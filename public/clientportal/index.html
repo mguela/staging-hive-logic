@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>GH Group — Client Portal</title>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#0e1320">
+<style>
+  :root{
+    --bg:#0e1320; --card:#171f30; --ink:#c9d3e4; --ink2:#9cabc6; --ink3:#6f7d9a;
+    --brand:#9db8d4; --brand-dark:#8fa9c4; --brand-bg:#223049; --line:#26304a;
+    --good:#58c68f; --good-deep:#1B7A50; --good-bg:#1b3129;
+    --warn:#d7a94e; --warn-bg:#37301b;
+    --bad:#e08a7e; --bad-deep:#c65b4e; --bad-bg:#3a2521;
+    --radius:16px;
+    --shadow:0 10px 30px rgba(22,30,46,.35);
+    --shadow-deep:0 24px 70px rgba(22,30,46,.45);
+  }
+  *{box-sizing:border-box; margin:0; padding:0; font-family:'Segoe UI',system-ui,-apple-system,sans-serif; -webkit-tap-highlight-color:transparent;}
+  html,body{background:var(--bg); color:var(--ink); min-height:100vh;}
+  #app{max-width:480px; margin:0 auto; min-height:100vh; display:flex; flex-direction:column; position:relative;}
+  header{background:#0b0f1a; padding:14px 20px 12px; display:flex; align-items:center; gap:10px; border-bottom:1px solid var(--line); position:sticky; top:0; z-index:10;}
+  header .logo{width:30px;height:30px;border-radius:8px;background:var(--brand-bg);color:var(--brand);display:flex;align-items:center;justify-content:center;font-size:17px; box-shadow:var(--shadow); flex-shrink:0;}
+  header .who{font-size:13px; color:var(--ink3); flex:1; min-width:0;}
+  header .who b{display:block; color:var(--ink); font-size:15px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+  .screen{flex:1; overflow-y:auto; padding:16px 16px 90px; -webkit-overflow-scrolling:touch;}
+  .hidden{display:none !important;}
+  .hello{font-size:22px; font-weight:700; margin:6px 2px 14px; color:var(--ink);}
+  .card{background:var(--card); border:1px solid var(--line); border-radius:var(--radius); padding:16px; margin-bottom:12px; box-shadow:var(--shadow);}
+  .hero{border:1.5px solid var(--brand-dark); background:linear-gradient(180deg,#223049 0%,#171f30 100%); box-shadow:var(--shadow-deep);}
+  .hero .tag{font-size:12px; font-weight:700; color:var(--brand); letter-spacing:.5px;}
+  .bigbtn{display:block; width:100%; background:var(--brand); color:#0e1320; font-size:16px; font-weight:700; text-align:center; padding:14px; border:none; border-radius:14px; cursor:pointer; box-shadow:0 4px 10px rgba(22,30,46,.10),0 10px 22px rgba(22,30,46,.14);}
+  .bigbtn:active{transform:translateY(1px);}
+  .bigbtn.green{background:var(--good-deep); color:#eaf7f0;}
+  .bigbtn.red{background:var(--bad-deep); color:#fdeceb;}
+  .bigbtn.ghost{background:var(--card); border:1.5px solid var(--line); color:var(--ink); box-shadow:none;}
+  .bigbtn[disabled]{opacity:.5; pointer-events:none;}
+  .smbtn{background:var(--card); border:1.5px solid var(--line); color:var(--ink); font-size:12.5px; font-weight:700; padding:8px 12px; border-radius:10px; cursor:pointer; white-space:nowrap;}
+  .smbtn.hot{background:var(--brand); border:none; color:#0e1320;}
+  .row{display:flex; justify-content:space-between; align-items:center; gap:8px; padding:12px 2px; border-bottom:1px solid var(--line); font-size:14.5px;}
+  .row:last-child{border-bottom:none;}
+  .row .l{flex:1; min-width:0;}
+  .row .l b{display:block; font-size:15px; color:var(--ink);}
+  .row .l span{color:var(--ink3); font-size:12.5px;}
+  .money{font-weight:700; font-size:15px; color:var(--ink);}
+  .pill{font-size:11px; font-weight:700; padding:3px 9px; border-radius:99px; white-space:nowrap;}
+  .pill.g{background:var(--good-bg); color:var(--good);}
+  .pill.w{background:var(--warn-bg); color:var(--warn);}
+  .pill.r{background:var(--bad-bg); color:var(--bad);}
+  .pill.b{background:var(--brand-bg); color:var(--brand);}
+  .stat{font-size:26px; font-weight:800; color:var(--ink);}
+  .statlabel{font-size:12.5px; color:var(--ink3); margin-top:2px;}
+  .statrow{display:flex; gap:10px; margin-bottom:12px;}
+  .statrow .card{flex:1; margin-bottom:0; text-align:center;}
+  h3.section{font-size:12.5px; color:var(--ink3); letter-spacing:.8px; margin:18px 4px 8px; text-transform:uppercase;}
+  nav{position:fixed; bottom:0; left:0; right:0; max-width:480px; margin:0 auto; background:#0b0f1a; border-top:1px solid var(--line); display:flex; padding:8px 2px calc(14px + env(safe-area-inset-bottom)); box-shadow:0 -10px 30px rgba(0,0,0,.35); z-index:10;}
+  nav button{flex:1; background:none; border:none; font-size:10.5px; color:var(--ink3); cursor:pointer;}
+  nav button .em{display:block; font-size:21px; margin-bottom:2px;}
+  nav button.on{color:var(--brand); font-weight:700;}
+  input,textarea,select{width:100%; padding:13px; font-size:16px; border:1.5px solid var(--line); border-radius:12px; margin-bottom:10px; background:#0e1320; color:var(--ink);}
+  input::placeholder,textarea::placeholder{color:var(--ink3);}
+  input:focus,textarea:focus,select:focus{outline:none; border-color:var(--brand-dark); box-shadow:0 0 0 3px rgba(143,169,196,.15);}
+  label{font-size:13px; font-weight:700; display:block; margin:2px 2px 5px; color:var(--ink2);}
+  .okmsg{background:var(--good-bg); color:var(--good); font-weight:700; padding:12px; border-radius:12px; text-align:center; margin-bottom:12px;}
+  .errmsg{background:var(--bad-bg); color:var(--bad); font-weight:700; padding:12px; border-radius:12px; text-align:center; margin-bottom:12px;}
+  .note{font-size:12px; color:var(--ink3); text-align:center; margin-top:8px;}
+  .fab{position:fixed; right:calc((100vw - 480px)/2 + 16px); bottom:calc(78px + env(safe-area-inset-bottom)); width:54px; height:54px; border-radius:50%; background:var(--brand); color:#0e1320; font-size:24px; border:none; cursor:pointer; box-shadow:var(--shadow-deep); z-index:9;}
+  @media (max-width:512px){ .fab{ right:16px; } }
+  .fab .fdot{position:absolute; top:-2px; right:-2px; min-width:19px; padding:2px 5px; background:var(--bad-deep); color:#fff; font-size:11px; font-weight:700; border-radius:10px;}
+  .bubble{max-width:80%; padding:10px 13px; border-radius:14px; font-size:14.5px; margin-bottom:8px;}
+  .bubble.staff{background:var(--card); border:1px solid var(--line);}
+  .bubble.client{background:var(--brand-bg); color:var(--ink); margin-left:auto; border:1px solid var(--brand-dark);}
+  .sig{height:40px; border:1px dashed var(--brand-dark); border-radius:10px; background:#0e1320; display:flex; align-items:center; padding:0 14px; font-family:'Brush Script MT','Segoe Script',cursive; font-size:22px; color:var(--ink); margin-bottom:10px;}
+  .center-screen{display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:100vh; padding:24px; text-align:center;}
+  .center-screen .em{font-size:54px; margin-bottom:14px;}
+  .center-screen h1{font-size:22px; margin-bottom:8px;}
+  .center-screen p{color:var(--ink2); font-size:14.5px; margin-bottom:20px; max-width:320px;}
+  .center-screen .box{width:100%; max-width:340px;}
+  .spinner{width:28px; height:28px; border-radius:50%; border:3px solid var(--line); border-top-color:var(--brand); animation:spin .8s linear infinite; margin:0 auto;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+  .pgrid{display:grid; grid-template-columns:repeat(3,1fr); gap:6px;}
+  .pgrid a{display:block; aspect-ratio:1; border-radius:10px; overflow:hidden; border:1px solid var(--line); background:#0b0f1a;}
+  .pgrid img{width:100%; height:100%; object-fit:cover; display:block;}
+  .pjobhead{font-size:13px; font-weight:700; color:var(--ink2); margin:12px 2px 8px;}
+</style>
+</head>
+<body>
+<div id="app"><div class="center-screen"><div class="spinner"></div></div></div>
+
+<script>
+const API = '/api/clientportal';
+const SESSION_KEY = 'clientportal_session_token';
+let STATE = { client: null, badges: {}, tab: 'home' };
+
+// ---------------------------------------------------------------- fetch helper
+async function api(action, opts = {}) {
+  const token = localStorage.getItem(SESSION_KEY);
+  const headers = { 'Content-Type': 'application/json', ...(opts.headers || {}) };
+  if (token) headers['Authorization'] = 'Bearer ' + token;
+  const method = opts.method || 'GET';
+  const qs = opts.query ? '&' + new URLSearchParams(opts.query).toString() : '';
+  const res = await fetch(`${API}?action=${action}${qs}`, {
+    method,
+    headers,
+    body: opts.body ? JSON.stringify(opts.body) : undefined,
+  });
+  const json = await res.json().catch(() => ({ ok: false, error: 'Something went wrong. Try again.' }));
+  if (!res.ok || json.ok === false) throw new Error(json.error || 'Something went wrong.');
+  return json;
+}
+
+function money(n) { return n === null || n === undefined ? '—' : '$' + Number(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+function dateShort(d) { return d ? new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : ''; }
+function firstName(n) { return (n || '').split(' ')[0] || 'there'; }
+function escapeHtml(s) { const d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
+
+const app = document.getElementById('app');
+
+// ---------------------------------------------------------------- boot
+async function boot() {
+  const params = new URLSearchParams(location.search);
+  const linkToken = params.get('token');
+
+  if (linkToken) {
+    renderCenter('⏳', 'Signing you in…', '');
+    try {
+      const r = await api('redeem', { query: { token: linkToken } });
+      localStorage.setItem(SESSION_KEY, r.sessionToken);
+      history.replaceState({}, '', location.pathname);
+      STATE.client = r.client;
+      renderShell();
+      return;
+    } catch (e) {
+      renderCenter('⚠️', 'That link didn\'t work', e.message);
+      setTimeout(renderRecovery, 1800);
+      return;
+    }
+  }
+
+  if (localStorage.getItem(SESSION_KEY)) {
+    try {
+      const r = await api('me');
+      STATE.client = r.client; STATE.badges = r.badges;
+      renderShell();
+      return;
+    } catch (e) {
+      localStorage.removeItem(SESSION_KEY);
+    }
+  }
+
+  renderRecovery();
+}
+
+// ---------------------------------------------------------------- recovery / sign-in
+function renderRecovery() {
+  app.innerHTML = `
+    <div class="center-screen">
+      <div class="em">⬡</div>
+      <h1>GH Group Client Portal</h1>
+      <p>Enter the email you gave us and we'll get you a sign-in link.</p>
+      <div class="box">
+        <input id="rec-input" type="email" placeholder="you@email.com">
+        <button class="bigbtn" id="rec-btn">Get my link</button>
+        <div id="rec-msg"></div>
+      </div>
+    </div>`;
+  document.getElementById('rec-btn').onclick = async () => {
+    const v = document.getElementById('rec-input').value.trim();
+    const msg = document.getElementById('rec-msg');
+    if (!v) return;
+    msg.textContent = '';
+    const looking = document.createElement('div');
+    looking.className = 'note';
+    looking.textContent = 'Sending your sign-in link…';
+    msg.appendChild(looking);
+    try {
+      const r = await api('login_link', { method: 'POST', body: { email: v } });
+      // Security: the link is emailed to the address on file, never returned
+      // here. Show the same generic confirmation regardless of whether the
+      // email matched an account. Use textContent (no innerHTML) so the
+      // server message can't inject markup.
+      msg.textContent = '';
+      const ok = document.createElement('div');
+      ok.className = 'okmsg';
+      ok.textContent = 'Check your email';
+      const note = document.createElement('div');
+      note.className = 'note';
+      note.textContent = (r && r.message) || 'If that email is on file, a sign-in link has been sent to it.';
+      msg.appendChild(ok);
+      msg.appendChild(note);
+    } catch (e) {
+      msg.textContent = '';
+      const err = document.createElement('div');
+      err.className = 'errmsg';
+      err.textContent = e.message;
+      msg.appendChild(err);
+    }
+  };
+}
+
+function renderCenter(emoji, title, body) {
+  app.innerHTML = `<div class="center-screen"><div class="em">${escapeHtml(emoji)}</div><h1>${escapeHtml(title)}</h1><p>${escapeHtml(body)}</p></div>`;
+}
+
+// ---------------------------------------------------------------- shell + nav
+function renderShell() {
+  app.innerHTML = `
+    <header>
+      <div class="logo">⬡</div>
+      <div class="who"><b>${escapeHtml(STATE.client.name)}</b>with Greenwich Handyman</div>
+    </header>
+    <div class="screen" id="screen"></div>
+    <button class="fab" id="fab" onclick="go('messages')">💬<span class="fdot hidden" id="fab-dot"></span></button>
+    <nav>
+      <button id="n-home" onclick="go('home')"><span class="em">🏠</span>Home</button>
+      <button id="n-projects" onclick="go('projects')"><span class="em">🔨</span>Projects</button>
+      <button id="n-approvals" onclick="go('approvals')"><span class="em">📄</span>Approvals</button>
+      <button id="n-money" onclick="go('money')"><span class="em">💵</span>Money</button>
+      <button id="n-account" onclick="go('account')"><span class="em">👤</span>Account</button>
+    </nav>`;
+  go('home');
+}
+
+let lastTab = 'home';
+async function go(tab) {
+  if (tab !== 'messages') lastTab = tab;
+  STATE.tab = tab;
+  ['home', 'projects', 'approvals', 'money', 'account'].forEach(t => {
+    const btn = document.getElementById('n-' + t);
+    if (btn) btn.classList.toggle('on', t === tab);
+  });
+  document.getElementById('fab').style.display = tab === 'messages' ? 'none' : 'block';
+  const screen = document.getElementById('screen');
+  screen.innerHTML = `<div class="center-screen" style="min-height:200px;"><div class="spinner"></div></div>`;
+  try {
+    if (tab === 'home') await renderHome(screen);
+    else if (tab === 'projects') await renderProjects(screen);
+    else if (tab === 'approvals') await renderApprovals(screen);
+    else if (tab === 'money') await renderMoney(screen);
+    else if (tab === 'account') await renderAccount(screen);
+    else if (tab === 'messages') await renderMessages(screen);
+  } catch (e) {
+    screen.innerHTML = `<div class="errmsg">${escapeHtml(e.message)}</div>`;
+  }
+  screen.scrollTop = 0;
+}
+
+// ---------------------------------------------------------------- HOME / Notifications
+async function renderHome(screen) {
+  const { notifications } = await api('notifications');
+  const unread = notifications.filter(n => !n.read_at);
+  document.getElementById('fab-dot').classList.toggle('hidden', unread.length === 0);
+  if (unread.length) document.getElementById('fab-dot').textContent = unread.length;
+
+  const icon = { approval_due: '📄', invoice_due: '💵', job_update: '🔨', payment_requested: '💳' };
+  screen.innerHTML = `
+    <div class="hello">👋 Hi ${escapeHtml(firstName(STATE.client.name))}!</div>
+    ${STATE.badges.approvalsPending ? `
+    <div class="card hero">
+      <div class="tag">👋 YOUR NEXT STEP</div>
+      <div style="margin:8px 0 12px; font-size:14.5px;">You have <b>${STATE.badges.approvalsPending}</b> item${STATE.badges.approvalsPending > 1 ? 's' : ''} waiting for your approval.</div>
+      <button class="bigbtn green" onclick="go('approvals')">Review now →</button>
+    </div>` : ''}
+    <div class="card">
+      <div class="tag" style="color:var(--brand);font-size:12px;font-weight:700;">🔔 NOTIFICATIONS</div>
+      ${notifications.length ? notifications.map(n => `
+        <div class="row">
+          <div class="l"><b>${icon[n.type] || '🔔'} ${escapeHtml(n.title)}</b><span>${escapeHtml(n.body || '')}</span></div>
+          <button class="smbtn" onclick="markRead('${n.id}')">Mark read</button>
+        </div>`).join('') : `<div class="row"><div class="l"><b>You're all set</b><span>We'll let you know the moment something needs you.</span></div></div>`}
+    </div>`;
+}
+async function markRead(id) { await api('notifications_read', { method: 'POST', body: { id } }); go('home'); }
+
+// ---------------------------------------------------------------- PROJECTS
+function stageLabel(s) { return { estimate: 'Estimate', scheduled: 'Scheduled', in_progress: 'In Progress', completed: 'Completed' }[s] || s; }
+function stagePill(s) { return { estimate: 'w', scheduled: 'b', in_progress: 'b', completed: 'g' }[s] || 'b'; }
+
+async function renderProjects(screen) {
+  const [{ jobs }, { photos }] = await Promise.all([api('jobs'), api('photos')]);
+  const photosByJob = {};
+  photos.forEach(p => { (photosByJob[p.jobRef] = photosByJob[p.jobRef] || { title: p.jobTitle, items: [] }).items.push(p); });
+
+  screen.innerHTML = `
+    <div class="hello">🔨 Your Projects</div>
+    <div class="card">
+      ${jobs.length ? jobs.map(j => `
+        <div class="row">
+          <div class="l"><b>${escapeHtml(j.title || j.jobNumber || 'Project')}</b><span>${j.jobNumber ? '#' + escapeHtml(j.jobNumber) + ' · ' : ''}${j.startAt ? dateShort(j.startAt) : 'not yet scheduled'}${j.total ? ' · ' + money(j.total) : ''}</span></div>
+          <span class="pill ${stagePill(j.stage)}">${stageLabel(j.stage).toUpperCase()}</span>
+        </div>`).join('') : `<div class="row"><div class="l"><b>No projects yet</b><span>Your jobs will show up here once one's underway.</span></div></div>`}
+    </div>
+
+    <h3 class="section">📸 Photos from your projects</h3>
+    ${photos.length ? Object.entries(photosByJob).map(([ref, grp]) => `
+      <div class="pjobhead">${escapeHtml(grp.title)} · ${grp.items.length} photo${grp.items.length > 1 ? 's' : ''}</div>
+      <div class="pgrid">
+        ${grp.items.map(p => `<a href="${escapeHtml(p.url)}" target="_blank" rel="noopener" title="${escapeHtml(p.note || '')}"><img src="${escapeHtml(p.url)}" alt="Project photo" loading="lazy"></a>`).join('')}
+      </div>`).join('') : `
+      <div class="card"><div class="row"><div class="l"><b>No photos shared yet</b><span>Your GH Group team reviews and approves every photo before it appears here — new ones will show up as work progresses.</span></div></div></div>`}
+    <div class="note">Every photo here was approved for you by GH Group. Tap any photo to see it full size.</div>`;
+}
+
+// ---------------------------------------------------------------- APPROVALS (estimate + change-order e-sign)
+async function renderApprovals(screen) {
+  const { approvals } = await api('approvals');
+  const pending = approvals.filter(a => a.status === 'pending');
+  const done = approvals.filter(a => a.status !== 'pending');
+
+  screen.innerHTML = `
+    <div class="hello">📄 Approvals</div>
+    ${pending.length ? pending.map(a => `
+      <div class="card hero" id="appr-${a.id}">
+        <div class="tag">${a.kind === 'change_order' ? '✏️ CHANGE ORDER' : '📄 ESTIMATE'}${a.number ? ' · ' + escapeHtml(a.number) : ''}</div>
+        <b style="font-size:16px; display:block; margin:6px 0 4px;">${escapeHtml(a.title)}</b>
+        ${a.description ? `<div style="color:var(--ink2); font-size:13.5px; margin-bottom:8px;">${escapeHtml(a.description)}</div>` : ''}
+        ${a.amount !== null ? `<div style="font-size:20px; font-weight:800; margin-bottom:10px;">${money(a.amount)}</div>` : ''}
+        ${a.payment_terms ? `<div style="color:var(--ink3); font-size:12.5px; margin-bottom:10px;">${escapeHtml(a.payment_terms)}</div>` : ''}
+        ${a.doc_url ? `<a href="${escapeHtml(a.doc_url)}" target="_blank" rel="noopener" style="color:var(--brand); font-size:12.5px; display:block; margin-bottom:12px;">View full document →</a>` : ''}
+        <!-- 2026-08-01 (Chris approved): online e-sign taken OFFLINE. approval_sign never persisted a signature (0 rows ever written) - showing an honest PDF-signing notice instead of silently losing legally-relevant signatures. Restore only after persistence is fixed AND verified end-to-end. Item 8 (doc_url now escaped) preserved on the offline notice. -->
+        <div style="background:#fff8e6;border:1px solid #f0d47a;border-radius:10px;padding:12px;margin-top:10px;font-size:13px;line-height:1.5;color:#6b5717;">
+          <b>Online signing is temporarily unavailable.</b> To approve this ${a.kind === 'change_order' ? 'change order' : 'estimate'}, GH Group will send you a PDF to sign - or simply reply to your project contact and we'll take care of it. This item stays right here until it's signed.
+        </div>
+      </div>`).join('') : `<div class="card"><div class="row"><div class="l"><b>Nothing waiting on you</b><span>Estimates and change orders will show up here to review and sign.</span></div></div></div>`}
+    ${done.length ? `
+    <h3 class="section">Past approvals</h3>
+    <div class="card">
+      ${done.map(a => `
+        <div class="row"><div class="l"><b>${escapeHtml(a.title)}</b><span>${a.amount !== null ? money(a.amount) + ' · ' : ''}${a.responded_at ? dateShort(a.responded_at) : ''}</span></div>
+        <span class="pill ${a.status === 'approved' ? 'g' : 'r'}">${a.status.toUpperCase()}</span></div>`).join('')}
+    </div>` : ''}`;
+
+  done.length; // no-op, keeps linter quiet on unused-var style tools
+  pending.forEach(a => {
+    const nameInput = document.getElementById(`sig-name-${a.id}`);
+    if (nameInput) nameInput.oninput = () => { document.getElementById(`sig-preview-${a.id}`).textContent = nameInput.value || ' '; };
+  });
+}
+async function signApproval(id) {
+  const name = document.getElementById(`sig-name-${id}`).value.trim();
+  const agree = document.getElementById(`sig-agree-${id}`).checked;
+  const msg = document.getElementById(`appr-msg-${id}`);
+  if (!name) { msg.innerHTML = `<div class="errmsg">Type your full name to sign.</div>`; return; }
+  if (!agree) { msg.innerHTML = `<div class="errmsg">Please check the agreement box.</div>`; return; }
+  try {
+    await api('approval_sign', { method: 'POST', body: { id, signer_name: name, agree: true } });
+    msg.innerHTML = `<div class="okmsg">✅ Signed! GH Group has been notified.</div>`;
+    setTimeout(() => go('approvals'), 1200);
+  } catch (e) { msg.innerHTML = `<div class="errmsg">${escapeHtml(e.message)}</div>`; }
+}
+async function rejectApproval(id) {
+  const note = prompt("What would you like changed? (optional)");
+  const msg = document.getElementById(`appr-msg-${id}`);
+  try {
+    await api('approval_reject', { method: 'POST', body: { id, note: note || null } });
+    if (msg) msg.innerHTML = `<div class="okmsg">Got it — GH Group will follow up.</div>`;
+    setTimeout(() => go('approvals'), 1200);
+  } catch (e) { if (msg) msg.innerHTML = `<div class="errmsg">${escapeHtml(e.message)}</div>`; }
+}
+
+// ---------------------------------------------------------------- MONEY
+async function renderMoney(screen) {
+  const { invoices } = await api('invoices');
+  const owed = invoices.reduce((s, i) => s + (i.balance || 0), 0);
+  const next = invoices.filter(i => i.balance > 0 && i.dueDate).sort((a, b) => new Date(a.dueDate) - new Date(b.dueDate))[0];
+
+  screen.innerHTML = `
+    <div class="hello">💵 Money</div>
+    <div class="statrow">
+      <div class="card"><div class="stat">${money(owed)}</div><div class="statlabel">Total balance</div></div>
+      <div class="card"><div class="stat">${next ? dateShort(next.dueDate) : '—'}</div><div class="statlabel">Next due</div></div>
+    </div>
+    <h3 class="section">Your invoices</h3>
+    <div class="card">
+      ${invoices.length ? invoices.map(i => `
+        <div class="row" id="inv-${i.id}">
+          <div class="l"><b>${escapeHtml(i.subject || ('Invoice ' + (i.jobNumber || '')))}</b><span>${i.dueDate ? 'due ' + dateShort(i.dueDate) : ''} · ${money(i.total)} total</span></div>
+          ${i.balance > 0 ? `<button class="smbtn hot" onclick="startPayment('${i.id}', ${i.balance})">Pay ${money(i.balance)}</button>` : `<span class="pill g">✓ PAID</span>`}
+        </div>`).join('') : `<div class="row"><div class="l"><b>No invoices yet</b><span>They'll show up here once GH Group sends one.</span></div></div>`}
+    </div>
+    <div class="note">Online payment isn't live yet — "Pay" sends a request to our office to follow up with you.</div>`;
+}
+function startPayment(invoiceId, balance) {
+  const row = document.getElementById(`inv-${invoiceId}`);
+  row.insertAdjacentHTML('afterend', `
+    <div class="card" id="pay-card">
+      <div class="tag" style="color:var(--brand);font-size:12px;font-weight:700;margin-bottom:8px;">💳 REQUEST PAYMENT — ${money(balance)}</div>
+      <label>How would you like to pay?</label>
+      <select id="pay-method"><option value="card">Credit / debit card</option><option value="ach">Bank transfer (ACH)</option><option value="check">Check</option></select>
+      <button class="bigbtn green" onclick="sendPaymentRequest('${invoiceId}', ${balance})">Send payment request</button>
+      <button class="bigbtn ghost" style="margin-top:8px;" onclick="document.getElementById('pay-card').remove()">Cancel</button>
+      <div id="pay-msg"></div>
+    </div>`);
+}
+async function sendPaymentRequest(invoiceId, balance) {
+  const method = document.getElementById('pay-method').value;
+  const msg = document.getElementById('pay-msg');
+  try {
+    const r = await api('payment_request', { method: 'POST', body: { invoice_ref: invoiceId, amount: balance, method } });
+    msg.innerHTML = `<div class="okmsg">✅ ${escapeHtml(r.note)}</div>`;
+  } catch (e) { msg.innerHTML = `<div class="errmsg">${escapeHtml(e.message)}</div>`; }
+}
+
+// ---------------------------------------------------------------- ACCOUNT
+async function renderAccount(screen) {
+  const { client } = await api('me');
+  STATE.client = client;
+  screen.innerHTML = `
+    <div class="hello">👤 Account</div>
+    <div class="card">
+      <div class="row"><div class="l"><b>${escapeHtml(client.name)}</b><span>${escapeHtml(client.email || 'no email on file')}</span></div></div>
+    </div>
+    <div class="note">To update your name, email, or address, contact your GH Group representative — this info comes straight from our records.</div>
+    <button class="bigbtn ghost" style="margin-top:16px;" onclick="signOut()">Sign out</button>`;
+}
+function signOut() { localStorage.removeItem(SESSION_KEY); location.href = location.pathname; }
+
+// ---------------------------------------------------------------- MESSAGES
+async function renderMessages(screen) {
+  const { messages } = await api('messages');
+  screen.innerHTML = `
+    <button class="smbtn" style="margin-bottom:10px;" onclick="go(lastTab)">← Back</button>
+    <div class="hello">💬 Messages</div>
+    <div id="msg-thread">
+      ${messages.length ? messages.map(m => `<div class="bubble ${m.sender}">${escapeHtml(m.body)}</div>`).join('') : `<div class="note">Say hello — GH Group will see it here.</div>`}
+    </div>
+    <div style="position:fixed; bottom:calc(14px + env(safe-area-inset-bottom)); left:16px; right:16px; max-width:448px; margin:0 auto; display:flex; gap:8px;">
+      <input id="msg-input" placeholder="Type a message…" style="margin-bottom:0;">
+      <button class="smbtn hot" style="flex-shrink:0;" onclick="sendMessage()">Send</button>
+    </div>`;
+  document.getElementById('msg-input').addEventListener('keydown', (e) => { if (e.key === 'Enter') sendMessage(); });
+}
+async function sendMessage() {
+  const input = document.getElementById('msg-input');
+  const body = input.value.trim();
+  if (!body) return;
+  input.value = '';
+  await api('message_send', { method: 'POST', body: { body } });
+  go('messages');
+}
+
+boot();
+
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => navigator.serviceWorker.register('/clientportal/sw.js').catch(() => {}));
+}
+</script>
+  <script src="/voice-input.js" defer></script>
+</body>
+</html>

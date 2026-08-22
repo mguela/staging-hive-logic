@@ -1,0 +1,12 @@
+# Shell scripts must keep LF endings so their shebang works on Linux/macOS
+# (e.g. the throwaway-DB integration runner under test/integration/).
+*.sh text eol=lf
+
+# claude/status.md is an append-at-the-top log written by every session. Two
+# sessions working the same afternoon always land on the same first lines, so
+# it conflicted on essentially every PR while nothing else in those PRs did.
+# `union` keeps BOTH sides instead of raising a conflict, which is exactly what
+# resolving it by hand amounted to -- no entry has ever needed to be dropped.
+# Safe here precisely because the file is append-only prose: nobody edits an
+# older entry, so there is no case where one side should win.
+claude/status.md merge=union

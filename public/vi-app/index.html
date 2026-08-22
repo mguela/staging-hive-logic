@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1" />
+    <meta name="theme-color" content="#161e2e" />
+    <meta name="description" content="HiveLogic Visual Intelligence — capture, organize, and share job site photos and video, online or off." />
+    <link rel="icon" type="image/svg+xml" href="/vi-app/favicon.svg" />
+    <link rel="apple-touch-icon" href="/vi-app/icons/icon-192.svg" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800;900&display=swap"
+      rel="stylesheet"
+    />
+    <title>HiveLogic Visual Intelligence</title>
+    <script>
+      // Force light mode always (2026-08-06 fix): this bundle checks
+      // matchMedia('(prefers-color-scheme: dark)') and switches to its
+      // Tailwind dark: theme when the OS/browser prefers dark -- but the
+      // rest of HiveLogic has its own manual light/dark toggle and never
+      // follows system preference, so a user in system dark mode saw this
+      // one screen go dark navy while everything around it stayed light.
+      // Shimming matchMedia here (a real source file) rather than patching
+      // the compiled bundle itself, which is a build artifact -- same risk
+      // this codebase already flags for the HiveConnect/HiveSight bundles.
+      // Runs as a plain synchronous script, so it's in place before the
+      // deferred module script below ever executes.
+      (function () {
+        var orig = window.matchMedia;
+        if (!orig) return;
+        window.matchMedia = function (query) {
+          if (/prefers-color-scheme:\s*dark/i.test(String(query))) {
+            return {
+              matches: false, media: query, onchange: null,
+              addListener: function () {}, removeListener: function () {},
+              addEventListener: function () {}, removeEventListener: function () {},
+              dispatchEvent: function () { return true; },
+            };
+          }
+          return orig.call(window, query);
+        };
+      })();
+    </script>
+    <script>
+      // Permanent auth safety net (2026-08-07 fix): this app's own compiled
+      // bundle calls /api/jobs, /api/clients, /api/visual-intel through its
+      // internal fetch helper with NO auth header -- a prior fix
+      // (claude/_patch_viapp_hivesight_auth.cjs) patches that header in
+      // directly inside the compiled JS, because HiveSight's real source
+      // (main.tsx etc.) was never committed to this repo. That patch is a
+      // build ARTIFACT, not source -- a future rebuild of the bundle will
+      // silently drop it and re-open the gap. This shim does the same
+      // injection at the browser fetch level instead, in a real source file
+      // that survives any rebuild, so the app stays authenticated even if
+      // the bundle-level patch is ever lost. Deliberately a different
+      // function name/scope from the bundle patch's own __hlViAuth() (which
+      // may or may not still be present) -- this is an independent,
+      // redundant safety net, not a replacement for re-applying the real
+      // fix at source whenever that becomes possible.
+      (function () {
+        var origFetch = window.fetch;
+        if (!origFetch) return;
+        function hlTokenForVi() {
+          try {
+            if (window.parent && window.parent !== window && window.parent.__hlAccessToken) {
+              return 'Bearer ' + window.parent.__hlAccessToken;
+            }
+            var candidates = Object.keys(localStorage).filter(function (k) {
+              return k.indexOf('sqhusuuhlmcmkeowdrga') >= 0 && k.indexOf('auth-token') >= 0;
+            });
+            for (var i = 0; i < candidates.length; i++) {
+              var raw = localStorage.getItem(candidates[i]);
+              if (!raw) continue;
+              if (raw.indexOf('base64-') === 0 && typeof atob === 'function') {
+                var encoded = raw.slice(7).replace(/-/g, '+').replace(/_/g, '/');
+                while (encoded.length % 4) encoded += '=';
+                raw = atob(encoded);
+              }
+              var v = JSON.parse(raw);
+              if (v && v.access_token) return 'Bearer ' + v.access_token;
+              if (v && v.currentSession && v.currentSession.access_token) return 'Bearer ' + v.currentSession.access_token;
+            }
+          } catch (e) { /* fall through */ }
+          return null;
+        }
+        function hasAuthHeader(init) {
+          var h = init && init.headers;
+          if (!h) return false;
+          if (typeof h.get === 'function') return !!h.get('Authorization');
+          if (Array.isArray(h)) return h.some(function (pair) { return String(pair[0]).toLowerCase() === 'authorization'; });
+          return Object.keys(h).some(function (k) { return k.toLowerCase() === 'authorization'; });
+        }
+        window.fetch = function (input, init) {
+          try {
+            var url = (typeof input === 'string') ? input : ((input && input.url) || '');
+            var isApi = url.indexOf('/api/') === 0 || url.indexOf(window.location.origin + '/api/') === 0;
+            if (isApi && !hasAuthHeader(init)) {
+              var token = hlTokenForVi();
+              if (token) {
+                var merged = {};
+                var h = init && init.headers;
+                if (h) { for (var k in h) { if (Object.prototype.hasOwnProperty.call(h, k)) merged[k] = h[k]; } }
+                merged.Authorization = token;
+                init = Object.assign({}, init, { headers: merged });
+              }
+            }
+          } catch (e) { /* never let this shim break a request */ }
+          return origFetch.call(this, input, init);
+        };
+      })();
+    </script>
+    <script type="module" crossorigin src="/vi-app/assets/index-DwAcQw3z.js"></script>
+    <link rel="stylesheet" crossorigin href="/vi-app/assets/index-BGX3qR6T.css">
+  </head>
+  <body class="bg-surface text-slate-900 antialiased">
+    <div id="root"></div>
+    <script src="/voice-input.js" defer></script>
+</body>
+</html>

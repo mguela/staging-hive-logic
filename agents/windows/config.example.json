@@ -1,0 +1,11 @@
+{
+  "controlPlaneUrl": "https://hivelogic-live.vercel.app",
+  "pollIntervalMs": 5000,
+  "approvedScopes": [
+    {
+      "type": "repository",
+      "path": "C:\\Work\\approved-repository",
+      "permissions": ["read", "test"]
+    }
+  ]
+}

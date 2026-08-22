@@ -1,0 +1,10 @@
+node_modules/
+.vs/
+.env
+.env.local
+.vercel
+*.log
+.env*
+!.env.example
+vercel-secrets.txt
+*secrets*.txt

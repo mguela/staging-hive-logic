@@ -1,0 +1,22 @@
+create table if not exists public.companies (id uuid primary key default gen_random_uuid(), name text not null, slug text not null unique, plan text not null default 'internal', status text not null default 'active', dba text, created_at timestamptz not null default now());
+insert into public.companies (name, slug, status, plan, dba) values ('Greenwich Handyman','greenwich-handyman','active','primary','GH Co.') on conflict (slug) do update set dba=excluded.dba, status=excluded.status, plan=excluded.plan;
+create table if not exists public.org_units (id uuid primary key default gen_random_uuid(), company_id uuid not null references public.companies(id), parent_id uuid references public.org_units(id), unit_type text not null default 'division' check (unit_type in ('division','location','crew')), name text not null, is_primary boolean not null default false, status text not null default 'planned' check (status in ('operational','planned')), sort_order int not null default 0, created_at timestamptz not null default now(), unique (company_id, unit_type, name));
+insert into public.org_units (company_id, unit_type, name, is_primary, status, sort_order) select c.id,'division',v.name,v.is_primary,v.status,v.sort_order from (select id from public.companies where slug='greenwich-handyman') c cross join (values ('GH Co. Design|Build',true,'planned',0),('Greenwich Handyman',false,'operational',1),('GH Handyman',false,'planned',2),('GH Electric',false,'operational',3),('GH Outdoor Spaces',false,'planned',4),('GH Home Concierge Services',false,'planned',5),('GH Plumbing',false,'planned',6),('GH HVAC',false,'planned',7)) as v(name,is_primary,status,sort_order) on conflict (company_id, unit_type, name) do update set is_primary=excluded.is_primary, status=excluded.status, sort_order=excluded.sort_order;
+do $$ declare gh uuid; begin
+  select id into gh from public.companies where slug='greenwich-handyman';
+  alter table public.clients add column if not exists company_id uuid;
+  alter table public.jobs add column if not exists company_id uuid;
+  alter table public.invoices add column if not exists company_id uuid;
+  update public.clients set company_id=gh where company_id is null;
+  update public.jobs set company_id=gh where company_id is null;
+  update public.invoices set company_id=gh where company_id is null;
+  execute format('alter table public.clients alter column company_id set default %L', gh);
+  execute format('alter table public.jobs alter column company_id set default %L', gh);
+  execute format('alter table public.invoices alter column company_id set default %L', gh);
+  if not exists (select 1 from pg_constraint where conname='fk_clients_company') then alter table public.clients add constraint fk_clients_company foreign key (company_id) references public.companies(id) not valid; alter table public.clients validate constraint fk_clients_company; end if;
+  if not exists (select 1 from pg_constraint where conname='fk_jobs_company') then alter table public.jobs add constraint fk_jobs_company foreign key (company_id) references public.companies(id) not valid; alter table public.jobs validate constraint fk_jobs_company; end if;
+  if not exists (select 1 from pg_constraint where conname='fk_invoices_company') then alter table public.invoices add constraint fk_invoices_company foreign key (company_id) references public.companies(id) not valid; alter table public.invoices validate constraint fk_invoices_company; end if;
+  alter table public.companies enable row level security; alter table public.org_units enable row level security;
+end $$;
+revoke all on public.companies from anon, authenticated;
+revoke all on public.org_units from anon, authenticated;

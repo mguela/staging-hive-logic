@@ -1,0 +1,116 @@
+name: PR health guard
+
+# Finds open PRs that are NOT BEING TESTED -- as opposed to PRs that are
+# failing, which are already visible as a red X.
+#
+# See scripts/pr-health.mjs for why this exists. Short version: a conflicted PR
+# has no merge ref, so `on: pull_request` workflows never start, and the PR page
+# still shows a green preview-deployment check. It reads as healthy. Four PRs in
+# this repo sat like that on 2026-08-18, one of them for four days holding a
+# migration that would have stripped six of nine permission roles.
+
+on:
+  schedule:
+    # 09:00 and 17:00 UTC, so a PR that goes quiet is noticed the same working
+    # day rather than the next one.
+    - cron: '0 9,17 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  # checks:read is what the guard actually runs on -- checks.listForRef is the
+  # single call its whole verdict depends on. Without it the API answers
+  # "403 Resource not accessible by integration" and the run dies in 11
+  # seconds, which is how the FIRST scheduled run of this workflow ended.
+  # A guard written to catch "shipped, never actually worked" shipped and
+  # never actually worked. Ninth instance of the class guard.js catalogues.
+  checks: read
+  pull-requests: write
+
+concurrency:
+  group: pr-health-guard
+  cancel-in-progress: false
+
+jobs:
+  audit:
+    name: Audit open PRs for missing test runs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Classify every open PR and post/refresh one sticky comment each
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { classifyPr, renderComment, renderResolvedComment, COMMENT_MARKER } =
+              await import(`${process.env.GITHUB_WORKSPACE}/scripts/pr-health.mjs`);
+
+            const { owner, repo } = context.repo;
+            const open = await github.paginate(github.rest.pulls.list, {
+              owner, repo, state: 'open', per_page: 100,
+            });
+
+            const now = Date.now();
+            const rows = [];
+
+            for (const summary of open) {
+              // The list endpoint omits mergeable_state; it is only computed on
+              // a single-PR read, and the first read after a push can return
+              // 'unknown' while GitHub works it out. classifyPr treats
+              // 'unknown' as "no evidence" rather than guessing.
+              const { data: pr } = await github.rest.pulls.get({
+                owner, repo, pull_number: summary.number,
+              });
+
+              const { data: checks } = await github.rest.checks.listForRef({
+                owner, repo, ref: pr.head.sha, per_page: 100,
+              });
+
+              const verdict = classifyPr({
+                mergeableState: pr.mergeable_state,
+                checkRuns: checks.check_runs,
+                updatedAt: pr.updated_at,
+              }, now);
+
+              rows.push({ number: pr.number, title: pr.title, status: verdict.status, reason: verdict.reason });
+
+              const comments = await github.paginate(github.rest.issues.listComments, {
+                owner, repo, issue_number: pr.number, per_page: 100,
+              });
+              const existing = comments.find((c) => c.body && c.body.includes(COMMENT_MARKER));
+              const flagged = verdict.status === 'conflicted' || verdict.status === 'untested';
+
+              if (flagged) {
+                const body = renderComment(pr, verdict);
+                // Update in place. A guard that appends a new comment every
+                // twelve hours becomes noise, and noise gets muted.
+                if (existing) {
+                  if (existing.body !== body) {
+                    await github.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body });
+                  }
+                } else {
+                  await github.rest.issues.createComment({ owner, repo, issue_number: pr.number, body });
+                }
+              } else if (existing && !existing.body.includes('Resolved')) {
+                // Say so when it recovers, so a stale warning never outlives
+                // the problem it described.
+                await github.rest.issues.updateComment({
+                  owner, repo, comment_id: existing.id, body: renderResolvedComment(),
+                });
+              }
+            }
+
+            const bad = rows.filter((r) => r.status === 'conflicted' || r.status === 'untested');
+            const lines = [
+              `Checked ${rows.length} open PR(s).`,
+              '',
+              bad.length ? '| PR | status | why |' : 'Every open PR has its required checks.',
+              bad.length ? '|---|---|---|' : '',
+              ...bad.map((r) => `| #${r.number} | \`${r.status}\` | ${r.reason} |`),
+            ].filter(Boolean);
+            await core.summary.addRaw(lines.join('\n')).write();
+
+            // Reporting is the job. A red run here would be indistinguishable
+            // from this workflow itself breaking, which is the failure mode it
+            // was built to notice in others.
+            core.info(`${bad.length} of ${rows.length} open PR(s) are not being tested.`);

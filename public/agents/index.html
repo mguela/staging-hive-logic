@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>HiveLogic Devices</title>
+  <style>
+    :root{font-family:Inter,Segoe UI,sans-serif;color:#eef3f8;background:#0b1118}
+    *{box-sizing:border-box}body{margin:0}.wrap{max-width:1100px;margin:auto;padding:32px 20px}
+    header{display:flex;justify-content:space-between;align-items:center;margin-bottom:24px}
+    h1{font-size:25px;margin:0}.muted{color:#91a0b2;font-size:13px}.card{background:#131c27;border:1px solid #263342;border-radius:14px;padding:18px;margin:12px 0}
+    button,select,input{border:1px solid #39495c;border-radius:9px;background:#192534;color:#eef3f8;padding:9px 12px}
+    button{cursor:pointer}.primary{background:#f2b84b;color:#16120b;border-color:#f2b84b;font-weight:700}.danger{background:#7f2830;border-color:#a53d47}
+    .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));gap:12px}.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+    .dot{width:9px;height:9px;border-radius:50%;background:#5c6876;display:inline-block}.online{background:#55ce8a}.paused{background:#e5b74d}.emergency_stopped,.revoked{background:#ed6a72}
+    code{background:#0d151f;padding:3px 6px;border-radius:5px}.task{border-top:1px solid #263342;padding-top:10px;margin-top:10px}
+  </style>
+</head>
+<body><div class="wrap">
+  <header><div><h1>Devices</h1><div class="muted">Approved HiveLogic automation computers</div></div><button class="primary" onclick="createEnrollment()">Add computer</button></header>
+  <div id="notice" class="card" hidden></div>
+  <div id="devices" class="grid"></div>
+  <div class="card"><b>Recent tasks</b><div id="tasks"></div></div>
+</div>
+<script>
+function token(){try{for(const k of Object.keys(localStorage)){if(!k.includes('auth-token'))continue;const v=JSON.parse(localStorage.getItem(k));if(v&&v.access_token)return v.access_token;if(v&&v.currentSession)return v.currentSession.access_token}}catch(e){}return null}
+async function api(method,body,path='/api/agents/control'){const r=await fetch(path,{method,headers:{'Content-Type':'application/json','Authorization':'Bearer '+(token()||'')},body:body?JSON.stringify(body):undefined});const j=await r.json();if(!r.ok)throw new Error(j.error||'Request failed');return j}
+function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+async function load(){try{const d=await api('GET');devices.innerHTML=d.agents.map(a=>`<div class="card"><div class="row"><span class="dot ${esc(a.status)}"></span><b>${esc(a.display_name)}</b></div><div class="muted">${esc(a.hostname)} · ${esc(a.status)}<br>Last heartbeat: ${a.last_heartbeat_at?new Date(a.last_heartbeat_at).toLocaleString():'Never'}<br>Version: ${esc(a.agent_version||'Unknown')}</div><div class="row" style="margin-top:13px">${a.status==='paused'?`<button onclick="act('resume','${a.id}')">Resume</button>`:`<button onclick="act('pause','${a.id}')">Pause</button>`}<button class="danger" onclick="act('emergency_stop','${a.id}')">Emergency stop</button><button onclick="act('revoke','${a.id}')">Revoke</button></div><div class="task row"><select id="type-${a.id}"><option value="repository_status">Repository status</option><option value="repository_test">Run tests</option></select><input id="path-${a.id}" placeholder="Approved repository path"><button onclick="task('${a.id}')">Prepare task</button></div></div>`).join('')||'<div class="card muted">No computers enrolled.</div>';tasks.innerHTML=d.tasks.map(t=>`<div class="task"><b>${esc(t.task_type)}</b> · ${esc(t.status)} <span class="muted">${new Date(t.created_at).toLocaleString()}</span>${t.status==='pending_approval'?` <button class="primary" onclick="approve('${t.id}')">Approve</button>`:''}</div>`).join('')||'<div class="muted">No tasks yet.</div>'}catch(e){show(e.message)}}
+async function createEnrollment(){try{const d=await api('POST',null,'/api/agents/enrollment?action=create');show(`Enrollment code: <code>${esc(d.enrollmentCode)}</code><br><span class="muted">Single use. Expires ${new Date(d.expiresAt).toLocaleTimeString()}.</span>`)}catch(e){show(e.message)}}
+async function act(action,agentId){if((action==='revoke'||action==='emergency_stop')&&!confirm('Confirm '+action.replace('_',' ')+'?'))return;await api('POST',{action,agentId});load()}
+async function task(id){const taskType=document.getElementById('type-'+id).value,path=document.getElementById('path-'+id).value;try{await api('POST',{action:'create_task',agentId:id,taskType,payload:{path}});load()}catch(e){show(e.message)}}
+async function approve(taskId){await api('POST',{action:'approve_task',taskId});load()}
+function show(html){notice.hidden=false;notice.innerHTML=html}
+load();setInterval(load,15000);
+</script></body></html>

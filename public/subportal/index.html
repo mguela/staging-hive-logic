@@ -1,0 +1,568 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>GH Group — Sub Portal</title>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#0e1320">
+<style>
+  :root{
+    --bg:#0e1320; --card:#171f30; --ink:#c9d3e4; --ink2:#9cabc6; --ink3:#6f7d9a;
+    --brand:#9db8d4; --brand-dark:#8fa9c4; --brand-bg:#223049; --line:#26304a;
+    --good:#58c68f; --good-deep:#1B7A50; --good-bg:#1b3129;
+    --warn:#d7a94e; --warn-bg:#37301b;
+    --bad:#e08a7e; --bad-deep:#c65b4e; --bad-bg:#3a2521;
+    --radius:16px;
+    --shadow:0 10px 30px rgba(22,30,46,.35);
+    --shadow-deep:0 24px 70px rgba(22,30,46,.45);
+  }
+  *{box-sizing:border-box; margin:0; padding:0; font-family:'Segoe UI',system-ui,-apple-system,sans-serif; -webkit-tap-highlight-color:transparent;}
+  html,body{background:var(--bg); color:var(--ink); min-height:100vh;}
+  #app{max-width:480px; margin:0 auto; min-height:100vh; display:flex; flex-direction:column; position:relative;}
+  header{background:#0b0f1a; padding:14px 20px 12px; display:flex; align-items:center; gap:10px; border-bottom:1px solid var(--line); position:sticky; top:0; z-index:10;}
+  header .logo{width:30px;height:30px;border-radius:8px;background:var(--brand-bg);color:var(--brand);display:flex;align-items:center;justify-content:center;font-size:17px; box-shadow:var(--shadow); flex-shrink:0;}
+  header .who{font-size:13px; color:var(--ink3); flex:1; min-width:0;}
+  header .who b{display:block; color:var(--ink); font-size:15px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+  .screen{flex:1; overflow-y:auto; padding:16px 16px 90px; -webkit-overflow-scrolling:touch;}
+  .hidden{display:none !important;}
+  .hello{font-size:22px; font-weight:700; margin:6px 2px 14px; color:var(--ink);}
+  .card{background:var(--card); border:1px solid var(--line); border-radius:var(--radius); padding:16px; margin-bottom:12px; box-shadow:var(--shadow);}
+  .hero{border:1.5px solid var(--brand-dark); background:linear-gradient(180deg,#223049 0%,#171f30 100%); box-shadow:var(--shadow-deep);}
+  .hero .tag{font-size:12px; font-weight:700; color:var(--brand); letter-spacing:.5px;}
+  .bigbtn{display:block; width:100%; background:var(--brand); color:#0e1320; font-size:16px; font-weight:700; text-align:center; padding:14px; border:none; border-radius:14px; cursor:pointer; box-shadow:0 4px 10px rgba(22,30,46,.10),0 10px 22px rgba(22,30,46,.14);}
+  .bigbtn:active{transform:translateY(1px);}
+  .bigbtn.green{background:var(--good-deep); color:#eaf7f0;}
+  .bigbtn.ghost{background:var(--card); border:1.5px solid var(--line); color:var(--ink); box-shadow:none;}
+  .bigbtn[disabled]{opacity:.5; pointer-events:none;}
+  .smbtn{background:var(--card); border:1.5px solid var(--line); color:var(--ink); font-size:12.5px; font-weight:700; padding:8px 12px; border-radius:10px; cursor:pointer; white-space:nowrap;}
+  .smbtn.hot{background:var(--brand); border:none; color:#0e1320;}
+  .row{display:flex; justify-content:space-between; align-items:center; gap:8px; padding:12px 2px; border-bottom:1px solid var(--line); font-size:14.5px;}
+  .row:last-child{border-bottom:none;}
+  .row .l{flex:1; min-width:0;}
+  .row .l b{display:block; font-size:15px; color:var(--ink);}
+  .row .l span{color:var(--ink3); font-size:12.5px;}
+  .money{font-weight:700; font-size:15px; color:var(--ink);}
+  .pill{font-size:11px; font-weight:700; padding:3px 9px; border-radius:99px; white-space:nowrap;}
+  .pill.g{background:var(--good-bg); color:var(--good);}
+  .pill.w{background:var(--warn-bg); color:var(--warn);}
+  .pill.r{background:var(--bad-bg); color:var(--bad);}
+  .pill.b{background:var(--brand-bg); color:var(--brand);}
+  .stat{font-size:26px; font-weight:800; color:var(--ink);}
+  .statlabel{font-size:12.5px; color:var(--ink3); margin-top:2px;}
+  .statrow{display:flex; gap:10px; margin-bottom:12px;}
+  .statrow .card{flex:1; margin-bottom:0; text-align:center;}
+  h3.section{font-size:12.5px; color:var(--ink3); letter-spacing:.8px; margin:18px 4px 8px; text-transform:uppercase;}
+  nav{position:fixed; bottom:0; left:0; right:0; max-width:480px; margin:0 auto; background:#0b0f1a; border-top:1px solid var(--line); display:flex; padding:8px 2px calc(14px + env(safe-area-inset-bottom)); box-shadow:0 -10px 30px rgba(0,0,0,.35); z-index:10;}
+  nav button{flex:1; background:none; border:none; font-size:10.5px; color:var(--ink3); cursor:pointer;}
+  nav button .em{display:block; font-size:21px; margin-bottom:2px;}
+  nav button.on{color:var(--brand); font-weight:700;}
+  .camera{border:2px dashed var(--brand-dark); background:var(--brand-bg); border-radius:var(--radius); text-align:center; padding:24px 16px; cursor:pointer; margin-bottom:12px; box-shadow:var(--shadow); position:relative;}
+  .camera input{position:absolute; inset:0; opacity:0; cursor:pointer;}
+  .camera .em{font-size:38px;}
+  .camera .t{font-weight:700; font-size:16px; margin-top:8px; color:var(--ink);}
+  .camera .s{font-size:12.5px; color:var(--ink2); margin-top:3px;}
+  input,textarea{width:100%; padding:13px; font-size:16px; border:1.5px solid var(--line); border-radius:12px; margin-bottom:10px; background:#0e1320; color:var(--ink);}
+  input::placeholder,textarea::placeholder{color:var(--ink3);}
+  input:focus,textarea:focus{outline:none; border-color:var(--brand-dark); box-shadow:0 0 0 3px rgba(143,169,196,.15);}
+  label{font-size:13px; font-weight:700; display:block; margin:2px 2px 5px; color:var(--ink2);}
+  .okmsg{background:var(--good-bg); color:var(--good); font-weight:700; padding:12px; border-radius:12px; text-align:center; margin-bottom:12px;}
+  .errmsg{background:var(--bad-bg); color:var(--bad); font-weight:700; padding:12px; border-radius:12px; text-align:center; margin-bottom:12px;}
+  .note{font-size:12px; color:var(--ink3); text-align:center; margin-top:8px;}
+  .fab{position:fixed; right:calc((100vw - 480px)/2 + 16px); bottom:calc(78px + env(safe-area-inset-bottom)); width:54px; height:54px; border-radius:50%; background:var(--brand); color:#0e1320; font-size:24px; border:none; cursor:pointer; box-shadow:var(--shadow-deep); z-index:9;}
+  @media (max-width:512px){ .fab{ right:16px; } }
+  .fab .fdot{position:absolute; top:-2px; right:-2px; min-width:19px; padding:2px 5px; background:var(--bad-deep); color:#fff; font-size:11px; font-weight:700; border-radius:10px;}
+  .bubble{max-width:80%; padding:10px 13px; border-radius:14px; font-size:14.5px; margin-bottom:8px;}
+  .bubble.staff{background:var(--card); border:1px solid var(--line);}
+  .bubble.sub{background:var(--brand-bg); color:var(--ink); margin-left:auto; border:1px solid var(--brand-dark);}
+  .toggle{width:44px; height:26px; border-radius:99px; background:var(--line); position:relative; flex-shrink:0; border:none; cursor:pointer;}
+  .toggle::after{content:''; position:absolute; top:3px; left:3px; width:20px; height:20px; border-radius:50%; background:var(--ink3); transition:.15s;}
+  .toggle.on{background:var(--good-deep);}
+  .toggle.on::after{left:auto; right:3px; background:#eaf7f0;}
+  .center-screen{display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:100vh; padding:24px; text-align:center;}
+  .center-screen .em{font-size:54px; margin-bottom:14px;}
+  .center-screen h1{font-size:22px; margin-bottom:8px;}
+  .center-screen p{color:var(--ink2); font-size:14.5px; margin-bottom:20px; max-width:320px;}
+  .center-screen .box{width:100%; max-width:340px;}
+  .spinner{width:28px; height:28px; border-radius:50%; border:3px solid var(--line); border-top-color:var(--brand); animation:spin .8s linear infinite; margin:0 auto;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+</style>
+</head>
+<body>
+<div id="app"><div class="center-screen"><div class="spinner"></div></div></div>
+
+<script>
+const API = '/api/subportal';
+const SESSION_KEY = 'subportal_session_token';
+let STATE = { sub: null, badges: {}, tab: 'home' };
+
+// ---------------------------------------------------------------- fetch helper
+async function api(action, opts = {}) {
+  const token = localStorage.getItem(SESSION_KEY);
+  const headers = { 'Content-Type': 'application/json', ...(opts.headers || {}) };
+  if (token) headers['Authorization'] = 'Bearer ' + token;
+  const method = opts.method || 'GET';
+  const qs = opts.query ? '&' + new URLSearchParams(opts.query).toString() : '';
+  const res = await fetch(`${API}?action=${action}${qs}`, {
+    method,
+    headers,
+    body: opts.body ? JSON.stringify(opts.body) : undefined,
+  });
+  const json = await res.json().catch(() => ({ ok: false, error: 'Something went wrong. Try again.' }));
+  if (!res.ok || json.ok === false) throw new Error(json.error || 'Something went wrong.');
+  return json;
+}
+
+function fileToDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(r.result);
+    r.onerror = reject;
+    r.readAsDataURL(file);
+  });
+}
+
+function money(n) { return n === null || n === undefined ? '—' : '$' + Number(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+function dateShort(d) { return d ? new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : ''; }
+function dateTimeShort(d) { return d ? new Date(d).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : ''; }
+
+const app = document.getElementById('app');
+
+// ---------------------------------------------------------------- boot
+async function boot() {
+  const params = new URLSearchParams(location.search);
+  const linkToken = params.get('token');
+
+  if (linkToken) {
+    renderCenter('⏳', 'Signing you in…', '');
+    try {
+      const r = await api('redeem', { query: { token: linkToken } });
+      localStorage.setItem(SESSION_KEY, r.sessionToken);
+      history.replaceState({}, '', location.pathname);
+      if (r.reauth) { finishReauth(); return; }
+      STATE.sub = r.sub;
+      afterAuth();
+      return;
+    } catch (e) {
+      renderCenter('⚠️', 'That link didn\'t work', e.message, renderRecovery);
+      return;
+    }
+  }
+
+  if (localStorage.getItem(SESSION_KEY)) {
+    try {
+      const r = await api('me');
+      STATE.sub = r.sub; STATE.badges = r.badges;
+      afterAuth();
+      return;
+    } catch (e) {
+      localStorage.removeItem(SESSION_KEY);
+    }
+  }
+
+  renderRecovery();
+}
+
+function afterAuth() {
+  const needsOnboarding = STATE.sub.status === 'invited' || !STATE.sub.contact_name || !STATE.sub.phone;
+  if (needsOnboarding) renderOnboarding();
+  else renderShell();
+}
+
+// ---------------------------------------------------------------- recovery / sign-in
+function renderRecovery() {
+  app.innerHTML = `
+    <div class="center-screen">
+      <div class="em">⬡</div>
+      <h1>GH Group Sub Portal</h1>
+      <p>Enter the phone or email you gave us and we'll get you a sign-in link.</p>
+      <div class="box">
+        <input id="rec-input" type="text" placeholder="Phone or email">
+        <button class="bigbtn" id="rec-btn">Get my link</button>
+        <div id="rec-msg"></div>
+      </div>
+    </div>`;
+  document.getElementById('rec-btn').onclick = async () => {
+    const v = document.getElementById('rec-input').value.trim();
+    const msg = document.getElementById('rec-msg');
+    if (!v) return;
+    msg.textContent = '';
+    const looking = document.createElement('div');
+    looking.className = 'note';
+    looking.textContent = 'Sending your sign-in link…';
+    msg.appendChild(looking);
+    try {
+      const r = await api('login_link', { method: 'POST', body: { phone_or_email: v } });
+      // Security: the link is emailed to the address on file, never returned
+      // here. Same generic confirmation regardless of whether the contact
+      // matched. textContent (no innerHTML) so the message can't inject markup.
+      msg.textContent = '';
+      const ok = document.createElement('div');
+      ok.className = 'okmsg';
+      ok.textContent = 'Check your email';
+      const note = document.createElement('div');
+      note.className = 'note';
+      note.textContent = (r && r.message) || 'If that contact is on file, a sign-in link has been sent to the email we have for it.';
+      msg.appendChild(ok);
+      msg.appendChild(note);
+    } catch (e) {
+      msg.textContent = '';
+      const err = document.createElement('div');
+      err.className = 'errmsg';
+      err.textContent = e.message;
+      msg.appendChild(err);
+    }
+  };
+}
+
+function finishReauth() {
+  renderCenter('✅', 'Verified', 'You can go back and finish updating your banking info now.', () => {
+    app.innerHTML += `<div style="text-align:center;margin-top:12px;"><button class="bigbtn ghost" onclick="afterAuthFresh()">Continue to portal</button></div>`;
+  });
+}
+async function afterAuthFresh() { const r = await api('me'); STATE.sub = r.sub; STATE.badges = r.badges; afterAuth(); }
+
+function renderCenter(emoji, title, body, after) {
+  app.innerHTML = `<div class="center-screen"><div class="em">${escapeHtml(emoji)}</div><h1>${escapeHtml(title)}</h1><p>${escapeHtml(body)}</p></div>`;
+  if (after) after();
+}
+
+// ---------------------------------------------------------------- progressive onboarding (spec P0 #1)
+function renderOnboarding() {
+  app.innerHTML = `
+    <div class="center-screen">
+      <div class="em">👋</div>
+      <h1>Welcome, ${escapeHtml(STATE.sub.company_name)}!</h1>
+      <p>Just your name and phone to get started — everything else we'll ask for one thing at a time.</p>
+      <div class="box">
+        <label>Your name</label>
+        <input id="ob-name" type="text" value="${escapeHtml(STATE.sub.contact_name || '')}" placeholder="Dave Pickwick">
+        <label>Your cell phone</label>
+        <input id="ob-phone" type="tel" value="${escapeHtml(STATE.sub.phone || '')}" placeholder="(203) 555-0142">
+        <button class="bigbtn green" id="ob-btn">Let's go →</button>
+        <div id="ob-msg"></div>
+      </div>
+    </div>`;
+  document.getElementById('ob-btn').onclick = async () => {
+    const contact_name = document.getElementById('ob-name').value.trim();
+    const phone = document.getElementById('ob-phone').value.trim();
+    const msg = document.getElementById('ob-msg');
+    if (!contact_name || !phone) { msg.innerHTML = `<div class="errmsg">Both fields are needed.</div>`; return; }
+    try {
+      const r = await api('profile', { method: 'PATCH', body: { contact_name, phone } });
+      STATE.sub = r.sub;
+      renderShell();
+    } catch (e) { msg.innerHTML = `<div class="errmsg">${escapeHtml(e.message)}</div>`; }
+  };
+}
+
+// ---------------------------------------------------------------- shell + nav
+function renderShell() {
+  app.innerHTML = `
+    <header>
+      <div class="logo">⬡</div>
+      <div class="who"><b>${escapeHtml(STATE.sub.company_name)}</b>working with Greenwich Handyman</div>
+    </header>
+    <div class="screen" id="screen"></div>
+    <button class="fab" id="fab" onclick="go('messages')">💬<span class="fdot hidden" id="fab-dot"></span></button>
+    <nav>
+      <button id="n-home" onclick="go('home')"><span class="em">🏠</span>Home</button>
+      <button id="n-jobs" onclick="go('jobs')"><span class="em">🔨</span>Jobs</button>
+      <button id="n-schedule" onclick="go('schedule')"><span class="em">📅</span>Schedule</button>
+      <button id="n-money" onclick="go('money')"><span class="em">💵</span>Money</button>
+      <button id="n-account" onclick="go('account')"><span class="em">👤</span>Account</button>
+    </nav>`;
+  go('home');
+}
+
+let lastTab = 'home';
+async function go(tab) {
+  if (tab !== 'messages') lastTab = tab;
+  STATE.tab = tab;
+  ['home', 'jobs', 'schedule', 'money', 'account'].forEach(t => {
+    const btn = document.getElementById('n-' + t);
+    if (btn) btn.classList.toggle('on', t === tab);
+  });
+  document.getElementById('fab').style.display = tab === 'messages' ? 'none' : 'block';
+  const screen = document.getElementById('screen');
+  screen.innerHTML = `<div class="center-screen" style="min-height:200px;"><div class="spinner"></div></div>`;
+  try {
+    if (tab === 'home') await renderHome(screen);
+    else if (tab === 'jobs') await renderJobs(screen);
+    else if (tab === 'schedule') await renderSchedule(screen);
+    else if (tab === 'money') await renderMoney(screen);
+    else if (tab === 'account') await renderAccount(screen);
+    else if (tab === 'messages') await renderMessages(screen);
+  } catch (e) {
+    screen.innerHTML = `<div class="errmsg">${escapeHtml(e.message)}</div>`;
+  }
+  screen.scrollTop = 0;
+}
+
+// ---------------------------------------------------------------- HOME / Notifications
+async function renderHome(screen) {
+  const { notifications } = await api('notifications');
+  const unread = notifications.filter(n => !n.read_at);
+  document.getElementById('fab-dot').classList.toggle('hidden', unread.length === 0);
+  if (unread.length) document.getElementById('fab-dot').textContent = unread.length;
+
+  const icon = { bid_due: '📋', invoice_due: '💵', schedule_upcoming: '📅', schedule_unapproved: '📅', doc_expiring: '⚠️', payment_sent: '✅' };
+  screen.innerHTML = `
+    <div class="hello">👋 Hi ${escapeHtml(firstName(STATE.sub.contact_name))}!</div>
+    <div class="card hero">
+      <div class="tag">🔔 NOTIFICATIONS</div>
+      ${notifications.length ? notifications.map(n => `
+        <div class="row">
+          <div class="l"><b>${icon[n.type] || '🔔'} ${escapeHtml(n.title)}</b><span>${escapeHtml(n.body || '')}</span></div>
+          ${n.action_url ? `<button class="smbtn hot" data-notif-open="${escapeHtml(n.id)}" data-notif-url="${escapeHtml(n.action_url)}">Open</button>` : `<button class="smbtn" data-notif-read="${escapeHtml(n.id)}">Mark read</button>`}
+        </div>`).join('') : `<div class="row"><div class="l"><b>You're all set</b><span>We'll ping you the moment something needs you.</span></div></div>`}
+      <div class="note" style="margin-top:10px;">We also text 📱 and email ✉️ you everything — you'll never miss it.</div>
+    </div>
+    <div class="card" style="text-align:center;">
+      <div style="font-size:24px;">🐦</div>
+      <b style="font-size:15px;">Want a chirp when something needs you?</b>
+      <div style="font-size:12.5px; color:var(--ink2); margin:4px 0 10px;">Get the app and turn on Chirp for instant pings.</div>
+      <button class="bigbtn ghost" onclick="go('account')">Get the app + turn on Chirp</button>
+    </div>`;
+  // Notification action/read buttons are wired via listeners (not inline
+  // onclick) so the server-provided id / action_url are treated as data and
+  // can never break out into an executable JS-string context.
+  screen.querySelectorAll('[data-notif-open]').forEach(btn => {
+    btn.addEventListener('click', () => handleNotifAction(btn.dataset.notifOpen, btn.dataset.notifUrl || ''));
+  });
+  screen.querySelectorAll('[data-notif-read]').forEach(btn => {
+    btn.addEventListener('click', () => markRead(btn.dataset.notifRead));
+  });
+}
+async function markRead(id) { await api('notifications_read', { method: 'POST', body: { id } }); go('home'); }
+function handleNotifAction(id, url) { markRead(id); if (url.startsWith('#')) go(url.slice(1)); }
+function firstName(n) { return (n || '').split(' ')[0] || 'there'; }
+function escapeHtml(s) { const d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
+
+// ---------------------------------------------------------------- JOBS
+async function renderJobs(screen) {
+  const { rfqs, schedule } = await api('jobs');
+  const open = rfqs.filter(r => ['sent', 'viewed'].includes(r.status));
+  const active = schedule.filter(s => new Date(s.start_at) >= new Date(Date.now() - 86400000)).slice(0, 5);
+
+  screen.innerHTML = `
+    <div class="hello">🔨 Jobs</div>
+    ${open.map(r => `
+      <div class="card hero">
+        <div class="tag">NEEDS YOUR PRICE${r.due_date ? ' · DUE ' + dateShort(r.due_date).toUpperCase() : ''}</div>
+        <b style="font-size:17px; display:block; margin:6px 0 2px;">${escapeHtml(r.title)}</b>
+        <div style="color:var(--ink2); font-size:13.5px; margin-bottom:10px;">${escapeHtml(r.job_ref || '')}</div>
+        ${r.scope ? `<div style="color:var(--ink2);font-size:13px;margin-bottom:10px;">${escapeHtml(r.scope)}</div>` : ''}
+        <label>Your price</label>
+        <input type="text" inputmode="decimal" placeholder="$" id="bid-${r.id}">
+        <button class="bigbtn green" onclick="submitBid('${r.id}')">Send price ✓</button>
+        <div id="bid-msg-${r.id}"></div>
+      </div>`).join('')}
+    <h3 class="section">Your jobs</h3>
+    <div class="card">
+      ${active.length ? active.map(s => `
+        <div class="row"><div class="l"><b>${escapeHtml(s.title)}</b><span>${escapeHtml(s.job_ref || '')} · ${dateShort(s.start_at)}</span></div><span class="pill ${s.status === 'approved' ? 'g' : (s.status === 'change_requested' ? 'w' : 'b')}">${s.status.replace('_', ' ').toUpperCase()}</span></div>`).join('')
+        : `<div class="row"><div class="l"><b>Nothing scheduled yet</b><span>We'll list your jobs here as they come in.</span></div></div>`}
+    </div>`;
+}
+async function submitBid(rfqId) {
+  const input = document.getElementById('bid-' + rfqId);
+  const msg = document.getElementById('bid-msg-' + rfqId);
+  const val = input.value.replace(/[^0-9.]/g, '');
+  if (!val) return;
+  try {
+    await api('rfq_bid', { method: 'POST', body: { rfq_id: rfqId, bid_amount: val } });
+    msg.innerHTML = `<div class="okmsg">✅ Sent! Chris has your price.</div>`;
+    setTimeout(() => go('jobs'), 1200);
+  } catch (e) { msg.innerHTML = `<div class="errmsg">${escapeHtml(e.message)}</div>`; }
+}
+
+// ---------------------------------------------------------------- SCHEDULE
+async function renderSchedule(screen) {
+  const { schedule } = await api('schedule');
+  const icsUrl = `${API}?action=calendar.ics&t=${encodeURIComponent(localStorage.getItem(SESSION_KEY))}`;
+  screen.innerHTML = `
+    <div class="hello">📅 Schedule</div>
+    <a class="bigbtn ghost" style="display:block;text-decoration:none;margin-bottom:12px;" href="${icsUrl}">📲 Add my schedule to my phone's calendar</a>
+    ${schedule.length ? schedule.map(s => `
+      <div class="card ${s.status === 'proposed' ? '' : ''}" ${s.status === 'proposed' ? 'style="border:1.5px solid var(--warn);"' : ''}>
+        ${s.status === 'proposed' ? '<span class="pill w">NEEDS YOUR OK</span>' : `<span class="pill ${s.status === 'approved' ? 'g' : 'w'}">${s.status.replace('_', ' ').toUpperCase()}</span>`}
+        <div style="font-size:16px; font-weight:700; margin:8px 0 2px;">${dateTimeShort(s.start_at)}${s.end_at ? ' – ' + dateTimeShort(s.end_at) : ''}</div>
+        <div style="color:var(--ink2); font-size:13.5px; margin-bottom:12px;">${escapeHtml(s.title)} ${s.job_ref ? '· ' + escapeHtml(s.job_ref) : ''}</div>
+        ${s.status === 'proposed' ? `
+          <button class="bigbtn green" onclick="scheduleRespond('${s.id}','approved')">👍 Works for me</button>
+          <button class="bigbtn ghost" style="margin-top:8px;" onclick="scheduleChange('${s.id}')">✏️ Request a change</button>
+          <div id="sched-msg-${s.id}"></div>` : `<button class="smbtn" onclick="scheduleChange('${s.id}')">Request a change</button>`}
+      </div>`).join('') : `<div class="card"><div class="row"><div class="l"><b>Nothing scheduled yet</b><span>Your upcoming work will show up here.</span></div></div></div>`}
+    <div class="note">Schedule updates also go to your 📱 text and ✉️ email.</div>`;
+}
+async function scheduleRespond(id, response, note) {
+  try { await api('schedule_respond', { method: 'POST', body: { id, response, note: note || null } }); go('schedule'); }
+  catch (e) { const m = document.getElementById('sched-msg-' + id); if (m) m.innerHTML = `<div class="errmsg">${escapeHtml(e.message)}</div>`; }
+}
+function scheduleChange(id) {
+  const note = prompt("What day/time works better?");
+  if (note !== null) scheduleRespond(id, 'change_requested', note);
+}
+
+// ---------------------------------------------------------------- MONEY
+async function renderMoney(screen) {
+  const { invoices } = await api('invoices');
+  const coming = invoices.filter(i => i.status !== 'paid').reduce((s, i) => s + (Number(i.amount) || 0), 0);
+  const next = invoices.filter(i => i.payment_due).sort((a, b) => new Date(a.payment_due) - new Date(b.payment_due))[0];
+
+  const statusPill = { submitted: '<span class="pill w">SUBMITTED</span>', scheduled: '<span class="pill b">SCHEDULED</span>', paid: '<span class="pill g">✓ PAID</span>' };
+
+  screen.innerHTML = `
+    <div class="hello">💵 Money</div>
+    <div class="statrow">
+      <div class="card"><div class="stat">${money(coming)}</div><div class="statlabel">Coming to you</div></div>
+      <div class="card"><div class="stat">${next ? dateShort(next.payment_due) : '—'}</div><div class="statlabel">Next payment</div></div>
+    </div>
+    <div class="camera" id="inv-camera">
+      <input type="file" accept="image/*" capture="environment" id="inv-file">
+      <div class="em">📷</div>
+      <div class="t">Send an invoice — take a photo</div>
+      <div class="s">or drop / scan a file. That's it.</div>
+    </div>
+    <div id="inv-msg"></div>
+    <h3 class="section">Your invoices</h3>
+    <div class="card">
+      ${invoices.length ? invoices.map(i => `
+        <div class="row"><div class="l"><b>${money(i.amount)}${i.amount_source === 'pending_ocr' ? ' <span style="color:var(--ink3);font-weight:400;">(amount pending)</span>' : ''}</b><span>sent ${dateShort(i.submitted_at)}${i.payment_due ? ' · due ' + dateShort(i.payment_due) : ''}</span></div>
+          ${i.status === 'paid' ? statusPill.paid : (i.payment_due ? statusPill[i.status] || statusPill.submitted : `<button class="smbtn" onclick="followUp('${i.id}', this)">Follow up</button>`)}
+        </div>`).join('') : `<div class="row"><div class="l"><b>No invoices yet</b><span>Send your first one above.</span></div></div>`}
+    </div>`;
+
+  document.getElementById('inv-file').onchange = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const msg = document.getElementById('inv-msg');
+    msg.innerHTML = `<div class="note">Uploading…</div>`;
+    try {
+      const dataUrl = await fileToDataUrl(file);
+      await api('invoice_submit', { method: 'POST', body: { file_data_url: dataUrl } });
+      msg.innerHTML = `<div class="okmsg">✅ Invoice received! Track it below.</div>`;
+      setTimeout(() => go('money'), 1200);
+    } catch (err) { msg.innerHTML = `<div class="errmsg">${escapeHtml(err.message)}</div>`; }
+  };
+}
+async function followUp(invoiceId, btn) {
+  btn.textContent = '…';
+  try { await api('invoice_followup', { method: 'POST', body: { invoice_id: invoiceId } }); btn.outerHTML = `<span class="pill w">FOLLOWED UP</span>`; }
+  catch (e) { btn.textContent = 'Follow up'; }
+}
+
+// ---------------------------------------------------------------- ACCOUNT
+async function renderAccount(screen) {
+  const { sub, documents, banking } = await api('account');
+  STATE.sub = sub;
+  const docIcon = { coi: 'Insurance (COI)', w9: 'W-9', license: 'License' };
+  screen.innerHTML = `
+    <div class="hello">👤 Account</div>
+    <div class="card">
+      <div class="row"><div class="l"><b id="acct-name">${escapeHtml(sub.contact_name || '')}</b><span>${escapeHtml(sub.company_name)} · ${escapeHtml(sub.phone || 'no phone on file')} · ${escapeHtml(sub.email || 'no email on file')}</span></div><button class="smbtn" onclick="editProfile()">Edit</button></div>
+    </div>
+
+    <h3 class="section">Paperwork</h3>
+    <div class="camera" id="doc-camera">
+      <input type="file" accept="image/*" capture="environment" id="doc-file">
+      <div class="em">📷</div>
+      <div class="t">Snap a photo of a document</div>
+      <div class="s">insurance, license, or W-9 — upload and you're done</div>
+    </div>
+    <div id="doc-msg"></div>
+    <div class="card">
+      ${documents.length ? documents.map(d => `
+        <div class="row"><div class="l"><b>${escapeHtml(docIcon[d.doc_type] || d.doc_type)}</b><span>${d.expires_at ? 'expires ' + dateShort(d.expires_at) : 'on file'}</span></div>
+        <span class="pill ${d.status === 'current' ? 'g' : (d.status === 'expiring' ? 'w' : 'r')}">${d.status === 'current' ? '✓ CURRENT' : d.status.toUpperCase()}</span></div>`).join('')
+        : `<div class="row"><div class="l"><b>No paperwork on file yet</b><span>Upload your COI, license, and W-9 above.</span></div></div>`}
+    </div>
+
+    <h3 class="section">Getting paid</h3>
+    <div class="card">
+      <div class="row"><div class="l"><b>Bank account (ACH)</b><span>${banking && banking.masked_account ? banking.masked_account + ' — payments go here' : 'not set up yet'}</span></div><button class="smbtn" onclick="startBankingReauth()">${banking && banking.masked_account ? 'Edit' : 'Add'}</button></div>
+      <div class="row"><div class="l"><b>Card payments</b><span>do you accept credit cards?</span></div><button class="toggle ${sub.accepts_cc ? 'on' : ''}" onclick="toggleAcceptsCc(this)"></button></div>
+    </div>
+
+    <h3 class="section">Notifications</h3>
+    <div class="card">
+      <div class="row"><div class="l"><b>📱 Text me</b><span>bids, schedule, paperwork, payments</span></div><button class="toggle ${sub.notify_sms ? 'on' : ''}" onclick="toggleNotif(this,'notify_sms')"></button></div>
+      <div class="row"><div class="l"><b>✉️ Email me</b><span>everything, with attachments</span></div><button class="toggle ${sub.notify_email ? 'on' : ''}" onclick="toggleNotif(this,'notify_email')"></button></div>
+      <div class="row"><div class="l"><b>🐦 Chirp (app)</b><span>instant pings — get the app to turn on</span></div><button class="toggle ${sub.notify_chirp ? 'on' : ''}" onclick="toggleNotif(this,'notify_chirp')"></button></div>
+      <div class="row"><div class="l"><b>📲 Calendar sync</b><span>schedule lands in your phone calendar</span></div><button class="toggle ${sub.calendar_sync_enabled ? 'on' : ''}" onclick="toggleNotif(this,'calendar_sync_enabled')"></button></div>
+    </div>`;
+
+  document.getElementById('doc-file').onchange = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const msg = document.getElementById('doc-msg');
+    const docType = prompt("What is this document? Type: coi, w9, or license", "coi") || 'other';
+    msg.innerHTML = `<div class="note">Uploading…</div>`;
+    try {
+      const dataUrl = await fileToDataUrl(file);
+      await api('documents', { method: 'POST', body: { doc_type: docType.trim().toLowerCase(), file_data_url: dataUrl } });
+      msg.innerHTML = `<div class="okmsg">✅ Got it! You're all set.</div>`;
+      setTimeout(() => go('account'), 1200);
+    } catch (err) { msg.innerHTML = `<div class="errmsg">${escapeHtml(err.message)}</div>`; }
+  };
+}
+async function editProfile() {
+  const name = prompt("Your name", STATE.sub.contact_name || '');
+  if (name === null) return;
+  const phone = prompt("Your phone", STATE.sub.phone || '');
+  if (phone === null) return;
+  await api('profile', { method: 'PATCH', body: { contact_name: name, phone } });
+  go('account');
+}
+async function toggleNotif(btn, field) {
+  const next = !btn.classList.contains('on');
+  btn.classList.toggle('on', next);
+  await api('notif_prefs', { method: 'POST', body: { [field]: next } });
+}
+async function toggleAcceptsCc(btn) {
+  const next = !btn.classList.contains('on');
+  btn.classList.toggle('on', next);
+  await api('profile', { method: 'PATCH', body: { accepts_cc: next } });
+}
+async function startBankingReauth() {
+  try {
+    const r = await api('reauth_start', { method: 'POST' });
+    alert("For your security, tap the link we just generated to verify it's you before changing banking info.\n\n(Text/email auto-send isn't wired up yet, so this opens directly.)");
+    location.href = r.reauthUrl;
+  } catch (e) { alert(e.message); }
+}
+
+// ---------------------------------------------------------------- MESSAGES
+async function renderMessages(screen) {
+  const { messages } = await api('messages');
+  screen.innerHTML = `
+    <button class="smbtn" style="margin-bottom:10px;" onclick="go(lastTab)">← Back</button>
+    <div class="hello">💬 Messages</div>
+    <div id="msg-thread">
+      ${messages.length ? messages.map(m => `<div class="bubble ${m.sender}">${escapeHtml(m.body)}</div>`).join('') : `<div class="note">Say hello — the office will see it here.</div>`}
+    </div>
+    <div style="position:fixed; bottom:calc(14px + env(safe-area-inset-bottom)); left:16px; right:16px; max-width:448px; margin:0 auto; display:flex; gap:8px;">
+      <input id="msg-input" placeholder="Type a message…" style="margin-bottom:0;">
+      <button class="smbtn hot" style="flex-shrink:0;" onclick="sendMessage()">Send</button>
+    </div>`;
+  document.getElementById('msg-input').addEventListener('keydown', (e) => { if (e.key === 'Enter') sendMessage(); });
+}
+async function sendMessage() {
+  const input = document.getElementById('msg-input');
+  const body = input.value.trim();
+  if (!body) return;
+  input.value = '';
+  await api('message_send', { method: 'POST', body: { body } });
+  go('messages');
+}
+
+boot();
+
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => navigator.serviceWorker.register('/subportal/sw.js').catch(() => {}));
+}
+</script>
+  <script src="/voice-input.js" defer></script>
+</body>
+</html>

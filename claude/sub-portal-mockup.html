@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HiveLogic Sub Portal — Mockup v2</title>
+<style>
+  /* HiveLogic app theme — tokens lifted from public/index.html :root */
+  :root{
+    --bg:#0e1320; --card:#171f30; --ink:#c9d3e4; --ink2:#9cabc6; --ink3:#6f7d9a;
+    --brand:#9db8d4; --brand-dark:#8fa9c4; --brand-bg:#223049; --line:#26304a;
+    --good:#58c68f; --good-deep:#1B7A50; --good-bg:#1b3129;
+    --warn:#d7a94e; --warn-bg:#37301b;
+    --bad:#e08a7e; --bad-deep:#c65b4e; --bad-bg:#3a2521;
+    --radius:16px;
+    --shadow:0 10px 30px rgba(22,30,46,.35);
+    --shadow-deep:0 24px 70px rgba(22,30,46,.45);
+  }
+  *{box-sizing:border-box; margin:0; padding:0; font-family:'Segoe UI',system-ui,-apple-system,sans-serif;}
+  body{background:#080b13; display:flex; justify-content:center; padding:24px 8px; min-height:100vh;}
+  .phone{width:390px; background:var(--bg); border-radius:36px; border:10px solid #1c2333; overflow:hidden; box-shadow:0 30px 80px rgba(0,0,0,.6); position:relative; height:820px; display:flex; flex-direction:column; color:var(--ink);}
+  header{background:#0b0f1a; color:var(--ink); padding:14px 20px 12px; display:flex; align-items:center; gap:10px; border-bottom:1px solid var(--line);}
+  header .logo{width:30px;height:30px;border-radius:8px;background:var(--brand-bg);color:var(--brand);display:flex;align-items:center;justify-content:center;font-size:17px; box-shadow:var(--shadow);}
+  header .who{font-size:13px; color:var(--ink3); flex:1;}
+  header .who b{display:block; color:var(--ink); font-size:15px;}
+  .screen{flex:1; overflow-y:auto; padding:16px 16px 90px;}
+  .hidden{display:none;}
+  .hello{font-size:22px; font-weight:700; margin:6px 2px 14px; color:var(--ink);}
+  .card{background:var(--card); border:1px solid var(--line); border-radius:var(--radius); padding:16px; margin-bottom:12px; box-shadow:var(--shadow);}
+  .hero{border:1.5px solid var(--brand-dark); background:linear-gradient(180deg,#223049 0%,#171f30 100%); box-shadow:var(--shadow-deep);}
+  .hero .tag{font-size:12px; font-weight:700; color:var(--brand); letter-spacing:.5px;}
+  .bigbtn{display:block; width:100%; background:var(--brand); color:#0e1320; font-size:16px; font-weight:700; text-align:center; padding:14px; border:none; border-radius:14px; cursor:pointer; box-shadow:0 4px 10px rgba(22,30,46,.10),0 10px 22px rgba(22,30,46,.14);}
+  .bigbtn:active{transform:translateY(1px);}
+  .bigbtn.green{background:var(--good-deep); color:#eaf7f0;}
+  .bigbtn.ghost{background:var(--card); border:1.5px solid var(--line); color:var(--ink); box-shadow:none;}
+  .smbtn{background:var(--card); border:1.5px solid var(--line); color:var(--ink); font-size:12.5px; font-weight:700; padding:8px 12px; border-radius:10px; cursor:pointer; white-space:nowrap;}
+  .smbtn.hot{background:var(--brand); border:none; color:#0e1320;}
+  .row{display:flex; justify-content:space-between; align-items:center; gap:8px; padding:12px 2px; border-bottom:1px solid var(--line); font-size:14.5px;}
+  .row:last-child{border-bottom:none;}
+  .row .l{flex:1; min-width:0;}
+  .row .l b{display:block; font-size:15px; color:var(--ink);}
+  .row .l span{color:var(--ink3); font-size:12.5px;}
+  .money{font-weight:700; font-size:15px; color:var(--ink);}
+  .pill{font-size:11px; font-weight:700; padding:3px 9px; border-radius:99px; white-space:nowrap;}
+  .pill.g{background:var(--good-bg); color:var(--good);}
+  .pill.w{background:var(--warn-bg); color:var(--warn);}
+  .pill.r{background:var(--bad-bg); color:var(--bad);}
+  .pill.b{background:var(--brand-bg); color:var(--brand);}
+  .stat{font-size:28px; font-weight:800; color:var(--ink);}
+  .statlabel{font-size:12.5px; color:var(--ink3); margin-top:2px;}
+  .statrow{display:flex; gap:10px; margin-bottom:12px;}
+  .statrow .card{flex:1; margin-bottom:0; text-align:center;}
+  h3.section{font-size:12.5px; color:var(--ink3); letter-spacing:.8px; margin:18px 4px 8px; text-transform:uppercase;}
+  nav{position:absolute; bottom:0; left:0; right:0; background:#0b0f1a; border-top:1px solid var(--line); display:flex; padding:8px 2px 14px; box-shadow:0 -10px 30px rgba(0,0,0,.35);}
+  nav button{flex:1; background:none; border:none; font-size:10.5px; color:var(--ink3); cursor:pointer;}
+  nav button .em{display:block; font-size:21px; margin-bottom:2px;}
+  nav button.on{color:var(--brand); font-weight:700;}
+  .back{background:none; border:none; color:var(--brand); font-size:14px; font-weight:700; cursor:pointer; margin-bottom:10px;}
+  .camera{border:2px dashed var(--brand-dark); background:var(--brand-bg); border-radius:var(--radius); text-align:center; padding:24px 16px; cursor:pointer; margin-bottom:12px; box-shadow:var(--shadow);}
+  .camera .em{font-size:38px;}
+  .camera .t{font-weight:700; font-size:16px; margin-top:8px; color:var(--ink);}
+  .camera .s{font-size:12.5px; color:var(--ink2); margin-top:3px;}
+  input,textarea{width:100%; padding:13px; font-size:16px; border:1.5px solid var(--line); border-radius:12px; margin-bottom:10px; background:#0e1320; color:var(--ink);}
+  input::placeholder,textarea::placeholder{color:var(--ink3);}
+  input:focus,textarea:focus{outline:none; border-color:var(--brand-dark); box-shadow:0 0 0 3px rgba(143,169,196,.15);}
+  label{font-size:13px; font-weight:700; display:block; margin:2px 2px 5px; color:var(--ink2);}
+  .okmsg{background:var(--good-bg); color:var(--good); font-weight:700; padding:12px; border-radius:12px; text-align:center; margin-bottom:12px; display:none; box-shadow:var(--shadow);}
+  .note{font-size:12px; color:var(--ink3); text-align:center; margin-top:8px;}
+  .fab{position:absolute; right:16px; bottom:78px; width:54px; height:54px; border-radius:50%; background:var(--brand); color:#0e1320; font-size:24px; border:none; cursor:pointer; box-shadow:var(--shadow-deep); z-index:5;}
+  .fab .fdot{position:absolute; top:-2px; right:-2px; min-width:19px; padding:2px 5px; background:var(--bad-deep); color:#fff; font-size:11px; font-weight:700; border-radius:10px;}
+  .bubble{max-width:80%; padding:10px 13px; border-radius:14px; font-size:14.5px; margin-bottom:8px;}
+  .bubble.them{background:var(--card); border:1px solid var(--line);}
+  .bubble.me{background:var(--brand-bg); color:var(--ink); margin-left:auto; border:1px solid var(--brand-dark);}
+  .toggle{width:44px; height:26px; border-radius:99px; background:var(--good-deep); position:relative; flex-shrink:0;}
+  .toggle::after{content:''; position:absolute; top:3px; right:3px; width:20px; height:20px; border-radius:50%; background:#eaf7f0;}
+  .toggle.off{background:var(--line);}
+  .toggle.off::after{right:auto; left:3px; background:var(--ink3);}
+</style>
+</head>
+<body>
+<div class="phone">
+  <header>
+    <div class="logo">⬡</div>
+    <div class="who"><b>Pickwick Plumbing</b>working with Greenwich Handyman</div>
+  </header>
+
+  <!-- HOME -->
+  <div class="screen" id="home">
+    <div class="hello">👋 Hi Dave!</div>
+
+    <div class="card hero">
+      <div class="tag">🔔 NOTIFICATIONS</div>
+      <div class="row"><div class="l"><b>Bid due Friday</b><span>Radiant floor heat · 31 Hudson Watch Dr</span></div><button class="smbtn hot" onclick="go('jobs')">Send price</button></div>
+      <div class="row"><div class="l"><b>Schedule needs your OK</b><span>Mon Jul 27 – Wed Jul 29</span></div><button class="smbtn hot" onclick="go('schedule')">Review</button></div>
+      <div class="row"><div class="l"><b>Insurance expires Aug 3</b><span>snap a photo of the new COI</span></div><button class="smbtn hot" onclick="go('account')">Upload</button></div>
+      <div class="row"><div class="l"><b>You got paid $1,200</b><span>Leak repair — ACH sent Jul 18</span></div><button class="smbtn" onclick="go('money')">View</button></div>
+      <div class="note" style="margin-top:10px;">We also text 📱 and email ✉️ you everything — you'll never miss it.</div>
+    </div>
+
+    <div class="card" style="text-align:center;">
+      <div style="font-size:24px;">🐦</div>
+      <b style="font-size:15px;">Want a chirp when something needs you?</b>
+      <div style="font-size:12.5px; color:var(--ink2); margin:4px 0 10px;">Get the app and turn on Chirp for instant pings.</div>
+      <button class="bigbtn ghost">Get the app + turn on Chirp</button>
+    </div>
+  </div>
+
+  <!-- JOBS -->
+  <div class="screen hidden" id="jobs">
+    <div class="hello">🔨 Jobs</div>
+    <div class="okmsg" id="quoteok">✅ Sent! Chris has your price.</div>
+
+    <div class="card hero">
+      <div class="tag">NEEDS YOUR PRICE · DUE FRI JUL 24</div>
+      <b style="font-size:17px; display:block; margin:6px 0 2px;">Radiant floor heat</b>
+      <div style="color:var(--ink2); font-size:13.5px; margin-bottom:10px;">31 Hudson Watch Dr</div>
+      <button class="bigbtn ghost" style="margin-bottom:10px;">📎 View plans &amp; scope</button>
+      <label>Your price</label>
+      <input type="text" inputmode="decimal" placeholder="$">
+      <button class="bigbtn green" onclick="sent('quoteok')">Send price ✓</button>
+      <div class="note">or 📷 photo your written quote · ❓ ask a question first</div>
+    </div>
+
+    <h3 class="section">Your jobs</h3>
+    <div class="card">
+      <div class="row"><div class="l"><b>Boiler room leak repair</b><span>31 Hudson Watch Dr · Thu Jul 23</span></div><span class="pill g">ACTIVE</span></div>
+      <div class="row"><div class="l"><b>Fixture set — master bath</b><span>31 Hudson Watch Dr · Fri Jul 31</span></div><span class="pill b">UPCOMING</span></div>
+      <div class="row"><div class="l"><b>Radiant floor install</b><span>waiting on your price</span></div><span class="pill w">QUOTING</span></div>
+    </div>
+  </div>
+
+  <!-- SCHEDULE -->
+  <div class="screen hidden" id="schedule">
+    <div class="hello">📅 Schedule</div>
+    <div class="okmsg" id="schedok">✅ Confirmed! Added to your calendar.</div>
+
+    <button class="bigbtn ghost" style="margin-bottom:12px;" onclick="sent('schedok')">📲 Add my schedule to my phone's calendar</button>
+
+    <div class="card" style="border:1.5px solid var(--warn);">
+      <span class="pill w">NEEDS YOUR OK</span>
+      <div style="font-size:16px; font-weight:700; margin:8px 0 2px;">Mon Jul 27 – Wed Jul 29</div>
+      <div style="color:var(--ink2); font-size:13.5px; margin-bottom:12px;">Radiant floor install · 31 Hudson Watch Dr</div>
+      <button class="bigbtn green" onclick="sent('schedok')">👍 Works for me</button>
+      <button class="bigbtn ghost" style="margin-top:8px;">✏️ Request a change</button>
+    </div>
+
+    <div class="card">
+      <div class="row"><div class="l"><b>Thu Jul 23 · 8:00 AM</b><span>Boiler room leak repair</span></div><button class="smbtn">Request a change</button></div>
+      <div class="row"><div class="l"><b>Fri Jul 31 · 8:00 AM</b><span>Fixture set — master bath</span></div><button class="smbtn">Request a change</button></div>
+    </div>
+    <div class="note">Schedule updates also go to your 📱 text and ✉️ email.</div>
+  </div>
+
+  <!-- MONEY -->
+  <div class="screen hidden" id="money">
+    <div class="hello">💵 Money</div>
+    <div class="okmsg" id="invok">✅ Invoice received! Track it below.</div>
+    <div class="statrow">
+      <div class="card"><div class="stat">$4,850</div><div class="statlabel">Coming to you</div></div>
+      <div class="card"><div class="stat">Jul 30</div><div class="statlabel">Next payment</div></div>
+    </div>
+
+    <div class="camera" onclick="sent('invok')">
+      <div class="em">📷</div>
+      <div class="t">Send an invoice — take a photo</div>
+      <div class="s">or drop / scan a file. That's it.</div>
+    </div>
+
+    <h3 class="section">Your invoices</h3>
+    <div class="card">
+      <div class="row"><div class="l"><b>INV-1088 · $3,650</b><span>sent Jul 15 · payment scheduled Jul 30</span></div><span class="pill b">SCHEDULED</span></div>
+      <div class="row"><div class="l"><b>INV-1084 · $1,200</b><span>sent Jul 10 · paid Jul 18 by ACH</span></div><span class="pill g">✓ PAID</span></div>
+      <div class="row"><div class="l"><b>INV-1079 · $860</b><span>sent Jun 28 · no payment date yet</span></div><button class="smbtn">Follow up</button></div>
+    </div>
+
+    <h3 class="section">Payment schedule</h3>
+    <div class="card">
+      <div class="row"><div class="l"><b>Rough-in — tranche 1</b><span>Jul 30</span></div><span class="money">$3,650</span></div>
+      <div class="row"><div class="l"><b>Rough-in — tranche 2</b><span>after inspection passes</span></div><span class="money" style="color:var(--ink3);">$1,200</span></div>
+    </div>
+  </div>
+
+  <!-- ACCOUNT -->
+  <div class="screen hidden" id="account">
+    <div class="hello">👤 Account</div>
+    <div class="okmsg" id="docok">✅ Got it! You're all set.</div>
+
+    <div class="card">
+      <div class="row"><div class="l"><b>Dave Pickwick</b><span>Pickwick Plumbing · (203) 555-0142 · dave@pickwickplumbing.com</span></div><button class="smbtn">Edit</button></div>
+    </div>
+
+    <h3 class="section">Paperwork</h3>
+    <div class="camera" onclick="sent('docok')">
+      <div class="em">📷</div>
+      <div class="t">Snap a photo of your new insurance</div>
+      <div class="s">expires Aug 3 — upload and you're done</div>
+    </div>
+    <div class="card">
+      <div class="row"><div class="l"><b>Insurance (COI)</b><span>expires Aug 3, 2026</span></div><span class="pill w">⚠️ EXPIRING</span></div>
+      <div class="row"><div class="l"><b>License — P1 Plumbing</b><span>expires Mar 2027</span></div><span class="pill g">✓ CURRENT</span></div>
+      <div class="row"><div class="l"><b>W-9</b><span>on file</span></div><span class="pill g">✓ CURRENT</span></div>
+    </div>
+
+    <h3 class="section">Getting paid</h3>
+    <div class="card">
+      <div class="row"><div class="l"><b>Bank account (ACH)</b><span>••••4821 — payments go here</span></div><button class="smbtn">Edit</button></div>
+      <div class="row"><div class="l"><b>Card payments</b><span>you accept credit cards</span></div><span class="pill g">✓ YES</span></div>
+    </div>
+
+    <h3 class="section">Notifications</h3>
+    <div class="card">
+      <div class="row"><div class="l"><b>📱 Text me</b><span>bids, schedule, paperwork, payments</span></div><div class="toggle"></div></div>
+      <div class="row"><div class="l"><b>✉️ Email me</b><span>everything, with attachments</span></div><div class="toggle"></div></div>
+      <div class="row"><div class="l"><b>🐦 Chirp (app)</b><span>instant pings — get the app to turn on</span></div><div class="toggle off"></div></div>
+      <div class="row"><div class="l"><b>📲 Calendar sync</b><span>schedule lands in your phone calendar</span></div><div class="toggle"></div></div>
+    </div>
+  </div>
+
+  <!-- MESSAGES -->
+  <div class="screen hidden" id="messages">
+    <button class="back" onclick="go(lastTab)">← Back</button>
+    <div class="hello">💬 Messages</div>
+    <div class="bubble them">Morning Dave — plans for the radiant floor quote are attached on the job. Any questions before Friday?</div>
+    <div class="bubble me">Looks good. Is the manifold location final?</div>
+    <div class="bubble them">Yes — utility room, north wall. Marked on sheet M-2.</div>
+    <div style="position:absolute; bottom:78px; left:16px; right:16px;">
+      <input placeholder="Type a message…" style="margin-bottom:0;">
+    </div>
+  </div>
+
+  <button class="fab" id="fab" onclick="go('messages')">💬<span class="fdot">1</span></button>
+
+  <nav>
+    <button id="n-home" class="on" onclick="go('home')"><span class="em">🏠</span>Home</button>
+    <button id="n-jobs" onclick="go('jobs')"><span class="em">🔨</span>Jobs</button>
+    <button id="n-schedule" onclick="go('schedule')"><span class="em">📅</span>Schedule</button>
+    <button id="n-money" onclick="go('money')"><span class="em">💵</span>Money</button>
+    <button id="n-account" onclick="go('account')"><span class="em">👤</span>Account</button>
+  </nav>
+</div>
+<script>
+  const tabs=['home','jobs','schedule','money','account'];
+  let lastTab='home';
+  function go(s){
+    if(tabs.includes(s)) lastTab=s;
+    ['home','jobs','schedule','money','account','messages'].forEach(x=>{
+      document.getElementById(x).classList.toggle('hidden',x!==s);
+    });
+    tabs.forEach(x=>document.getElementById('n-'+x).classList.toggle('on',x===s));
+    document.getElementById('fab').style.display = (s==='messages') ? 'none' : 'block';
+    document.querySelectorAll('.screen').forEach(e=>e.scrollTop=0);
+  }
+  function sent(id){ const el=document.getElementById(id); el.style.display='block'; setTimeout(()=>el.style.display='none',2500); }
+</script>
+</body>
+</html>

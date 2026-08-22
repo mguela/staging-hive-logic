@@ -1,0 +1,29 @@
+  <div class="topbar">
+    <div class="greet"><b>Documents</b><span>Upload and file real documents. Reina suggests a type when classification is available; you always confirm it.</span></div>
+  </div>
+  <div style="display:grid;grid-template-columns:240px 1fr;gap:16px;align-items:start">
+    <div class="card" style="padding:14px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+        <h3 style="font-size:13px">Folders</h3>
+        <button class="iconbtn" style="width:28px;height:28px;font-size:14px" onclick="hlDocNewFolder(null)">+</button>
+      </div>
+      <div id="hldoc-tree" style="display:flex;flex-direction:column;gap:1px;font-size:12.5px"></div>
+      <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--line)">
+        <div style="padding:8px 6px;font-size:12px;color:var(--ink);cursor:pointer;border-radius:8px" onclick="hlDocSelectFolder(null)">📄 All documents</div>
+        <div style="padding:8px 6px;font-size:12px;color:var(--ink);cursor:pointer;border-radius:8px" onclick="hlDocSelectTemplates()">✨ Templates</div>
+      </div>
+    </div>
+    <div class="card" style="padding:18px">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap">
+        <div id="hldoc-crumb" style="font-weight:800;font-size:14px">All documents</div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <input id="hldoc-search" placeholder="Search this page…" aria-label="Search the current document page by filename, client, or job" style="border:1px solid var(--line);border-radius:8px;padding:8px 12px;font-size:12px;width:220px" oninput="hlDocRenderCurrentPage()">
+          <label class="btn primary" style="margin:0;cursor:pointer">Upload<input id="hldoc-file" type="file" style="display:none" onchange="hlDocUpload(this.files[0])"></label>
+        </div>
+      </div>
+      <div id="hldoc-suggest" style="display:none;margin-bottom:14px"></div>
+      <div id="hldoc-list" style="display:flex;flex-direction:column;gap:1px"></div>
+      <div id="hldoc-empty" style="display:none;text-align:center;padding:40px 0;color:var(--mut);font-size:12.5px">No documents here yet — click Upload to add one.</div>
+      <div id="hldoc-page" style="display:none;align-items:center;justify-content:space-between;gap:12px;margin-top:14px;padding-top:12px;border-top:1px solid var(--line)"></div>
+    </div>
+  </div>

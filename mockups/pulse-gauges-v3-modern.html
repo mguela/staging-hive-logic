@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HiveLogic — Pulse Gauges v3</title>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700;800&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#484f64; --ink-strong:#333a4e;
+    --canvas:#f0f1f6; --card:#fff; --line:#dadde8;
+    --rail:#161e2e; --rail2:#1d2740;
+    --mut:#8b92a6;
+    --mono:'JetBrains Mono',monospace;
+    --sans:'Montserrat',sans-serif;
+    --shadow:inset 0 1px 0 rgba(255,255,255,.85), 0 10px 18px rgba(53,76,89,.13), 0 3px 6px rgba(53,76,89,.10);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:var(--sans);background:var(--canvas);color:var(--ink);padding:22px 14px;display:flex;justify-content:center}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(235px,1fr));gap:22px;width:100%;max-width:810px}
+
+  .card{
+    position:relative;
+    border:1.5px solid var(--line);
+    border-radius:14px;
+    box-shadow:var(--shadow);
+    padding:26px 16px 16px;
+    background:var(--card);
+    transition:transform .18s, box-shadow .18s;
+  }
+  .card:hover{transform:translateY(-3px)}
+
+  .title{
+    position:absolute;top:-11px;left:14px;
+    background:var(--card);
+    border:1.5px solid rgb(var(--sc));
+    border-radius:99px;padding:3px 12px 3px 9px;
+    font-family:var(--mono);font-size:8.5px;font-weight:700;letter-spacing:1.3px;
+    color:rgb(var(--sc));
+    box-shadow:0 2px 5px rgba(53,76,89,.10);
+  }
+  .title::before{content:"⬡ ";font-size:8px}
+
+  /* brushed gunmetal dial with machined rim */
+  .dial{
+    position:relative;
+    width:150px;height:150px;margin:0 auto;
+    border-radius:50%;
+    background:
+      radial-gradient(95% 95% at 50% 26%, rgba(255,255,255,.16) 0%, rgba(255,255,255,0) 46%),
+      conic-gradient(from 210deg,
+        #2b3345 0deg, #414c63 22deg, #29303f 48deg, #4a5570 76deg,
+        #2b3345 104deg, #3d4760 132deg, #272e3d 160deg, #46516c 190deg,
+        #2b3345 218deg, #414c63 246deg, #29303f 274deg, #4a5570 302deg,
+        #2b3345 330deg, #3d4760 360deg);
+    box-shadow:
+      inset 0 2px 6px rgba(0,0,0,.5),
+      inset 0 -2px 5px rgba(255,255,255,.07),
+      0 0 22px rgba(var(--sc), calc(.35 * var(--glow))),
+      0 6px 14px rgba(22,30,46,.30);
+  }
+  /* machined metal rim ring */
+  .dial::before{
+    content:"";position:absolute;inset:-4px;border-radius:50%;z-index:-1;
+    background:conic-gradient(from 140deg,#9aa4b8,#5b6478,#cfd6e2,#6a7488,#9aa4b8,#565f73,#c3cad8,#9aa4b8);
+    box-shadow:0 3px 8px rgba(22,30,46,.35);
+  }
+  .dial svg{position:absolute;inset:0;overflow:visible}
+  .seg{stroke:rgba(226,232,244,.42);stroke-width:3.2;stroke-linecap:round}
+  .seg.on{stroke:rgb(var(--sc));filter:drop-shadow(0 0 3.5px rgba(var(--sc),.85))}
+  .seg.tip{stroke:#fff;filter:drop-shadow(0 0 6px rgba(var(--sc),1))}
+
+  .center{
+    position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;
+  }
+  .center .n{font-size:24px;font-weight:800;color:#f6f8fc;line-height:1;letter-spacing:-.5px;text-shadow:0 1px 3px rgba(0,0,0,.55)}
+  .center .pc{font-family:var(--mono);font-size:9.5px;letter-spacing:1px;color:rgba(var(--sc),1);font-weight:700;margin-top:3px}
+
+  .st{
+    display:block;width:max-content;margin:13px auto 0;
+    font-family:var(--mono);font-size:9.5px;letter-spacing:.9px;font-weight:700;
+    color:rgb(var(--sc));background:rgba(var(--sc),.12);
+    border:1px solid rgba(var(--sc),.35);
+    border-radius:99px;padding:5px 14px;
+  }
+  .sub{text-align:center;font-size:13px;color:var(--ink-strong);font-weight:600;margin-top:9px;line-height:1.55}
+  .sub b{color:#1e2436;font-weight:800}
+</style>
+</head>
+<body>
+<div class="grid" id="grid"></div>
+
+<script>
+// 270° segmented ring: 42 segments, gap at the bottom. Center (75,75), r 60.
+const CX=75, CY=75, R=60, SEGS=42, START=135, SWEEP=270;
+function seg(i){
+  const a=(START+SWEEP*(i/(SEGS-1)))*Math.PI/180;
+  const x1=CX+(R-8)*Math.cos(a), y1=CY+(R-8)*Math.sin(a);
+  const x2=CX+R*Math.cos(a),     y2=CY+R*Math.sin(a);
+  return {x1,y1,x2,y2};
+}
+
+const tiles=[
+ {t:'AVAILABLE CASH', n:'$95K', pc:'24% OF TARGET', st:'2.6 WK RUNWAY · LOW', sc:'232,116,97', glow:.95, pct:.24,
+  sub:'True cash vs <b>8-wk overhead target</b> ($290K)'},
+ {t:'PROFIT (YTD)', n:'40.8%', pc:'91% OF GOAL', st:'ON TARGET', sc:'61,204,138', glow:.7, pct:.91,
+  sub:'Gross margin vs <b>45% goal</b> · QuickBooks'},
+ {t:'OWED TO YOU', n:'$321K', pc:'19% PAST DUE', st:'36 OVERDUE · CHASE', sc:'244,178,64', glow:.8, pct:.62,
+  sub:'<b>$60K past due</b> of $321K outstanding · Jobber'},
+ {t:'WORK COMING IN', n:'$324K', pc:'72% OF GOAL', st:'PIPELINE HEALTHY', sc:'61,204,138', glow:.6, pct:.72,
+  sub:'22 open quotes vs <b>$450K pipeline goal</b>'},
+ {t:'OVERDUE TO VENDORS', n:'$387K', pc:'388% OF CEILING', st:'110 BILLS · HIGH', sc:'232,116,97', glow:1, pct:.97,
+  sub:'Unpaid vendor bills vs <b>$100K comfort ceiling</b>'},
+ {t:'JOBS NEEDING ATTENTION', n:'11/37', pc:'30% UNSCHEDULED', st:'NEEDS SCHEDULING', sc:'244,178,64', glow:.6, pct:.30,
+  sub:'11 of 37 active jobs <b>unscheduled</b> · see Watching'}
+];
+
+document.getElementById('grid').innerHTML = tiles.map((x,i)=>{
+ let segs='';
+ for(let s=0;s<SEGS;s++){
+   const p=seg(s);
+   segs+=`<line class="seg" data-i="${s}" x1="${p.x1}" y1="${p.y1}" x2="${p.x2}" y2="${p.y2}"/>`;
+ }
+ return `
+ <div class="card" style="--sc:${x.sc};--glow:${x.glow}">
+   <div class="title">${x.t}</div>
+   <div class="dial" data-pct="${x.pct}" id="d${i}">
+     <svg viewBox="0 0 150 150">${segs}</svg>
+     <div class="center"><div class="n">${x.n}</div><div class="pc">${x.pc}</div></div>
+   </div>
+   <span class="st">● ${x.st}</span>
+   <div class="sub">${x.sub}</div>
+ </div>`}).join('');
+
+// IGNITION SWEEP — old-school cluster: needle full sweep up, then settle back to the real reading
+document.querySelectorAll('.dial').forEach((d,di)=>{
+ const pct=+d.dataset.pct, lit=Math.round(pct*(SEGS-1));
+ const lines=d.querySelectorAll('.seg');
+ const UP=13, DOWN=17, HOLD=170, START_DELAY=200+di*90;
+
+ // phase 1: sweep to FULL
+ lines.forEach((ln,s)=>setTimeout(()=>{
+   ln.classList.add('on');
+   if(s>0) lines[s-1].classList.remove('tip');
+   ln.classList.add('tip');
+ }, START_DELAY + s*UP));
+
+ const topAt = START_DELAY + SEGS*UP + HOLD;
+
+ // phase 2: fall back to the real value
+ for(let s=SEGS-1; s>lit; s--){
+   setTimeout(()=>{
+     lines[s].classList.remove('on','tip');
+     lines[s-1].classList.add('tip');
+   }, topAt + (SEGS-1-s)*DOWN);
+ }
+ // settle: ensure tip sits exactly on the reading
+ setTimeout(()=>{
+   lines.forEach((ln,s)=>{
+     ln.classList.toggle('on', s<lit);
+     ln.classList.toggle('tip', s===lit);
+   });
+ }, topAt + (SEGS-1-lit)*DOWN + 60);
+});
+</script>
+</body>
+</html>

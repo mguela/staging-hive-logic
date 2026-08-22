@@ -1,0 +1,76 @@
+name: Mergeable
+
+# WHY THIS EXISTS. A pull request that conflicts with its base gets NO checks at
+# all -- GitHub cannot build the merge ref, so it dispatches nothing. The pull
+# request page then shows an empty check list, which looks exactly like "the
+# gate has not started yet". On 2026-08-18 that cost two long waits on runs that
+# were never coming, and the real cause (a one-line conflict on the page build
+# id) went unnoticed each time.
+#
+# So this posts the one check a conflicted PR CAN still receive, and makes it
+# red. Silence stops being the symptom.
+#
+# pull_request_target, not pull_request, ON PURPOSE: pull_request workflows are
+# exactly what a conflicted PR cannot run, so a check written that way could
+# never report on the case it exists for. pull_request_target runs against the
+# BASE branch instead.
+#
+# SECURITY. pull_request_target runs with repository write scope and access to
+# secrets, which is why the usual warning is to never check out or execute the
+# pull request's code. This job does neither -- no actions/checkout, no build,
+# no dependency install. It asks the API one question about the PR and prints
+# the answer. Keep it that way.
+
+on:
+  pull_request_target:
+    types: [opened, reopened, synchronize, ready_for_review]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: mergeable-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  mergeable:
+    name: Mergeable with the base branch
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Ask GitHub whether this can merge
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          # mergeable is computed asynchronously: it is null until GitHub has
+          # worked it out, so a single immediate read would report "unknown" for
+          # most PRs and this check would be noise. Poll for a real answer.
+          for attempt in 1 2 3 4 5 6 7 8 9 10; do
+            body="$(curl -sS -H "Authorization: Bearer $GH_TOKEN" \
+              -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/repos/$REPO/pulls/$PR")"
+            state="$(printf '%s' "$body" | jq -r '.mergeable_state')"
+            mergeable="$(printf '%s' "$body" | jq -r '.mergeable')"
+            [ "$mergeable" != "null" ] && break
+            echo "mergeable not computed yet (attempt $attempt), waiting..."
+            sleep 6
+          done
+
+          echo "mergeable=$mergeable mergeable_state=$state"
+
+          if [ "$mergeable" = "false" ] || [ "$state" = "dirty" ]; then
+            echo "::error::This pull request conflicts with its base branch, so GitHub will not run the completion gate on it. An empty check list here means BLOCKED, not pending."
+            echo "Resolve with:"
+            echo "  git fetch origin main && git merge origin/main"
+            echo "  node scripts/stamp-page-build.mjs   # resolves a page-build-id conflict and re-stamps"
+            exit 1
+          fi
+
+          # 'unknown' after ten tries is GitHub being slow, not a conflict.
+          # Failing on it would cry wolf, and a check that cries wolf gets
+          # ignored on the day it is right.
+          echo "No conflict with the base branch (state: $state)."

@@ -1,0 +1,866 @@
+<!doctype html>
+<!-- Slice 3 of Overhead Registries + Payroll Integration; all math server-side (api/registries.js + the registry_overhead / compliance_calendar views); browser is display + edit only. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HiveLogic — Overhead Registries</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#484f64; --canvas:#f0f1f6; --card:#ffffff; --line:#dadde8; --rail:#161e2e;
+    --gold:#748a9e; --green:#1B7A50; --red:#c65b4e; --cta:#f5793b;
+    --blue:#3d6fa5; --grey:#8a90a2; --amber:#b07d17;
+    --ink2:#6b7488; --ink3:#98a0b4;
+    --radius:12px;
+    --shadow:0 1px 2px rgba(22,30,46,.05), 0 6px 18px rgba(22,30,46,.05);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{font-family:'Montserrat',system-ui,-apple-system,"Segoe UI",sans-serif;background:var(--canvas);color:var(--ink);-webkit-font-smoothing:antialiased;font-size:14px;line-height:1.4}
+  .mono{font-family:'JetBrains Mono',ui-monospace,monospace;font-variant-numeric:tabular-nums}
+  a{color:var(--blue);text-decoration:none}
+  a:hover{text-decoration:underline}
+
+  header.top{background:var(--rail);color:#eef1f7;padding:14px 22px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px}
+  header.top .brand{display:flex;flex-direction:column;gap:2px}
+  header.top h1{font-size:15px;margin:0;font-weight:800;letter-spacing:.02em}
+  header.top .sub{font-size:11px;color:#9aa6bd;font-weight:500}
+  header.top nav{display:flex;gap:14px;font-size:12px;font-weight:700}
+  header.top nav a{color:#c3ccdd}
+  header.top nav a:hover{color:#fff}
+
+  main{max-width:1180px;margin:0 auto;padding:22px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);margin-bottom:18px;overflow:hidden}
+  .card > .card-hd{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px 18px;border-bottom:1px solid var(--line)}
+  .card > .card-hd h2{font-size:12px;text-transform:uppercase;letter-spacing:.07em;color:var(--ink2);margin:0;font-weight:800}
+  .card > .card-hd .hd-actions{display:flex;align-items:center;gap:12px}
+  .card > .card-hd .count{font-size:11px;color:var(--ink3);font-weight:600}
+  .card-bd{padding:14px 18px}
+
+  /* summary strip */
+  .strip{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:18px}
+  .stat{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:15px 17px}
+  .stat .sl{font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink3);font-weight:800;margin-bottom:8px}
+  .stat .sv{font-size:23px;font-weight:700;color:var(--rail)}
+  .stat .sn{font-size:11px;color:var(--ink3);font-weight:500;margin-top:5px}
+  .stat.reg .sv{color:var(--green)}
+  .stat.bench .sv{color:var(--gold)}
+  .stat.exp .sv{color:var(--red)}
+
+  /* tabs */
+  .tabs{display:flex;flex-wrap:wrap;gap:4px;background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:6px;margin-bottom:18px}
+  .tab{border:1px solid transparent;background:transparent;color:var(--ink2);border-radius:9px;padding:8px 13px;font-size:12.5px;font-weight:700;cursor:pointer;font-family:inherit;display:flex;align-items:center;gap:7px}
+  .tab:hover{background:#f4f5f9}
+  .tab.on{background:var(--rail);color:#fff}
+  .tab .tc{font-size:10.5px;font-weight:700;background:#eceef4;color:var(--ink2);border-radius:20px;padding:1px 7px;min-width:18px;text-align:center}
+  .tab.on .tc{background:rgba(255,255,255,.18);color:#fff}
+
+  .panel.hidden{display:none}
+
+  .tablewrap{overflow-x:auto;border:1px solid var(--line);border-radius:10px}
+  table.rtable{border-collapse:collapse;width:100%;min-width:100%}
+  table.rtable th{font-size:9.5px;text-transform:uppercase;letter-spacing:.04em;color:var(--ink3);font-weight:800;text-align:left;padding:9px 10px;background:#f7f8fb;border-bottom:1px solid var(--line);white-space:nowrap}
+  table.rtable td{padding:6px 8px;border-bottom:1px solid #eceef4;vertical-align:middle}
+  table.rtable tr:last-child td{border-bottom:none}
+  table.rtable th.tact,table.rtable td.tact{position:sticky;right:0;background:#fff;box-shadow:-6px 0 8px -8px rgba(22,30,46,.25)}
+  table.rtable th.tact{background:#f7f8fb}
+
+  table.rtable input[type=text],table.rtable input[type=number],table.rtable input[type=date],table.rtable select{
+    width:100%;min-width:96px;border:1.5px solid transparent;border-radius:7px;padding:6px 7px;font-size:12.5px;
+    font-family:'JetBrains Mono',ui-monospace,monospace;font-variant-numeric:tabular-nums;background:#fbfbfe;color:var(--ink)}
+  table.rtable input.t{font-family:'Montserrat',sans-serif;min-width:120px}
+  table.rtable select{font-family:'Montserrat',sans-serif;font-size:12px;min-width:120px}
+  table.rtable input:hover,table.rtable select:hover{border-color:var(--line)}
+  table.rtable input:focus,table.rtable select:focus{outline:none;border-color:var(--cta);background:#fff}
+  table.rtable input.dirty{border-color:var(--gold)}
+  table.rtable input.bad,table.rtable select.bad{border-color:var(--red);background:#fdf3f2}
+  table.rtable .boolcell{display:flex;justify-content:center}
+  table.rtable input[type=checkbox]{width:17px;height:17px;min-width:0;accent-color:var(--cta);cursor:pointer}
+
+  tr.addrow{background:#fbfaf6}
+  tr.addrow.hidden{display:none}
+  tr.addrow td{background:#fbfaf6}
+  tr.addrow td.tact{background:#fbfaf6}
+
+  .badge{display:inline-block;padding:2px 8px;border-radius:20px;font-size:9.5px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;border:1px solid transparent;white-space:nowrap}
+  .badge.imported{background:#eaf1fa;color:#2f5f96;border-color:#cfe0f2}
+  .badge.confirmed{background:#e6f3ec;color:#166a45;border-color:#c5e5d3}
+  .badge.manual{background:#eef0f4;color:#6b7488;border-color:#dcdfe8}
+  .badge.extracted{background:#f3efe4;color:#7a6a3d;border-color:#e3d8bd}
+
+  .btn{border:1px solid var(--line);background:#fff;color:var(--ink);border-radius:9px;padding:8px 14px;font-size:12.5px;font-weight:700;cursor:pointer;font-family:inherit}
+  .btn:hover{border-color:var(--ink3)}
+  .btn.cta{background:var(--cta);border-color:var(--cta);color:#fff}
+  .btn.cta:hover{filter:brightness(1.05)}
+  .btn.sm{padding:6px 11px;font-size:11.5px}
+  .btn.arch{border:1px solid var(--line);background:#fff;color:var(--ink2);border-radius:8px;padding:5px 9px;font-size:11px;font-weight:700}
+  .btn.arch:hover{border-color:var(--red);color:var(--red)}
+
+  .inline-err{margin-top:12px;padding:10px 13px;border:1.5px solid var(--red);background:#fdf3f2;color:var(--red);border-radius:9px;font-size:12.5px;font-weight:700}
+  .inline-err.hidden{display:none}
+
+  /* compliance calendar */
+  table.caltable{border-collapse:collapse;width:100%}
+  table.caltable th{font-size:9.5px;text-transform:uppercase;letter-spacing:.04em;color:var(--ink3);font-weight:800;text-align:left;padding:10px 12px;background:#f7f8fb;border-bottom:1px solid var(--line)}
+  table.caltable td{padding:11px 12px;border-bottom:1px solid #eceef4;vertical-align:middle;font-size:13px}
+  table.caltable tr:last-child td{border-bottom:none}
+  .kindtag{display:inline-block;padding:2px 9px;border-radius:20px;border:1px solid var(--line);background:#f4f5f9;font-weight:700;font-size:10.5px;text-transform:capitalize;color:var(--ink2)}
+  .cdue{display:inline-block;font-family:'JetBrains Mono',ui-monospace,monospace;font-weight:700;font-size:12px;padding:3px 10px;border-radius:20px;border:1px solid transparent}
+  .cdue.red{background:#fbecea;color:var(--red);border-color:#f0cfc9}
+  .cdue.amber{background:#f7f0dd;color:var(--amber);border-color:#e8dbb6}
+  .cdue.green{background:#e6f3ec;color:var(--green);border-color:#c5e5d3}
+  .row-red{box-shadow:inset 3px 0 0 var(--red)}
+  .row-amber{box-shadow:inset 3px 0 0 var(--amber)}
+  .row-green{box-shadow:inset 3px 0 0 var(--green)}
+  .blockmark{display:inline-block;margin-left:8px;padding:1px 7px;border-radius:5px;background:#fbecea;color:var(--red);border:1px solid #f0cfc9;font-size:9px;font-weight:800;letter-spacing:.05em;vertical-align:middle}
+
+  /* reina proposals */
+  .pbar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:12px 16px;background:#f7f8fb;border:1px solid var(--line);border-radius:10px;margin-bottom:14px}
+  .pbar .selall{display:flex;align-items:center;gap:7px;font-size:12px;font-weight:700;color:var(--ink2);cursor:pointer}
+  .pbar .selall input{width:16px;height:16px;accent-color:var(--cta);cursor:pointer}
+  .pbar .spacer{flex:1}
+  .btn.approve{background:var(--green);border-color:var(--green);color:#fff}
+  .btn.approve:hover{filter:brightness(1.06)}
+  .btn.reject{background:#fff;border-color:#e2b7b1;color:var(--red)}
+  .btn.reject:hover{background:#fdf3f2;border-color:var(--red)}
+  .btn[disabled]{opacity:.5;cursor:not-allowed;filter:none}
+  .pcard{display:flex;gap:13px;align-items:flex-start;border:1px solid var(--line);border-radius:11px;background:#fff;padding:14px 16px;margin-bottom:11px;box-shadow:var(--shadow)}
+  .pcard .pcheck{padding-top:2px}
+  .pcard .pcheck input{width:17px;height:17px;accent-color:var(--cta);cursor:pointer}
+  .pcard .pbody{flex:1;min-width:0}
+  .pcard .phd{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px}
+  .pcard .ptype{font-size:13px;font-weight:800;color:var(--rail)}
+  .pcard .ptarget{font-size:11px;color:var(--ink3);font-weight:600}
+  .pcard .pdate{font-size:11px;color:var(--ink3);font-weight:600}
+  .pill{display:inline-block;padding:2px 9px;border-radius:20px;font-size:10px;font-weight:800;letter-spacing:.03em;border:1px solid #cfe0f2;background:#eaf1fa;color:#2f5f96}
+  .pill.hi{background:#e6f3ec;color:#166a45;border-color:#c5e5d3}
+  .pill.lo{background:#f7f0dd;color:var(--amber);border-color:#e8dbb6}
+  .pdiff{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:9px}
+  .pdiff .d{font-family:'JetBrains Mono',ui-monospace,monospace;font-variant-numeric:tabular-nums;font-size:12px;background:#fafbfe;border:1px solid var(--line);border-radius:8px;padding:5px 10px;color:var(--ink)}
+  .pdiff .d .k{color:var(--ink2);font-weight:700;font-family:'Montserrat',sans-serif;margin-right:6px}
+  .pdiff .d .old{color:var(--ink3)}
+  .pdiff .d .arr{color:var(--gold);margin:0 5px;font-weight:700}
+  .pdiff .d .new{color:var(--green);font-weight:700}
+  .prat{font-size:12.5px;color:var(--ink2);line-height:1.5}
+
+  .gate{max-width:460px;margin:80px auto;text-align:center;padding:34px 26px}
+  .gate .h{font-size:20px;font-weight:800;color:var(--rail);margin-bottom:10px}
+  .gate p{color:var(--ink2);font-size:14px;margin:0 0 20px}
+
+  #toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%) translateY(20px);background:var(--rail);color:#fff;padding:11px 20px;border-radius:10px;font-size:13px;font-weight:600;box-shadow:0 12px 34px rgba(22,30,46,.32);opacity:0;pointer-events:none;transition:opacity .25s,transform .25s;z-index:99}
+  #toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+  #toast.err{background:var(--red)}
+
+  .muted{color:var(--ink3);font-size:12.5px;text-align:center;padding:16px 0}
+  .hidden{display:none !important}
+  .spin{padding:40px;text-align:center;color:var(--ink3);font-size:13px}
+  @media(max-width:820px){
+    .strip{grid-template-columns:1fr}
+  }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="brand">
+    <h1>Overhead Registries</h1>
+    <div class="sub">Overhead Registries + Payroll Integration — figures computed server-side</div>
+  </div>
+  <nav>
+    <a href="/setup/cost-model.html">&larr; Cost Model</a>
+    <a href="/">Home</a>
+  </nav>
+</header>
+
+<div id="gate" class="gate card hidden">
+  <div class="h">Please sign in to the HiveLogic app first</div>
+  <p>You need an active HiveLogic session to view and edit your overhead registries.</p>
+  <a class="btn cta" href="/">Go to HiveLogic sign-in</a>
+</div>
+
+<main id="app" class="hidden">
+
+  <!-- SUMMARY STRIP -->
+  <div class="strip">
+    <div class="stat reg">
+      <div class="sl">Overhead from registries</div>
+      <div class="sv mono" id="sReg">—</div>
+      <div class="sn">annual, sourced from your records</div>
+    </div>
+    <div class="stat bench">
+      <div class="sl">Overhead from benchmarks</div>
+      <div class="sv mono" id="sBench">—</div>
+      <div class="sn">annual, still on industry defaults</div>
+    </div>
+    <div class="stat exp">
+      <div class="sl">Expiring within 90 days</div>
+      <div class="sv mono" id="sExp">—</div>
+      <div class="sn">items on the compliance calendar</div>
+    </div>
+  </div>
+
+  <!-- TABS -->
+  <div class="tabs" id="tabs"></div>
+
+  <!-- PANELS -->
+  <div id="panels"></div>
+
+</main>
+
+<div id="toast"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+var SUPABASE_URL = 'https://sqhusuuhlmcmkeowdrga.supabase.co';
+var SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNxaHVzdXVobG1jbWtlb3dkcmdhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQxMjkyMjAsImV4cCI6MjA5OTcwNTIyMH0.PszXL0D8KJC0MEYgbTduSPEcPn2g1pGx0IMK3YGzBcI';
+var sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { auth: { persistSession: true, autoRefreshToken: true } });
+
+/* ---------- static config (labels + column shapes only; NO overhead math here) ---------- */
+var FREQ = { mo:'Monthly (/mo)', yr:'Yearly (/yr)', wk:'Weekly (/wk)' };
+var FREQ_SHORT = { mo:'/mo', yr:'/yr', wk:'/wk' };
+
+var REGS = {
+  insurance: {
+    label:'Insurance', title:'Insurance Policies', table:'insurance_policies',
+    cols:[
+      {k:'policy_type',l:'Policy Type',t:'text'},
+      {k:'carrier',l:'Carrier',t:'text'},
+      {k:'policy_number',l:'Policy #',t:'text'},
+      {k:'coverage_limit_each',l:'Limit / Each',t:'money'},
+      {k:'coverage_limit_aggregate',l:'Limit / Aggregate',t:'money'},
+      {k:'premium_amount',l:'Premium',t:'money'},
+      {k:'premium_frequency',l:'Frequency',t:'freq'},
+      {k:'effective_date',l:'Effective',t:'date'},
+      {k:'expiration_date',l:'Expires',t:'date'},
+      {k:'wc_class_code',l:'WC Class',t:'text'},
+      {k:'wc_rate_per_100',l:'WC Rate / $100',t:'money'}
+    ]
+  },
+  licenses: {
+    label:'Licenses', title:'Licenses & Credentials', table:'licenses_credentials',
+    cols:[
+      {k:'scope',l:'Scope',t:'sel',opts:['company','employee','subcontractor']},
+      {k:'holder_name',l:'Holder',t:'text'},
+      {k:'credential_type',l:'Credential',t:'text'},
+      {k:'credential_number',l:'Number',t:'text'},
+      {k:'issuing_body',l:'Issuing Body',t:'text'},
+      {k:'expiration_date',l:'Expires',t:'date'},
+      {k:'renewal_fee',l:'Renewal Fee',t:'money'},
+      {k:'renewal_frequency',l:'Frequency',t:'freq'},
+      {k:'blocks_work',l:'Blocks Work',t:'bool'}
+    ]
+  },
+  loans: {
+    label:'Loans', title:'Loans & Obligations', table:'loans_obligations',
+    cols:[
+      {k:'obligation_type',l:'Type',t:'sel',opts:['loan','lease','line_of_credit','mortgage','credit_card']},
+      {k:'lender',l:'Lender',t:'text'},
+      {k:'account_last4',l:'Acct ••••',t:'text'},
+      {k:'description',l:'Description',t:'text'},
+      {k:'payment_amount',l:'Payment',t:'money'},
+      {k:'payment_frequency',l:'Frequency',t:'freq'},
+      {k:'interest_rate',l:'Interest %',t:'pct'},
+      {k:'current_balance',l:'Balance',t:'money'},
+      {k:'maturity_date',l:'Maturity',t:'date'},
+      {k:'balloon_amount',l:'Balloon',t:'money'},
+      {k:'vehicle_jobber_id',l:'Vehicle Link',t:'text'}
+    ]
+  },
+  leases: {
+    label:'Leases', title:'Property Leases', table:'leases',
+    cols:[
+      {k:'landlord',l:'Landlord',t:'text'},
+      {k:'premises',l:'Premises',t:'text'},
+      {k:'base_rent',l:'Base Rent',t:'money'},
+      {k:'cam_charges',l:'CAM Charges',t:'money'},
+      {k:'rent_frequency',l:'Frequency',t:'freq'},
+      {k:'escalation_pct',l:'Escalation %',t:'pct'},
+      {k:'escalation_date',l:'Escalation Date',t:'date'},
+      {k:'term_start',l:'Term Start',t:'date'},
+      {k:'term_end',l:'Term End',t:'date'},
+      {k:'option_notice_deadline',l:'Option Notice',t:'date'},
+      {k:'security_deposit',l:'Deposit',t:'money'}
+    ]
+  },
+  vehicles: {
+    label:'Vehicles', title:'Vehicle Costs', table:'vehicle_costs',
+    note:'Vehicles come from a read-only Jobber / FleetSharp mirror — this tab attaches cost data only.',
+    cols:[
+      {k:'vehicle_name',l:'Vehicle',t:'text'},
+      {k:'registration_expires',l:'Registration Expires',t:'date'},
+      {k:'odometer',l:'Odometer',t:'num'},
+      {k:'service_interval_miles',l:'Service Interval (mi)',t:'num'},
+      {k:'loan_id',l:'Loan Link',t:'text'},
+      {k:'insurance_policy_id',l:'Insurance Link',t:'text'},
+      {k:'assigned_profile_id',l:'Assigned To',t:'text'},
+      {k:'division_id',l:'Division',t:'text'},
+      {k:'fuel_cost_per_mile',l:'Fuel $/mi',t:'permile'},
+      {k:'maintenance_cost_per_mile',l:'Maint $/mi',t:'permile'}
+    ]
+  },
+  subscriptions: {
+    label:'Subscriptions', title:'Subscriptions', table:'subscriptions',
+    cols:[
+      {k:'name',l:'Name',t:'text'},
+      {k:'category',l:'Category',t:'text'},
+      {k:'monthly_cost',l:'Monthly Cost',t:'money'},
+      {k:'billing_cycle',l:'Billing Cycle',t:'sel',opts:['monthly','annual','usage','other']},
+      {k:'renewal_date',l:'Renewal',t:'date'},
+      {k:'relationship_owner',l:'Owner',t:'text'}
+    ]
+  }
+};
+var REG_ORDER = ['insurance','licenses','loans','leases','vehicles','subscriptions'];
+
+/* ---------- helpers ---------- */
+function esc(s){
+  return String(s==null?'':s).replace(/[&<>"']/g,function(c){
+    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
+  });
+}
+function $(sel,root){ return (root||document).querySelector(sel); }
+function cssq(s){ return String(s==null?'':s).replace(/"/g,'\\"'); }
+function titleize(s){ return String(s||'').replace(/_/g,' ').replace(/\b\w/g,function(c){return c.toUpperCase();}); }
+
+function money(v){
+  if(v==null||v==='') return '—';
+  var n=Number(v); if(!isFinite(n)) return '—';
+  return '$'+n.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+}
+function money0(v){
+  if(v==null||v==='') return '—';
+  var n=Number(v); if(!isFinite(n)) return '—';
+  return '$'+n.toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:0});
+}
+function fmtDate(v){
+  if(v==null||v==='') return '—';
+  var d=new Date(v); if(isNaN(d.getTime())) return String(v);
+  return d.toLocaleDateString('en-US',{year:'numeric',month:'short',day:'numeric'});
+}
+function daysLabel(d){
+  if(d==null||d==='') return '—';
+  var n=Number(d); if(!isFinite(n)) return '—';
+  n=Math.round(n);
+  if(n===0) return 'today';
+  if(n<0) return Math.abs(n)+(Math.abs(n)===1?' day ago':' days ago');
+  return 'in '+n+(n===1?' day':' days');
+}
+function dueClass(d){
+  var n=Number(d);
+  if(!isFinite(n)) return 'green';
+  if(n<30) return 'red';
+  if(n<90) return 'amber';
+  return 'green';
+}
+
+/* ---------- auth + api (Bearer on every call) ---------- */
+async function token(){
+  var s = await sb.auth.getSession();
+  return (s.data.session ? s.data.session.access_token : '');
+}
+async function api(method,resource,body,query){
+  var t = await token();
+  if(!t) throw new Error('No session');
+  var opts = { method:method, headers:{ Authorization:'Bearer '+t } };
+  if(body){ opts.headers['Content-Type']='application/json'; opts.body=JSON.stringify(body); }
+  var url = '/api/registries?resource='+encodeURIComponent(resource) + (query||'');
+  var r = await fetch(url, opts);
+  var j;
+  try{ j = await r.json(); }catch(e){ throw new Error('HTTP '+r.status); }
+  if(!r.ok || !j || j.ok===false) throw new Error((j&&j.error)?j.error:('HTTP '+r.status));
+  return j;
+}
+
+var _tt=null;
+function toast(msg,isErr){
+  var el=$('#toast'); el.textContent=msg; el.className='show'+(isErr?' err':'');
+  if(_tt) clearTimeout(_tt);
+  _tt=setTimeout(function(){ el.className=isErr?'err':''; },3200);
+}
+
+/* ---------- summary strip ---------- */
+var state = { rates:{}, loaded:{}, active:null };
+function applyRates(rates){
+  if(!rates) return;
+  state.rates = rates;
+  var reg = rates.overhead_from_registry;
+  var total = rates.overhead_total;
+  $('#sReg').textContent = (reg==null) ? '—' : money0(reg);
+  if(total==null || reg==null){
+    $('#sBench').textContent = '—';
+  } else {
+    $('#sBench').textContent = money0(Number(total)-Number(reg));
+  }
+}
+function setExpiring(n){
+  $('#sExp').textContent = (n==null) ? '—' : String(n);
+}
+
+/* ---------- cell rendering ---------- */
+function coerce(t,raw){
+  if(t==='money'||t==='num'||t==='pct'||t==='permile'){
+    var s=String(raw==null?'':raw).trim();
+    if(s==='') return null;
+    var n=Number(s);
+    return isFinite(n)?n:null;
+  }
+  if(t==='bool') return !!raw;
+  var s2=String(raw==null?'':raw);
+  return s2;
+}
+function cellInput(col, val, id, adding){
+  var t=col.t, k=col.k;
+  var attrId = adding ? ('data-add="'+esc(k)+'"') : ('data-field="'+esc(k)+'" data-id="'+esc(id)+'" data-type="'+esc(t)+'"');
+  if(t==='freq'){
+    var o1='';
+    ['mo','yr','wk'].forEach(function(f){
+      o1 += '<option value="'+f+'"'+(String(val)===f?' selected':'')+'>'+esc(FREQ[f])+'</option>';
+    });
+    if(!adding && (val==null||val==='')) o1 = '<option value="" selected>—</option>'+o1;
+    return '<select '+attrId+'>'+o1+'</select>';
+  }
+  if(t==='sel'){
+    var o2='';
+    if(adding || val==null || val==='') o2 += '<option value=""'+((val==null||val==='')?' selected':'')+'>—</option>';
+    (col.opts||[]).forEach(function(op){
+      o2 += '<option value="'+esc(op)+'"'+(String(val)===op?' selected':'')+'>'+esc(titleize(op))+'</option>';
+    });
+    return '<select '+attrId+'>'+o2+'</select>';
+  }
+  if(t==='bool'){
+    return '<div class="boolcell"><input type="checkbox" '+attrId+(val?' checked':'')+'></div>';
+  }
+  if(t==='date'){
+    return '<input type="date" '+attrId+' value="'+esc(val==null?'':String(val).slice(0,10))+'">';
+  }
+  if(t==='money'||t==='pct'||t==='permile'){
+    var step = t==='permile' ? '0.001' : '0.01';
+    return '<input type="number" step="'+step+'" '+attrId+' value="'+esc(val==null?'':val)+'">';
+  }
+  if(t==='num'){
+    return '<input type="number" step="1" '+attrId+' value="'+esc(val==null?'':val)+'">';
+  }
+  /* text */
+  return '<input type="text" class="t" '+attrId+' value="'+esc(val==null?'':val)+'" placeholder="'+esc(adding?col.l:'')+'">';
+}
+
+function badgeHtml(src){
+  if(src==null||src==='') return '';
+  var known={imported:1,confirmed:1,manual:1,extracted:1};
+  var cls = known[src]?src:'manual';
+  return '<span class="badge '+cls+'" data-badge>'+esc(src)+'</span>';
+}
+
+function renderTable(reg, items){
+  var cfg=REGS[reg];
+  var cols=cfg.cols;
+  var host=$('[data-host="'+reg+'"]');
+  var thead='<thead><tr>';
+  cols.forEach(function(c){ thead += '<th>'+esc(c.l)+'</th>'; });
+  thead += '<th class="tsrc">Source</th><th class="tact"></th></tr></thead>';
+
+  /* add row */
+  var addTds='';
+  cols.forEach(function(c){ addTds += '<td>'+cellInput(c,'',null,true)+'</td>'; });
+  var addRow = '<tr class="addrow hidden" data-addrow="'+esc(reg)+'">'+addTds
+             + '<td></td>'
+             + '<td class="tact"><button class="btn cta sm" data-addsave="'+esc(reg)+'">Save</button> '
+             + '<button class="btn sm" data-addcancel="'+esc(reg)+'">Cancel</button></td></tr>';
+
+  var body='';
+  (items||[]).forEach(function(it){
+    var id=it.id;
+    var tds='';
+    cols.forEach(function(c){ tds += '<td>'+cellInput(c, it[c.k], id, false)+'</td>'; });
+    body += '<tr data-row="'+esc(id)+'">'+tds
+          + '<td class="tsrc">'+badgeHtml(it.source)+'</td>'
+          + '<td class="tact"><button class="btn arch" data-arch="'+esc(id)+'" data-reg="'+esc(reg)+'">Archive</button></td></tr>';
+  });
+  if(!items || items.length===0){
+    body += '<tr><td class="muted" colspan="'+(cols.length+2)+'">No entries yet. Use “+ Add row” to create one.</td></tr>';
+  }
+
+  host.innerHTML = '<div class="tablewrap"><table class="rtable">'+thead+'<tbody>'+addRow+body+'</tbody></table></div>'
+                 + '<div class="inline-err hidden" data-err="'+esc(reg)+'"></div>';
+
+  /* bind edit cells (rows only, not the add row) */
+  host.querySelectorAll('tr[data-row] [data-field]').forEach(bindEdit);
+  /* bind archive */
+  host.querySelectorAll('[data-arch]').forEach(function(b){
+    b.addEventListener('click', function(){ archiveRow(b.getAttribute('data-reg'), b.getAttribute('data-arch')); });
+  });
+  /* bind add save/cancel */
+  host.querySelectorAll('[data-addsave]').forEach(function(b){
+    b.addEventListener('click', function(){ submitAdd(b.getAttribute('data-addsave')); });
+  });
+  host.querySelectorAll('[data-addcancel]').forEach(function(b){
+    b.addEventListener('click', function(){ toggleAdd(b.getAttribute('data-addcancel'), false); });
+  });
+}
+
+function showRegErr(reg,msg){
+  var e=$('[data-err="'+cssq(reg)+'"]');
+  if(e){ e.textContent=msg; e.classList.remove('hidden'); }
+}
+function clearRegErr(reg){
+  var e=$('[data-err="'+cssq(reg)+'"]');
+  if(e){ e.textContent=''; e.classList.add('hidden'); }
+}
+
+function bindEdit(el){
+  var save=function(){ el.dataset.saved = (el.type==='checkbox')?(el.checked?'1':''):el.value; };
+  save();
+  el.addEventListener('focus', save);
+  el.addEventListener('change', function(){
+    if(el.classList){ el.classList.add('dirty'); }
+    patchCell(el);
+  });
+}
+
+async function patchCell(el){
+  var reg=state.active;
+  var id=el.getAttribute('data-id');
+  var field=el.getAttribute('data-field');
+  var type=el.getAttribute('data-type');
+  var raw = (el.type==='checkbox') ? el.checked : el.value;
+  var body={ id:id };
+  body[field]=coerce(type,raw);
+  clearRegErr(reg);
+  el.classList.remove('bad');
+  try{
+    var j = await api('PATCH', reg, body);
+    el.classList.remove('dirty');
+    el.dataset.saved = (el.type==='checkbox')?(el.checked?'1':''):el.value;
+    if(j.item) applyItemBadge(reg, j.item);
+    applyRates(j.rates);
+  }catch(e){
+    /* revert + surface + refresh from server */
+    if(el.type==='checkbox') el.checked = (el.dataset.saved==='1');
+    else el.value = el.dataset.saved;
+    el.classList.remove('dirty');
+    el.classList.add('bad');
+    showRegErr(reg,'Could not save '+field+': '+e.message+' — reloaded from server.');
+    toast('Change not saved', true);
+    loadReg(reg,true);
+  }
+}
+function applyItemBadge(reg,item){
+  if(!item || item.id==null) return;
+  var tr=$('tr[data-row="'+cssq(item.id)+'"]');
+  if(!tr) return;
+  var cell=tr.querySelector('.tsrc');
+  if(cell) cell.innerHTML = badgeHtml(item.source);
+}
+
+function toggleAdd(reg,show){
+  var tr=$('[data-addrow="'+cssq(reg)+'"]');
+  if(!tr) return;
+  if(show===undefined) tr.classList.toggle('hidden');
+  else tr.classList.toggle('hidden', !show);
+  if(!tr.classList.contains('hidden')){
+    var f=tr.querySelector('input,select'); if(f) f.focus();
+  }
+}
+
+async function submitAdd(reg){
+  var cfg=REGS[reg];
+  var tr=$('[data-addrow="'+cssq(reg)+'"]');
+  if(!tr) return;
+  var body={};
+  var any=false;
+  cfg.cols.forEach(function(c){
+    var el=tr.querySelector('[data-add="'+cssq(c.k)+'"]');
+    if(!el) return;
+    var raw=(el.type==='checkbox')?el.checked:el.value;
+    var v=coerce(c.t,raw);
+    if(v!==null && v!=='' ) any=true;
+    if(c.t==='bool'){ body[c.k]=v; }
+    else if(v!==null && v!==''){ body[c.k]=v; }
+  });
+  if(!any){ toast('Enter at least one value first', true); return; }
+  clearRegErr(reg);
+  try{
+    var j = await api('POST', reg, body);
+    applyRates(j.rates);
+    toggleAdd(reg,false);
+    toast('Entry added');
+    await loadReg(reg,true);
+    refreshExpiring();
+  }catch(e){
+    showRegErr(reg,'Could not add entry: '+e.message);
+    toast('Add failed', true);
+  }
+}
+
+async function archiveRow(reg,id){
+  if(!window.confirm('Archive this entry? It will be removed from active registries and overhead.')) return;
+  clearRegErr(reg);
+  try{
+    var j = await api('DELETE', reg, { id:id });
+    applyRates(j.rates);
+    toast('Entry archived');
+    await loadReg(reg,true);
+    refreshExpiring();
+  }catch(e){
+    showRegErr(reg,'Could not archive: '+e.message);
+    toast('Archive failed', true);
+  }
+}
+
+/* ---------- loaders ---------- */
+function setCount(reg,n){
+  var c=$('[data-count="'+cssq(reg)+'"]');
+  if(c) c.textContent = (n==null?'':String(n));
+}
+async function loadReg(reg,force){
+  if(state.loaded[reg] && !force) return;
+  var host=$('[data-host="'+reg+'"]');
+  if(host && !state.loaded[reg]) host.innerHTML='<div class="spin">Loading '+esc(REGS[reg].label)+'…</div>';
+  try{
+    var j = await api('GET', reg);
+    renderTable(reg, j.items||[]);
+    setCount(reg, (j.items||[]).length);
+    applyRates(j.rates);
+    state.loaded[reg]=true;
+  }catch(e){
+    if(host) host.innerHTML='<div class="muted">Could not load '+esc(REGS[reg].label)+': '+esc(e.message)+'</div>';
+  }
+}
+
+function renderCalendar(items){
+  var host=$('[data-host="calendar"]');
+  if(!items || items.length===0){
+    host.innerHTML='<div class="muted">Nothing expiring within the next 90 days.</div>';
+    return;
+  }
+  var rows='';
+  items.forEach(function(it){
+    var dc=dueClass(it.days_out);
+    var blocks = it.blocks_work ? '<span class="blockmark">Blocks Work</span>' : '';
+    rows += '<tr class="row-'+dc+'">'
+          +   '<td><span class="kindtag">'+esc(it.kind||'')+'</span></td>'
+          +   '<td>'+esc(it.item||'')+blocks+'</td>'
+          +   '<td>'+esc(it.detail||'')+'</td>'
+          +   '<td class="mono">'+esc(fmtDate(it.expires_on))+'</td>'
+          +   '<td><span class="cdue '+dc+'">'+esc(daysLabel(it.days_out))+'</span></td>'
+          + '</tr>';
+  });
+  host.innerHTML = '<div class="tablewrap"><table class="caltable">'
+    + '<thead><tr><th>Kind</th><th>Item</th><th>Detail</th><th>Expires</th><th>Countdown</th></tr></thead>'
+    + '<tbody>'+rows+'</tbody></table></div>';
+}
+
+async function loadCalendar(force){
+  var host=$('[data-host="calendar"]');
+  if(host && !state.loaded.calendar && !force) host.innerHTML='<div class="spin">Loading compliance calendar…</div>';
+  try{
+    var j = await api('GET','calendar',null,'&within_days=90');
+    var items = j.items||[];
+    renderCalendar(items);
+    setCount('calendar', items.length);
+    setExpiring(items.length);
+    state.loaded.calendar=true;
+  }catch(e){
+    if(host && !state.loaded.calendar) host.innerHTML='<div class="muted">Could not load calendar: '+esc(e.message)+'</div>';
+  }
+}
+async function refreshExpiring(){
+  /* re-pull calendar so the strip count + calendar tab stay in sync after a mutation */
+  await loadCalendar(true);
+}
+
+/* ---------- reina proposals (Slice 6 review screen) ---------- */
+function fmtVal(v){
+  if(v==null||v==='') return '—';
+  if(typeof v==='number'){
+    /* whole-number-ish burden values render as percentages per the payroll_tax_pct / other_burden_pct shape */
+    return (Number(v).toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:2}))+'%';
+  }
+  return String(v);
+}
+function diffHtml(cur,prop){
+  cur = (cur && typeof cur==='object') ? cur : {};
+  prop = (prop && typeof prop==='object') ? prop : {};
+  var keys=[];
+  Object.keys(cur).forEach(function(k){ if(keys.indexOf(k)<0) keys.push(k); });
+  Object.keys(prop).forEach(function(k){ if(keys.indexOf(k)<0) keys.push(k); });
+  if(keys.length===0) return '<div class="prat">No value changes.</div>';
+  var html='';
+  keys.forEach(function(k){
+    html += '<span class="d"><span class="k">'+esc(titleize(k))+'</span>'
+          + '<span class="old">'+esc(fmtVal(cur[k]))+'</span>'
+          + '<span class="arr">&rarr;</span>'
+          + '<span class="new">'+esc(fmtVal(prop[k]))+'</span></span>';
+  });
+  return '<div class="pdiff">'+html+'</div>';
+}
+function confPill(c){
+  var n=Number(c);
+  var cls = !isFinite(n) ? '' : (n>=80?' hi':(n<50?' lo':''));
+  return '<span class="pill'+cls+'">confidence '+esc(c==null?'—':c)+'</span>';
+}
+
+function renderProposals(proposals){
+  var host=$('[data-host="proposals"]');
+  if(!proposals || proposals.length===0){
+    host.innerHTML='<div class="muted">No pending proposals — Reina has nothing waiting for review.</div>';
+    return;
+  }
+  var cards='';
+  proposals.forEach(function(p){
+    var id=p.id;
+    var target = (p.target_table||'') + (p.target_id!=null ? (' #'+p.target_id) : '');
+    cards += '<div class="pcard" data-prow="'+esc(id)+'">'
+      +   '<div class="pcheck"><input type="checkbox" data-pcheck value="'+esc(id)+'"></div>'
+      +   '<div class="pbody">'
+      +     '<div class="phd">'
+      +       '<span class="ptype">'+esc(titleize(p.proposal_type||'Proposal'))+'</span>'
+      +       (target ? '<span class="ptarget">'+esc(target)+'</span>' : '')
+      +       confPill(p.confidence)
+      +       '<span class="pdate">'+esc(fmtDate(p.created_at))+'</span>'
+      +     '</div>'
+      +     diffHtml(p.current_value, p.proposed_value)
+      +     (p.rationale ? '<div class="prat">'+esc(p.rationale)+'</div>' : '')
+      +   '</div>'
+      + '</div>';
+  });
+  host.innerHTML =
+      '<div class="pbar">'
+    +   '<label class="selall"><input type="checkbox" data-pselall> Select all</label>'
+    +   '<div class="spacer"></div>'
+    +   '<button class="btn approve" data-papprove>Approve selected</button>'
+    +   '<button class="btn reject" data-preject>Reject selected</button>'
+    + '</div>'
+    + cards
+    + '<div class="inline-err hidden" data-err="proposals"></div>';
+
+  var selAll = host.querySelector('[data-pselall]');
+  if(selAll) selAll.addEventListener('change', function(){
+    host.querySelectorAll('[data-pcheck]').forEach(function(c){ c.checked = selAll.checked; });
+  });
+  host.querySelector('[data-papprove]').addEventListener('click', function(){ actProposals('approve'); });
+  host.querySelector('[data-preject]').addEventListener('click', function(){ actProposals('reject'); });
+}
+
+function checkedProposalIds(){
+  var host=$('[data-host="proposals"]');
+  var ids=[];
+  if(host) host.querySelectorAll('[data-pcheck]:checked').forEach(function(c){ ids.push(c.value); });
+  return ids;
+}
+
+async function actProposals(action){
+  var host=$('[data-host="proposals"]');
+  var ids=checkedProposalIds();
+  clearRegErr('proposals');
+  if(ids.length===0){ toast('Select at least one proposal first', true); return; }
+  if(action==='reject' && !window.confirm('Reject '+ids.length+' proposal'+(ids.length===1?'':'s')+'? Reina will drop '+(ids.length===1?'it':'them')+' from review.')) return;
+  var btns = host.querySelectorAll('[data-papprove],[data-preject]');
+  btns.forEach(function(b){ b.setAttribute('disabled','disabled'); });
+  try{
+    var j = await api('POST','proposals',{ action:action, ids:ids });
+    /* remove acted rows optimistically */
+    ids.forEach(function(id){
+      var r=host.querySelector('[data-prow="'+cssq(id)+'"]');
+      if(r) r.parentNode.removeChild(r);
+    });
+    applyRates(j.rates);
+    var n = (action==='approve') ? (j.applied!=null?j.applied:ids.length) : (j.rejected!=null?j.rejected:ids.length);
+    toast((action==='approve'?'Approved ':'Rejected ')+n);
+    /* if nothing left, show empty state; keep counts + strip fresh */
+    if(host.querySelectorAll('[data-prow]').length===0) renderProposals([]);
+    setCount('proposals', host.querySelectorAll('[data-prow]').length);
+    if(action==='approve') refreshExpiring();
+  }catch(e){
+    showRegErr('proposals','Could not '+action+' proposals: '+e.message);
+    toast(action.charAt(0).toUpperCase()+action.slice(1)+' failed', true);
+    loadProposals(true);
+  }
+  btns.forEach(function(b){ b.removeAttribute('disabled'); });
+}
+
+async function loadProposals(force){
+  if(state.loaded.proposals && !force) return;
+  var host=$('[data-host="proposals"]');
+  if(host && !state.loaded.proposals) host.innerHTML='<div class="spin">Loading Reina proposals…</div>';
+  try{
+    var j = await api('GET','proposals',null,'&status=pending');
+    var proposals = j.proposals||[];
+    renderProposals(proposals);
+    setCount('proposals', proposals.length);
+    state.loaded.proposals=true;
+  }catch(e){
+    if(host) host.innerHTML='<div class="muted">Could not load proposals: '+esc(e.message)+'</div>';
+  }
+}
+
+/* ---------- tabs ---------- */
+function buildTabs(){
+  var tabsHtml='';
+  var panelsHtml='';
+  REG_ORDER.forEach(function(reg){
+    var cfg=REGS[reg];
+    tabsHtml += '<button class="tab" data-tab="'+esc(reg)+'">'+esc(cfg.label)+'<span class="tc" data-count="'+esc(reg)+'"></span></button>';
+    var noteHtml = cfg.note ? '<div class="muted" style="text-align:left;padding:0 0 12px;font-weight:600">'+esc(cfg.note)+'</div>' : '';
+    panelsHtml += '<section class="panel hidden" data-panel="'+esc(reg)+'">'
+      + '<div class="card"><div class="card-hd"><h2>'+esc(cfg.title)+'</h2>'
+      + '<div class="hd-actions"><span class="count" data-count="'+esc(reg)+'"></span>'
+      + '<button class="btn cta sm" data-addtoggle="'+esc(reg)+'">+ Add row</button></div></div>'
+      + '<div class="card-bd">'+noteHtml+'<div data-host="'+esc(reg)+'"><div class="spin">Loading…</div></div></div></div></section>';
+  });
+  /* seventh tab: compliance calendar */
+  tabsHtml += '<button class="tab" data-tab="calendar">Compliance<span class="tc" data-count="calendar"></span></button>';
+  panelsHtml += '<section class="panel hidden" data-panel="calendar">'
+    + '<div class="card"><div class="card-hd"><h2>Compliance Calendar</h2>'
+    + '<span class="count">Everything expiring, soonest first</span></div>'
+    + '<div class="card-bd"><div data-host="calendar"><div class="spin">Loading…</div></div></div></div></section>';
+
+  /* eighth tab: Reina burden-rate proposals (Slice 6 review screen) */
+  tabsHtml += '<button class="tab" data-tab="proposals">Reina proposals<span class="tc" data-count="proposals"></span></button>';
+  panelsHtml += '<section class="panel hidden" data-panel="proposals">'
+    + '<div class="card"><div class="card-hd"><h2>Reina Proposals</h2>'
+    + '<span class="count">Pending burden-rate proposals awaiting review</span></div>'
+    + '<div class="card-bd"><div data-host="proposals"><div class="spin">Loading…</div></div></div></div></section>';
+
+  $('#tabs').innerHTML = tabsHtml;
+  $('#panels').innerHTML = panelsHtml;
+
+  $('#tabs').querySelectorAll('[data-tab]').forEach(function(b){
+    b.addEventListener('click', function(){ setTab(b.getAttribute('data-tab')); });
+  });
+  $('#panels').querySelectorAll('[data-addtoggle]').forEach(function(b){
+    b.addEventListener('click', function(){ toggleAdd(b.getAttribute('data-addtoggle')); });
+  });
+}
+
+function setTab(reg){
+  state.active=reg;
+  $('#tabs').querySelectorAll('[data-tab]').forEach(function(b){
+    b.classList.toggle('on', b.getAttribute('data-tab')===reg);
+  });
+  $('#panels').querySelectorAll('[data-panel]').forEach(function(p){
+    p.classList.toggle('hidden', p.getAttribute('data-panel')!==reg);
+  });
+  if(reg==='calendar') loadCalendar();
+  else if(reg==='proposals') loadProposals();
+  else loadReg(reg);
+}
+
+/* ---------- boot ---------- */
+(async function(){
+  var sess = await sb.auth.getSession();
+  if(!sess.data.session){
+    $('#gate').classList.remove('hidden');
+    return;
+  }
+  $('#app').classList.remove('hidden');
+  buildTabs();
+  setTab('insurance');   /* seeds rates + first table */
+  loadCalendar();        /* seeds the "expiring within 90 days" strip figure */
+})();
+</script>
+</body>
+</html>

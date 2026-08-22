@@ -1,0 +1,19 @@
+<div class="lsent"><h1>Job cost, <em>kept honest.</em></h1>
+<p>Every approved actual dollar flowing out of the purchase-order engine — preapproved and after-the-fact money always shown as two separate totals, never blended into one number.</p></div>
+
+<div class="jcr-actions"><button class="gbtn" id="jcr-download" type="button">Download CSV</button><button class="gbtn" id="jcr-print" type="button">Print / PDF</button></div>
+
+<div class="statrow" id="jcr-statrow">
+  <div class="stat"><span>Preapproved actuals</span><b id="jcr-stat-preapproved">$0.00</b><span class="tr">ordered before the money moved</span></div>
+  <div class="stat"><span>After-the-fact actuals</span><b id="jcr-stat-afterfact">$0.00</b><span class="tr down">no PO existed beforehand</span></div>
+  <div class="stat"><span>Total approved actuals</span><b id="jcr-stat-total">$0.00</b><span class="tr">feeding job costing now</span></div>
+  <div class="stat"><span>Jobs / cost homes</span><b id="jcr-stat-jobcount">0</b><span class="tr">with approved actual costs</span></div>
+</div>
+
+<div class="card jcr-not-ready-card" id="jcr-not-ready" style="display:none;margin-bottom:16px"></div>
+
+<div class="card">
+  <h3>By job / overhead category <span style="font-size:10px;color:var(--mut);font-weight:700">APPROVED &amp; RECEIVED ONLY</span></h3>
+  <div class="jcr-filter"><label class="bkx-field"><span>Find a job, vendor, or PO</span><input type="search" id="jcr-search" placeholder="Search supporting detail"></label><label class="bkx-field"><span>Show</span><select id="jcr-timing"><option value="">All approved costs</option><option value="preapproved">Preapproved only</option><option value="after_the_fact">After-the-fact only</option></select></label></div>
+  <div id="jcr-body"><div class="note">Loading job cost report&hellip;</div></div>
+</div>

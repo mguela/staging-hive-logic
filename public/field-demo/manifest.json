@@ -1,0 +1,14 @@
+{
+  "name": "HiveLogic Field",
+  "short_name": "HiveField",
+  "description": "GH Group field app — schedule, jobs, time tracking, HiveConnect.",
+  "start_url": "/field-demo/",
+  "scope": "/field-demo/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0a0f18",
+  "theme_color": "#0a0f18",
+  "icons": [
+    { "src": "/field-demo/icon.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+  ]
+}

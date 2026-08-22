@@ -1,0 +1,66 @@
+name: Portal auth integration
+
+# The portal auth *unit* tests already run on every PR -- npm test globs
+# test/*.test.mjs, which picks up portal-auth-correctness and
+# portal-login-bypass. This job exists for the half that nothing runs:
+# test/integration/, which stands up a throwaway Postgres and exercises the
+# sub-banking reauth RPC for real.
+#
+# That distinction matters. The bug those tests were written for is a
+# two-connection race on a single-use grant, and the fix is a conditional
+# UPDATE that relies on Postgres serialising concurrent writers to a row. A
+# mocked store cannot fail that test no matter how the code is broken --
+# only a real database with two real connections can. The scripts have been
+# sitting in the repo since 2026-08-02 with nothing invoking them.
+#
+# Scoped by paths so the Docker spin-up only happens on PRs that touch the
+# portal auth surface. Deliberately NOT wired to merge_group: this is not a
+# required check, and a path-filtered workflow that never reports on a
+# merge-group ref is exactly how a queue ends up waiting forever.
+
+on:
+  pull_request:
+    paths:
+      - 'api/clientportal.js'
+      - 'api/subportal.js'
+      - 'api/_lib/portal-auth.js'
+      - 'public/clientportal/**'
+      - 'public/subportal/**'
+      - 'supabase/migrations/*sub_banking_reauth*'
+      - 'test/portal-*.test.mjs'
+      - 'test/integration/**'
+      - '.github/workflows/portal-auth-integration.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: portal-auth-integration-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  portal-auth-integration:
+    name: Portal auth integration (real Postgres)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+
+      # The runner ships Docker, but the run script assumes a reachable daemon
+      # and would otherwise fail deep inside a psql call with a confusing
+      # message. Fail here, where the cause is legible.
+      - name: Verify Docker daemon
+        run: docker info > /dev/null
+
+      # No npm install: the scripts shell out to psql inside the container and
+      # use node only for an HS256 JWT signer built on node:crypto.
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      # Runs the sequential scenarios, a SET ROLE execution matrix, a real
+      # two-connection concurrency race, and the optional PostgREST HTTP layer.
+      # The script tears its containers down on exit and never touches a remote
+      # database.
+      - name: Banking reauth RPC (throwaway Postgres + PostgREST)
+        run: bash test/integration/run-banking-reauth-txn.sh

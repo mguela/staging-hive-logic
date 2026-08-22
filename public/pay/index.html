@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#4F6F82">
+<title>Pay your HiveLogic invoice</title>
+<style>
+  *{box-sizing:border-box}
+  body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",sans-serif;background:#FAFBFA;color:#17212B;display:flex;flex-direction:column;min-height:100vh}
+  header{background:linear-gradient(135deg,#4F6F82 0%,#668A9E 100%);color:#fff;padding:16px 20px;padding-top:calc(16px + env(safe-area-inset-top))}
+  header h1{font-size:16px;margin:0;font-weight:800}
+  header .sub{font-size:12px;color:#E4EFF4;margin-top:2px}
+  main{flex:1;padding:20px;display:flex;flex-direction:column;align-items:center;justify-content:center}
+  .card{background:#fff;border:1px solid #E5E9E8;border-radius:16px;padding:24px;max-width:400px;width:100%;text-align:center;box-shadow:0 2px 10px rgba(0,0,0,.05)}
+  .amt{font-size:36px;font-weight:900;color:#17212B;margin:6px 0 2px}
+  .job{font-size:14px;color:#5E6972;margin-bottom:18px}
+  .paidbadge{display:inline-flex;align-items:center;gap:6px;background:#F0F8F2;color:#1e5c34;border:1px solid #BED9C5;border-radius:999px;padding:6px 14px;font-weight:800;font-size:13px;margin-bottom:10px}
+  button.pay{width:100%;padding:16px;border:none;border-radius:12px;background:#1e7a3f;color:#fff;font-weight:800;font-size:16px;cursor:pointer}
+  button.pay:active{opacity:.85}
+  .err{color:#B3261E;font-size:14px;padding:10px 0}
+  .cashbox{background:#F0F8F2;border:1px solid #BED9C5;border-radius:12px;padding:12px 14px;margin:14px 0 4px;font-size:13px;color:#1e5c34;text-align:left}
+  .cashbox b{font-size:15px}
+  footer{padding:12px 16px calc(16px + env(safe-area-inset-bottom));font-size:11px;color:#5E6972;text-align:center;background:#fff;border-top:1px solid #E5E9E8}
+  .loading{color:#5E6972;font-size:14px}
+</style>
+</head>
+<body>
+<header>
+  <h1>&#11041; GH Group</h1>
+  <div class="sub">Secure payment</div>
+</header>
+<main>
+  <div class="card" id="card"><div class="loading">Loading your invoice&#8230;</div></div>
+</main>
+<footer>Payments are processed by Authorize.Net. HiveLogic never sees or stores your card details.</footer>
+
+<form id="anet-form" method="POST" style="display:none">
+  <input type="hidden" name="token" id="anet-token">
+</form>
+
+<script>
+var params = new URLSearchParams(location.search);
+var t = params.get('t');
+var card = document.getElementById('card');
+
+function money(n){ return '$' + Number(n || 0).toFixed(2); }
+
+function showErr(msg){
+  card.innerHTML = '<div class="err">' + msg + '</div>';
+}
+
+async function load(){
+  if(!t){ showErr('This payment link is missing its code. Ask your tech to resend it.'); return; }
+  var r;
+  try {
+    var res = await fetch('/api/fieldops?action=tm_pay_init&t=' + encodeURIComponent(t));
+    r = await res.json();
+  } catch(e){ showErr('Could not reach the payment server. Check your connection and reload.'); return; }
+
+  if(!r.ok){ showErr(r.error || 'This payment link is no longer active.'); return; }
+
+  if(r.alreadyPaid){
+    card.innerHTML =
+      '<div class="paidbadge">&#10003; Paid</div>' +
+      '<div class="amt">' + money(r.invoice.totalAmount) + '</div>' +
+      '<div class="job">' + esc(r.invoice.jobTitle || 'HiveLogic service') + '</div>';
+    return;
+  }
+
+  // Cash-discount display (legal requirement in CT/NY: the full total is
+  // the posted price, and the lower amount is framed as a cash DISCOUNT --
+  // never as a card fee added on top). Older invoices without cash-discount
+  // info simply don't render the box.
+  var cashHtml = '';
+  if (r.invoice.cashAmount != null && Number(r.invoice.cashAmount) < Number(r.invoice.totalAmount)) {
+    cashHtml =
+      '<div class="cashbox">&#128181; <b>Save ' + money(r.invoice.cashDiscount) + '</b> with our cash discount &#8212; pay <b>' +
+      money(r.invoice.cashAmount) + '</b> by cash or check to your technician, or by bank transfer (ACH) through the office.</div>';
+  }
+  card.innerHTML =
+    '<div class="amt">' + money(r.invoice.totalAmount) + '</div>' +
+    '<div class="job">' + esc(r.invoice.jobTitle || 'HiveLogic service') + (r.invoice.clientName ? ' &#183; ' + esc(r.invoice.clientName) : '') + '</div>' +
+    '<button class="pay" id="paybtn">Pay ' + money(r.invoice.totalAmount) + ' by card</button>' +
+    cashHtml;
+
+  document.getElementById('paybtn').onclick = function(){
+    var form = document.getElementById('anet-form');
+    form.action = r.postUrl;
+    document.getElementById('anet-token').value = r.formToken;
+    form.submit();
+  };
+}
+
+function esc(s){
+  return String(s == null ? '' : s).replace(/[&<>"]/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; });
+}
+
+load();
+</script>
+  <script src="/voice-input.js" defer></script>
+</body>
+</html>

@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HiveLogic — Client Portal Staff Tools</title>
+<style>
+  :root{
+    --bg:#0e1320; --card:#171f30; --ink:#c9d3e4; --ink2:#9cabc6; --ink3:#6f7d9a;
+    --brand:#9db8d4; --brand-dark:#8fa9c4; --brand-bg:#223049; --line:#26304a;
+    --good:#58c68f; --good-deep:#1B7A50; --good-bg:#1b3129;
+    --warn:#d7a94e; --warn-bg:#37301b;
+    --bad:#e08a7e; --bad-deep:#c65b4e; --bad-bg:#3a2521;
+    --radius:16px;
+    --shadow:0 10px 30px rgba(22,30,46,.35);
+    --shadow-deep:0 24px 70px rgba(22,30,46,.45);
+  }
+  *{box-sizing:border-box; margin:0; padding:0; font-family:'Segoe UI',system-ui,-apple-system,sans-serif;}
+  html,body{background:var(--bg); color:var(--ink); min-height:100vh;}
+  .wrap{max-width:1100px; margin:0 auto; padding:24px 20px 80px;}
+  h1{font-size:22px; margin-bottom:4px;}
+  .sub{color:var(--ink3); font-size:13.5px; margin-bottom:22px;}
+  .card{background:var(--card); border:1px solid var(--line); border-radius:var(--radius); padding:18px; margin-bottom:14px; box-shadow:var(--shadow);}
+  .hero{border:1.5px solid var(--brand-dark); background:linear-gradient(180deg,#223049 0%,#171f30 100%); box-shadow:var(--shadow-deep);}
+  input,select,textarea{width:100%; padding:12px; font-size:15px; border:1.5px solid var(--line); border-radius:12px; background:#0e1320; color:var(--ink); font-family:inherit;}
+  textarea{resize:vertical; min-height:80px;}
+  input::placeholder,textarea::placeholder{color:var(--ink3);}
+  input:focus,select:focus,textarea:focus{outline:none; border-color:var(--brand-dark); box-shadow:0 0 0 3px rgba(143,169,196,.15);}
+  label{font-size:12.5px; font-weight:700; display:block; margin:0 2px 6px; color:var(--ink2);}
+  button{cursor:pointer;}
+  .bigbtn{background:var(--brand); color:#0e1320; font-size:15px; font-weight:700; padding:12px 20px; border:none; border-radius:12px; box-shadow:var(--shadow);}
+  .bigbtn[disabled]{opacity:.5; pointer-events:none;}
+  .note{font-size:12.5px; color:var(--ink3); margin-top:8px;}
+  .okmsg{background:var(--good-bg); color:var(--good); font-weight:700; padding:12px; border-radius:12px; margin:10px 0;}
+  .errmsg{background:var(--bad-bg); color:var(--bad); font-weight:700; padding:12px; border-radius:12px; margin:10px 0;}
+  .pill{font-size:11px; font-weight:700; padding:3px 10px; border-radius:99px; white-space:nowrap;}
+  .pill.g{background:var(--good-bg); color:var(--good);}
+  .pill.w{background:var(--warn-bg); color:var(--warn);}
+  .joblist{max-height:340px; overflow-y:auto;}
+  .jobrow{display:flex; justify-content:space-between; align-items:center; gap:10px; padding:11px 6px; border-bottom:1px solid var(--line); cursor:pointer; border-radius:8px; font-size:14px;}
+  .jobrow:hover{background:var(--brand-bg);}
+  .jobrow:last-child{border-bottom:none;}
+  .jobrow b{display:block; font-size:14.5px;}
+  .jobrow span{color:var(--ink3); font-size:12px;}
+  .grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(170px,1fr)); gap:12px; margin-top:14px;}
+  .ph{border:2px solid var(--line); border-radius:14px; overflow:hidden; background:#0b0f1a; position:relative; box-shadow:var(--shadow);}
+  .ph.shared{border-color:var(--good);}
+  .ph img{width:100%; aspect-ratio:1; object-fit:cover; display:block;}
+  .ph .st{position:absolute; top:8px; left:8px;}
+  .ph .bar{display:flex; gap:6px; padding:8px;}
+  .ph .bar button{flex:1; font-size:12px; font-weight:700; padding:8px 4px; border-radius:9px; border:1.5px solid var(--line); background:var(--card); color:var(--ink);}
+  .ph .bar button.share{background:var(--good-deep); border:none; color:#eaf7f0;}
+  .ph .bar button.revoke{background:var(--card); color:var(--bad);}
+  .ph .cap{font-size:11px; color:var(--ink3); padding:0 8px 8px;}
+  .topbar{display:flex; gap:12px; align-items:flex-end; flex-wrap:wrap; margin-bottom:4px;}
+  .topbar > div{flex:1; min-width:220px;}
+  .spinner{width:26px; height:26px; border-radius:50%; border:3px solid var(--line); border-top-color:var(--brand); animation:spin .8s linear infinite; margin:20px auto;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+  a{color:var(--brand);}
+  .tabbar{display:flex; gap:8px; margin-bottom:18px; flex-wrap:wrap;}
+  .tabbar button{background:var(--card); color:var(--ink2); border:1.5px solid var(--line); padding:10px 18px; border-radius:12px; font-size:13.5px; font-weight:700;}
+  .tabbar button.on{background:var(--brand); color:#0e1320; border-color:var(--brand-dark);}
+  .linkbox{display:flex; gap:10px; align-items:center; background:#0e1320; border:1.5px solid var(--line); border-radius:12px; padding:10px 12px; margin:10px 0;}
+  .linkbox span{flex:1; word-break:break-all; font-size:13px; color:var(--ink);}
+  .linkbox button{flex-shrink:0; background:var(--brand); color:#0e1320; border:none; border-radius:9px; padding:8px 14px; font-size:12.5px; font-weight:700;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>🧰 Client Portal Staff Tools</h1>
+  <div class="sub">Share job photos, invite clients to their portal, and create estimate / change-order approvals for them to review and sign.</div>
+  <div class="tabbar" id="tabbar" style="display:none;"></div>
+  <div id="content"><div class="spinner"></div></div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+// Same Supabase project + anon key as the main HiveLogic app (public/index.html)
+// — served from the same domain, so the staff member's existing HiveLogic
+// login session is picked up automatically from localStorage.
+const HL_SUPABASE_URL = 'https://sqhusuuhlmcmkeowdrga.supabase.co';
+const HL_SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNxaHVzdXVobG1jbWtlb3dkcmdhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQxMjkyMjAsImV4cCI6MjA5OTcwNTIyMH0.PszXL0D8KJC0MEYgbTduSPEcPn2g1pGx0IMK3YGzBcI';
+const sb = window.supabase.createClient(HL_SUPABASE_URL, HL_SUPABASE_ANON_KEY, { auth: { persistSession: true, autoRefreshToken: true } });
+
+const content = document.getElementById('content');
+let TOKEN = null;
+let JOBS = [];
+let CLIENTS = [];
+let CURRENT_JOB = null;
+let CURRENT_TAB = 'photos';
+
+function esc(s) { const d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
+function dateShort(d) { return d ? new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : ''; }
+
+async function api(action, opts = {}) {
+  const headers = { 'Content-Type': 'application/json', Authorization: 'Bearer ' + TOKEN };
+  const qs = opts.query ? '&' + new URLSearchParams(opts.query).toString() : '';
+  const res = await fetch(`/api/clientportal?action=${action}${qs}`, {
+    method: opts.method || 'GET',
+    headers,
+    body: opts.body ? JSON.stringify(opts.body) : undefined,
+  });
+  const json = await res.json().catch(() => ({ ok: false, error: 'Something went wrong.' }));
+  if (!res.ok || json.ok === false) throw new Error(json.error || 'Something went wrong.');
+  return json;
+}
+
+async function boot() {
+  const { data: { session } } = await sb.auth.getSession();
+  if (!session) {
+    content.innerHTML = `
+      <div class="card hero" style="max-width:420px;">
+        <b style="display:block; margin-bottom:6px;">Staff sign-in required</b>
+        <div class="note" style="margin:0 0 14px;">This page uses your regular HiveLogic login. Sign in below, or <a href="/">open the main app</a>, sign in there, and come back.</div>
+        <label>Email</label>
+        <input id="li-email" type="email" autocomplete="username">
+        <div style="height:10px;"></div>
+        <label>Password</label>
+        <input id="li-pass" type="password" autocomplete="current-password">
+        <div style="height:14px;"></div>
+        <button class="bigbtn" id="li-btn" style="width:100%;">Sign in</button>
+        <div id="li-msg"></div>
+      </div>`;
+    document.getElementById('li-btn').onclick = async () => {
+      const msg = document.getElementById('li-msg');
+      msg.innerHTML = '';
+      const { error } = await sb.auth.signInWithPassword({
+        email: document.getElementById('li-email').value.trim(),
+        password: document.getElementById('li-pass').value,
+      });
+      if (error) { msg.innerHTML = `<div class="errmsg">${esc(error.message)}</div>`; return; }
+      boot();
+    };
+    return;
+  }
+  TOKEN = session.access_token;
+  document.getElementById('tabbar').style.display = 'flex';
+  switchTab('photos');
+}
+
+function renderTabBar() {
+  const bar = document.getElementById('tabbar');
+  bar.innerHTML = `
+    <button class="${CURRENT_TAB === 'photos' ? 'on' : ''}" onclick="switchTab('photos')">📸 Photos</button>
+    <button class="${CURRENT_TAB === 'invite' ? 'on' : ''}" onclick="switchTab('invite')">✉️ Invite client</button>
+    <button class="${CURRENT_TAB === 'approval' ? 'on' : ''}" onclick="switchTab('approval')">📄 Create approval</button>`;
+}
+
+async function switchTab(tab) {
+  CURRENT_TAB = tab;
+  renderTabBar();
+  content.innerHTML = `<div class="spinner"></div>`;
+  if (tab === 'invite') return renderInviteTab();
+  if (tab === 'approval') return renderApprovalTab();
+  return renderJobPicker();
+}
+
+async function loadJobs() {
+  // /api/jobs is the existing read-only synced-Jobber jobs endpoint.
+  // P0 auth (2026-07-29): /api/jobs now requires a signed-in session.
+  const res = await fetch('/api/jobs?limit=1000', { headers: { Authorization: 'Bearer ' + TOKEN } });
+  const json = await res.json();
+  if (!json.ok) throw new Error(json.error || 'Could not load jobs');
+  return json.jobs;
+}
+
+// /api/clients is the existing read-only synced-Jobber clients endpoint
+// (same data source api/clientportal.js's invite/approval_create actions
+// match against) — same fetch-and-cache pattern as loadJobs above.
+async function loadClients() {
+  // P0 auth (2026-07-29): /api/clients now requires a signed-in session.
+  const res = await fetch('/api/clients?limit=5000&order=name', { headers: { Authorization: 'Bearer ' + TOKEN } });
+  const json = await res.json();
+  if (!json.ok) throw new Error(json.error || 'Could not load clients');
+  return json.clients;
+}
+
+async function renderJobPicker() {
+  content.innerHTML = `<div class="spinner"></div>`;
+  try { JOBS = JOBS.length ? JOBS : await loadJobs(); }
+  catch (e) { content.innerHTML = `<div class="errmsg">${esc(e.message)}</div>`; return; }
+
+  content.innerHTML = `
+    <div class="card">
+      <label>Find a job</label>
+      <input id="job-search" placeholder="Type a job title or number…">
+      <div class="joblist" id="job-list"></div>
+    </div>`;
+  const list = document.getElementById('job-list');
+  const draw = (filter) => {
+    const f = (filter || '').toLowerCase();
+    const rows = JOBS.filter(j => !f || (j.title || '').toLowerCase().includes(f) || String(j.jobNumber || '').includes(f)).slice(0, 60);
+    list.innerHTML = rows.length ? rows.map(j => `
+      <div class="jobrow" onclick="openJob('${j.id}')">
+        <div><b>${esc(j.title || 'Untitled job')}</b><span>#${esc(String(j.jobNumber || ''))} · ${esc(j.status || '')}</span></div>
+        <span class="pill w" style="visibility:hidden;"></span>
+      </div>`).join('') : `<div class="note">No jobs match.</div>`;
+  };
+  draw('');
+  document.getElementById('job-search').oninput = (e) => draw(e.target.value);
+}
+
+async function openJob(jobRef) {
+  CURRENT_JOB = jobRef;
+  content.innerHTML = `<div class="spinner"></div>`;
+  try {
+    const r = await api('photos_review', { query: { job_ref: jobRef } });
+    const shared = r.photos.filter(p => p.shared).length;
+    content.innerHTML = `
+      <button class="bigbtn" style="background:var(--card); color:var(--ink); border:1.5px solid var(--line); box-shadow:none; margin-bottom:14px;" onclick="renderJobPicker()">← All jobs</button>
+      <div class="card hero">
+        <b style="font-size:17px;">${esc(r.job.title || 'Job')}</b>
+        <div class="note" style="margin-top:4px;">${r.photos.length} photo${r.photos.length === 1 ? '' : 's'} in HiveSight · <b style="color:var(--good);">${shared} visible to the client</b>${r.job.client_ref ? '' : ' · ⚠️ this job has no client attached — sharing is disabled'}</div>
+      </div>
+      ${r.photos.length ? `<div class="grid">
+        ${r.photos.map(p => `
+          <div class="ph ${p.shared ? 'shared' : ''}" id="ph-${p.media_id}">
+            ${p.url ? `<img src="${p.url}" loading="lazy" alt="Job photo">` : `<div style="aspect-ratio:1; display:flex; align-items:center; justify-content:center; color:var(--ink3);">unavailable</div>`}
+            <span class="st pill ${p.shared ? 'g' : 'w'}">${p.shared ? '✓ CLIENT SEES THIS' : 'HIDDEN'}</span>
+            <div class="cap">${dateShort(p.captured_at)}</div>
+            <div class="bar">
+              ${p.shared
+                ? `<button class="revoke" onclick="togglePhoto('${p.media_id}', false, this)">Hide from client</button>`
+                : `<button class="share" ${r.job.client_ref ? '' : 'disabled'} onclick="togglePhoto('${p.media_id}', true, this)">Share with client</button>`}
+            </div>
+          </div>`).join('')}
+      </div>` : `<div class="card"><div class="note" style="margin:0;">No HiveSight photos on this job yet.</div></div>`}
+      <div class="note">Sharing a photo notifies the client in their portal. Hiding removes it instantly.</div>`;
+  } catch (e) {
+    content.innerHTML = `<div class="errmsg">${esc(e.message)}</div><button class="bigbtn" onclick="renderJobPicker()">← All jobs</button>`;
+  }
+}
+
+async function togglePhoto(mediaId, share, btn) {
+  btn.disabled = true; btn.textContent = '…';
+  try {
+    await api(share ? 'photo_share' : 'photo_revoke', { method: 'POST', body: { media_id: mediaId } });
+    openJob(CURRENT_JOB); // refresh statuses
+  } catch (e) {
+    btn.disabled = false; btn.textContent = share ? 'Share with client' : 'Hide from client';
+    alert(e.message);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Invite Client — calls action=invite. That action mints a magic-link token
+// (client_auth_links, purpose 'invite') scoped to whatever client's email
+// matches exactly. There is no SMS/email auto-dispatch yet (disclosed by the
+// API's own response note) — staff must copy/send the link themselves.
+// ---------------------------------------------------------------------------
+async function renderInviteTab() {
+  content.innerHTML = `<div class="spinner"></div>`;
+  try { CLIENTS = CLIENTS.length ? CLIENTS : await loadClients(); }
+  catch (e) { content.innerHTML = `<div class="errmsg">${esc(e.message)}</div>`; return; }
+
+  content.innerHTML = `
+    <div class="card">
+      <label>Find a client</label>
+      <input id="invite-search" placeholder="Type a client or company name…">
+      <div class="joblist" id="invite-list"></div>
+    </div>
+    <div id="invite-detail"></div>`;
+  const list = document.getElementById('invite-list');
+  const draw = (filter) => {
+    const f = (filter || '').toLowerCase();
+    const rows = CLIENTS.filter(c => !f
+      || (c.name || '').toLowerCase().includes(f)
+      || (c.companyName || '').toLowerCase().includes(f)
+      || (c.email || '').toLowerCase().includes(f)).slice(0, 60);
+    list.innerHTML = rows.length ? rows.map(c => `
+      <div class="jobrow" onclick="selectInviteClient('${c.id}')">
+        <div><b>${esc(c.name)}</b><span>${esc(c.companyName || '')}${c.companyName && c.email ? ' · ' : ''}${esc(c.email || 'no email on file')}</span></div>
+        <span class="pill ${c.email ? 'g' : 'w'}">${c.email ? 'has email' : 'no email'}</span>
+      </div>`).join('') : `<div class="note">No clients match.</div>`;
+  };
+  draw('');
+  document.getElementById('invite-search').oninput = (e) => draw(e.target.value);
+}
+
+function selectInviteClient(clientId) {
+  const c = CLIENTS.find(x => x.id === clientId);
+  const detail = document.getElementById('invite-detail');
+  if (!c) return;
+  if (!c.email) {
+    detail.innerHTML = `<div class="card"><div class="errmsg">No email on file for ${esc(c.name)} in Jobber — add one in Jobber and wait for the next sync before inviting.</div></div>`;
+    return;
+  }
+  detail.innerHTML = `
+    <div class="card hero">
+      <b style="display:block; margin-bottom:6px;">${esc(c.name)}</b>
+      <div class="note" style="margin:0 0 12px;">Invite will be created for <b>${esc(c.email)}</b> — this must match the email on their Jobber record exactly.</div>
+      <button class="bigbtn" id="invite-send-btn" onclick="sendInvite('${c.id}', this)">Send invite</button>
+      <div id="invite-result"></div>
+    </div>`;
+}
+
+async function sendInvite(clientId, btn) {
+  const c = CLIENTS.find(x => x.id === clientId);
+  btn.disabled = true; btn.textContent = '…';
+  const result = document.getElementById('invite-result');
+  try {
+    const r = await api('invite', { method: 'POST', body: { email: c.email } });
+    result.innerHTML = `
+      <div class="okmsg">Invite link created for ${esc(r.client.name)}.</div>
+      <div class="note" style="margin-top:8px;">${esc(r.note)} Text or email it to the client yourself.</div>
+      <div class="linkbox"><span id="invite-link-text">${esc(r.inviteUrl)}</span><button onclick="copyText(this)" data-copy="${esc(r.inviteUrl)}">Copy link</button></div>`;
+  } catch (e) {
+    result.innerHTML = `<div class="errmsg">${esc(e.message)}</div>`;
+  } finally {
+    btn.disabled = false; btn.textContent = 'Send invite';
+  }
+}
+
+function copyText(btn) {
+  const text = btn.getAttribute('data-copy') || '';
+  const done = () => { const old = btn.textContent; btn.textContent = 'Copied!'; setTimeout(() => { btn.textContent = old; }, 1500); };
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(done).catch(() => alert('Could not copy automatically — here is the text:\n\n' + text));
+  } else {
+    alert('Could not copy automatically — here is the text:\n\n' + text);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Create Approval — calls action=approval_create. Requires client_ref, kind
+// ('estimate' | 'change_order'), and title; job_ref/number/description/
+// amount/payment_terms/doc_url are all optional (api/clientportal.js). The
+// created row has no client-facing deep link of its own — the client sees
+// it under the Approvals tab in their portal (public/clientportal/) the
+// next time they sign in, so we surface the reference, not an invented URL.
+// ---------------------------------------------------------------------------
+async function renderApprovalTab() {
+  content.innerHTML = `<div class="spinner"></div>`;
+  try {
+    CLIENTS = CLIENTS.length ? CLIENTS : await loadClients();
+    JOBS = JOBS.length ? JOBS : await loadJobs();
+  } catch (e) { content.innerHTML = `<div class="errmsg">${esc(e.message)}</div>`; return; }
+
+  content.innerHTML = `
+    <div class="card">
+      <label>Find a client</label>
+      <input id="approval-search" placeholder="Type a client or company name…">
+      <div class="joblist" id="approval-client-list"></div>
+    </div>
+    <div id="approval-form-wrap"></div>`;
+  const list = document.getElementById('approval-client-list');
+  const draw = (filter) => {
+    const f = (filter || '').toLowerCase();
+    const rows = CLIENTS.filter(c => !f || (c.name || '').toLowerCase().includes(f) || (c.companyName || '').toLowerCase().includes(f)).slice(0, 60);
+    list.innerHTML = rows.length ? rows.map(c => `
+      <div class="jobrow" onclick="selectApprovalClient('${c.id}')">
+        <div><b>${esc(c.name)}</b><span>${esc(c.companyName || '')}</span></div>
+        <span class="pill w" style="visibility:hidden;"></span>
+      </div>`).join('') : `<div class="note">No clients match.</div>`;
+  };
+  draw('');
+  document.getElementById('approval-search').oninput = (e) => draw(e.target.value);
+}
+
+function selectApprovalClient(clientId) {
+  const c = CLIENTS.find(x => x.id === clientId);
+  const wrap = document.getElementById('approval-form-wrap');
+  if (!c) return;
+  const clientJobs = JOBS.filter(j => j.clientId === clientId);
+  wrap.innerHTML = `
+    <div class="card hero">
+      <b style="display:block; margin-bottom:12px;">New approval for ${esc(c.name)}</b>
+      <div class="topbar">
+        <div>
+          <label>Kind</label>
+          <select id="ap-kind">
+            <option value="estimate">Estimate</option>
+            <option value="change_order">Change order</option>
+          </select>
+        </div>
+        <div>
+          <label>Job (optional)</label>
+          <select id="ap-job">
+            <option value="">— not tied to a specific job —</option>
+            ${clientJobs.map(j => `<option value="${esc(j.id)}">${esc(j.title || 'Untitled job')} (#${esc(String(j.jobNumber || ''))})</option>`).join('')}
+          </select>
+        </div>
+      </div>
+      <div style="height:10px;"></div>
+      <label>Title</label>
+      <input id="ap-title" placeholder="e.g. Kitchen remodel — Phase 2 estimate">
+      <div style="height:10px;"></div>
+      <div class="topbar">
+        <div>
+          <label>Number (optional)</label>
+          <input id="ap-number" placeholder="e.g. CO-231-004-01">
+        </div>
+        <div>
+          <label>Amount (optional)</label>
+          <input id="ap-amount" type="number" step="0.01" placeholder="0.00">
+        </div>
+      </div>
+      <div style="height:10px;"></div>
+      <label>Description (optional)</label>
+      <textarea id="ap-description" placeholder="What the client is approving…"></textarea>
+      <div style="height:10px;"></div>
+      <div class="topbar">
+        <div>
+          <label>Payment terms (optional)</label>
+          <input id="ap-terms" placeholder="e.g. 50% deposit, balance on completion">
+        </div>
+        <div>
+          <label>Document link (optional)</label>
+          <input id="ap-doc-url" placeholder="Link to the full PDF, if any">
+        </div>
+      </div>
+      <div style="height:16px;"></div>
+      <button class="bigbtn" id="ap-submit-btn" onclick="submitApproval('${clientId}', this)">Create approval</button>
+      <div id="ap-result"></div>
+    </div>`;
+}
+
+async function submitApproval(clientId, btn) {
+  const result = document.getElementById('ap-result');
+  const title = document.getElementById('ap-title').value.trim();
+  if (!title) { result.innerHTML = `<div class="errmsg">Title is required.</div>`; return; }
+
+  btn.disabled = true; btn.textContent = '…';
+  const body = {
+    client_ref: clientId,
+    job_ref: document.getElementById('ap-job').value || null,
+    kind: document.getElementById('ap-kind').value,
+    number: document.getElementById('ap-number').value.trim() || null,
+    title,
+    description: document.getElementById('ap-description').value.trim() || null,
+    amount: document.getElementById('ap-amount').value || null,
+    payment_terms: document.getElementById('ap-terms').value.trim() || null,
+    doc_url: document.getElementById('ap-doc-url').value.trim() || null,
+  };
+  try {
+    const r = await api('approval_create', { method: 'POST', body });
+    const a = r.approval;
+    const ref = a.number || a.id;
+    result.innerHTML = `
+      <div class="okmsg">Approval created — status: ${esc(a.status)}.</div>
+      <div class="linkbox"><span>${esc(a.kind)} · ${esc(ref)} · ${esc(a.title)}</span><button onclick="copyText(this)" data-copy="${esc((a.number ? a.number + ' — ' : '') + a.title)}">Copy reference</button></div>
+      <div class="note" style="margin-top:8px;">The client will see this under the Approvals tab in their portal the next time they sign in. If they haven't been sent portal access yet, use the Invite Client tab first.</div>`;
+  } catch (e) {
+    result.innerHTML = `<div class="errmsg">${esc(e.message)}</div>`;
+  } finally {
+    btn.disabled = false; btn.textContent = 'Create approval';
+  }
+}
+
+boot();
+</script>
+  <script src="/voice-input.js" defer></script>
+</body>
+</html>

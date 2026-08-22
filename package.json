@@ -1,0 +1,30 @@
+{
+  "name": "hivelogic-live",
+  "version": "1.0.0",
+  "private": true,
+  "description": "HiveLogic live backend - Jobber OAuth callback and data sync",
+  "scripts": {
+    "test": "node --experimental-test-module-mocks --test test/*.test.mjs",
+    "test:smoke": "node test/api-smoke-test.js",
+    "test:ui": "node --test test/browser/*.test.mjs"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.39.0",
+    "imapflow": "^1.0.191",
+    "mailparser": "^3.7.4",
+    "nodemailer": "^9.0.5",
+    "web-push": "^3.6.7"
+  },
+  "overridesRationale": {
+    "deepmerge-ts": "GHSA-ggr8-5vv4-36mx (high): stack exhaustion merging recursive object graphs. There is no upstream fix path -- mailparser pins html-to-text to exactly 10.0.0, and html-to-text 10.0.0 pins deepmerge-ts ^7.1.5, so `npm audit fix` advertises a fix and then changes nothing. deepmerge-ts 8 keeps every API html-to-text uses (deepmergeCustom with filterValues/mergeArrays/metaDataUpdater), so the override is safe. test/mail-html-to-text-contract.test.mjs holds that claim to account against the real libraries. Drop this override once mailparser ships an html-to-text that depends on deepmerge-ts >=8."
+  },
+  "overrides": {
+    "deepmerge-ts": "^8.0.1"
+  },
+  "devDependencies": {
+    "gridstack": "^10.3.1",
+    "leaflet": "^1.9.4",
+    "maplibre-gl": "^4.7.1",
+    "playwright-core": "^1.49.1"
+  }
+}

@@ -1,0 +1,109 @@
+name: Hardened completion gate
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  # Required with a merge queue. GitHub builds a temporary merge-group ref and
+  # dispatches merge_group; required status checks have to report on THAT ref,
+  # not on the PR head. Without this the queue waits forever for checks that
+  # can never run, and eventually ejects the entry -- while the PR page still
+  # shows every check green, so it reads as "merged fine" right up until it
+  # silently is not.
+  merge_group:
+
+permissions:
+  contents: read
+
+concurrency:
+  # PR branches: a new push supersedes the old run. Only the latest head matters,
+  # and cancelling frees a runner.
+  #
+  # main: every merge gets its OWN group, keyed by commit, so a merge's run is
+  # never cancelled by the merge that lands sixty seconds later. On 2026-08-17
+  # three consecutive merges (3f54f0e, 4eeacb3c, 492f788) each had their run
+  # cancelled by the next one, so not one of those commits was ever verified by
+  # a run of its own. Nothing unsafe -- the next run covers the merged tree --
+  # but "did main go green for MY commit" stopped having an answer, which is
+  # exactly the question this gate exists to answer.
+  #
+  # Keyed by SHA rather than just setting cancel-in-progress: false, because
+  # false would serialise every merge behind the previous one's browser job
+  # (~6.5 minutes lately) on a branch that merges every few minutes.
+  group: completion-gate-${{ github.workflow }}-${{ github.ref }}-${{ github.event_name == 'push' && github.sha || 'head' }}
+  cancel-in-progress: true
+
+jobs:
+  full-regression:
+    name: Full regression (required for DONE)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test
+
+  # Layout bugs — overlapping controls, a second scrollbar, a map centred on the
+  # wrong place — cannot be caught by npm test, because nothing has been laid
+  # out. This job runs the board in a real browser. See test/browser/README.md.
+  board-ui:
+    name: Schedule board UI (real browser)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+
+      # Keyed on the playwright-core version, so a bump fetches a matching build
+      # rather than silently reusing an incompatible one.
+      - name: Resolve Playwright version
+        id: pw
+        run: echo "version=$(node -p "require('./node_modules/playwright-core/package.json').version")" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v5
+        id: browser-cache
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-chromium-${{ runner.os }}-${{ steps.pw.outputs.version }}
+      - name: Install Chromium
+        if: steps.browser-cache.outputs.cache-hit != 'true'
+        run: npx playwright-core install --with-deps chromium
+      # There is deliberately NO apt step on the cache-hit path.
+      #
+      # It used to run `npx playwright-core install-deps chromium` here, and on
+      # 2026-08-18 that hung three times, each time eating the job's entire
+      # 15-minute budget so `npm run test:ui` never ran and the run produced no
+      # signal (runs 32088045175, 32089928969, 32091020727-era). It had drifted
+      # first: ~2 min, then ~6.5, then the timeout. #412 bounded it; this removes
+      # it, per #405.
+      #
+      # Removing it is safe because on ubuntu-latest it installed nothing this
+      # suite needs. Every library Playwright requires is already on the image --
+      # the log read "is already the newest version" for all of them -- and
+      # Chromium comes from the cache restored above. Its only real output was
+      # ~21MB of CJK and Cyrillic fonts nothing here renders; the Latin and emoji
+      # fonts the board and Pulse tiles actually use (fonts-liberation,
+      # fonts-noto-color-emoji) were already present.
+      #
+      # The cache-MISS path above still uses `install --with-deps`, on purpose:
+      # that path is a fresh Playwright version with no cached browser, which is
+      # the one case where the deps genuinely may not be there. It runs only on a
+      # playwright-core bump, so it is rare enough not to be the recurring hazard.
+      #
+      # If the browser cannot start for any reason, that is still caught loudly:
+      # the step below runs with HL_UI_TESTS_REQUIRED=1, which turns "no browser,
+      # skip" into a hard failure. With the apt step gone, that flag is the whole
+      # safety net -- test/ci-completion-gate.test.mjs asserts it stays.
+      # HL_UI_TESTS_REQUIRED turns "no browser, skip" into a hard failure. Without
+      # it a broken install would report a green run that executed nothing —
+      # which is the precise failure mode this suite was built to stop.
+      - run: npm run test:ui
+        env:
+          HL_UI_TESTS_REQUIRED: '1'

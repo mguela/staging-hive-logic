@@ -1,0 +1,283 @@
+{
+  "rewrites": [
+    {
+      "source": "/vi-app/jobs/:path*",
+      "destination": "/vi-app/index.html"
+    },
+    {
+      "source": "/vi-app/media/:path*",
+      "destination": "/vi-app/index.html"
+    },
+    {
+      "source": "/vi-app/settings",
+      "destination": "/vi-app/index.html"
+    }
+  ],
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        },
+        {
+          "key": "Referrer-Policy",
+          "value": "strict-origin-when-cross-origin"
+        },
+        {
+          "key": "X-Frame-Options",
+          "value": "SAMEORIGIN"
+        }
+      ]
+    },
+    {
+      "source": "/clientportal/(.*)",
+      "headers": [
+        {
+          "key": "X-Frame-Options",
+          "value": "DENY"
+        },
+        {
+          "key": "Content-Security-Policy",
+          "value": "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'"
+        }
+      ]
+    },
+    {
+      "source": "/subportal/(.*)",
+      "headers": [
+        {
+          "key": "X-Frame-Options",
+          "value": "DENY"
+        },
+        {
+          "key": "Content-Security-Policy",
+          "value": "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'"
+        }
+      ]
+    },
+    {
+      "source": "/hiveconnect/(.*)",
+      "headers": [
+        {
+          "key": "X-Frame-Options",
+          "value": "DENY"
+        },
+        {
+          "key": "Content-Security-Policy",
+          "value": "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https:; media-src 'self' blob:; connect-src 'self' https: wss: ws://127.0.0.1:8766 ws://localhost:8766; frame-src 'self' https://login.microsoftonline.com; child-src 'self' blob: https://login.microsoftonline.com; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'"
+        }
+      ]
+    }
+  ],
+  "functions": {
+    "api/ai-workroom.js": {
+      "maxDuration": 120
+    },
+    "api/reina-council.js": {
+      "maxDuration": 120
+    },
+    "api/mail.js": {
+      "maxDuration": 90
+    },
+    "api/jobber/sync.js": {
+      "maxDuration": 300
+    },
+    "api/chat.js": {
+      "maxDuration": 120,
+      "includeFiles": "api/_lib/brain/**"
+    },
+    "api/jobber/sync-extended.js": {
+      "maxDuration": 300
+    },
+    "api/qbo/index.js": {
+      "maxDuration": 90
+    },
+    "api/track1.js": {
+      "maxDuration": 120
+    },
+    "api/visual-intel.js": {
+      "maxDuration": 60
+    },
+    "api/import-companycam.js": {
+      "maxDuration": 300
+    },
+    "api/subportal.js": {
+      "maxDuration": 30
+    },
+    "api/clientportal.js": {
+      "maxDuration": 30
+    },
+    "api/fieldops.js": {
+      "maxDuration": 30
+    },
+    "api/authnet-webhook.js": {
+      "maxDuration": 30
+    },
+    "api/marketing.js": {
+      "maxDuration": 30
+    },
+    "api/voice.js": {
+      "maxDuration": 30
+    },
+    "api/reina-neural-speech.js": {
+      "maxDuration": 30
+    },
+    "api/voice-webhook.js": {
+      "maxDuration": 30
+    },
+    "api/health-cron.js": {
+      "maxDuration": 60
+    },
+    "api/social-posts.js": {
+      "maxDuration": 60
+    }
+  },
+  "crons": [
+    {
+      "path": "/api/jobber/sync?resource=clients",
+      "schedule": "0 * * * *"
+    },
+    {
+      "path": "/api/jobber/sync?resource=jobs",
+      "schedule": "20 * * * *"
+    },
+    {
+      "path": "/api/jobber/sync?resource=invoices",
+      "schedule": "40 * * * *"
+    },
+    {
+      "path": "/api/jobber/webhook?drain=1",
+      "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/jobber/sync-extended?resource=quotes",
+      "schedule": "50 13 * * *"
+    },
+    {
+      "path": "/api/jobber/sync-extended?resource=vehicles",
+      "schedule": "*/15 * * * *"
+    },
+    {
+      "path": "/api/fleet/record-positions",
+      "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/fleet/detect-presence",
+      "schedule": "*/15 * * * *"
+    },
+    {
+      "path": "/api/jobber/sync-extended?resource=requests",
+      "schedule": "0 14 * * *"
+    },
+    {
+      "path": "/api/jobber/sync-extended?resource=visits",
+      "schedule": "10 14 * * *"
+    },
+    {
+      "path": "/api/jobber/sync-extended?resource=expenses",
+      "schedule": "20 14 * * *"
+    },
+    {
+      "path": "/api/jobber/sync-extended?resource=timesheets",
+      "schedule": "30 14 * * *"
+    },
+    {
+      "path": "/api/jobber/sync-extended?resource=users",
+      "schedule": "40 14 * * *"
+    },
+    {
+      "path": "/api/jobber/sync-extended?resource=locations",
+      "schedule": "50 14 * * *"
+    },
+    {
+      "path": "/api/jobber/sync-extended?resource=geocode",
+      "schedule": "0 15 * * *"
+    },
+    {
+      "path": "/api/import-companycam",
+      "schedule": "*/15 * * * *"
+    },
+    {
+      "path": "/api/marketing?resource=process_scheduled_sends",
+      "schedule": "*/15 * * * *"
+    },
+    {
+      "path": "/api/track1?resource=check_new_leads",
+      "schedule": "*/15 * * * *"
+    },
+    {
+      "path": "/api/health-cron",
+      "schedule": "30 15 * * *"
+    },
+    {
+      "path": "/api/track1?resource=monitor_prune",
+      "schedule": "0 8 * * *"
+    },
+    {
+      "path": "/api/track1?resource=workforce_sweep_gone",
+      "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/jobber/webhook?cleanup=1",
+      "schedule": "0 4 * * *"
+    },
+    {
+      "path": "/api/reina/scan-change-requests?days=2",
+      "schedule": "0 */2 * * *"
+    },
+    {
+      "path": "/api/social-posts?resource=process_scheduled_posts",
+      "schedule": "*/15 * * * *"
+    },
+    {
+      "path": "/api/marketing?resource=process_review_request_autosend",
+      "schedule": "0 15 * * *"
+    },
+    {
+      "path": "/api/marketing?resource=process_post_job_thank_you_autosend",
+      "schedule": "0 12 * * *"
+    },
+    {
+      "path": "/api/marketing?resource=process_service_anniversary_autosend",
+      "schedule": "15 12 * * *"
+    },
+    {
+      "path": "/api/marketing?resource=process_dormant_reactivation_autosend",
+      "schedule": "30 12 * * *"
+    },
+    {
+      "path": "/api/marketing?resource=process_maintenance_reminders_autosend",
+      "schedule": "45 12 * * *"
+    },
+    {
+      "path": "/api/marketing?resource=process_new_lead_followup_autosend",
+      "schedule": "0 */4 * * *"
+    },
+    {
+      "path": "/api/marketing?resource=process_newsletter_autosend",
+      "schedule": "0 13 * * *"
+    },
+    {
+      "path": "/api/marketing?resource=process_referral_autosend",
+      "schedule": "15 13 * * *"
+    },
+    {
+      "path": "/api/automations?resource=missed_call_textback",
+      "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/automations?resource=invoice_overdue_nudge",
+      "schedule": "0 14 * * *"
+    },
+    {
+      "path": "/api/schedule/outbox?resource=process",
+      "schedule": "*/10 * * * *"
+    },
+    {
+      "path": "/api/reina/mail-sweep",
+      "schedule": "*/10 * * * *"
+    }
+  ]
+}

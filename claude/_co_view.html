@@ -1,0 +1,132 @@
+<div id="view-co" style="display:none">
+  <div style="max-width:1080px;margin:0 auto;padding:18px 16px 60px">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:18px;flex-wrap:wrap">
+      <div>
+        <div style="font-family:var(--sans);font-weight:900;font-size:22px;color:#0f172a">Change Orders</div>
+        <div style="color:var(--mut);font-size:12px;font-weight:700;margin-top:2px">Extra work beyond the original scope &mdash; tracked, approved, and rolled into job profit. Live from the change-order engine.</div>
+      </div>
+      <button class="btn-save" onclick="coOpenCreate()">+ New Change Order</button>
+    </div>
+    <div id="co-create" style="display:none"></div>
+    <div id="co-list"><div style="color:var(--mut);padding:44px;text-align:center;font-weight:700">Loading&hellip;</div></div>
+  </div>
+</div>
+<script>
+function coApi(action, body){ var h={'Content-Type':'application/json'}; var t=hlTokenSync(); if(t)h['Authorization']='Bearer '+t; return fetch('/api/bookkeeping/change-orders/'+action,{method:'POST',headers:h,body:JSON.stringify(body||{})}).then(function(r){return r.json();}); }
+function coListApi(){ var h={}; var t=hlTokenSync(); if(t)h['Authorization']='Bearer '+t; return fetch('/api/bookkeeping/change-orders/list',{headers:h}).then(function(r){return r.json();}); }
+function coEsc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
+function coMoney(n){ n=+n||0; return '$'+n.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+function coInp(){ return 'border:1.5px solid var(--line);border-radius:9px;padding:10px 11px;font-family:var(--sans);font-size:12px;font-weight:700;width:100%;outline:none;background:#fff;box-sizing:border-box'; }
+function coBtn(kind){ var b='border:none;border-radius:9px;padding:9px 14px;font-family:var(--sans);font-weight:800;font-size:12px;cursor:pointer;'; if(kind==='ok')return b+'background:#047857;color:#fff'; if(kind==='no')return b+'background:#fee2e2;color:#b91c1c'; if(kind==='ghost')return b+'background:#f1f5f9;color:#475569'; return b+'background:#eef2ff;color:#4338ca'; }
+function coBadge(s){ var m={draft:['#475569','#f1f5f9'],sent:['#b45309','#fef3c7'],approved:['#047857','#d1fae5'],rejected:['#b91c1c','#fee2e2'],overdue:['#b91c1c','#fee2e2'],paid:['#047857','#d1fae5'],partially_paid:['#047857','#d1fae5']}; var c=m[s]||['#475569','#f1f5f9']; return '<span style="background:'+c[1]+';color:'+c[0]+';font-weight:800;font-size:10px;padding:3px 9px;border-radius:99px;text-transform:uppercase;letter-spacing:.04em">'+coEsc((s||'draft').replace(/_/g,' '))+'</span>'; }
+function coEmpty(t,s){ return '<div style="border:1.5px dashed var(--line);border-radius:14px;padding:44px;text-align:center;background:#fff"><div style="font-family:var(--sans);font-weight:900;font-size:16px;color:#0f172a">'+coEsc(t)+'</div><div style="color:var(--mut);font-size:12px;font-weight:700;margin-top:6px">'+coEsc(s)+'</div></div>'; }
+function coCard(co){
+  var st=co.displayStatus||co.lifecycleStatus||'draft';
+  var tot=co.totals||{}; var amt=tot.cardPrice||tot.price||0;
+  var kind=co.kind==='invoice'?'Invoice &middot; work already done':'Estimate &middot; needs client approval';
+  var cid=coEsc(co.id);
+  var acts='';
+  if(st==='draft'&&co.kind!=='invoice') acts+='<button style="'+coBtn()+'" onclick="coSend(\''+cid+'\')">Send for approval</button>';
+  if(st==='sent'||st==='overdue') acts+='<button style="'+coBtn('ok')+'" onclick="coApprove(\''+cid+'\')">Approve</button><button style="'+coBtn('no')+'" onclick="coRejectForm(\''+cid+'\')">Reject</button>';
+  if(st==='approved'||st==='partially_paid'||co.kind==='invoice') acts+='<button style="'+coBtn()+'" onclick="coPayForm(\''+cid+'\')">Record payment</button>';
+  return '<div style="border:1.5px solid var(--line);border-radius:14px;padding:15px 16px;background:#fff">'
+    +'<div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start">'
+    +'<div style="min-width:0"><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span style="font-family:var(--sans);font-weight:900;font-size:14px;color:#0f172a">'+coEsc(co.coNumber||'CO')+'</span>'+coBadge(st)+'</div>'
+    +'<div style="color:#0f172a;font-size:13px;font-weight:700;margin-top:7px">'+coEsc(co.description||'(no description)')+'</div>'
+    +'<div style="color:var(--mut);font-size:11px;font-weight:700;margin-top:4px">'+coEsc(co.jobLabel||co.jobId||'')+' &middot; '+kind+'</div></div>'
+    +'<div style="text-align:right;flex-shrink:0"><div style="font-family:var(--sans);font-weight:900;font-size:18px;color:#0f172a">'+coMoney(amt)+'</div>'
+    +(tot.marginPct!=null?'<div style="color:var(--mut);font-size:11px;font-weight:700;margin-top:2px">'+tot.marginPct+'% margin</div>':'')+'</div></div>'
+    +(acts?'<div id="coacts-'+cid+'" style="display:flex;gap:8px;margin-top:13px;flex-wrap:wrap">'+acts+'</div>':'')
+    +'<div id="cop-'+cid+'" style="display:none;margin-top:12px;border-top:1px solid var(--line);padding-top:12px"></div>'
+    +'</div>';
+}
+function coLoadList(){
+  var el=document.getElementById('co-list'); if(!el)return;
+  el.innerHTML='<div style="color:var(--mut);padding:44px;text-align:center;font-weight:700">Loading&hellip;</div>';
+  coListApi().then(function(d){
+    if(d&&d.enabled===false){ el.innerHTML=coEmpty('Change Orders are switched off','This feature is built but disabled. Turn on BOOKKEEPING_ENABLED to use it.'); return; }
+    if(!d||!d.ok){ el.innerHTML=coEmpty('Could not load change orders',(d&&d.error)||'Please try again in a moment.'); return; }
+    var rows=d.changeOrders||[];
+    if(!rows.length){ el.innerHTML=coEmpty('No change orders yet','When a job needs extra work beyond the original scope, create a change order so the added revenue is tracked and approved.'); return; }
+    var html='<div style="display:flex;flex-direction:column;gap:10px">';
+    rows.forEach(function(co){ html+=coCard(co); });
+    html+='</div>';
+    el.innerHTML=html;
+  }).catch(function(e){ el.innerHTML=coEmpty('Network error',e.message); });
+}
+function coOpenCreate(){
+  var box=document.getElementById('co-create'); if(!box)return;
+  box.innerHTML='<div style="border:1.5px solid var(--line);border-radius:14px;padding:16px;background:#fbfcfe;margin-bottom:14px">'
+    +'<div style="font-family:var(--sans);font-weight:900;font-size:15px;color:#0f172a;margin-bottom:12px">New Change Order</div>'
+    +'<div style="display:flex;flex-direction:column;gap:10px">'
+    +'<label style="font-size:11px;font-weight:800;color:var(--mut);display:block">Job<select id="co-job" style="'+coInp()+';margin-top:5px"><option value="">Loading jobs&hellip;</option></select></label>'
+    +'<label style="font-size:11px;font-weight:800;color:var(--mut);display:block">Type<select id="co-kind" style="'+coInp()+';margin-top:5px"><option value="estimate">Estimate &mdash; needs client approval first</option><option value="invoice">Invoice &mdash; work already done</option></select></label>'
+    +'<label style="font-size:11px;font-weight:800;color:var(--mut);display:block">What is the extra work?<input id="co-desc" placeholder="e.g. Add recessed lighting in hallway" style="'+coInp()+';margin-top:5px"></label>'
+    +'<div><div style="font-size:11px;font-weight:800;color:var(--mut);margin-bottom:5px">First line item</div><div style="display:grid;grid-template-columns:2fr 1fr 1fr;gap:8px"><input id="co-l-desc" placeholder="Description" style="'+coInp()+'"><input id="co-l-qty" type="number" value="1" placeholder="Qty" style="'+coInp()+'"><input id="co-l-cost" type="number" placeholder="Unit cost $" style="'+coInp()+'"></div></div>'
+    +'</div>'
+    +'<div style="display:flex;gap:8px;margin-top:14px"><button class="btn-save" onclick="coSubmitCreate()">Create change order</button><button class="btn-ghost" onclick="document.getElementById(\'co-create\').style.display=\'none\'">Cancel</button></div>'
+    +'</div>';
+  box.style.display='block';
+  box.scrollIntoView({behavior:'smooth',block:'nearest'});
+  coFillJobs();
+}
+function coFillJobs(){
+  var sel=document.getElementById('co-job'); if(!sel)return;
+  fetch((window.API||'')+'/api/jobs?limit=500').then(function(r){return r.json();}).then(function(d){
+    if(!d||!d.ok||!d.jobs||!d.jobs.length){ sel.innerHTML='<option value="">No jobs found &mdash; sync Jobber</option>'; return; }
+    var jobs=d.jobs.slice().sort(function(a,b){ return (a.status==='active'?0:1)-(b.status==='active'?0:1); });
+    var o='<option value="">&mdash; pick a job &mdash;</option>';
+    jobs.forEach(function(j){ var lbl=(j.jobNumber?('#'+j.jobNumber+' '):'')+(j.title||'Untitled')+(j.clientName?(' — '+j.clientName):''); o+='<option value="'+coEsc(j.id)+'" data-label="'+coEsc(lbl)+'">'+coEsc(lbl)+(j.status&&j.status!=='active'?(' ('+coEsc(j.status)+')'):'')+'</option>'; });
+    sel.innerHTML=o;
+  }).catch(function(){ sel.innerHTML='<option value="">Could not load jobs</option>'; });
+}
+function coSubmitCreate(){
+  var sel=document.getElementById('co-job');
+  var job=(sel&&sel.value||'').trim();
+  var jobLabel=(sel&&sel.options[sel.selectedIndex]&&sel.options[sel.selectedIndex].getAttribute('data-label'))||job;
+  var kind=document.getElementById('co-kind').value;
+  var desc=(document.getElementById('co-desc').value||'').trim();
+  var ld=(document.getElementById('co-l-desc').value||'').trim();
+  var qty=+document.getElementById('co-l-qty').value||1;
+  var cost=+document.getElementById('co-l-cost').value||0;
+  if(!job){ chirpToast('&#9888; Pick the job this change order is for'); return; }
+  if(!desc){ chirpToast('&#9888; Describe the extra work'); return; }
+  if(!ld){ chirpToast('&#9888; Add at least one line item'); return; }
+  var body={ jobId:job, jobLabel:jobLabel, kind:kind, description:desc, lines:[{type:'labor',description:ld,qty:qty,unit:'ea',unitCost:cost,pmode:'markup'}] };
+  coApi('create',body).then(function(d){
+    if(d&&d.ok){ chirpToast('&#10003; '+((d.changeOrder&&d.changeOrder.coNumber)||'Change order')+' created'); document.getElementById('co-create').style.display='none'; coLoadList(); }
+    else chirpToast('&#9888; '+((d&&d.error)||'Could not create the change order'));
+  }).catch(function(e){ chirpToast('&#9888; '+e.message); });
+}
+function coPanel(id){ return document.getElementById('cop-'+id); }
+function coPanelClose(id){ var p=coPanel(id); if(p){ p.style.display='none'; p.innerHTML=''; } }
+function coRejectForm(id){
+  var p=coPanel(id); if(!p)return;
+  p.innerHTML='<div style="font-size:11px;font-weight:800;color:var(--mut);margin-bottom:6px">Reason for rejecting</div>'
+    +'<input id="cor-'+id+'" placeholder="e.g. Client declined the added scope" style="'+coInp()+'">'
+    +'<div style="display:flex;gap:8px;margin-top:10px"><button style="'+coBtn('no')+'" onclick="coRejectConfirm(\''+id+'\')">Confirm reject</button><button style="'+coBtn('ghost')+'" onclick="coPanelClose(\''+id+'\')">Cancel</button></div>';
+  p.style.display='block';
+  var inp=document.getElementById('cor-'+id); if(inp)inp.focus();
+}
+function coRejectConfirm(id){
+  var inp=document.getElementById('cor-'+id); var reason=(inp&&inp.value||'').trim();
+  if(!reason){ chirpToast('&#9888; Add a short reason'); return; }
+  coApi('reject',{id:id,reason:reason}).then(function(d){ coAfter(d,'Change order rejected.'); });
+}
+function coPayForm(id){
+  var p=coPanel(id); if(!p)return;
+  p.innerHTML='<div style="font-size:11px;font-weight:800;color:var(--mut);margin-bottom:6px">Payment amount received</div>'
+    +'<div style="display:flex;gap:8px;align-items:center;max-width:260px"><span style="font-weight:900;color:#0f172a">$</span><input id="cop-amt-'+id+'" type="number" min="0" step="0.01" placeholder="0.00" style="'+coInp()+'"></div>'
+    +'<div style="display:flex;gap:8px;margin-top:10px"><button style="'+coBtn('ok')+'" onclick="coPayConfirm(\''+id+'\')">Record payment</button><button style="'+coBtn('ghost')+'" onclick="coPanelClose(\''+id+'\')">Cancel</button></div>';
+  p.style.display='block';
+  var inp=document.getElementById('cop-amt-'+id); if(inp)inp.focus();
+}
+function coPayConfirm(id){
+  var inp=document.getElementById('cop-amt-'+id); var amt=+(inp&&inp.value||0);
+  if(!(amt>0)){ chirpToast('&#9888; Enter a dollar amount greater than zero'); return; }
+  coApi('record-payment',{id:id,amount:amt,method:'manual',reference:'HiveLogic'}).then(function(d){ coAfter(d,'Payment recorded.'); });
+}
+function coSend(id){ coApi('send',{id:id}).then(function(d){ coAfter(d,'Sent for approval.'); }); }
+function coApprove(id){ coApi('approve',{id:id}).then(function(d){ coAfter(d,'Change order approved.'); }); }
+function coAfter(d,okMsg){ if(d&&d.ok){ chirpToast('&#10003; '+okMsg); } else { chirpToast('&#9888; '+((d&&d.error)||'That action could not be completed')); } coLoadList(); }
+</script>

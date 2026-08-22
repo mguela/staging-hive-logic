@@ -1,0 +1,281 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>Voice Lab</title>
+<style>
+  :root {
+    --bg: #0e1420; --card: #161d2b; --line: #27324a; --ink: #e6e9f1;
+    --mut: #8794ad; --good: #34c759; --warn: #ffc94b; --bad: #e07568;
+    --accent: #5b9dff;
+    --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    --mono: 'SF Mono', ui-monospace, Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: var(--sans); background: var(--bg); color: var(--ink);
+    line-height: 1.5; padding: 24px 16px 64px; -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 760px; margin: 0 auto; }
+  h1 { font-size: 22px; letter-spacing: -.2px; }
+  .sub { color: var(--mut); font-size: 14px; margin-top: 4px; }
+  .card {
+    background: var(--card); border: 1px solid var(--line); border-radius: 14px;
+    padding: 18px; margin-top: 16px;
+  }
+  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .8px; color: var(--mut); margin-bottom: 12px; }
+  button {
+    font: inherit; font-weight: 650; color: #08131f; background: var(--accent);
+    border: 0; border-radius: 10px; padding: 11px 18px; cursor: pointer;
+  }
+  button.ghost { background: transparent; color: var(--ink); border: 1px solid var(--line); }
+  button:disabled { opacity: .45; cursor: default; }
+  select {
+    font: inherit; color: var(--ink); background: #0e1420; border: 1px solid var(--line);
+    border-radius: 9px; padding: 9px 10px; width: 100%; max-width: 100%;
+  }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+  .meterwrap { margin-top: 14px; }
+  .bar { height: 26px; background: #0b1017; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; position: relative; }
+  .fill { height: 100%; width: 0%; background: var(--good); transition: width .06s linear; }
+  .fill.hot { background: var(--bad); }
+  .fill.low { background: var(--warn); }
+  .ticks { position: relative; height: 14px; margin-top: 3px; color: var(--mut); font-size: 10px; font-family: var(--mono); }
+  .ticks span { position: absolute; transform: translateX(-50%); }
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; margin-top: 14px; }
+  .stat { background: #0b1017; border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
+  .stat b { display: block; font-family: var(--mono); font-size: 20px; font-weight: 600; }
+  .stat span { color: var(--mut); font-size: 11px; text-transform: uppercase; letter-spacing: .6px; }
+  .verdict { margin-top: 14px; padding: 12px 14px; border-radius: 10px; border: 1px solid var(--line); background: #0b1017; font-size: 14px; }
+  .verdict.good { border-color: rgba(52,199,89,.5); }
+  .verdict.bad { border-color: rgba(224,117,104,.5); }
+  .verdict.warn { border-color: rgba(255,201,75,.5); }
+  #heard { font-size: 19px; min-height: 30px; margin-top: 10px; }
+  #heard:empty::before { content: 'nothing yet'; color: var(--mut); font-size: 14px; }
+  .log { font-family: var(--mono); font-size: 12px; color: var(--mut); margin-top: 12px; max-height: 200px; overflow: auto; white-space: pre-wrap; }
+  .note { color: var(--mut); font-size: 13px; margin-top: 10px; }
+  code { font-family: var(--mono); background: #0b1017; padding: 1px 5px; border-radius: 4px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Voice Lab</h1>
+  <p class="sub">Standalone. Nothing here touches the HiveLogic voice stack.</p>
+
+  <!-- 1. See the microphone working, before saying a word ------------------ -->
+  <div class="card">
+    <h2>1 · Is the microphone actually hearing you?</h2>
+    <div class="row">
+      <select id="device"><option value="">Default microphone</option></select>
+    </div>
+    <div class="row" style="margin-top:10px">
+      <button id="monitor">Start meter</button>
+      <button id="stopMonitor" class="ghost" disabled>Stop</button>
+      <label style="font-size:13px;color:var(--mut);display:flex;gap:6px;align-items:center">
+        <input type="checkbox" id="agc" checked> browser auto-gain
+      </label>
+    </div>
+
+    <div class="meterwrap">
+      <div class="bar"><div class="fill" id="fill"></div></div>
+      <div class="ticks">
+        <span style="left:14%">18 floor</span>
+        <span style="left:47%">60 good</span>
+        <span style="left:98%">128 clip</span>
+      </div>
+    </div>
+
+    <div class="stats">
+      <div class="stat"><span>peak now</span><b id="sPeak">0</b></div>
+      <div class="stat"><span>peak held</span><b id="sHold">0</b></div>
+      <div class="stat"><span>rms</span><b id="sRms">0</b></div>
+      <div class="stat"><span>crest</span><b id="sCrest">0</b></div>
+    </div>
+
+    <div class="verdict" id="verdict">Press <b>Start meter</b> and talk normally.</div>
+    <p class="note">Crest is peak ÷ rms. Speech is spiky, so it runs about 4 and up. A steady hum or an amplified empty room runs near 1.5 — that tells us whether the microphone is hearing <em>you</em> or the room.</p>
+  </div>
+
+  <!-- 2. The native recognizer, no upload at all --------------------------- -->
+  <div class="card">
+    <h2>2 · Native browser speech recognition</h2>
+    <p class="note" style="margin-top:0">Chrome transcribes this itself. No recording, no upload, no OpenAI — none of the machinery that has been failing.</p>
+    <div class="row" style="margin-top:12px">
+      <button id="listen">Start listening</button>
+      <button id="stopListen" class="ghost" disabled>Stop</button>
+    </div>
+    <div id="heard"></div>
+    <div class="verdict" id="nativeVerdict">Not started.</div>
+    <div class="log" id="log"></div>
+  </div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+  var $ = function (id) { return document.getElementById(id); };
+  var log = function (line) {
+    var el = $('log');
+    el.textContent = new Date().toLocaleTimeString() + '  ' + line + '\n' + el.textContent;
+  };
+  var setVerdict = function (el, text, kind) {
+    el.className = 'verdict' + (kind ? ' ' + kind : '');
+    el.innerHTML = text;
+  };
+
+  /* ---- 1. live meter --------------------------------------------------- */
+  var stream = null, ctx = null, analyser = null, buf = null, raf = 0;
+  var holdPeak = 0, sqSum = 0, sqN = 0, clipped = 0, everSpoke = false;
+
+  function listDevices() {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) return;
+    navigator.mediaDevices.enumerateDevices().then(function (all) {
+      var sel = $('device');
+      var chosen = sel.value;
+      sel.innerHTML = '<option value="">Default microphone</option>';
+      all.filter(function (d) { return d.kind === 'audioinput'; }).forEach(function (d, i) {
+        var o = document.createElement('option');
+        o.value = d.deviceId;
+        o.textContent = d.label || ('Microphone ' + (i + 1));
+        sel.appendChild(o);
+      });
+      sel.value = chosen;
+    }).catch(function () {});
+  }
+
+  function stopMeter() {
+    cancelAnimationFrame(raf);
+    if (ctx) { try { ctx.close(); } catch (e) {} ctx = null; }
+    if (stream) { stream.getTracks().forEach(function (t) { t.stop(); }); stream = null; }
+    $('monitor').disabled = false; $('stopMonitor').disabled = true;
+  }
+
+  function startMeter() {
+    var id = $('device').value;
+    var audio = {
+      echoCancellation: true,
+      noiseSuppression: true,
+      autoGainControl: $('agc').checked
+    };
+    if (id) audio.deviceId = { exact: id };
+    navigator.mediaDevices.getUserMedia({ audio: audio }).then(function (s) {
+      stream = s;
+      listDevices();                       // labels appear only after permission
+      var track = s.getAudioTracks()[0];
+      log('open: ' + (track && track.label ? track.label : 'unknown device'));
+      ctx = new (window.AudioContext || window.webkitAudioContext)();
+      if (ctx.state === 'suspended') ctx.resume();
+      analyser = ctx.createAnalyser();
+      analyser.fftSize = 512;
+      ctx.createMediaStreamSource(s).connect(analyser);
+      buf = new Uint8Array(analyser.fftSize);
+      holdPeak = 0; sqSum = 0; sqN = 0; clipped = 0; everSpoke = false;
+      $('monitor').disabled = true; $('stopMonitor').disabled = false;
+      tick();
+    }).catch(function (err) {
+      setVerdict($('verdict'), 'Could not open the microphone: <code>' + (err && err.name) + '</code>', 'bad');
+      log('getUserMedia failed: ' + (err && err.name));
+    });
+  }
+
+  function tick() {
+    if (!analyser) return;
+    analyser.getByteTimeDomainData(buf);
+    var peak = 0, squares = 0;
+    for (var i = 0; i < buf.length; i++) {
+      var m = Math.abs(buf[i] - 128);
+      if (m > peak) peak = m;
+      squares += m * m;
+    }
+    if (peak > holdPeak) holdPeak = peak;
+    if (peak >= 126) clipped++;
+    sqSum += squares / buf.length; sqN++;
+    var rms = Math.sqrt(sqSum / sqN);
+    var crest = rms > 0 ? holdPeak / rms : 0;
+    if (peak > 18) everSpoke = true;
+
+    var fill = $('fill');
+    fill.style.width = Math.min(100, (peak / 128) * 100) + '%';
+    fill.className = 'fill' + (peak >= 120 ? ' hot' : peak < 18 ? ' low' : '');
+    $('sPeak').textContent = peak;
+    $('sHold').textContent = holdPeak;
+    $('sRms').textContent = rms.toFixed(1);
+    $('sCrest').textContent = crest.toFixed(1);
+
+    if (!everSpoke) {
+      setVerdict($('verdict'), 'Listening… say a full sentence at your normal volume.', '');
+    } else if (clipped > 20) {
+      setVerdict($('verdict'), '<b>Too loud — distorting.</b> Turn this microphone\'s input volume down in Windows sound settings.', 'bad');
+    } else if (holdPeak < 18) {
+      setVerdict($('verdict'), '<b>Too quiet.</b> Turn its input volume up, or move closer.', 'warn');
+    } else if (crest < 2.5) {
+      setVerdict($('verdict'), '<b>This is mostly room noise, not your voice.</b> The level is fine but the sound is flat — a hum or fan, with speech too far away. A closer microphone is the fix; no software setting will help.', 'bad');
+    } else {
+      setVerdict($('verdict'), '<b>This looks like real speech.</b> Peak ' + holdPeak + ', crest ' + crest.toFixed(1) + '. If transcription still fails, the microphone is not the problem.', 'good');
+    }
+    raf = requestAnimationFrame(tick);
+  }
+
+  $('monitor').onclick = startMeter;
+  $('stopMonitor').onclick = stopMeter;
+  listDevices();
+
+  /* ---- 2. native recognition ------------------------------------------- */
+  var Rec = window.SpeechRecognition || window.webkitSpeechRecognition;
+  var rec = null;
+
+  if (!Rec) {
+    setVerdict($('nativeVerdict'),
+      '<b>This browser has no native speech recognition.</b> That rules the approach out here.', 'bad');
+    $('listen').disabled = true;
+  } else {
+    setVerdict($('nativeVerdict'), 'Available in this browser. Press <b>Start listening</b>.', '');
+  }
+
+  $('listen').onclick = function () {
+    if (!Rec) return;
+    try { if (rec) rec.abort(); } catch (e) {}
+    rec = new Rec();
+    rec.lang = 'en-US';
+    rec.interimResults = true;
+    rec.continuous = false;
+    $('heard').textContent = '';
+
+    rec.onstart = function () {
+      log('native: started');
+      setVerdict($('nativeVerdict'), 'Listening…', '');
+      $('listen').disabled = true; $('stopListen').disabled = false;
+    };
+    rec.onresult = function (ev) {
+      var text = '';
+      for (var i = 0; i < ev.results.length; i++) text += ev.results[i][0].transcript;
+      $('heard').textContent = text;
+      var isFinal = ev.results[ev.results.length - 1].isFinal;
+      log('native: ' + (isFinal ? 'FINAL' : 'interim') + ' "' + text + '"');
+      if (isFinal && text.trim()) {
+        setVerdict($('nativeVerdict'),
+          '<b>It works.</b> The browser transcribed you with no upload and no OpenAI call.', 'good');
+      }
+    };
+    rec.onerror = function (ev) {
+      log('native: error ' + ev.error);
+      setVerdict($('nativeVerdict'), 'Error: <code>' + ev.error + '</code>', 'bad');
+    };
+    rec.onend = function () {
+      log('native: ended');
+      $('listen').disabled = false; $('stopListen').disabled = true;
+      if (!$('heard').textContent.trim()) {
+        setVerdict($('nativeVerdict'),
+          'Ended with nothing transcribed. If the meter above showed real speech, the browser heard you and still produced no words.', 'warn');
+      }
+    };
+    try { rec.start(); } catch (e) { log('native: start threw ' + e.message); }
+  };
+
+  $('stopListen').onclick = function () { try { rec && rec.stop(); } catch (e) {} };
+})();
+</script>
+</body>
+</html>

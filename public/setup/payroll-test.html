@@ -1,0 +1,123 @@
+<!doctype html>
+<!--
+  public/setup/payroll-test.html
+  A tiny admin tool to exercise the Gusto integration against the connected
+  DEMO company: (1) run the read-only payroll dry-run, and (2) push one test
+  W2-hourly timesheet (write). Both call /api/gusto with the signed-in Bearer
+  token. The push is demo-guarded server-side. Not linked from the app nav —
+  it's a hand-run test surface.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gusto Payroll Test</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700;800&family=JetBrains+Mono&display=swap" rel="stylesheet">
+<style>
+  :root{ --ink:#484f64; --canvas:#f0f1f6; --card:#ffffff; --line:#dadde8; --rail:#161e2e; --green:#1B7A50; --red:#c65b4e; --orange:#f5793b; }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--canvas);color:var(--ink);font-family:'Montserrat',system-ui,sans-serif;padding:28px}
+  .wrap{max-width:820px;margin:0 auto}
+  h1{font-size:20px;margin:0 0 4px}
+  p.sub{color:#6c7488;font-size:13px;margin:0 0 20px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px;margin-bottom:16px}
+  .card h2{font-size:15px;margin:0 0 6px}
+  .card p{font-size:13px;color:#6c7488;margin:0 0 12px}
+  button{border:0;border-radius:10px;padding:12px 18px;font-weight:800;font-family:inherit;font-size:14px;cursor:pointer}
+  .read{background:var(--rail);color:#fff}
+  .write{background:var(--orange);color:#fff}
+  button:disabled{opacity:.5;cursor:default}
+  pre{background:#0d1220;color:#d7e3f4;border-radius:10px;padding:14px;overflow:auto;font-family:'JetBrains Mono',monospace;font-size:12px;line-height:1.5;max-height:520px;white-space:pre-wrap;word-break:break-word}
+  .status{font-size:12px;font-family:'JetBrains Mono',monospace;margin-top:8px}
+  .ok{color:var(--green)} .bad{color:var(--red)}
+  #signin{display:none}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Gusto payroll — test surface</h1>
+  <p class="sub">Runs against the connected <b>demo</b> company. The timesheet push is demo-only and picks the first W2-hourly employee.</p>
+
+  <div id="signin" class="card"><h2>Please sign in first</h2><p>Open the <a href="/">HiveLogic app</a>, sign in, then come back to this page.</p></div>
+
+  <div id="tools" style="display:none">
+    <div class="card">
+      <h2>1 · Payroll dry-run (read-only)</h2>
+      <p>Pulls demo employees + jobs + last processed payrolls, computes the burden, and prints what it <i>would</i> write. Writes nothing.</p>
+      <button class="read" id="btnDry">Run dry-run</button>
+      <div class="status" id="dryStatus"></div>
+      <pre id="dryOut" hidden></pre>
+    </div>
+
+    <div class="card">
+      <h2>2 · Push one test timesheet (write · demo only)</h2>
+      <p>Finds the first W2-hourly employee and pushes one 8-hour “Regular” shift to Gusto’s Time Sheets API, then reads the sheets back.</p>
+      <button class="write" id="btnPush">Push test timesheet</button>
+      <div class="status" id="pushStatus"></div>
+      <pre id="pushOut" hidden></pre>
+    </div>
+
+    <div class="card">
+      <h2>3 · Provision a test hire into Gusto (write)</h2>
+      <p>Creates an employee in Gusto the way onboarding does — self-onboarding (Gusto collects SSN/bank, not us) + hourly job + compensation. Returns the new Gusto employee id.</p>
+      <button class="write" id="btnProv">Provision test hire</button>
+      <div class="status" id="provStatus"></div>
+      <pre id="provOut" hidden></pre>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+var SUPABASE_URL = 'https://sqhusuuhlmcmkeowdrga.supabase.co';
+var SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNxaHVzdXVobG1jbWtlb3dkcmdhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQxMjkyMjAsImV4cCI6MjA5OTcwNTIyMH0.PszXL0D8KJC0MEYgbTduSPEcPn2g1pGx0IMK3YGzBcI';
+var sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { auth: { persistSession: true, autoRefreshToken: true } });
+
+async function token(){ var s = await sb.auth.getSession(); return s.data.session ? s.data.session.access_token : ''; }
+
+async function call(resource, method){
+  var t = await token();
+  var r = await fetch('/api/gusto?resource=' + resource, { method: method || 'GET', headers: { Authorization: 'Bearer ' + t } });
+  var data = null; try { data = await r.json(); } catch(e){ data = { error: 'bad response' }; }
+  return { status: r.status, ok: r.ok, data: data };
+}
+
+function show(outEl, statusEl, res){
+  outEl.hidden = false;
+  outEl.textContent = JSON.stringify(res.data, null, 2);
+  var good = res.ok && res.data && res.data.ok !== false;
+  statusEl.innerHTML = '<span class="' + (good ? 'ok' : 'bad') + '">HTTP ' + res.status + (good ? ' · ok' : ' · see result') + '</span>';
+}
+
+async function boot(){
+  var s = await sb.auth.getSession();
+  if(!s.data.session){ document.getElementById('signin').style.display = 'block'; return; }
+  document.getElementById('tools').style.display = 'block';
+
+  document.getElementById('btnDry').onclick = async function(){
+    var b = this; b.disabled = true; document.getElementById('dryStatus').textContent = 'Running…';
+    try { show(document.getElementById('dryOut'), document.getElementById('dryStatus'), await call('payroll_dry_run', 'GET')); }
+    finally { b.disabled = false; }
+  };
+  document.getElementById('btnPush').onclick = async function(){
+    if(!confirm('Push a test 8-hour shift to the DEMO Gusto company?')) return;
+    var b = this; b.disabled = true; document.getElementById('pushStatus').textContent = 'Pushing…';
+    try { show(document.getElementById('pushOut'), document.getElementById('pushStatus'), await call('timesheet_test', 'POST')); }
+    finally { b.disabled = false; }
+  };
+  document.getElementById('btnProv').onclick = async function(){
+    if(!confirm('Create a test employee in the connected Gusto company?')) return;
+    var b = this; b.disabled = true; document.getElementById('provStatus').textContent = 'Provisioning…';
+    try {
+      var t = await token();
+      var r = await fetch('/api/invites?resource=provision_test', { method:'POST', headers:{ Authorization:'Bearer '+t } });
+      var data = null; try { data = await r.json(); } catch(e){ data = { error:'bad response' }; }
+      show(document.getElementById('provOut'), document.getElementById('provStatus'), { status: r.status, ok: r.ok, data: data });
+    } finally { b.disabled = false; }
+  };
+}
+boot();
+</script>
+</body>
+</html>

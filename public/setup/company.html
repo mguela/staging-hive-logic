@@ -1,0 +1,621 @@
+<!doctype html>
+<!-- Company settings — profile, headcount, divisions, integrations, and links to every other admin surface. Static Vercel page; all figures server-side via api/company.js. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HiveLogic — Company Settings</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#484f64; --canvas:#f0f1f6; --card:#ffffff; --line:#dadde8; --rail:#161e2e;
+    --gold:#748a9e; --green:#1B7A50; --red:#c65b4e; --cta:#f5793b;
+    --blue:#3d6fa5; --grey:#8a90a2;
+    --ink2:#6b7488; --ink3:#98a0b4;
+    --radius:12px;
+    --shadow:0 1px 2px rgba(22,30,46,.05), 0 6px 18px rgba(22,30,46,.05);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{font-family:'Montserrat',system-ui,-apple-system,"Segoe UI",sans-serif;background:var(--canvas);color:var(--ink);-webkit-font-smoothing:antialiased;font-size:14px;line-height:1.4}
+  .mono{font-family:'JetBrains Mono',ui-monospace,monospace;font-variant-numeric:tabular-nums}
+  a{color:var(--blue);text-decoration:none}
+  a:hover{text-decoration:underline}
+
+  header.top{background:var(--rail);color:#eef1f7;padding:14px 22px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px}
+  header.top .brand{display:flex;flex-direction:column;gap:2px}
+  header.top h1{font-size:15px;margin:0;font-weight:800;letter-spacing:.02em}
+  header.top .sub{font-size:11px;color:#9aa6bd;font-weight:500}
+  header.top nav{display:flex;gap:14px;font-size:12px;font-weight:700}
+  header.top nav a{color:#c3ccdd}
+  header.top nav a:hover{color:#fff}
+
+  main{max-width:1080px;margin:0 auto;padding:22px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);margin-bottom:18px;overflow:hidden}
+  .card > .card-hd{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px 18px;border-bottom:1px solid var(--line)}
+  .card > .card-hd h2{font-size:12px;text-transform:uppercase;letter-spacing:.07em;color:var(--ink2);margin:0;font-weight:800}
+  .card > .card-hd .count{font-size:11px;color:var(--ink3);font-weight:600}
+  .card-bd{padding:14px 18px}
+
+  label.f{display:block;font-size:10.5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--ink2);margin-bottom:5px}
+  input[type=text],input[type=number],select{width:100%;border:1.5px solid var(--line);border-radius:9px;padding:9px 10px;font-size:13.5px;font-family:'JetBrains Mono',ui-monospace,monospace;background:#fbfbfe;color:var(--ink)}
+  select{font-family:'Montserrat',sans-serif;font-size:13px}
+  input[type=text].t{font-family:'Montserrat',sans-serif}
+  input:focus,select:focus{outline:none;border-color:var(--cta);background:#fff}
+  input.dirty{border-color:var(--gold)}
+  input.bad{border-color:var(--red);background:#fdf3f2}
+
+  .fw{position:relative}
+  .fw .err{display:none;color:var(--red);font-size:10.5px;font-weight:700;margin-top:3px}
+  .fw.showerr .err{display:block}
+
+  /* profile grid */
+  .pgrid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  .pgrid.pgrid-3{grid-template-columns:1fr 1fr 1fr}
+  .p-subhd{font-size:10.5px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--ink3);margin:18px 0 9px;padding-bottom:5px;border-bottom:1px solid #eceef4}
+  .p-subhd:first-child{margin-top:0}
+  .pmeta{display:flex;flex-wrap:wrap;gap:18px;margin-top:14px;padding-top:12px;border-top:1px solid #eceef4}
+  .pmeta .m{font-size:11px;color:var(--ink3);font-weight:600}
+  .pmeta .m b{display:block;font-size:13px;color:var(--ink);font-weight:700;margin-top:2px}
+  .savenote{font-size:11px;font-weight:700;margin-top:8px;min-height:14px}
+  .savenote.ok{color:var(--green)}
+  .savenote.bad{color:var(--red)}
+
+  /* headcount strip */
+  .hc{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px}
+  .stat{border:1px solid var(--line);border-radius:10px;padding:12px 14px;background:#fafbfe}
+  .stat .sl{font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink3);font-weight:700;margin-bottom:6px}
+  .stat .sv{font-size:22px;font-weight:700;color:var(--rail);font-family:'JetBrains Mono',ui-monospace,monospace}
+
+  /* divisions table */
+  .tbl{width:100%;border-collapse:collapse}
+  .tbl th{text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink3);font-weight:700;padding:8px 10px;border-bottom:1px solid var(--line)}
+  .tbl td{padding:10px;border-bottom:1px solid #eceef4;vertical-align:top}
+  .tbl tr:last-child td{border-bottom:none}
+  .tbl td.num{width:130px}
+  .tbl td.stat-col{width:150px}
+  .tbl td.code-col{width:120px}
+  .rowsave{font-size:10px;font-weight:700;min-height:12px;margin-top:4px}
+  .rowsave.ok{color:var(--green)}
+  .rowsave.bad{color:var(--red)}
+  .primary-tag{display:inline-block;margin-left:6px;padding:1px 7px;border-radius:20px;font-size:9px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;background:#f3efe4;color:#7a6a3d;border:1px solid #e3d8bd;vertical-align:middle}
+  .subnote{font-size:12px;color:var(--ink2);margin-top:12px}
+
+  /* integrations */
+  .irow{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 0;border-bottom:1px solid #eceef4}
+  .irow:last-child{border-bottom:none}
+  .irow .ileft{display:flex;flex-direction:column;gap:3px}
+  .irow .iname{font-size:14px;font-weight:700;color:var(--rail)}
+  .irow .ihint{font-size:11px;color:var(--ink3);font-weight:600}
+  .irow .iright{display:flex;align-items:center;gap:12px}
+  .pill{display:inline-block;padding:3px 11px;border-radius:20px;font-size:10.5px;font-weight:800;letter-spacing:.03em;text-transform:uppercase;border:1px solid transparent}
+  .pill.on{background:#e6f3ec;color:#166a45;border-color:#c5e5d3}
+  .pill.off{background:#eef0f4;color:#6b7488;border-color:#dcdfe8}
+
+  /* manage links */
+  .mlinks{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px}
+  .mlink{display:block;border:1px solid var(--line);border-radius:10px;padding:14px 16px;background:#fafbfe;transition:transform .12s,box-shadow .12s,border-color .12s}
+  .mlink:hover{text-decoration:none;transform:translateY(-2px);box-shadow:var(--shadow);border-color:#c9d3e0}
+  .mlink .mt{font-size:14px;font-weight:800;color:var(--rail)}
+  .mlink .md{font-size:12px;color:var(--ink2);font-weight:600;margin-top:4px}
+
+  .btn{border:1px solid var(--line);background:#fff;color:var(--ink);border-radius:9px;padding:8px 14px;font-size:12.5px;font-weight:700;cursor:pointer;font-family:inherit}
+  .btn:hover{border-color:var(--ink3)}
+  .btn.cta{background:var(--cta);border-color:var(--cta);color:#fff}
+  .btn.cta:hover{filter:brightness(1.05)}
+  .btn.sm{padding:6px 11px;font-size:11.5px}
+
+  .gate{max-width:460px;margin:80px auto;text-align:center;padding:34px 26px}
+  .gate .h{font-size:20px;font-weight:800;color:var(--rail);margin-bottom:10px}
+  .gate p{color:var(--ink2);font-size:14px;margin:0 0 20px}
+
+  #toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%) translateY(20px);background:var(--rail);color:#fff;padding:11px 20px;border-radius:10px;font-size:13px;font-weight:600;box-shadow:0 12px 34px rgba(22,30,46,.32);opacity:0;pointer-events:none;transition:opacity .25s,transform .25s;z-index:99}
+  #toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+  #toast.err{background:var(--red)}
+
+  .muted{color:var(--ink3);font-size:12.5px;text-align:center;padding:12px 0}
+  .hidden{display:none !important}
+  .spin{padding:40px;text-align:center;color:var(--ink3);font-size:13px}
+  .retry{margin-top:10px}
+  @media(max-width:720px){
+    .pgrid,.pgrid.pgrid-3{grid-template-columns:1fr}
+    .tbl,.tbl thead,.tbl tbody,.tbl th,.tbl td,.tbl tr{display:block}
+    .tbl thead{display:none}
+    .tbl td{border-bottom:none;padding:6px 0}
+    .tbl tr{border-bottom:1px solid var(--line);padding:10px 0;display:block}
+    .tbl td.num,.tbl td.stat-col,.tbl td.code-col{width:100%}
+  }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="brand">
+    <h1>Company settings</h1>
+    <div class="sub">Your company profile, divisions, integrations, and where to manage everything else.</div>
+  </div>
+  <nav>
+    <a href="/setup/">&larr; Company Setup</a>
+    <a href="/">Home</a>
+  </nav>
+</header>
+
+<div id="gate" class="gate card hidden">
+  <div class="h">Please sign in to the HiveLogic app first</div>
+  <p>You need an active HiveLogic session to view and edit your company settings.</p>
+  <a class="btn cta" href="/">Go to HiveLogic sign-in</a>
+</div>
+
+<main id="app" class="hidden">
+
+  <!-- PROFILE -->
+  <section class="card">
+    <div class="card-hd">
+      <h2>Company Profile</h2>
+      <span class="count">Legal name &amp; DBA auto-save</span>
+    </div>
+    <div class="card-bd">
+      <div id="profile"><div class="spin">Loading profile…</div></div>
+    </div>
+  </section>
+
+  <!-- PLAN -->
+  <section class="card">
+    <div class="card-hd">
+      <h2>Plan &amp; subscription</h2>
+      <span class="count">What your plan includes</span>
+    </div>
+    <div class="card-bd">
+      <div id="plan"><div class="spin">Loading plan…</div></div>
+    </div>
+  </section>
+
+  <!-- HEADCOUNT -->
+  <section class="card">
+    <div class="card-hd">
+      <h2>Headcount</h2>
+      <span class="count">People on the books</span>
+    </div>
+    <div class="card-bd">
+      <div id="headcount" class="hc"><div class="spin">Loading headcount…</div></div>
+    </div>
+  </section>
+
+  <!-- DIVISIONS -->
+  <section class="card">
+    <div class="card-hd">
+      <h2>Divisions</h2>
+      <span class="count" id="divCount"></span>
+    </div>
+    <div class="card-bd">
+      <div id="divisions"><div class="spin">Loading divisions…</div></div>
+    </div>
+  </section>
+
+  <!-- INTEGRATIONS -->
+  <section class="card">
+    <div class="card-hd">
+      <h2>Integrations</h2>
+      <span class="count">Connected accounting &amp; payroll</span>
+    </div>
+    <div class="card-bd">
+      <div id="integrations"><div class="spin">Loading integrations…</div></div>
+    </div>
+  </section>
+
+  <!-- MANAGE EVERYTHING -->
+  <section class="card">
+    <div class="card-hd">
+      <h2>Manage everything</h2>
+      <span class="count">Jump to the other admin surfaces</span>
+    </div>
+    <div class="card-bd">
+      <div class="mlinks">
+        <a class="mlink" href="/setup/cost-model.html"><div class="mt">Cost Model</div><div class="md">Money, to the cent</div></a>
+        <a class="mlink" href="/setup/registries.html"><div class="mt">Registries</div><div class="md">Vehicles, insurance certs, licenses, loans, leases, subscriptions</div></a>
+        <a class="mlink" href="/setup/team.html"><div class="mt">Team</div><div class="md">Employees &amp; 1099s</div></a>
+        <a class="mlink" href="/setup/payroll.html"><div class="mt">Payroll</div><div class="md">Gusto payroll</div></a>
+        <a class="mlink" href="/setup/index.html"><div class="mt">Setup wizard</div><div class="md">First-time setup</div></a>
+      </div>
+      <div style="margin-top:14px;padding-top:12px;border-top:1px solid #eceef4;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">
+        <div class="subnote" style="margin:0">Download a copy of all your company data (JSON). Your data is yours.</div>
+        <button class="btn" id="exportBtn" onclick="downloadExport()">Export company data</button>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<div id="toast"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+var SUPABASE_URL = 'https://sqhusuuhlmcmkeowdrga.supabase.co';
+var SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNxaHVzdXVobG1jbWtlb3dkcmdhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQxMjkyMjAsImV4cCI6MjA5OTcwNTIyMH0.PszXL0D8KJC0MEYgbTduSPEcPn2g1pGx0IMK3YGzBcI';
+var sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { auth: { persistSession: true, autoRefreshToken: true } });
+
+/* ---------- helpers ---------- */
+function esc(s){
+  return String(s==null?'':s).replace(/[&<>"']/g,function(c){
+    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
+  });
+}
+function $(sel,root){ return (root||document).querySelector(sel); }
+
+function num(v){
+  if(v==null||v==='') return '0';
+  var n=Number(v); if(!isFinite(n)) return '0';
+  return n.toLocaleString('en-US');
+}
+
+async function token(){
+  var s = await sb.auth.getSession();
+  return s.data.session ? s.data.session.access_token : '';
+}
+async function api(method,resource,body){
+  var t = await token();
+  if(!t) throw new Error('No session');
+  var opts = { method:method, headers:{ Authorization:'Bearer '+t } };
+  if(body){ opts.headers['Content-Type']='application/json'; opts.body=JSON.stringify(body); }
+  var r = await fetch('/api/company?resource='+resource, opts);
+  var j;
+  try{ j = await r.json(); }catch(e){ throw new Error('HTTP '+r.status); }
+  if(!r.ok || !j || j.ok===false) throw new Error((j&&j.error)?j.error:('HTTP '+r.status));
+  return j;
+}
+
+var _tt=null;
+function toast(msg,isErr){
+  var el=$('#toast'); el.textContent=msg; el.className='show'+(isErr?' err':'');
+  if(_tt) clearTimeout(_tt);
+  _tt=setTimeout(function(){ el.className=isErr?'err':''; },3200);
+}
+
+/* ---------- inline error UI ---------- */
+function fwOf(el){ return el.closest ? el.closest('.fw') : null; }
+function showErr(el,msg){
+  el.classList.add('bad');
+  var fw=fwOf(el);
+  if(fw){ fw.classList.add('showerr'); var e=fw.querySelector('.err'); if(e) e.textContent=msg; }
+}
+function clearErr(el){
+  el.classList.remove('bad');
+  var fw=fwOf(el);
+  if(fw){ fw.classList.remove('showerr'); var e=fw.querySelector('.err'); if(e) e.textContent=''; }
+}
+
+/* ---------- profile ---------- */
+var TZ_OPTIONS = [
+  ['America/New_York','Eastern (New York)'],
+  ['America/Chicago','Central (Chicago)'],
+  ['America/Denver','Mountain (Denver)'],
+  ['America/Phoenix','Arizona (no DST)'],
+  ['America/Los_Angeles','Pacific (Los Angeles)'],
+  ['America/Anchorage','Alaska'],
+  ['Pacific/Honolulu','Hawaii']
+];
+var REGION_OPTIONS = [
+  ['northeast','Northeast'],['southeast','Southeast'],['midwest','Midwest'],
+  ['southwest','Southwest'],['west','West']
+];
+
+function tf(id, field, label, val, ph, isText){
+  return '<div class="fw"><label class="f" for="'+id+'">'+esc(label)+'</label>'
+    + '<input '+(isText?'class="t" ':'class="mono" ')+'type="text" id="'+id+'" data-field="'+field+'" value="'+esc(val)+'" placeholder="'+esc(ph||'')+'">'
+    + '<small class="err"></small></div>';
+}
+function sel(id, field, label, val, options){
+  var opts = '<option value="">—</option>' + options.map(function(o){
+    return '<option value="'+esc(o[0])+'"'+(String(val||'')===o[0]?' selected':'')+'>'+esc(o[1])+'</option>';
+  }).join('');
+  return '<div class="fw"><label class="f" for="'+id+'">'+esc(label)+'</label>'
+    + '<select id="'+id+'" data-field="'+field+'">'+opts+'</select>'
+    + '<small class="err"></small></div>';
+}
+function subhd(t){ return '<div class="p-subhd">'+esc(t)+'</div>'; }
+
+function renderProfile(c){
+  c = c || {};
+  var html =
+    subhd('Identity')
+    + '<div class="pgrid">'
+    +   tf('p_name','name','Legal name', c.name, 'Legal company name', true)
+    +   tf('p_dba','dba','DBA (doing business as)', c.dba, 'Trade / brand name', true)
+    + '</div>'
+
+    + subhd('Contact')
+    + '<div class="pgrid pgrid-3">'
+    +   tf('p_phone','phone','Phone', c.phone, '(203) 555-0100')
+    +   tf('p_email','email','Email', c.email, 'office@company.com')
+    +   tf('p_website','website','Website', c.website, 'company.com')
+    + '</div>'
+
+    + subhd('Business address')
+    + '<div class="pgrid">'
+    +   tf('p_addr1','address_line1','Street', c.address_line1, '123 Main St', true)
+    +   tf('p_addr2','address_line2','Street 2 (unit, suite)', c.address_line2, 'Unit 4B', true)
+    + '</div>'
+    + '<div class="pgrid pgrid-3" style="margin-top:14px">'
+    +   tf('p_city','city','City', c.city, '', true)
+    +   tf('p_state','state','State', c.state, 'CT')
+    +   tf('p_zip','postal_code','ZIP', c.postal_code, '06830')
+    + '</div>'
+
+    + subhd('Tax &amp; licensing')
+    + '<div class="pgrid">'
+    +   tf('p_ein','ein','EIN / Federal Tax ID', c.ein, '00-0000000')
+    +   tf('p_lic','license_number','Business license #', c.license_number, 'e.g. 103278')
+    + '</div>'
+
+    + subhd('Locale &amp; classification')
+    + '<div class="pgrid pgrid-3">'
+    +   sel('p_tz','timezone','Timezone', c.timezone, TZ_OPTIONS)
+    +   sel('p_region','region','Region', c.region, REGION_OPTIONS)
+    +   tf('p_industry','industry','Industry', c.industry, 'e.g. Handyman', true)
+    + '</div>'
+
+    + '<div class="savenote" id="profileSave"></div>'
+    + '<div class="pmeta">'
+    +   '<div class="m">Slug<b class="mono">'+esc(c.slug||'—')+'</b></div>'
+    +   '<div class="m">Plan<b>'+esc(c.plan||'—')+'</b></div>'
+    +   '<div class="m">Status<b>'+esc(c.status||'—')+'</b></div>'
+    + '</div>';
+  var wrap=$('#profile');
+  wrap.innerHTML=html;
+  wrap.querySelectorAll('[data-field]').forEach(bindProfileField);
+}
+function bindProfileField(el){
+  el.dataset.saved = el.value;
+  if(el.tagName === 'SELECT'){
+    el.addEventListener('change', function(){
+      clearErr(el); el.classList.add('dirty'); saveProfile(el);
+    });
+    return;
+  }
+  var timer=null;
+  el.addEventListener('input', function(){
+    clearErr(el); el.classList.add('dirty');
+    if(timer) clearTimeout(timer);
+    timer=setTimeout(function(){ saveProfile(el); }, 600);
+  });
+}
+async function saveProfile(el){
+  var field=el.getAttribute('data-field');
+  var body={}; body[field]=el.value.trim();
+  var note=$('#profileSave');
+  try{
+    var j = await api('POST','update',body);
+    el.dataset.saved = el.value;
+    el.classList.remove('dirty');
+    if(note){ note.textContent='Saved.'; note.className='savenote ok'; }
+    if(j.company){ /* keep meta fresh without clobbering focused inputs */ }
+  }catch(e){
+    el.value = el.dataset.saved;
+    el.classList.remove('dirty');
+    showErr(el, 'Save failed: '+e.message);
+    if(note){ note.textContent='Save failed: '+e.message; note.className='savenote bad'; }
+    toast('Company profile not saved', true);
+  }
+}
+
+/* ---------- plan / entitlements (report-only) ---------- */
+var FEATURE_LABELS = {
+  cost_model:'Cost Model', registries:'Registries', team:'Team', schedule:'Schedule',
+  clients:'Clients', invoicing:'Invoicing', fleet:'Fleet', payroll:'Payroll',
+  reina:'Reina AI', marketing:'Marketing'
+};
+function renderPlan(e){
+  e = e || {};
+  var feats = e.features || {};
+  var chips = Object.keys(FEATURE_LABELS).map(function(k){
+    var on = !!feats[k];
+    return '<span class="pill '+(on?'on':'off')+'">'+esc(FEATURE_LABELS[k])+'</span>';
+  }).join(' ');
+  var seats = (e.seats==null) ? 'Unlimited' : e.seats;
+  var trial = (e.trialing && e.trial_ends_at)
+    ? '<div class="m">Trial ends<b>'+esc(new Date(e.trial_ends_at).toLocaleDateString())+'</b></div>' : '';
+  $('#plan').innerHTML =
+    '<div class="pmeta" style="border-top:none;margin-top:0;padding-top:0">'
+    + '<div class="m">Plan<b>'+esc(e.plan_label||e.plan||'—')+'</b></div>'
+    + '<div class="m">Status<b>'+esc(e.plan_status||'active')+'</b></div>'
+    + '<div class="m">Seats<b>'+esc(seats)+'</b></div>'
+    + trial
+    + '</div>'
+    + '<div style="margin-top:12px;display:flex;flex-wrap:wrap;gap:6px">'+chips+'</div>'
+    + (e.enforced ? '' : '<div class="subnote">Plan limits are shown for reference — nothing is restricted yet.</div>');
+}
+
+/* ---------- headcount ---------- */
+function renderHeadcount(h){
+  h = h || {};
+  var tiles=[
+    ['Total', h.total],
+    ['W-2', h.w2],
+    ['1099 contractors', h.contractors],
+    ['Field', h.field]
+  ];
+  var html='';
+  tiles.forEach(function(t){
+    html += '<div class="stat"><div class="sl">'+esc(t[0])+'</div><div class="sv mono">'+esc(num(t[1]))+'</div></div>';
+  });
+  $('#headcount').innerHTML=html;
+}
+
+/* ---------- divisions ---------- */
+var DIV_STATUS=['operational','planned'];
+function statusLabel(s){ return s==='planned'?'Planned':'Operational'; }
+
+function renderDivisions(divs){
+  divs = divs || [];
+  var wrap=$('#divisions');
+  if(divs.length===0){
+    wrap.innerHTML='<div class="muted">No divisions yet.</div>';
+    $('#divCount').textContent='0 divisions';
+    $('#divisions').insertAdjacentHTML('beforeend','<div class="subnote">Divisions drive overhead allocation in the Cost Model.</div>');
+    return;
+  }
+  var rows='';
+  divs.forEach(function(d){
+    var id=esc(d.id);
+    var st=(d.status==='planned')?'planned':'operational';
+    var opts='';
+    DIV_STATUS.forEach(function(s){
+      opts += '<option value="'+s+'"'+(s===st?' selected':'')+'>'+statusLabel(s)+'</option>';
+    });
+    rows +=
+      '<tr data-div="'+id+'">'
+      + '<td>'
+      +   '<div class="fw"><input class="t" type="text" data-dedit="name" data-id="'+id+'" value="'+esc(d.name)+'" placeholder="Division name"><small class="err"></small></div>'
+      +   (d.is_primary?'<span class="primary-tag">Primary</span>':'')
+      + '</td>'
+      + '<td class="code-col"><div class="fw"><input type="text" data-dedit="code" data-id="'+id+'" value="'+esc(d.code)+'" placeholder="Code"><small class="err"></small></div></td>'
+      + '<td class="stat-col"><select data-dedit="status" data-id="'+id+'">'+opts+'</select></td>'
+      + '<td class="num"><div class="fw"><input type="number" step="0.1" min="0" max="100" data-dedit="revenue_share_pct" data-id="'+id+'" value="'+esc(d.revenue_share_pct)+'"><small class="err"></small></div></td>'
+      + '<td class="rowsave-col"><div class="rowsave" data-rowsave="'+id+'"></div></td>'
+      + '</tr>';
+  });
+  wrap.innerHTML =
+    '<table class="tbl">'
+    + '<thead><tr><th>Name</th><th>Code</th><th>Status</th><th>Revenue share %</th><th></th></tr></thead>'
+    + '<tbody>'+rows+'</tbody>'
+    + '</table>'
+    + '<div class="subnote">Divisions drive overhead allocation in the Cost Model.</div>';
+  $('#divCount').textContent = divs.length + (divs.length===1?' division':' divisions');
+
+  wrap.querySelectorAll('input[data-dedit]').forEach(bindDivInput);
+  wrap.querySelectorAll('select[data-dedit]').forEach(function(sel){
+    sel.addEventListener('change', function(){ saveDivision(sel); });
+  });
+}
+function bindDivInput(el){
+  el.dataset.saved = el.value;
+  var timer=null;
+  el.addEventListener('input', function(){
+    clearErr(el); el.classList.add('dirty');
+    if(timer) clearTimeout(timer);
+    timer=setTimeout(function(){ saveDivision(el); }, 600);
+  });
+}
+async function saveDivision(el){
+  var id=el.getAttribute('data-id');
+  var field=el.getAttribute('data-dedit');
+  var body={ id:id };
+  if(field==='revenue_share_pct'){
+    var raw=el.value.trim();
+    if(raw===''){ showErr(el,'Enter a number'); return; }
+    var n=parseFloat(raw);
+    if(!isFinite(n)){ showErr(el,'Enter a number'); return; }
+    body.revenue_share_pct=n;
+  } else {
+    body[field]=el.value;
+  }
+  var note=document.querySelector('[data-rowsave="'+String(id).replace(/"/g,'\\"')+'"]');
+  try{
+    var j = await api('POST','division_update',body);
+    if(el.classList) el.classList.remove('dirty');
+    el.dataset.saved = el.value;
+    if(note){ note.textContent='Saved.'; note.className='rowsave ok'; }
+  }catch(e){
+    el.value = el.dataset.saved;
+    if(el.classList) el.classList.remove('dirty');
+    if(el.tagName==='INPUT') showErr(el, e.message);
+    if(note){ note.textContent='Failed: '+e.message; note.className='rowsave bad'; }
+    toast('Division not saved', true);
+  }
+}
+
+/* ---------- integrations ---------- */
+function renderIntegrations(ig){
+  ig = ig || {};
+  var rows=[
+    { key:'jobber', name:'Jobber', link:null, hint:null },
+    { key:'qbo',    name:'QuickBooks', link:'/api/qbo', hint:null },
+    { key:'gusto',  name:'Gusto', link:'/api/gusto', hint:'New hires provision into Gusto automatically.' }
+  ];
+  var html='';
+  rows.forEach(function(r){
+    var on = !!ig[r.key];
+    var pill = on
+      ? '<span class="pill on">Connected</span>'
+      : '<span class="pill off">Not connected</span>';
+    var action='';
+    if(!on && r.link){
+      action = '<a class="btn sm cta" href="'+esc(r.link)+'">Connect</a>';
+    }
+    html +=
+      '<div class="irow">'
+      + '<div class="ileft"><span class="iname">'+esc(r.name)+'</span>'
+      +   (r.hint?'<span class="ihint">'+esc(r.hint)+'</span>':'')
+      + '</div>'
+      + '<div class="iright">'+pill+action+'</div>'
+      + '</div>';
+  });
+  $('#integrations').innerHTML=html;
+}
+
+/* ---------- data export ---------- */
+async function downloadExport(){
+  var btn=$('#exportBtn'); if(!btn) return;
+  var old=btn.textContent; btn.disabled=true; btn.textContent='Preparing…';
+  try{
+    var t=await token();
+    var r=await fetch('/api/company?resource=export', { headers:{ Authorization:'Bearer '+t } });
+    if(!r.ok) throw new Error('Export failed ('+r.status+')');
+    var j=await r.json();
+    var blob=new Blob([JSON.stringify(j,null,2)], { type:'application/json' });
+    var url=URL.createObjectURL(blob);
+    var a=document.createElement('a');
+    var slug=(j.company&&j.company.slug)||'company';
+    a.href=url; a.download='hivelogic-'+slug+'-export.json';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    toast('Export downloaded');
+  }catch(e){ toast(e.message||'Export failed', true); }
+  finally{ btn.disabled=false; btn.textContent=old; }
+}
+
+/* ---------- error card ---------- */
+function errCard(sel,msg,retryFn){
+  var wrap=$(sel);
+  wrap.innerHTML =
+    '<div class="muted">Could not load: '+esc(msg)+'<div class="retry"><button class="btn sm">Retry</button></div></div>';
+  var b=wrap.querySelector('button');
+  if(b) b.addEventListener('click', retryFn);
+}
+
+/* ---------- loader ---------- */
+async function loadAll(){
+  ['#profile','#headcount','#divisions','#integrations'].forEach(function(s){
+    if(s==='#headcount'||s==='#divisions'||s==='#integrations') $(s).innerHTML='<div class="spin">Loading…</div>';
+  });
+  try{
+    var j = await api('GET','get');
+    renderProfile(j.company||{});
+    renderPlan(j.entitlements||{});
+    renderHeadcount(j.headcount||{});
+    renderDivisions(j.divisions||[]);
+    renderIntegrations(j.integrations||{});
+  }catch(e){
+    errCard('#profile', e.message, loadAll);
+    errCard('#plan', e.message, loadAll);
+    errCard('#headcount', e.message, loadAll);
+    errCard('#divisions', e.message, loadAll);
+    errCard('#integrations', e.message, loadAll);
+  }
+}
+
+/* ---------- boot ---------- */
+(async function(){
+  var sess = await sb.auth.getSession();
+  if(!sess.data.session){
+    $('#gate').classList.remove('hidden');
+    return;
+  }
+  $('#app').classList.remove('hidden');
+  loadAll();
+})();
+</script>
+</body>
+</html>

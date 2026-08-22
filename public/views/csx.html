@@ -1,0 +1,840 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HiveLogic — Company Setup</title>
+<!--
+  Company Setup (csx) — LIVE. Every number on this page comes from an API.
+
+  Before this rewrite the page was a static mockup: hardcoded brands, rates,
+  roles and toggles, zero fetch calls. The backend it needed already existed and
+  was live in production, so this page reads it rather than duplicating it:
+
+    company profile, divisions, integrations, headcount  -> /api/company?resource=get
+    rate cards + burden + break-even                     -> /api/cost-model?resource=rates
+    hours, payment terms, numbering, automations         -> /api/settings   (sql/086)
+
+  Sections owned by another surface (rates, divisions, roles) are shown READ-ONLY
+  here with a link to the page that owns them — one source of truth per fact.
+
+  Auth: this page is injected into an iframe via srcdoc by showView('csx') in
+  public/index.html, so it is same-origin with the shell and uses the shell's
+  Supabase session through window.parent.sb — the same "hl63 auth bridge" pattern
+  the other embedded views use.
+-->
+<style>
+  :root{
+    --ink:#484f64; --rail:#161e2e; --canvas:#f0f1f6; --card:#fff; --line:#dadde8;
+    --gold:#748a9e; --gold-deep:#59718a; --gold-bg:#e9eff4;
+    --red:#c65b4e; --red-bg:#f9ebe8;
+    --green:#1B7A50; --green-bg:#e6f2ec;
+    --amber:#9a6414; --amber-bg:#fbf1e2;
+    --purple:#6a3fb5; --purple-bg:#f3edfb;
+    --slate:#5d657b; --mut:#8b92a8;
+    --mono:'JetBrains Mono',ui-monospace,monospace;
+    --sans:'Montserrat',-apple-system,sans-serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:var(--sans);background:var(--canvas);color:var(--ink);font-size:13px;padding:34px 20px 60px}
+  .wrap{max-width:1140px;margin:0 auto}
+  h1{font-size:26px;font-weight:900;color:var(--rail);margin-bottom:4px}
+  h1 span{color:var(--gold-deep)}
+  .tag{font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:.2em;color:var(--mut);margin-bottom:20px;text-transform:uppercase}
+
+  .grid2{display:grid;grid-template-columns:1.4fr 1fr;gap:14px;margin-bottom:14px}
+  .box{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px}
+  .box .bl{font-size:9.5px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--mut);margin-bottom:14px;display:flex;align-items:center;gap:8px}
+  .box .bl .n{margin-left:auto;font-family:var(--mono);font-size:9px;background:var(--gold-bg);color:var(--gold-deep);border-radius:99px;padding:3px 9px}
+  .box .bl .n.live{background:var(--green-bg);color:var(--green)}
+  .box .bl .n.ro{background:#eef0f5;color:var(--slate)}
+
+  /* banners */
+  .banner{border-radius:12px;padding:12px 16px;margin-bottom:14px;font-size:11.5px;font-weight:700;line-height:1.6;display:flex;gap:10px;align-items:flex-start}
+  .banner b{font-weight:900}
+  .banner.warn{background:var(--amber-bg);border:1px solid #e8d3ae;color:var(--amber)}
+  .banner.err{background:var(--red-bg);border:1px solid #eec7c0;color:var(--red)}
+  .banner.info{background:var(--gold-bg);border:1px solid #cfdce6;color:var(--gold-deep)}
+
+  /* brand cards */
+  .brands{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+  .bcard{border:1px solid var(--line);border-radius:12px;padding:13px 14px;background:#fafbfd;position:relative}
+  .bcard.on{border:2px solid var(--gold-deep)}
+  .bcard .nm{font-size:12px;font-weight:900;color:var(--rail);padding-right:56px}
+  .bcard .ph{font-family:var(--mono);font-size:9.5px;font-weight:700;color:var(--gold-deep);margin-top:3px}
+  .bcard .dv{font-size:9px;color:var(--slate);font-weight:600;margin-top:5px;line-height:1.5}
+  .bcard .st{position:absolute;top:11px;right:12px;font-family:var(--mono);font-size:7px;font-weight:800;border-radius:99px;padding:3px 8px;text-transform:uppercase}
+  .st.live{background:var(--green-bg);color:var(--green)}
+  .st.hold{background:var(--amber-bg);color:var(--amber)}
+
+  /* per-division service area */
+  .svc{margin-top:9px;padding-top:9px;border-top:1px solid #e6e9f0}
+  .svc-l{font-family:var(--mono);font-size:7.5px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--mut);margin-bottom:5px}
+  .svc input[type=text]{width:100%;padding:5px 7px;font-size:10.5px}
+  .svc-r{display:flex;align-items:center;gap:5px;margin-top:5px}
+  .svc-r input[type=number]{flex:0 0 62px;padding:5px 7px;font-size:10.5px;text-align:right}
+  .svc-u{font-size:9px;font-weight:700;color:var(--mut)}
+  .svc-b{margin-left:auto;padding:5px 11px;font-size:8.5px}
+  .svc-s{margin-top:5px;font-size:9px;font-weight:700;line-height:1.4;color:var(--slate)}
+  .svc-s.ok{color:var(--green)} .svc-s.bad{color:var(--red)}
+  .svc-s.warn{color:var(--amber)} .svc-s.busy{color:var(--mut)}
+
+  /* settings rows */
+  .srow{display:flex;align-items:center;gap:11px;padding:10px 0;border-bottom:1px solid #eceef4;font-size:11.5px;font-weight:700;color:var(--rail)}
+  .srow:last-child{border-bottom:none}
+  .srow .ic{font-size:16px;width:22px;text-align:center;flex-shrink:0}
+  .srow small{display:block;font-size:9.5px;color:var(--slate);font-weight:600;margin-top:2px;line-height:1.45}
+  .srow .val{margin-left:auto;font-family:var(--mono);font-size:9px;font-weight:700;color:var(--gold-deep);text-align:right;white-space:nowrap}
+
+  /* real toggle switch */
+  .sw{margin-left:auto;width:34px;height:19px;border-radius:99px;background:var(--green);position:relative;flex-shrink:0;cursor:pointer;border:none;padding:0;transition:background .15s}
+  .sw::after{content:"";position:absolute;top:2.5px;right:3px;width:14px;height:14px;border-radius:99px;background:#fff;transition:all .15s}
+  .sw.off{background:#cdd3e0}
+  .sw.off::after{right:auto;left:3px}
+  .sw:disabled{opacity:.45;cursor:not-allowed}
+
+  /* form controls */
+  .fld{display:flex;align-items:center;gap:10px;padding:7px 0;font-size:11px;font-weight:700;color:var(--rail)}
+  .fld label{flex:0 0 128px;font-size:9.5px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:var(--mut)}
+  input[type=text],input[type=time],input[type=number],select,textarea{
+    flex:1;min-width:0;padding:7px 9px;border:1px solid var(--line);border-radius:7px;
+    font-family:var(--sans);font-size:11.5px;font-weight:600;color:var(--ink);background:#fff}
+  input.mono{font-family:var(--mono);font-size:10.5px}
+  input:disabled,select:disabled,textarea:disabled{background:#f4f5f9;color:var(--mut);cursor:not-allowed}
+  input:focus,select:focus,textarea:focus{outline:2px solid var(--gold-deep);outline-offset:-1px}
+
+  .btn{padding:8px 16px;border:none;border-radius:8px;background:var(--gold-deep);color:#fff;
+    font-family:var(--sans);font-size:10px;font-weight:900;letter-spacing:.06em;text-transform:uppercase;cursor:pointer}
+  .btn:disabled{background:#c3cbd6;cursor:not-allowed}
+  .btn.ghost{background:#fff;border:1px solid var(--gold-deep);color:var(--gold-deep)}
+  .savebar{display:flex;align-items:center;gap:10px;margin-top:12px;padding-top:12px;border-top:1px solid #eceef4}
+  .savemsg{font-size:10px;font-weight:700}
+  .savemsg.ok{color:var(--green)} .savemsg.bad{color:var(--red)} .savemsg.busy{color:var(--mut)}
+
+  /* day grid */
+  .dayrow{display:grid;grid-template-columns:34px 1fr 1fr 74px;gap:8px;align-items:center;padding:5px 0}
+  .dayrow .dn{font-family:var(--mono);font-size:9px;font-weight:800;color:var(--slate);text-transform:uppercase}
+  .dayrow .cl{display:flex;align-items:center;gap:5px;font-size:9px;font-weight:700;color:var(--mut)}
+
+  /* rate table */
+  table.rt{width:100%;border-collapse:collapse}
+  table.rt th{font-family:var(--mono);font-size:8px;font-weight:800;letter-spacing:.08em;color:var(--mut);text-transform:uppercase;text-align:left;padding:6px 4px;border-bottom:1px solid var(--line)}
+  table.rt td{padding:8px 4px;font-size:11px;font-weight:700;color:var(--rail);border-bottom:1px solid #eceef4}
+  table.rt td.m{font-family:var(--mono);font-size:10.5px;color:var(--gold-deep);font-weight:900;text-align:right}
+  table.rt td.mut{color:var(--slate);font-weight:600;font-size:10px}
+
+  /* numbering law */
+  .law{background:var(--rail);border-radius:13px;padding:16px 18px;color:#eef4f8}
+  .law .lt{font-family:var(--mono);font-size:8.5px;font-weight:800;letter-spacing:.18em;color:#8ba4c4;text-transform:uppercase;margin-bottom:10px}
+  .law .rule{display:flex;gap:10px;align-items:center;padding:7px 0;border-bottom:1px solid #26324a;font-size:11px;font-weight:600;color:#c9d3e4;line-height:1.5}
+  .law .rule:last-child{border-bottom:none}
+  .law .rule span.lbl{flex:0 0 140px;font-size:9.5px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:#8ba4c4}
+  .law input{background:#0f1626;border:1px solid #2b3855;color:#f0c987;font-family:var(--mono);font-size:10.5px;font-weight:700}
+  .law input:disabled{background:#141c2c;color:#6f7d95}
+  .law .hint{font-size:9px;color:#8ba4c4;font-weight:600;margin-top:9px;line-height:1.55}
+
+  /* automations */
+  .auto{border:1px solid var(--line);border-radius:11px;padding:11px 13px;margin-bottom:8px;background:#fafbfd;font-size:10.5px;font-weight:600;color:var(--slate);line-height:1.55;display:flex;align-items:center;gap:10px}
+  .auto b{color:var(--rail)}
+  .auto .when{font-family:var(--mono);font-size:8px;font-weight:800;color:var(--purple);text-transform:uppercase;letter-spacing:.08em}
+  .auto .txt{flex:1}
+
+  /* roles */
+  table.rl{width:100%;border-collapse:collapse}
+  table.rl th{font-family:var(--mono);font-size:7.5px;font-weight:800;letter-spacing:.06em;color:var(--mut);text-transform:uppercase;text-align:left;padding:6px 2px;border-bottom:1px solid var(--line)}
+  table.rl td{padding:7px 2px;font-size:10.5px;font-weight:700;color:var(--rail);border-bottom:1px solid #eceef4}
+  table.rl td small{display:block;font-size:8.5px;color:var(--mut);font-weight:600}
+  .pill{font-family:var(--mono);font-size:7.5px;font-weight:800;border-radius:99px;padding:3px 8px;text-transform:uppercase}
+  .pill.owner{background:var(--purple-bg);color:var(--purple)}
+  .pill.admin{background:var(--gold-bg);color:var(--gold-deep)}
+  .pill.member{background:#eef0f5;color:var(--slate)}
+
+  .skel{color:var(--mut);font-size:10.5px;font-weight:700;padding:8px 0}
+  .foot{margin-top:20px;font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:.14em;color:var(--mut);text-transform:uppercase;text-align:center}
+  a.xlink{color:var(--gold-deep);font-weight:800;text-decoration:none;border-bottom:1px solid #c3d2de}
+  a.xlink:hover{border-bottom-color:var(--gold-deep)}
+  @media(max-width:860px){.grid2{grid-template-columns:1fr}.brands{grid-template-columns:1fr 1fr}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>⬡ Company Setup — <span>the DNA every module reads from</span></h1>
+  <div class="tag">Live · brands · rates · numbering law · roles · automations · integrations · one source of truth</div>
+
+  <div id="banners"></div>
+
+  <div class="grid2">
+    <div>
+      <!-- BRANDS / DIVISIONS (read-only mirror of org_units) -->
+      <div class="box">
+        <div class="bl">🏢 Brands &amp; divisions <span class="n ro" id="div-count">LOADING…</span></div>
+        <div class="brands" id="divisions"><div class="skel">Loading divisions…</div></div>
+        <div style="font-size:10px;color:var(--slate);font-weight:600;margin-top:10px;line-height:1.55">
+          Each brand carries its own <b style="color:var(--rail)">greeting, SMS voice, booking page, review links, and hours</b> — but writes to ONE client database, ONE schedule, ONE P&amp;L with division tags.
+          Divisions are edited on <a class="xlink" href="/setup/company.html" target="_blank" rel="noopener">Setup → Company</a>, which owns them.
+        </div>
+      </div>
+
+      <!-- RATE CARDS (read-only mirror of the cost model) -->
+      <div class="box" style="margin-top:14px">
+        <div class="bl">💵 Rate cards &amp; burden <span class="n ro">READ-ONLY · OWNED BY COST MODEL</span></div>
+        <table class="rt"><tbody id="rates"><tr><td class="skel">Loading rates…</td></tr></tbody></table>
+        <div style="font-size:9.5px;color:var(--slate);font-weight:600;margin-top:9px;line-height:1.55">
+          Every figure is computed server-side from your cost lines and roster — no flat percentages.
+          Change them on <a class="xlink" href="/setup/cost-model.html" target="_blank" rel="noopener">Setup → Cost Model</a>.
+        </div>
+      </div>
+
+      <!-- NUMBERING LAW (editable, /api/settings) -->
+      <div class="law" style="margin-top:14px">
+        <div class="lt">⬡ Numbering law — enforced everywhere</div>
+        <div id="numbering"><div class="skel" style="color:#8ba4c4">Loading…</div></div>
+        <div class="hint">
+          <code style="color:#f0c987">{n}</code> = the record's own number · <code style="color:#f0c987">{job}</code> = the parent job number · <code style="color:#f0c987">{seq}</code> = sequence within that job.
+          Every pattern must contain <code style="color:#f0c987">{n}</code> or <code style="color:#f0c987">{seq}</code>.
+          Jobs keep their number for life; change orders and POs are created only from inside a job.
+        </div>
+        <div class="savebar" style="border-top-color:#26324a">
+          <button class="btn" id="save-numbering">Save numbering</button>
+          <span class="savemsg" id="msg-numbering"></span>
+        </div>
+      </div>
+
+      <!-- BUSINESS HOURS (editable, /api/settings) -->
+      <div class="box" style="margin-top:14px">
+        <div class="bl">🕗 Business hours <span class="n" id="hours-badge">DEFAULT</span></div>
+        <div id="hours"><div class="skel">Loading hours…</div></div>
+        <div class="fld" style="margin-top:8px">
+          <label for="hours-notes">Notes</label>
+          <input type="text" id="hours-notes" placeholder="e.g. FL runs its own hours and timezone">
+        </div>
+        <div class="fld">
+          <label for="hours-sat">Sat by approval</label>
+          <input type="checkbox" id="hours-sat" style="flex:0 0 auto;width:16px;height:16px;accent-color:#1B7A50">
+          <span style="font-size:9.5px;color:var(--slate);font-weight:600">Saturday work needs an approver's sign-off</span>
+        </div>
+        <div class="savebar">
+          <button class="btn" id="save-hours">Save hours</button>
+          <span class="savemsg" id="msg-hours"></span>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <!-- COMPANY PROFILE (editable, /api/company) -->
+      <div class="box">
+        <div class="bl">🏠 Company profile <span class="n live">LIVE</span></div>
+        <div id="profile"><div class="skel">Loading profile…</div></div>
+        <div class="savebar">
+          <button class="btn" id="save-profile">Save profile</button>
+          <span class="savemsg" id="msg-profile"></span>
+        </div>
+      </div>
+
+      <!-- PAYMENT TERMS (editable, /api/settings) -->
+      <div class="box" style="margin-top:14px">
+        <div class="bl">💳 Payment terms <span class="n" id="terms-badge">DEFAULT</span></div>
+        <div id="terms"><div class="skel">Loading terms…</div></div>
+        <div class="savebar">
+          <button class="btn" id="save-terms">Save terms</button>
+          <span class="savemsg" id="msg-terms"></span>
+        </div>
+      </div>
+
+      <!-- ROLES (read-only mirror of company_members) -->
+      <div class="box" style="margin-top:14px">
+        <div class="bl">🔐 Roles &amp; permissions <span class="n ro" id="team-count">READ-ONLY</span></div>
+        <table class="rl"><tbody id="roles"><tr><td class="skel">Loading team…</td></tr></tbody></table>
+        <div style="font-size:9.5px;color:var(--slate);font-weight:600;margin-top:9px;line-height:1.5">
+          Owners and admins can change company settings; members read only.
+          Manage people on <a class="xlink" href="/setup/registries.html" target="_blank" rel="noopener">Setup → Team</a>.
+        </div>
+      </div>
+
+      <!-- AUTOMATIONS (editable, /api/settings) -->
+      <div class="box" style="margin-top:14px">
+        <div class="bl">⚙️ Automations <span class="n" id="auto-badge">DEFAULT</span></div>
+        <div id="auto-posture"></div>
+        <div id="automations"><div class="skel">Loading automations…</div></div>
+        <div class="savebar">
+          <button class="btn" id="save-automations">Save automations</button>
+          <span class="savemsg" id="msg-automations"></span>
+        </div>
+      </div>
+
+      <!-- INTEGRATIONS (read-only live status) -->
+      <div class="box" style="margin-top:14px">
+        <div class="bl">🔌 Integrations <span class="n ro">LIVE STATUS</span></div>
+        <div id="integrations"><div class="skel">Loading…</div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="foot">⬡ HiveLogic · Company Setup · one source of truth · Control the Chaos</div>
+</div>
+
+<script>
+(function(){
+  'use strict';
+
+  // --- auth bridge: same-origin srcdoc iframe, so the shell's session is ours.
+  function shell(){ try { return window.parent; } catch(e){ return null; } }
+  async function token(){
+    var p = shell();
+    if(!p || !p.sb || !p.sb.auth) return null;
+    try {
+      var r = await p.sb.auth.getSession();
+      return (r && r.data && r.data.session && r.data.session.access_token) || null;
+    } catch(e){ return null; }
+  }
+  async function api(path, opts){
+    var t = await token();
+    if(!t) throw new Error('not-signed-in');
+    var o = Object.assign({}, opts||{});
+    o.headers = Object.assign({ 'Content-Type':'application/json', Authorization:'Bearer '+t }, o.headers||{});
+    var r = await fetch(path, o);
+    var data = null;
+    try { data = await r.json(); } catch(e){ /* non-JSON error page */ }
+    if(!data) throw new Error('HTTP '+r.status+' from '+path);
+    return { status: r.status, data: data };
+  }
+
+  var esc = function(s){ return String(s==null?'':s).replace(/[&<>"']/g, function(c){
+    return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]; }); };
+  var $ = function(id){ return document.getElementById(id); };
+  var money = function(n){
+    var v = Number(n);
+    if(!isFinite(v)) return '—';
+    return '$' + v.toLocaleString('en-US', { minimumFractionDigits:2, maximumFractionDigits:2 });
+  };
+  var pct = function(n){ var v=Number(n); return isFinite(v) ? v.toFixed(1)+'%' : '—'; };
+
+  // --- page state
+  var STATE = { canEdit:false, tableMissing:false, settings:null, company:null, loadFailed:false, areasReady:null };
+
+  function banner(kind, html){
+    var b = document.createElement('div');
+    b.className = 'banner ' + kind;
+    b.innerHTML = html;
+    $('banners').appendChild(b);
+  }
+
+  function msg(id, text, kind){
+    var el = $('msg-'+id);
+    if(!el) return;
+    el.textContent = text || '';
+    el.className = 'savemsg' + (kind ? ' '+kind : '');
+  }
+
+  // Disable every editable control + save button on the page.
+  function lockEditing(reason){
+    ['profile','hours','terms','numbering','automations'].forEach(function(k){
+      var b = $('save-'+k); if(b){ b.disabled = true; b.title = reason; }
+    });
+    document.querySelectorAll('input,select,textarea,.sw').forEach(function(el){
+      el.disabled = true; el.title = reason;
+    });
+  }
+
+  // -------------------------------------------------------------------------
+  // renderers
+  // -------------------------------------------------------------------------
+  var PROFILE_FIELDS = [
+    ['name','Legal name'], ['dba','DBA'],
+    ['address_line1','Address'], ['city','City'], ['state','State'], ['postal_code','ZIP'],
+    ['phone','Phone'], ['email','Email'], ['website','Website'],
+    ['ein','EIN'], ['license_number','License #'], ['timezone','Timezone'],
+  ];
+
+  function renderProfile(c){
+    var h = '';
+    PROFILE_FIELDS.forEach(function(f){
+      h += '<div class="fld"><label for="pf-'+f[0]+'">'+esc(f[1])+'</label>'
+        +  '<input type="text" id="pf-'+f[0]+'" value="'+esc(c[f[0]]||'')+'"></div>';
+    });
+    $('profile').innerHTML = h;
+  }
+
+  // The one line under each division that says whether its area is usable.
+  // Pulled out of the template because a four-branch ternary spliced into a
+  // string concatenation is where the leading-'+' bug lived.
+  function areaStatus(d, pending, unresolved, hasArea){
+    if(pending) return '⏳ Needs sql/089 applied';
+    if(unresolved) return '⚠️ Could not place that address — maps cannot use it yet';
+    if(hasArea) return '✓ ' + esc(d.service_radius_miles) + ' mi around ' + esc(d.service_center_label || 'centre');
+    return 'Not set — this division has no map default';
+  }
+
+  function renderDivisions(divs){
+    $('div-count').textContent = divs.length + (divs.length===1?' DIVISION':' DIVISIONS');
+    if(!divs.length){
+      $('divisions').innerHTML = '<div class="skel">No divisions yet — add them on Setup → Company.</div>';
+      return;
+    }
+    $('divisions').innerHTML = divs.map(function(d){
+      var live = d.status === 'operational';
+      var hasArea = d.service_center_lat != null && Number(d.service_radius_miles) > 0;
+      var pending = STATE.areasReady === false;
+      // A centre that was typed but could not be resolved is the one state
+      // worth calling out: the text is saved, the map still cannot use it.
+      var unresolved = d.service_center_label && d.service_center_lat == null;
+      return '<div class="bcard'+(d.is_primary?' on':'')+'">'
+        + '<span class="st '+(live?'live':'hold')+'">'+esc(live?'LIVE':(d.status||'planned'))+'</span>'
+        + '<div class="nm">'+esc(d.name||'Untitled')+'</div>'
+        + '<div class="ph">'+esc(d.code||'—')+'</div>'
+        + '<div class="dv">'+esc(d.trade_slug ? d.trade_slug.replace(/_/g,' ') : 'no trade set')
+        + (d.revenue_share_pct!=null ? ' · '+esc(d.revenue_share_pct)+'% revenue share' : '')+'</div>'
+        + '<div class="svc">'
+        +   '<div class="svc-l">Service area</div>'
+        +   '<input type="text" id="sa-c-'+esc(d.id)+'" placeholder="Centre — town or address" '
+        +     'value="'+esc(d.service_center_label||'')+'"'+(pending?' disabled':'')+'>'
+        +   '<div class="svc-r">'
+        +     '<input type="number" id="sa-r-'+esc(d.id)+'" min="1" max="500" step="1" placeholder="radius" '
+        +       'value="'+esc(d.service_radius_miles!=null?d.service_radius_miles:'')+'"'+(pending?' disabled':'')+'>'
+        +     '<span class="svc-u">miles</span>'
+        +     '<button class="btn svc-b" data-div="'+esc(d.id)+'"'+(pending?' disabled':'')+'>Save</button>'
+        +   '</div>'
+        +   '<div class="svc-s" id="sa-s-'+esc(d.id)+'">'
+        +     areaStatus(d, pending, unresolved, hasArea)
+        +   '</div>'
+        + '</div>'
+        + '</div>';
+    }).join('');
+
+    // Per-division save. Deliberately one button per division rather than a
+    // single Save for the card: geocoding one address is a network call, and
+    // saving eight of them because one changed is wasteful and slow.
+    document.querySelectorAll('.svc-b').forEach(function(btn){
+      btn.addEventListener('click', function(){ saveServiceArea(btn.getAttribute('data-div')); });
+    });
+  }
+
+  async function saveServiceArea(id){
+    var btn = document.querySelector('.svc-b[data-div="'+id+'"]');
+    var out = $('sa-s-'+id);
+    var centre = $('sa-c-'+id).value.trim();
+    var radius = $('sa-r-'+id).value.trim();
+    if(btn) btn.disabled = true;
+    if(out){ out.textContent = 'Saving…'; out.className = 'svc-s busy'; }
+    try {
+      var r = await api('/api/company?resource=division_update', { method:'POST', body: JSON.stringify({
+        id: id,
+        service_center_label: centre,
+        service_radius_miles: radius === '' ? null : Number(radius),
+      })});
+      if(r.data && r.data.ok){
+        var d = r.data.division || {};
+        var placed = d.service_center_lat != null;
+        if(out){
+          out.className = 'svc-s ' + (placed ? 'ok' : 'warn');
+          out.textContent = !centre ? 'Cleared'
+            : placed ? '✓ ' + (d.service_radius_miles||'?') + ' mi around ' + (d.service_center_label||centre)
+            : "⚠️ Saved, but that address could not be placed — maps cannot use it yet";
+        }
+      } else if(out){
+        out.className = 'svc-s bad';
+        out.textContent = (r.data && r.data.error) || ('Save failed (HTTP '+r.status+')');
+      }
+    } catch(e){
+      if(out){ out.className='svc-s bad'; out.textContent = 'Save failed: '+e.message; }
+    } finally {
+      if(btn) btn.disabled = !STATE.canEdit || STATE.areasReady === false;
+    }
+  }
+
+  function renderRates(r){
+    if(!r){ $('rates').innerHTML = '<tr><td class="skel">No cost model yet — set it up on Setup → Cost Model.</td></tr>'; return; }
+    var rows = [
+      ['Loaded labor rate', money(r.loaded_labor_rate), 'wages + burden per billable hour'],
+      ['Break-even hourly rate', money(r.breakeven_hourly_rate), 'below this, the job loses money'],
+      ['Overhead per billable hour', money(r.overhead_per_billable_hour), 'allocation, computed — not a flat %'],
+      ['Minimum markup', pct(r.min_markup_pct), 'the floor the estimator enforces'],
+      ['Gross margin target', pct(r.gross_margin_pct), ''],
+      ['Break-even revenue', money(r.breakeven_revenue), 'annual'],
+      ['Billable hours', isFinite(Number(r.billable_hours)) ? Number(r.billable_hours).toLocaleString('en-US') : '—', 'per year, after PTO and non-billable time'],
+      ['Fleet cost per mile', money(r.fleet_cost_per_mile), ''],
+    ];
+    $('rates').innerHTML = '<tr><th>Measure</th><th style="text-align:right">Value</th><th>Notes</th></tr>'
+      + rows.map(function(x){
+          return '<tr><td>'+esc(x[0])+'</td><td class="m">'+esc(x[1])+'</td><td class="mut">'+esc(x[2])+'</td></tr>';
+        }).join('');
+  }
+
+  var DAY_NAMES = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  function renderHours(hrs){
+    var days = (hrs && hrs.days) || {};
+    var h = '';
+    for(var i=0;i<7;i++){
+      var d = days[i] || days[String(i)] || {};
+      var closed = !!d.closed;
+      h += '<div class="dayrow">'
+        + '<span class="dn">'+DAY_NAMES[i]+'</span>'
+        + '<input type="time" id="hr-open-'+i+'" value="'+esc(d.open||'')+'"'+(closed?' disabled':'')+'>'
+        + '<input type="time" id="hr-close-'+i+'" value="'+esc(d.close||'')+'"'+(closed?' disabled':'')+'>'
+        + '<span class="cl"><input type="checkbox" id="hr-closed-'+i+'"'+(closed?' checked':'')+' style="width:14px;height:14px;accent-color:#c65b4e">closed</span>'
+        + '</div>';
+    }
+    $('hours').innerHTML = h;
+    // Greying the times the moment a day is marked closed is the difference
+    // between "this control did something" and "did my click register?".
+    for(var j=0;j<7;j++){
+      (function(k){
+        var cb = $('hr-closed-'+k);
+        if(!cb) return;
+        cb.addEventListener('change', function(){
+          var o=$('hr-open-'+k), c=$('hr-close-'+k);
+          if(o) o.disabled = cb.checked;
+          if(c) c.disabled = cb.checked;
+        });
+      })(j);
+    }
+    $('hours-notes').value = (hrs && hrs.notes) || '';
+    $('hours-sat').checked = !!(hrs && hrs.saturday_by_approval);
+  }
+
+  function renderTerms(t){
+    var sched = (t && t.schedule) || [];
+    var h = '<div style="font-size:9.5px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:var(--mut);margin-bottom:6px">Default project schedule</div>';
+    h += '<div id="terms-rows">';
+    sched.forEach(function(row, i){
+      h += '<div class="fld" data-stage="'+i+'">'
+        +  '<input type="text" class="stage-label" value="'+esc(row.label||'')+'" style="flex:1.4">'
+        +  '<input type="number" class="stage-pct" value="'+esc(row.pct)+'" min="0" max="100" step="0.01" style="flex:0 0 78px;text-align:right">'
+        +  '<span style="font-size:11px;font-weight:800;color:var(--mut);flex:0 0 12px">%</span>'
+        +  '</div>';
+    });
+    h += '</div>';
+    h += '<div style="font-size:9.5px;font-weight:700;color:var(--mut);margin:4px 0 10px">Total <b id="terms-total">—</b> — must be exactly 100%</div>';
+    h += '<div class="fld"><label for="tm-ach">ACH preferred over</label>'
+      +  '<input type="number" id="tm-ach" min="0" step="1" value="'+esc(((t&&t.ach_preferred_over_cents)||0)/100)+'" style="flex:0 0 110px;text-align:right">'
+      +  '<span style="font-size:10px;font-weight:700;color:var(--mut)">dollars</span></div>';
+    h += '<div class="fld"><label for="tm-net">Net terms</label>'
+      +  '<input type="number" id="tm-net" min="0" step="1" value="'+esc((t&&t.net_days)||0)+'" style="flex:0 0 110px;text-align:right">'
+      +  '<span style="font-size:10px;font-weight:700;color:var(--mut)">days (0 = due on receipt)</span></div>';
+    h += '<div class="fld"><label for="tm-dep">Deposit gate</label>'
+      +  '<input type="checkbox" id="tm-dep"'+((t&&t.deposit_before_materials)?' checked':'')+' style="flex:0 0 auto;width:16px;height:16px;accent-color:#1B7A50">'
+      +  '<span style="font-size:9.5px;color:var(--slate);font-weight:600">Deposit must clear before materials are released</span></div>';
+    $('terms').innerHTML = h;
+
+    function retotal(){
+      var tot = 0;
+      document.querySelectorAll('#terms-rows .stage-pct').forEach(function(el){ tot += Number(el.value)||0; });
+      tot = Math.round(tot*100)/100;
+      var el = $('terms-total');
+      el.textContent = tot + '%';
+      el.style.color = (tot === 100) ? 'var(--green)' : 'var(--red)';
+    }
+    document.querySelectorAll('#terms-rows .stage-pct').forEach(function(el){ el.addEventListener('input', retotal); });
+    retotal();
+  }
+
+  var NUM_FIELDS = [
+    ['job','Job'], ['change_order','Change order'], ['purchase_order','Purchase order'],
+    ['invoice','Invoice'], ['service_ticket','Service ticket'],
+  ];
+  function renderNumbering(n){
+    $('numbering').innerHTML = NUM_FIELDS.map(function(f){
+      return '<div class="rule"><span class="lbl">'+esc(f[1])+'</span>'
+        + '<input type="text" class="mono" id="nb-'+f[0]+'" value="'+esc((n&&n[f[0]])||'')+'" maxlength="40"></div>';
+    }).join('');
+  }
+
+  // `runner` names the cron that acts on the toggle. A field with runner:null
+  // has no runner and its switch is disabled — the switch must never imply an
+  // automation that nothing performs.
+  var AUTO_FIELDS = [
+    ['missed_call_textback','WHEN','missed call on any brand line → <b>text back within seconds, so the caller hears something</b>',
+      'every 5 min'],
+    ['deposit_releases_pos','WHEN','deposit clears → <b>release material POs + unlock the schedule slot</b> (readiness gate)',
+      null],
+    ['invoice_overdue_nudge','WHEN','invoice past due → <b>friendly nudge to the client, then escalate to the office</b>',
+      'daily'],
+    ['dormant_client_reengage','WHEN','no closed job in 12 months → <b>re-engagement message with a seasonal offer</b>',
+      'daily'],
+  ];
+  var NO_RUNNER_REASON = 'No runner yet: purchase orders have no hold state to release from, '
+    + 'and the readiness gate isn\'t built. Turning this on would do nothing, so it\'s disabled.';
+
+  function renderAutomations(a){
+    $('automations').innerHTML = AUTO_FIELDS.map(function(f){
+      var on = !!(a && a[f[0]] && a[f[0]].enabled);
+      var wired = !!f[3];
+      return '<div class="auto"'+(wired?'':' style="opacity:.72"')+'>'
+        + '<span class="txt"><span class="when">'+f[1]+'</span> '+f[2]
+        + (wired
+            ? '<span style="display:block;margin-top:4px;font-family:var(--mono);font-size:7.5px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--green)">⟳ runner: '+esc(f[3])+'</span>'
+            : '<span style="display:block;margin-top:4px;font-size:9px;font-weight:700;color:var(--amber);line-height:1.45">🚧 '+esc(NO_RUNNER_REASON)+'</span>')
+        + '</span>'
+        + '<button type="button" class="sw'+(on&&wired?'':' off')+'" id="au-'+f[0]+'" role="switch" '
+        + 'aria-checked="'+(on&&wired)+'"'+(wired?'':' disabled title="'+esc(NO_RUNNER_REASON)+'"')+' '
+        + 'aria-label="'+esc(f[0].replace(/_/g,' '))+'"></button>'
+        + '</div>';
+    }).join('');
+    AUTO_FIELDS.forEach(function(f){
+      var b = $('au-'+f[0]);
+      if(!b || !f[3]) return;
+      b.addEventListener('click', function(){
+        if(b.disabled) return;
+        var nowOn = b.classList.toggle('off') === false;
+        b.setAttribute('aria-checked', String(nowOn));
+      });
+    });
+  }
+
+  // The one line that keeps this section honest: whether a switched-on
+  // automation actually reaches a customer, or only queues a preview.
+  async function renderAutomationPosture(){
+    var host = $('auto-posture');
+    if(!host) return;
+    try {
+      var r = await api('/api/automations?resource=status');
+      if(!r.data || !r.data.ok) throw new Error((r.data && r.data.error) || 'status unavailable');
+      var live = !!r.data.master_send_enabled;
+      host.className = 'banner ' + (live ? 'info' : 'warn');
+      host.style.margin = '0 0 12px';
+      host.innerHTML = '<span>'+(live?'📣':'👁')+'</span><span>'
+        + (live
+            ? '<b>Automations are live.</b> A switched-on rule will actually message your clients.'
+            : '<b>Preview only.</b> Switched-on rules queue a message and stop there — nothing reaches a client until the master send switch is on.')
+        + '</span>';
+    } catch(e){
+      host.className = 'banner warn';
+      host.style.margin = '0 0 12px';
+      host.innerHTML = '<span>⚠️</span><span>Could not read automation status — '+esc(e.message)+'</span>';
+    }
+  }
+
+  function renderIntegrations(ints){
+    var LABELS = { jobber:['🔧','Jobber'], qbo:['📗','QuickBooks Online'], gusto:['💸','Gusto payroll'] };
+    $('integrations').innerHTML = Object.keys(LABELS).map(function(k){
+      var on = !!(ints && ints[k]);
+      return '<div class="srow"><span class="ic">'+LABELS[k][0]+'</span>'
+        + '<span>'+esc(LABELS[k][1])+'<small>'+(on?'Connected':'Not connected')+'</small></span>'
+        + '<span class="val" style="color:'+(on?'var(--green)':'var(--mut)')+'">'+(on?'CONNECTED ✓':'—')+'</span></div>';
+    }).join('');
+  }
+
+  function renderRoles(team, headcount){
+    if(!team || !team.length){
+      $('roles').innerHTML = '<tr><td class="skel">Team list is managed on Setup → Team.</td></tr>';
+    } else {
+      $('roles').innerHTML = team.map(function(m){
+        var r = (m.role||'member').toLowerCase();
+        return '<tr><td>'+esc(m.email||m.user_id||'—')+'</td>'
+          + '<td style="text-align:right"><span class="pill '+esc(r)+'">'+esc(r)+'</span></td></tr>';
+      }).join('');
+    }
+    if(headcount){
+      $('team-count').textContent = headcount.total + ' ON ROSTER';
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // collectors
+  // -------------------------------------------------------------------------
+  function collectHours(){
+    var days = {};
+    for(var i=0;i<7;i++){
+      var closed = $('hr-closed-'+i).checked;
+      days[i] = closed
+        ? { open:null, close:null, closed:true }
+        : { open:$('hr-open-'+i).value||'', close:$('hr-close-'+i).value||'', closed:false };
+    }
+    return { days: days, notes: $('hours-notes').value, saturday_by_approval: $('hours-sat').checked };
+  }
+  function collectTerms(){
+    var schedule = [];
+    document.querySelectorAll('#terms-rows .fld').forEach(function(row){
+      schedule.push({
+        label: row.querySelector('.stage-label').value,
+        pct: Number(row.querySelector('.stage-pct').value)||0,
+      });
+    });
+    return {
+      schedule: schedule,
+      ach_preferred_over_cents: Math.round((Number($('tm-ach').value)||0) * 100),
+      net_days: Number($('tm-net').value)||0,
+      deposit_before_materials: $('tm-dep').checked,
+    };
+  }
+  function collectNumbering(){
+    var out = {};
+    NUM_FIELDS.forEach(function(f){ out[f[0]] = $('nb-'+f[0]).value.trim(); });
+    return out;
+  }
+  function collectAutomations(){
+    var cur = (STATE.settings && STATE.settings.automations) || {};
+    var out = {};
+    AUTO_FIELDS.forEach(function(f){
+      var b = $('au-'+f[0]);
+      out[f[0]] = Object.assign({}, cur[f[0]] || {}, { enabled: b ? !b.classList.contains('off') : false });
+    });
+    return out;
+  }
+
+  // -------------------------------------------------------------------------
+  // saves
+  // -------------------------------------------------------------------------
+  async function saveSection(key, section, collect){
+    var btn = $('save-'+key);
+    btn.disabled = true;
+    msg(key, 'Saving…', 'busy');
+    try {
+      var r = await api('/api/settings', { method:'POST', body: JSON.stringify({ section: section, value: collect() }) });
+      if(r.data && r.data.ok){
+        STATE.settings[section] = r.data.value;
+        msg(key, '✓ Saved', 'ok');
+        var badge = $(key==='terms'?'terms-badge':(key==='hours'?'hours-badge':(key==='automations'?'auto-badge':null)));
+        if(badge){ badge.textContent = 'SAVED'; badge.className = 'n live'; }
+      } else {
+        msg(key, (r.data && r.data.error) || ('Save failed (HTTP '+r.status+')'), 'bad');
+      }
+    } catch(e){
+      msg(key, e.message === 'not-signed-in' ? 'Session expired — reload and sign in.' : ('Save failed: '+e.message), 'bad');
+    } finally {
+      btn.disabled = !STATE.canEdit || STATE.tableMissing;
+    }
+  }
+
+  async function saveProfile(){
+    var btn = $('save-profile');
+    btn.disabled = true;
+    msg('profile','Saving…','busy');
+    try {
+      var patch = {};
+      PROFILE_FIELDS.forEach(function(f){ patch[f[0]] = $('pf-'+f[0]).value.trim(); });
+      var r = await api('/api/company?resource=update', { method:'POST', body: JSON.stringify(patch) });
+      if(r.data && r.data.ok){
+        STATE.company = r.data.company;
+        msg('profile','✓ Saved','ok');
+      } else {
+        msg('profile',(r.data && r.data.error) || ('Save failed (HTTP '+r.status+')'),'bad');
+      }
+    } catch(e){
+      msg('profile', e.message === 'not-signed-in' ? 'Session expired — reload and sign in.' : ('Save failed: '+e.message),'bad');
+    } finally {
+      btn.disabled = !STATE.canEdit;
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // boot
+  // -------------------------------------------------------------------------
+  async function boot(){
+    var t = await token();
+    if(!t){
+      banner('err','<span>🔒</span><span><b>Not signed in.</b> Company Setup needs an active session — reload the app and sign in.</span>');
+      lockEditing('Not signed in');
+      return;
+    }
+
+    // Each call is independent; one failing must not blank the whole page.
+    var results = await Promise.allSettled([
+      api('/api/company?resource=get'),
+      api('/api/cost-model?resource=rates'),
+      api('/api/settings'),
+    ]);
+    var co = results[0].status==='fulfilled' ? results[0].value.data : null;
+    var rates = results[1].status==='fulfilled' ? results[1].value.data : null;
+    var set = results[2].status==='fulfilled' ? results[2].value.data : null;
+
+    // --- company profile / divisions / integrations
+    if(co && co.ok){
+      STATE.company = co.company;
+      STATE.areasReady = co.service_area ? co.service_area.ready !== false : false;
+      renderProfile(co.company || {});
+      renderDivisions(co.divisions || []);
+      renderIntegrations(co.integrations || {});
+      renderRoles(null, co.headcount);
+    } else {
+      banner('err','<span>⚠️</span><span><b>Could not load the company profile.</b> '
+        + esc((co && co.error) || 'The request failed.') + '</span>');
+      $('profile').innerHTML = '<div class="skel">Unavailable.</div>';
+      $('divisions').innerHTML = '<div class="skel">Unavailable.</div>';
+      $('integrations').innerHTML = '<div class="skel">Unavailable.</div>';
+      $('roles').innerHTML = '<tr><td class="skel">Unavailable.</td></tr>';
+    }
+
+    // --- rates
+    if(rates && rates.ok) renderRates(rates.rates);
+    else $('rates').innerHTML = '<tr><td class="skel">Cost model unavailable — open Setup → Cost Model.</td></tr>';
+
+    // --- settings
+    if(set && set.ok){
+      STATE.settings = set.sections;
+      STATE.canEdit = set.can_edit !== false;
+      STATE.tableMissing = !!set.table_missing;
+
+      renderHours(set.sections.hours);
+      renderTerms(set.sections.payment_terms);
+      renderNumbering(set.sections.numbering);
+      renderAutomations(set.sections.automations);
+      renderAutomationPosture();
+
+      var meta = set.meta || {};
+      if(meta.hours && meta.hours.saved){ $('hours-badge').textContent='SAVED'; $('hours-badge').className='n live'; }
+      if(meta.payment_terms && meta.payment_terms.saved){ $('terms-badge').textContent='SAVED'; $('terms-badge').className='n live'; }
+      if(meta.automations && meta.automations.saved){ $('auto-badge').textContent='SAVED'; $('auto-badge').className='n live'; }
+
+      if(STATE.tableMissing){
+        banner('warn','<span>🚧</span><span><b>Settings storage isn\'t set up yet.</b> '
+          + 'These four sections — hours, payment terms, numbering and automations — are showing built-in defaults and '
+          + '<b>cannot be saved</b> until <code>sql/086_company_settings.sql</code> is applied to the database. '
+          + 'Nothing here is pretending to save. The company profile above saves normally.</span>');
+      }
+      if(!STATE.canEdit){
+        banner('info','<span>👀</span><span><b>Read-only.</b> Your account is a member of this company, so you can see every setting but only an owner or admin can change them.</span>');
+      }
+    } else {
+      banner('err','<span>⚠️</span><span><b>Could not load company settings.</b> '
+        + esc((set && set.error) || 'The request failed.') + '</span>');
+      ['hours','terms','numbering','automations'].forEach(function(k){
+        var el = $(k==='terms'?'terms':k);
+        if(el) el.innerHTML = '<div class="skel">Unavailable.</div>';
+      });
+      STATE.loadFailed = true;
+    }
+
+    // --- wire saves, then apply whatever lock is warranted
+    $('save-profile').addEventListener('click', saveProfile);
+    $('save-hours').addEventListener('click', function(){ saveSection('hours','hours',collectHours); });
+    $('save-terms').addEventListener('click', function(){ saveSection('terms','payment_terms',collectTerms); });
+    $('save-numbering').addEventListener('click', function(){ saveSection('numbering','numbering',collectNumbering); });
+    $('save-automations').addEventListener('click', function(){ saveSection('automations','automations',collectAutomations); });
+
+    if(STATE.loadFailed){
+      lockEditing('Settings could not be loaded');
+    } else if(!STATE.canEdit){
+      lockEditing('Owner or admin only');
+    } else if(STATE.tableMissing){
+      // Profile still saves — only the four sql/086-backed sections are frozen.
+      ['hours','terms','numbering','automations'].forEach(function(k){
+        var b = $('save-'+k);
+        if(b){ b.disabled = true; b.title = 'Needs sql/086_company_settings.sql applied'; }
+        msg(k, 'Not saved yet — migration pending', 'busy');
+      });
+      ['hours','terms','numbering','automations'].forEach(function(sec){
+        var host = $(sec === 'terms' ? 'terms' : sec);
+        if(host) host.querySelectorAll('input,select,textarea,.sw').forEach(function(el){
+          el.disabled = true; el.title = 'Needs sql/086_company_settings.sql applied';
+        });
+      });
+      ['hours-notes','hours-sat'].forEach(function(id){
+        var el = $(id); if(el){ el.disabled = true; el.title = 'Needs sql/086_company_settings.sql applied'; }
+      });
+    }
+    if(co && co.ok && !STATE.canEdit){
+      var pb = $('save-profile'); if(pb){ pb.disabled = true; pb.title = 'Owner or admin only'; }
+    }
+  }
+
+  boot().catch(function(e){
+    banner('err','<span>⚠️</span><span><b>Company Setup failed to load.</b> '+esc(e.message)+'</span>');
+    try { lockEditing('Page failed to load'); } catch(x){}
+    console.error('[csx]', e);
+  });
+})();
+</script>
+</body>
+</html>

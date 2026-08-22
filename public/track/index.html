@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#4F6F82">
+<title>Your GH Group tech is on the way</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<style>
+  *{box-sizing:border-box}
+  body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",sans-serif;background:#FAFBFA;color:#17212B;display:flex;flex-direction:column;min-height:100vh}
+  header{background:linear-gradient(135deg,#4F6F82 0%,#668A9E 100%);color:#fff;padding:16px 20px;padding-top:calc(16px + env(safe-area-inset-top))}
+  header h1{font-size:16px;margin:0;font-weight:800}
+  header .sub{font-size:12px;color:#E4EFF4;margin-top:2px}
+  #eta-banner{background:#F0F8F2;border-bottom:1px solid #BED9C5;color:#1e5c34;font-weight:800;font-size:15px;text-align:center;padding:14px 16px}
+  #eta-banner.arrived{background:#EDF5F8;color:#4F6F82}
+  #map{flex:1;min-height:380px}
+  footer{padding:12px 16px calc(16px + env(safe-area-inset-bottom));font-size:11.5px;color:#5E6972;text-align:center;background:#fff;border-top:1px solid #E5E9E8}
+  .err{display:flex;flex:1;align-items:center;justify-content:center;padding:30px;text-align:center;color:#5E6972;font-size:14px}
+  .truck-icon{font-size:30px;text-shadow:0 2px 6px rgba(0,0,0,.3);transform:translate(-4px,-4px)}
+  .home-icon{font-size:26px;text-shadow:0 2px 6px rgba(0,0,0,.25)}
+</style>
+</head>
+<body>
+<header>
+  <h1>⬡ GH Group</h1>
+  <div class="sub" id="sub">Live arrival tracker</div>
+</header>
+<div id="eta-banner">Loading…</div>
+<div id="map"></div>
+<footer>Location and arrival time are approximate. This link is active for today's visit only.</footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+var params = new URLSearchParams(location.search);
+var t = params.get('t');
+var map = null, truckMarker = null, homeMarker = null, circle = null;
+
+function showErr(msg){
+  document.getElementById('eta-banner').style.display = 'none';
+  document.getElementById('map').outerHTML = '<div class="err">' + msg + '</div>';
+}
+
+async function refresh(){
+  var r;
+  try {
+    var res = await fetch('/api/fieldops?action=travel_view&t=' + encodeURIComponent(t));
+    r = await res.json();
+  } catch(e){ return; }
+  if(!r.ok){ showErr(r.error || 'This tracking link is no longer active.'); return; }
+
+  var banner = document.getElementById('eta-banner');
+  if(r.status === 'arrived'){
+    banner.className = 'arrived';
+    banner.textContent = '✅ ' + r.techFirstName + ' has arrived!';
+  } else if(r.status === 'canceled'){
+    showErr('This trip has ended. If you have questions, give us a call.');
+    return;
+  } else {
+    banner.textContent = '🛻 ' + r.techFirstName + ' is on the way — about ' + (r.etaMinutes != null ? r.etaMinutes + ' min' : 'a bit') + ' away';
+    if(r.staleMinutes != null && r.staleMinutes > 10){
+      banner.textContent += ' (last update ' + r.staleMinutes + ' min ago)';
+    }
+  }
+  document.getElementById('sub').textContent = r.destLabel ? 'Heading to ' + r.destLabel : 'Live arrival tracker';
+
+  if(!map){
+    map = L.map('map', { zoomControl: false });
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '&copy; OpenStreetMap' }).addTo(map);
+  }
+  var dest = [r.destLat, r.destLng];
+  if(!homeMarker){
+    homeMarker = L.marker(dest, { icon: L.divIcon({ className: '', html: '<div class="home-icon">📍</div>', iconSize: [26,26] }) }).addTo(map);
+  }
+  if(r.truckLat != null && r.status === 'en_route'){
+    var pos = [r.truckLat, r.truckLng];
+    if(!truckMarker){
+      truckMarker = L.marker(pos, { icon: L.divIcon({ className: '', html: '<div class="truck-icon">🛻</div>', iconSize: [30,30] }) }).addTo(map);
+      // broad-location circle -- makes clear this is approximate, not exact
+      circle = L.circle(pos, { radius: 900, color: '#4F6F82', fillColor: '#668A9E', fillOpacity: .12, weight: 1 }).addTo(map);
+      map.fitBounds(L.latLngBounds([pos, dest]).pad(0.3));
+    } else {
+      truckMarker.setLatLng(pos);
+      circle.setLatLng(pos);
+    }
+  } else if(map && r.status === 'arrived'){
+    if(truckMarker){ map.removeLayer(truckMarker); truckMarker = null; }
+    if(circle){ map.removeLayer(circle); circle = null; }
+    map.setView(dest, 14);
+  }
+}
+
+if(!t){ showErr('This tracking link is missing its code — ask us to resend it.'); }
+else {
+  refresh();
+  setInterval(refresh, 45000);
+}
+</script>
+  <script src="/voice-input.js" defer></script>
+</body>
+</html>

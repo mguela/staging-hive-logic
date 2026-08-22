@@ -1,0 +1,27 @@
+<div class="lsent"><h1>Materials Reina <em>already knows.</em></h1>
+<p>Every product and reusable expense line an owner has approved into the catalog — searchable by nickname, vendor, or SKU so the next receipt goes faster than the last.</p></div>
+
+<div class="statrow" id="mat-statrow">
+  <div class="stat"><span>Catalog items</span><b id="mat-stat-all">0</b><span class="tr">learned from receipts</span></div>
+  <div class="stat"><span>Materials</span><b id="mat-stat-materials">0</b><span class="tr">tracked as inventory or job cost</span></div>
+  <div class="stat"><span>With product images</span><b id="mat-stat-images">0</b><span class="tr">captured from receipts</span></div>
+</div>
+
+<div class="card">
+  <h3>Search the catalog <span style="font-size:10px;color:var(--mut);font-weight:700">NICKNAME &middot; VENDOR &middot; SKU</span></h3>
+  <div class="bkx-grid2">
+    <label class="bkx-field"><span>Search</span><input type="text" id="mat-search" placeholder="Try a nickname, vendor, or SKU"></label>
+    <label class="bkx-field"><span>Type</span>
+      <select id="mat-type">
+        <option value="">All types</option>
+        <option value="material">Material</option>
+        <option value="expense">Reusable expense</option>
+      </select>
+    </label>
+  </div>
+</div>
+
+<div class="card">
+  <h3>Catalog <span style="font-size:10px;color:var(--mut);font-weight:700">TAP AN ITEM DURING EXPENSE ENTRY TO REUSE IT</span></h3>
+  <div id="mat-grid"><div class="note">Loading materials catalog&hellip;</div></div>
+</div>

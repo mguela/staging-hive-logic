@@ -1,0 +1,187 @@
+name: Build and publish the Monitor agent
+
+# Builds the desktop agent installer on a Windows runner and publishes it, so
+# shipping a new version stops requiring a Windows machine, Node, and a person
+# who remembers the steps.
+#
+# WHY THIS EXISTS. 1.2.4 -- the consent dialog that WARNS people before they
+# decline, and the version reporting that shows a rollout actually happening --
+# sat unreleased while the server had already begun clocking people out for
+# declining. Not because anything was hard, but because the release path was
+# "build it by hand on Windows, then copy three files into another repo", and
+# every attempt landed in the wrong folder or the wrong repository. A release
+# process only one machine can perform is a release process that does not
+# happen.
+#
+# HOW IT WORKS. The source lives here (private). The installer is served from
+# csk5369/hivelogic-monitor (public), because electron-updater has to fetch it
+# without credentials. So this workflow builds here and pushes the three
+# artifacts there; that push triggers that repo's publish-release workflow,
+# which reads the version out of latest.yml, creates the release, and verifies
+# it is not a draft and has its assets.
+#
+# ONE-TIME SETUP, without which the build still runs but cannot publish:
+#   Create a fine-grained personal access token with Contents: Read and write
+#   on csk5369/hivelogic-monitor, and add it to THIS repository as the secret
+#   MONITOR_RELEASE_TOKEN. GITHUB_TOKEN cannot be used -- it is scoped to the
+#   repository the workflow runs in, and the installer has to land in another.
+#   Without the secret the job still uploads the installer as a downloadable
+#   artifact and tells you what is missing, rather than failing silently.
+#
+# TO SHIP: bump "version" in hivelogic-monitor-agent/package.json, merge, and
+# this runs itself. Or run it by hand from the Actions tab.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'hivelogic-monitor-agent/**'
+      - '.github/workflows/monitor-agent-release.yml'
+  workflow_dispatch:
+
+# The build and third-party dependency scripts stay read-only. A separate,
+# minimal fallback job receives contents: write only after the installer is
+# already built and uploaded. The first fallback run failed with contents: read;
+# granting the whole build job write would fix that 403 but widen its blast
+# radius unnecessarily.
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    outputs:
+      has_release_token: ${{ steps.release_token.outputs.present }}
+    env:
+      # The `secrets` context cannot be used in a step-level `if:` -- Actions
+      # refuses to parse the whole workflow if you try, which is how the first
+      # version of this file bricked itself. Resolving it once here, where the
+      # context IS allowed, gives the steps a plain string to test.
+      HAS_RELEASE_TOKEN: ${{ secrets.MONITOR_RELEASE_TOKEN != '' }}
+    defaults:
+      run:
+        working-directory: hivelogic-monitor-agent
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Record whether direct publishing is configured
+        id: release_token
+        shell: bash
+        run: echo "present=$HAS_RELEASE_TOKEN" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: hivelogic-monitor-agent/package-lock.json
+
+      - run: npm ci
+
+      # --publish never: electron-builder will otherwise try to publish to
+      # GitHub by itself when it detects CI, using the wrong repository and the
+      # wrong credentials. Publishing is this workflow's job, further down.
+      - name: Build the Windows installer
+        run: npm run build:win -- --publish never
+
+      - name: Check the build is the version we asked for
+        shell: bash
+        run: |
+          set -euo pipefail
+          WANT="$(node -p "require('./package.json').version")"
+          GOT="$(sed -n 's/^version:[[:space:]]*//p' dist/latest.yml | head -1 | tr -d '\r')"
+          echo "package.json says $WANT; the build produced $GOT"
+          if [ "$WANT" != "$GOT" ]; then
+            echo "::error::electron-builder produced $GOT but package.json says $WANT."
+            exit 1
+          fi
+          for f in dist/HiveLogic-Monitor-Setup.exe dist/latest.yml; do
+            test -f "$f" || { echo "::error::the build did not produce $f"; exit 1; }
+          done
+
+      # Uploaded before the publish step, so a missing token or a failed push
+      # still leaves something you can install by hand instead of a wasted run.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: HiveLogic-Monitor-installer
+          path: |
+            hivelogic-monitor-agent/dist/HiveLogic-Monitor-Setup.exe
+            hivelogic-monitor-agent/dist/HiveLogic-Monitor-Setup.exe.blockmap
+            hivelogic-monitor-agent/dist/latest.yml
+          if-no-files-found: error
+
+      - name: Publish to csk5369/hivelogic-monitor
+        shell: bash
+        env:
+          TOKEN: ${{ secrets.MONITOR_RELEASE_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "${TOKEN:-}" ]; then
+            echo "::warning::MONITOR_RELEASE_TOKEN is not set, so this cannot publish directly."
+            echo "::warning::Add a fine-grained PAT with Contents: Read and write on csk5369/hivelogic-monitor"
+            echo "::warning::as the secret MONITOR_RELEASE_TOKEN to make that one hop automatic."
+            echo "Falling back to the agent-dist branch of this repository, which GITHUB_TOKEN can write."
+            exit 0
+          fi
+
+          VERSION="$(node -p "require('./package.json').version")"
+          git clone --depth 1 "https://x-access-token:${TOKEN}@github.com/csk5369/hivelogic-monitor.git" "$RUNNER_TEMP/monitor"
+          cp dist/HiveLogic-Monitor-Setup.exe "$RUNNER_TEMP/monitor/"
+          cp dist/latest.yml "$RUNNER_TEMP/monitor/"
+          [ -f dist/HiveLogic-Monitor-Setup.exe.blockmap ] && cp dist/HiveLogic-Monitor-Setup.exe.blockmap "$RUNNER_TEMP/monitor/"
+
+          cd "$RUNNER_TEMP/monitor"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            # Same bytes as what is already published -- a re-run, or a change
+            # somewhere else under hivelogic-monitor-agent that does not alter
+            # the installer. Nothing to do, and saying so beats a confusing
+            # empty commit.
+            echo "The published installer is already identical to this build. Nothing to push."
+            exit 0
+          fi
+          git commit -m "v$VERSION (built from hivelogic-live@${GITHUB_SHA:0:7})"
+          git push
+          echo "Pushed v$VERSION. hivelogic-monitor's publish-release workflow will create and verify the release."
+
+  # Without the cross-repo token the installer would be stranded in an
+  # expiring artifact. This tiny follow-up job commits it to an orphan branch
+  # of this repository instead. Only this job can write repository contents;
+  # it runs no checkout, package install, or untrusted build script.
+  stage_fallback:
+    needs: build
+    if: needs.build.outputs.has_release_token != 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download the verified installer artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: HiveLogic-Monitor-installer
+          path: ${{ runner.temp }}/agent-dist
+
+      # agent-dist is an orphan branch: it holds only these files and never
+      # merges into main, so the installer does not enter shared history.
+      - name: Stage the installer on the agent-dist branch
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          STAGE="$RUNNER_TEMP/agent-dist"
+          VERSION="$(sed -n 's/^version:[[:space:]]*//p' "$STAGE/latest.yml" | head -1 | tr -d '\r')"
+          test -n "$VERSION"
+          cd "$STAGE"
+          git init -q
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -q -m "agent v$VERSION built from ${GITHUB_SHA:0:7}"
+          # Force-pushed on purpose: this branch is a drop box for the latest
+          # build, not a history worth keeping.
+          git push -q --force "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" HEAD:refs/heads/agent-dist
+          echo "Staged v$VERSION on the agent-dist branch."

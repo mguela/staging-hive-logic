@@ -1,0 +1,232 @@
+<!doctype html>
+<!--
+  public/field/onboard.html — Slice 6 of Company Setup + Cost Model V1.
+  Employee onboarding surface for the field app. Token-authenticated (no
+  Supabase session yet for a new hire): reads ?token= from the invite link,
+  redeems it against /api/invites, then walks four screens —
+  welcome → phone verification → license photo → confirm/finish.
+  V1 limits (deliberate): NO OCR (photo is stored + flagged for office review,
+  fields typed by office), no deferred deep links, no SSN/bank capture.
+  Degrades honestly when Twilio / storage aren't configured in the environment.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#070a12">
+<title>Join Greenwich Handyman</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#070a12; --card:#0e1420; --ink:#dbe4f0; --ink2:#93a2bd; --ink3:#54627e;
+    --brand:#2f8fff; --brand-dark:#1b5fd0; --brand-bg:#132038; --line:#1b2436;
+    --good:#58c68f; --good-deep:#1B7A50; --warn:#d7a94e; --bad:#e08a7e; --bad-deep:#c65b4e;
+    --radius:16px; --shadow:0 10px 30px rgba(3,5,10,.5);
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:'Inter',system-ui,-apple-system,"Segoe UI",sans-serif;-webkit-font-smoothing:antialiased;background:var(--bg);color:var(--ink);-webkit-tap-highlight-color:transparent}
+  header{background:#0b0f1a;color:#fff;padding:16px 20px;padding-top:calc(16px + env(safe-area-inset-top));border-bottom:1px solid var(--line)}
+  header h1{font-size:16px;margin:0;font-weight:800;letter-spacing:.02em}
+  header .sub{font-size:11px;color:var(--ink3);margin-top:2px}
+  main{padding:16px;max-width:520px;margin:0 auto;padding-bottom:calc(32px + env(safe-area-inset-bottom))}
+  .steps{display:flex;gap:6px;margin:6px 0 18px}
+  .steps .dot{flex:1;height:4px;border-radius:2px;background:var(--line)}
+  .steps .dot.on{background:var(--brand)}
+  .steps .dot.done{background:var(--good)}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:20px;box-shadow:var(--shadow);margin-bottom:16px}
+  h2{font-size:20px;margin:0 0 6px;font-weight:800}
+  p.lead{color:var(--ink2);font-size:14px;margin:0 0 16px;line-height:1.5}
+  label{display:block;font-size:12px;font-weight:700;color:var(--ink2);margin:14px 0 6px;text-transform:uppercase;letter-spacing:.04em}
+  input[type=text],input[type=tel],input[type=file]{width:100%;background:#0a1020;border:1px solid var(--line);color:var(--ink);border-radius:10px;padding:13px 14px;font-size:16px;font-family:inherit}
+  input:focus{outline:none;border-color:var(--brand)}
+  .btn{display:block;width:100%;border:0;border-radius:12px;padding:15px;font-size:16px;font-weight:800;cursor:pointer;margin-top:18px;font-family:inherit}
+  .btn.primary{background:var(--brand);color:#fff}
+  .btn.primary:active{background:var(--brand-dark)}
+  .btn.ghost{background:transparent;color:var(--ink2);border:1px solid var(--line);margin-top:10px}
+  .skip{display:block;text-align:center;color:var(--ink3);font-size:13px;margin-top:14px;text-decoration:none}
+  .note{font-size:13px;border-radius:10px;padding:10px 12px;margin-top:12px;line-height:1.45}
+  .note.warn{background:#2a2314;color:var(--warn);border:1px solid #3a2f16}
+  .note.bad{background:#2c1a17;color:var(--bad);border:1px solid #3a221d}
+  .note.good{background:#122a20;color:var(--good);border:1px solid #17392a}
+  .pill{display:inline-block;background:var(--brand-bg);color:var(--brand);border-radius:999px;padding:4px 10px;font-size:12px;font-weight:700}
+  .thumb{margin-top:12px;max-width:100%;border-radius:10px;border:1px solid var(--line)}
+  .center{text-align:center}
+  .big-check{width:64px;height:64px;border-radius:50%;background:var(--good-deep);color:#fff;display:flex;align-items:center;justify-content:center;font-size:34px;margin:6px auto 14px}
+</style>
+</head>
+<body>
+<header>
+  <h1>Greenwich Handyman</h1>
+  <div class="sub">Field onboarding</div>
+</header>
+<main>
+  <div class="steps" id="steps" hidden>
+    <div class="dot" data-i="0"></div><div class="dot" data-i="1"></div>
+    <div class="dot" data-i="2"></div><div class="dot" data-i="3"></div>
+  </div>
+  <div id="view"><div class="card"><p class="lead">Loading your invite…</p></div></div>
+</main>
+
+<script>
+(function(){
+  var qs = new URLSearchParams(location.search);
+  var TOKEN = qs.get('token') || '';
+  var SESSION = null;        // set after redeem
+  var INVITE = {};           // { email, role, actor_type }
+  var PHONE_VERIFIED = false;
+  var LICENSE_DONE = false;
+  var step = 0;
+
+  var view = document.getElementById('view');
+  var stepsEl = document.getElementById('steps');
+
+  function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
+  function el(html){ view.innerHTML = html; }
+  function setSteps(){
+    stepsEl.hidden = false;
+    [].forEach.call(stepsEl.children, function(d){
+      var i = +d.getAttribute('data-i');
+      d.className = 'dot' + (i<step?' done':(i===step?' on':''));
+    });
+  }
+  async function api(resource, body){
+    var r = await fetch('/api/invites?resource='+resource, {
+      method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body||{})
+    });
+    return r.json().catch(function(){ return { ok:false, error:'Bad response' }; });
+  }
+
+  // ---- boot: redeem the token -------------------------------------------
+  async function boot(){
+    if(!TOKEN){ return el('<div class="card"><h2>Missing invite</h2><p class="lead">This page needs an invite link. Please use the link the office sent you.</p></div>'); }
+    el('<div class="card"><p class="lead">Checking your invite…</p></div>');
+    var r;
+    try{ r = await (await fetch('/api/invites?resource=redeem&token='+encodeURIComponent(TOKEN))).json(); }
+    catch(e){ r = { ok:false, error:'Network error' }; }
+    if(!r || !r.ok){
+      return el('<div class="card"><h2>Link invalid or expired</h2><p class="lead">'+esc((r&&r.error)||'This invite link is invalid or has expired.')+'</p><p class="lead">Ask the office to send a fresh invite.</p></div>');
+    }
+    SESSION = r.session_id;
+    INVITE = { email:r.email, role:r.role, actor_type:r.actor_type };
+    step = 0; renderWelcome();
+  }
+
+  // ---- screen 1: welcome -------------------------------------------------
+  function renderWelcome(){
+    step = 0; setSteps();
+    el('<div class="card">'+
+      '<span class="pill">'+esc(INVITE.role||'Team member')+'</span>'+
+      '<h2 style="margin-top:12px">Welcome aboard 👋</h2>'+
+      '<p class="lead">You\'re joining <strong>Greenwich Handyman</strong>'+(INVITE.email?(' as '+esc(INVITE.email)):'')+'. This takes about two minutes: verify your phone, add a photo of your license, and you\'re done.</p>'+
+      '<button class="btn primary" id="go">Get started</button>'+
+    '</div>');
+    document.getElementById('go').onclick = renderPhone;
+  }
+
+  // ---- screen 2: phone verification -------------------------------------
+  function renderPhone(){
+    step = 1; setSteps();
+    el('<div class="card">'+
+      '<h2>Verify your phone</h2>'+
+      '<p class="lead">We\'ll text you a 6-digit code so the office can reach you on the job.</p>'+
+      '<label for="phone">Mobile number</label>'+
+      '<input id="phone" type="tel" inputmode="tel" placeholder="(203) 555-0134" autocomplete="tel">'+
+      '<button class="btn primary" id="send">Send code</button>'+
+      '<div id="codewrap" hidden>'+
+        '<label for="code">Enter the 6-digit code</label>'+
+        '<input id="code" type="tel" inputmode="numeric" maxlength="6" placeholder="––––––">'+
+        '<button class="btn primary" id="verify">Verify</button>'+
+      '</div>'+
+      '<div id="pmsg"></div>'+
+      '<a class="skip" id="skip" href="#">Skip for now</a>'+
+    '</div>');
+    var pmsg = document.getElementById('pmsg');
+    document.getElementById('send').onclick = async function(){
+      var phone = document.getElementById('phone').value.trim();
+      if(!phone){ pmsg.innerHTML='<div class="note bad">Enter your mobile number first.</div>'; return; }
+      pmsg.innerHTML='<div class="note">Sending…</div>';
+      var r = await api('send_code', { session_id:SESSION, phone:phone });
+      if(!r.ok){ pmsg.innerHTML='<div class="note bad">'+esc(r.error||'Could not send a code.')+'</div>'; return; }
+      document.getElementById('codewrap').hidden = false;
+      if(r.sent){ pmsg.innerHTML='<div class="note good">Code sent. Check your texts.</div>'; }
+      else { pmsg.innerHTML='<div class="note warn">'+esc(r.note||'Texting isn\'t enabled here yet.')+' Ask the office for your code, or skip.</div>'; }
+    };
+    document.getElementById('verify').onclick = async function(){
+      var code = document.getElementById('code').value.trim();
+      var r = await api('verify_code', { session_id:SESSION, code:code });
+      if(!r.ok){ pmsg.innerHTML='<div class="note bad">'+esc(r.error||'Incorrect code.')+'</div>'; return; }
+      PHONE_VERIFIED = true; renderLicense();
+    };
+    document.getElementById('skip').onclick = function(e){ e.preventDefault(); renderLicense(); };
+  }
+
+  // ---- screen 3: license photo ------------------------------------------
+  function renderLicense(){
+    step = 2; setSteps();
+    el('<div class="card">'+
+      '<h2>Add your license</h2>'+
+      '<p class="lead">Snap a clear photo of your driver\'s license or trade license. The office reviews it — you don\'t need to type anything.</p>'+
+      '<label for="file">License photo</label>'+
+      '<input id="file" type="file" accept="image/*" capture="environment">'+
+      '<img id="thumb" class="thumb" hidden alt="preview">'+
+      '<button class="btn primary" id="upload" disabled>Upload photo</button>'+
+      '<div id="lmsg"></div>'+
+      '<a class="skip" id="skip" href="#">Skip for now</a>'+
+    '</div>');
+    var fileInput = document.getElementById('file');
+    var thumb = document.getElementById('thumb');
+    var uploadBtn = document.getElementById('upload');
+    var lmsg = document.getElementById('lmsg');
+    var picked = null;
+    fileInput.onchange = function(){
+      var f = fileInput.files && fileInput.files[0];
+      if(!f) return;
+      if(f.size > 5*1024*1024){ lmsg.innerHTML='<div class="note bad">Photo is too large (max 5 MB).</div>'; return; }
+      var reader = new FileReader();
+      reader.onload = function(){ picked = { name:f.name, type:f.type, data:reader.result }; thumb.src = reader.result; thumb.hidden = false; uploadBtn.disabled = false; };
+      reader.readAsDataURL(f);
+    };
+    uploadBtn.onclick = async function(){
+      if(!picked) return;
+      lmsg.innerHTML='<div class="note">Uploading…</div>'; uploadBtn.disabled = true;
+      var r = await api('upload_license', { session_id:SESSION, filename:picked.name, contentType:picked.type, dataBase64:picked.data });
+      if(r.ok){ LICENSE_DONE = true; renderDone(); }
+      else { uploadBtn.disabled = false; lmsg.innerHTML='<div class="note warn">'+esc(r.note||r.error||'Upload failed.')+' You can skip and the office will follow up.</div>'; }
+    };
+    document.getElementById('skip').onclick = function(e){ e.preventDefault(); renderDone(); };
+  }
+
+  // ---- screen 4: confirm / finish ---------------------------------------
+  function renderDone(){
+    step = 3; setSteps();
+    el('<div class="card center">'+
+      '<div class="big-check">✓</div>'+
+      '<h2>You\'re all set</h2>'+
+      '<p class="lead">Thanks'+(INVITE.email?(', '+esc(INVITE.email)):'')+'. The office has your details and will finish setting up your account.</p>'+
+      '<div class="note '+(PHONE_VERIFIED?'good':'warn')+'">Phone: '+(PHONE_VERIFIED?'verified':'not verified (office will follow up)')+'</div>'+
+      '<div class="note '+(LICENSE_DONE?'good':'warn')+'" style="margin-top:8px">License: '+(LICENSE_DONE?'photo received, pending review':'not uploaded (office will follow up)')+'</div>'+
+      '<div class="note" id="payrollNote" style="margin-top:8px">Setting up payroll…</div>'+
+      '<button class="btn ghost" id="home" style="margin-top:18px">Open the field app</button>'+
+    '</div>');
+    document.getElementById('home').onclick = function(){ location.href = '/field/'; };
+    // Auto-provision the hire into payroll (Gusto) on completion.
+    finishOnboarding();
+  }
+
+  async function finishOnboarding(){
+    var note = document.getElementById('payrollNote');
+    try {
+      var r = await api('finish', { session_id: SESSION });
+      var p = r && r.provisioned;
+      if(p && p.ok){ note.className='note good'; note.textContent='Payroll: added to Gusto ('+(p.pay_type||'hourly')+').'; }
+      else { note.className='note warn'; note.textContent='Payroll: the office will finish adding you.'; }
+    } catch(e){ if(note){ note.className='note warn'; note.textContent='Payroll: the office will finish adding you.'; } }
+  }
+
+  boot();
+})();
+</script>
+</body>
+</html>

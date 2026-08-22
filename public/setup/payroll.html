@@ -1,0 +1,394 @@
+<!doctype html>
+<!-- Admin Payroll surface for HiveLogic's Gusto integration. New hires provision into Gusto AUTOMATICALLY on onboarding-complete (no manual step here). All writes to Gusto are gated: demo/sandbox environment can never commit real payroll — sync is dry-run only. Static Vercel page: vanilla HTML/CSS/JS, no build, no framework. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Payroll — Gusto</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#484f64; --canvas:#f0f1f6; --card:#ffffff; --line:#dadde8; --rail:#161e2e;
+    --gold:#748a9e; --green:#1B7A50; --red:#c65b4e; --cta:#f5793b;
+    --blue:#3d6fa5; --grey:#8a90a2; --amber:#a6791f;
+    --ink2:#6b7488; --ink3:#98a0b4;
+    --radius:12px;
+    --shadow:0 1px 2px rgba(22,30,46,.05), 0 6px 18px rgba(22,30,46,.05);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{font-family:'Montserrat',system-ui,-apple-system,"Segoe UI",sans-serif;background:var(--canvas);color:var(--ink);-webkit-font-smoothing:antialiased;font-size:14px;line-height:1.4}
+  .mono{font-family:'JetBrains Mono',ui-monospace,monospace;font-variant-numeric:tabular-nums}
+  a{color:var(--blue);text-decoration:none}
+  a:hover{text-decoration:underline}
+
+  header.top{background:var(--rail);color:#eef1f7;padding:14px 22px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px}
+  header.top .brand{display:flex;flex-direction:column;gap:2px}
+  header.top h1{font-size:15px;margin:0;font-weight:800;letter-spacing:.02em}
+  header.top .sub{font-size:11px;color:#9aa6bd;font-weight:500;max-width:640px}
+  header.top nav{display:flex;gap:14px;font-size:12px;font-weight:700}
+  header.top nav a{color:#c3ccdd}
+  header.top nav a:hover{color:#fff}
+
+  main{max-width:1080px;margin:0 auto;padding:22px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);margin-bottom:18px;overflow:hidden}
+  .card > .card-hd{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px 18px;border-bottom:1px solid var(--line)}
+  .card > .card-hd h2{font-size:12px;text-transform:uppercase;letter-spacing:.07em;color:var(--ink2);margin:0;font-weight:800}
+  .card > .card-hd .count{font-size:11px;color:var(--ink3);font-weight:600}
+  .card-bd{padding:14px 18px}
+
+  /* connection pill */
+  .pill{display:inline-flex;align-items:center;gap:8px;padding:7px 14px;border-radius:22px;font-size:12.5px;font-weight:800;letter-spacing:.02em;border:1px solid transparent}
+  .pill .dot{width:9px;height:9px;border-radius:50%;background:currentColor;flex:none}
+  .pill.on{background:#e6f3ec;color:#166a45;border-color:#c5e5d3}
+  .pill.off{background:#fbecea;color:#a5372c;border-color:#eecac5}
+  .pill.unknown{background:#eef0f4;color:#6b7488;border-color:#dcdfe8}
+  .connrow{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+
+  .note{margin-top:12px;font-size:12px;font-weight:600;line-height:1.45;border-radius:9px;padding:9px 12px}
+  .note.amber{background:#fbf4e3;color:var(--amber);border:1px solid #ecdcae}
+
+  /* badges */
+  .badge{display:inline-block;padding:2px 9px;border-radius:20px;font-size:10px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;border:1px solid transparent}
+  .badge.onboarding{background:#eaf1fa;color:#2f5f96;border-color:#cfe0f2}
+  .badge.manual{background:#eef0f4;color:#6b7488;border-color:#dcdfe8}
+  .badge.import{background:#f3efe4;color:#7a6a3d;border-color:#e3d8bd}
+  .badge.hourly{background:#e6f3ec;color:#166a45;border-color:#c5e5d3}
+  .badge.salary{background:#eef0f4;color:#4a5168;border-color:#dcdfe8}
+
+  /* roster table */
+  .tablewrap{overflow-x:auto}
+  table.roster{width:100%;border-collapse:collapse;font-size:13px}
+  table.roster th{text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink3);font-weight:800;padding:8px 10px;border-bottom:1.5px solid var(--line);white-space:nowrap}
+  table.roster td{padding:10px 10px;border-bottom:1px solid #eceef4;vertical-align:middle}
+  table.roster tr:last-child td{border-bottom:none}
+  table.roster td.name{font-weight:700;color:var(--rail)}
+  table.roster td.rate{font-family:'JetBrains Mono',ui-monospace,monospace;font-variant-numeric:tabular-nums;white-space:nowrap}
+  .linked{color:var(--green);font-weight:800;font-size:12px}
+  .unlinked{color:var(--ink3);font-weight:700}
+  .fo{font-size:12px;font-weight:700}
+  .fo.field{color:var(--green)}
+  .fo.office{color:var(--ink2)}
+
+  /* sync readout */
+  .rgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px}
+  .tile{border:1px solid var(--line);border-radius:10px;padding:11px 13px;background:#fafbfe}
+  .tile .rl{font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink3);font-weight:700;margin-bottom:6px}
+  .tile .rv{font-size:20px;font-weight:700;color:var(--rail);font-family:'JetBrains Mono',ui-monospace,monospace;font-variant-numeric:tabular-nums}
+  .tile .rv.sub{font-size:13px;color:var(--ink2);font-weight:600;margin-top:3px}
+  .tile.hero{background:#f0f4f9;border-color:#c9d3e0}
+  .tile.hero .rv{color:var(--green)}
+
+  .btn{border:1px solid var(--line);background:#fff;color:var(--ink);border-radius:9px;padding:9px 15px;font-size:12.5px;font-weight:700;cursor:pointer;font-family:inherit}
+  .btn:hover{border-color:var(--ink3)}
+  .btn:disabled{opacity:.55;cursor:default}
+  .btn.cta{background:var(--cta);border-color:var(--cta);color:#fff}
+  .btn.cta:hover{filter:brightness(1.05)}
+  .btn.sm{padding:6px 11px;font-size:11.5px}
+
+  details.raw{margin-top:16px;border:1px solid var(--line);border-radius:9px;background:#fbfbfe}
+  details.raw summary{cursor:pointer;padding:9px 13px;font-size:11.5px;font-weight:700;color:var(--ink2);user-select:none}
+  details.raw pre{margin:0;padding:12px 13px;border-top:1px solid var(--line);overflow-x:auto;font-family:'JetBrains Mono',ui-monospace,monospace;font-size:11.5px;line-height:1.55;color:var(--rail)}
+
+  .gate{max-width:460px;margin:80px auto;text-align:center;padding:34px 26px}
+  .gate .h{font-size:20px;font-weight:800;color:var(--rail);margin-bottom:10px}
+  .gate p{color:var(--ink2);font-size:14px;margin:0 0 20px}
+
+  .spin{padding:34px;text-align:center;color:var(--ink3);font-size:13px}
+  .errbox{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;background:#fdf3f2;border:1px solid #eecac5;color:#a5372c;border-radius:9px;padding:11px 13px;font-size:12.5px;font-weight:700}
+  .muted{color:var(--ink3);font-size:12.5px;text-align:center;padding:20px 0}
+  .hidden{display:none !important}
+
+  .footlinks{display:flex;align-items:center;gap:18px;flex-wrap:wrap;font-size:12.5px;font-weight:700;padding:4px 2px 20px;color:var(--ink2)}
+  .footlinks .diag{margin-left:auto;font-size:11.5px;font-weight:600;color:var(--ink3)}
+
+  @media(max-width:640px){
+    table.roster th:nth-child(4),table.roster td:nth-child(4){display:none}
+    .footlinks .diag{margin-left:0}
+  }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="brand">
+    <h1>Payroll — Gusto</h1>
+    <div class="sub">New hires provision into Gusto automatically; payroll costs read back into HiveLogic.</div>
+  </div>
+  <nav>
+    <a href="/setup/">&larr; Company Setup</a>
+    <a href="/">Home</a>
+  </nav>
+</header>
+
+<div id="gate" class="gate card hidden">
+  <div class="h">Please sign in to the HiveLogic app first</div>
+  <p>You need an active HiveLogic session to view the Payroll surface.</p>
+  <a class="btn cta" href="/">Go to HiveLogic sign-in</a>
+</div>
+
+<main id="app" class="hidden">
+
+  <!-- CONNECTION -->
+  <section class="card">
+    <div class="card-hd">
+      <h2>Gusto Connection</h2>
+      <button class="btn sm" id="connRetry">Refresh</button>
+    </div>
+    <div class="card-bd">
+      <div id="conn"><div class="spin">Checking Gusto connection…</div></div>
+    </div>
+  </section>
+
+  <!-- ROSTER -->
+  <section class="card">
+    <div class="card-hd">
+      <h2>Provisioned Roster</h2>
+      <span class="count" id="rosterCount"></span>
+    </div>
+    <div class="card-bd">
+      <div id="roster"><div class="spin">Loading roster…</div></div>
+    </div>
+  </section>
+
+  <!-- SYNC -->
+  <section class="card">
+    <div class="card-hd">
+      <h2>Read payroll costs from Gusto</h2>
+      <button class="btn cta sm" id="syncBtn">Sync from Gusto</button>
+    </div>
+    <div class="card-bd">
+      <p style="margin:0 0 6px;font-size:12.5px;color:var(--ink2)">
+        Pulls the current payroll plan from Gusto and reads costs back into HiveLogic. In demo mode this is a dry-run — nothing is written.
+      </p>
+      <div id="sync"><div class="muted">Click &ldquo;Sync from Gusto&rdquo; to read the latest payroll plan.</div></div>
+    </div>
+  </section>
+
+  <div class="footlinks">
+    <a href="/setup/cost-model.html">Cost model</a>
+    <a href="/setup/registries.html">Registries &amp; Reina proposals</a>
+    <a class="diag" href="/setup/payroll-test.html">Diagnostics</a>
+  </div>
+
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+var SUPABASE_URL = 'https://sqhusuuhlmcmkeowdrga.supabase.co';
+var SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNxaHVzdXVobG1jbWtlb3dkcmdhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQxMjkyMjAsImV4cCI6MjA5OTcwNTIyMH0.PszXL0D8KJC0MEYgbTduSPEcPn2g1pGx0IMK3YGzBcI';
+var sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { auth: { persistSession: true, autoRefreshToken: true } });
+
+/* ---------- helpers ---------- */
+function esc(s){
+  return String(s==null?'':s).replace(/[&<>"']/g,function(c){
+    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
+  });
+}
+function $(sel,root){ return (root||document).querySelector(sel); }
+
+function money(v){
+  var n=Number(v); if(v==null||v===''||!isFinite(n)) return '—';
+  return '$'+n.toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:0});
+}
+function money2(v){
+  var n=Number(v); if(v==null||v===''||!isFinite(n)) return '—';
+  return '$'+n.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+}
+function num(v){
+  var n=Number(v); if(v==null||v===''||!isFinite(n)) return '—';
+  return n.toLocaleString('en-US');
+}
+function pct(v){
+  var n=Number(v); if(v==null||v===''||!isFinite(n)) return '—';
+  return n.toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:2})+'%';
+}
+
+async function token(){
+  var s = await sb.auth.getSession();
+  return s.data.session ? s.data.session.access_token : '';
+}
+/* Every /api call carries the Bearer token. */
+async function api(method,resource,body){
+  var t = await token();
+  if(!t) throw new Error('No session');
+  var opts = { method:method, headers:{ Authorization:'Bearer '+t } };
+  if(body!==undefined){ opts.headers['Content-Type']='application/json'; opts.body=JSON.stringify(body||{}); }
+  var r = await fetch('/api/gusto?resource='+resource, opts);
+  var j;
+  try{ j = await r.json(); }catch(e){ throw new Error('HTTP '+r.status); }
+  if(!r.ok && !(j && typeof j==='object')) throw new Error('HTTP '+r.status);
+  return j;
+}
+
+function errBox(target,msg,onRetry){
+  var el=$('#'+target);
+  el.innerHTML='<div class="errbox"><span>'+esc(msg)+'</span><button class="btn sm" data-retry>Retry</button></div>';
+  var b=el.querySelector('[data-retry]');
+  if(b) b.addEventListener('click', onRetry);
+}
+
+/* ---------- connection ---------- */
+async function loadConnection(){
+  $('#conn').innerHTML='<div class="spin">Checking Gusto connection…</div>';
+  try{
+    var j = await api('GET','status');
+    if(!j || j.ok===false) throw new Error((j&&j.error)||'Status unavailable');
+    renderConnection(j);
+  }catch(e){
+    errBox('conn','Could not check connection: '+e.message, loadConnection);
+  }
+}
+function renderConnection(s){
+  var connected = !!s.connected;
+  var env = s.environment || 'unknown';
+  var html='<div class="connrow">';
+  if(connected){
+    html += '<span class="pill on"><span class="dot"></span>Connected &middot; '+esc(env)+'</span>';
+  } else {
+    html += '<span class="pill off"><span class="dot"></span>Not connected</span>';
+    html += '<a class="btn cta sm" href="/api/gusto">Connect Gusto</a>';
+  }
+  if(s.configured===false){
+    html += '<span class="pill unknown"><span class="dot"></span>Not configured</span>';
+  }
+  html += '</div>';
+  if(String(env).toLowerCase()==='demo'){
+    html += '<div class="note amber">Demo mode — safe test data; real payroll needs Gusto Production approval.</div>';
+  }
+  $('#conn').innerHTML = html;
+}
+
+/* ---------- roster ---------- */
+async function loadRoster(){
+  $('#roster').innerHTML='<div class="spin">Loading roster…</div>';
+  $('#rosterCount').textContent='';
+  try{
+    var j = await api('GET','roster');
+    if(!j || j.ok===false) throw new Error((j&&j.error)||'Roster unavailable');
+    renderRoster(j.roster||[]);
+  }catch(e){
+    errBox('roster','Could not load roster: '+e.message, loadRoster);
+  }
+}
+function payTypeBadge(t){
+  var v=(t||'').toLowerCase();
+  var cls = (v==='hourly'||v==='salary') ? v : 'manual';
+  return '<span class="badge '+cls+'">'+esc(t||'—')+'</span>';
+}
+function sourceBadge(src){
+  var v=(src||'manual').toLowerCase();
+  var known={onboarding:1,manual:1,import:1};
+  var cls=known[v]?v:'manual';
+  return '<span class="badge '+cls+'">'+esc(src||'manual')+'</span>';
+}
+function rateText(r){
+  var pt=(r.pay_type||'').toLowerCase();
+  if(r.base_rate==null||r.base_rate==='') return '—';
+  if(pt==='hourly') return money2(r.base_rate)+' /hr';
+  if(pt==='salary') return money(r.base_rate)+' /yr';
+  return money2(r.base_rate);
+}
+function renderRoster(roster){
+  if(!roster.length){
+    $('#roster').innerHTML='<div class="muted">No hires provisioned yet. When someone finishes onboarding, they&rsquo;ll appear here.</div>';
+    $('#rosterCount').textContent='0 hires';
+    return;
+  }
+  var linked=0;
+  var rows='';
+  roster.forEach(function(r){
+    var isLinked = !!(r.gusto_employee_uuid);
+    if(isLinked) linked++;
+    var isField = !!r.is_field;
+    rows += '<tr>'
+         +   '<td class="name">'+esc(r.display_name||'—')+'</td>'
+         +   '<td>'+payTypeBadge(r.pay_type)+'</td>'
+         +   '<td class="rate">'+esc(rateText(r))+'</td>'
+         +   '<td><span class="fo '+(isField?'field':'office')+'">'+(isField?'Field':'Office')+'</span></td>'
+         +   '<td>'+sourceBadge(r.source)+'</td>'
+         +   '<td>'+(isLinked?'<span class="linked">✓ linked</span>':'<span class="unlinked">—</span>')+'</td>'
+         + '</tr>';
+  });
+  $('#roster').innerHTML =
+      '<div class="tablewrap"><table class="roster">'
+    +   '<thead><tr>'
+    +     '<th>Name</th><th>Pay type</th><th>Rate</th><th>Field/Office</th><th>Source</th><th>Gusto</th>'
+    +   '</tr></thead><tbody>'+rows+'</tbody></table></div>';
+  $('#rosterCount').textContent = roster.length+(roster.length===1?' hire, ':' hires, ')+linked+' linked to Gusto';
+}
+
+/* ---------- sync ---------- */
+async function runSync(){
+  var btn=$('#syncBtn');
+  btn.disabled=true;
+  var prev=btn.textContent; btn.textContent='Syncing…';
+  $('#sync').innerHTML='<div class="spin">Reading payroll plan from Gusto…</div>';
+  try{
+    var j = await api('POST','sync',{});
+    if(j && j.ok===false && j.connected===false){
+      $('#sync').innerHTML='<div class="note amber">Connect Gusto first — no active Gusto connection to sync from.</div>'
+        + rawBlock(j);
+      return;
+    }
+    if(!j || j.ok===false) throw new Error((j&&j.error)||'Sync failed');
+    renderSync(j);
+  }catch(e){
+    errBox('sync','Sync failed: '+e.message, runSync);
+  }finally{
+    btn.disabled=false; btn.textContent=prev;
+  }
+}
+function tile(label,val,sub,hero){
+  return '<div class="tile'+(hero?' hero':'')+'">'
+       +   '<div class="rl">'+esc(label)+'</div>'
+       +   '<div class="rv">'+esc(val)+'</div>'
+       +   (sub?'<div class="rv sub">'+esc(sub)+'</div>':'')
+       + '</div>';
+}
+function renderSync(p){
+  var bpt = p.by_pay_type||{};
+  var fo = p.field_office||{};
+  var b = p.burden||{};
+  var tiles='';
+  tiles += tile('Employees', num(p.employees), (p.would_write_employee_pay!=null?num(p.would_write_employee_pay)+' pay writes':''), true);
+  tiles += tile('Hourly / Salary', num(bpt.hourly)+' / '+num(bpt.salary), null, false);
+  tiles += tile('Field / Office', num(fo.field)+' / '+num(fo.office), null, false);
+  tiles += tile('Payroll periods', num(p.payroll_periods), null, false);
+  tiles += tile('Payroll tax', pct(b.payroll_tax_pct), null, false);
+  tiles += tile('Other burden', pct(b.other_burden_pct), null, false);
+  tiles += tile('Payroll runs', num(b.runs), null, false);
+
+  var html='<div class="rgrid">'+tiles+'</div>';
+  if(p.dryRun || p.note_demo){
+    var msg = p.note_demo || 'Demo: dry-run only, nothing written.';
+    html += '<div class="note amber">'+esc(msg)+'</div>';
+  }
+  html += rawBlock(p);
+  $('#sync').innerHTML = html;
+}
+function rawBlock(obj){
+  var txt='';
+  try{ txt = JSON.stringify(obj,null,2); }catch(e){ txt = String(obj); }
+  return '<details class="raw"><summary>Raw response (debug)</summary><pre>'+esc(txt)+'</pre></details>';
+}
+
+/* ---------- boot ---------- */
+$('#connRetry').addEventListener('click', loadConnection);
+$('#syncBtn').addEventListener('click', runSync);
+
+(async function(){
+  var sess = await sb.auth.getSession();
+  if(!sess.data.session){
+    $('#gate').classList.remove('hidden');
+    return;
+  }
+  $('#app').classList.remove('hidden');
+  loadConnection();
+  loadRoster();
+})();
+</script>
+</body>
+</html>

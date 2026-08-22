@@ -1,0 +1,145 @@
+<div class="lsent"><h1>Your books, <em>explained.</em></h1>
+<p>One real close-readiness score, the exceptions that actually need you, and every stored receipt in one vault. Drop in a document, or work an exception, then come back here.</p></div>
+
+<div class="bkh-hero">
+  <label class="bkx-field bkh-period"><span>Books health through</span><input type="date" id="bkh-through"></label>
+</div>
+
+<div class="bkh-grid">
+  <label class="card bkh-drop-vault span-all" id="bkh-drop-vault">
+    <input id="bkh-drop-input" type="file" multiple accept="image/*,application/pdf,.csv,.xlsx,.xls,.txt">
+    <div class="bkh-drop-icon">&#8593;</div>
+    <div>
+      <h3>Drop any bookkeeping document here</h3>
+      <p>Receipts, vendor bills, bank and card statements, or spreadsheets — every file lands in the evidence vault below, checksum-protected.</p>
+      <span class="bkh-drop-action">Choose files</span>
+      <div id="bkh-upload-status" class="bkh-upload-status"></div>
+    </div>
+  </label>
+
+  <section class="card">
+    <div class="bkh-health-head">
+      <div class="bkh-score" id="bkh-score" style="--score:0"><b id="bkh-score-text">&mdash;</b></div>
+      <div class="bkh-health-copy">
+        <span style="font-size:10px;color:var(--mut);font-weight:700">BOOKS HEALTH</span>
+        <h3 id="bkh-score-title">Checking the books&hellip;</h3>
+        <p id="bkh-score-message">Testing balances, evidence, approvals, posting, duplicates, tax, and audit history.</p>
+      </div>
+    </div>
+    <div class="bkh-bar"><span id="bkh-bar" style="width:0"></span></div>
+    <div class="bkh-metric-row">
+      <div class="bkh-metric"><b id="bkh-metric-expenses">&mdash;</b><span>Expenses checked</span></div>
+      <div class="bkh-metric"><b id="bkh-metric-documents">&mdash;</b><span>Documents stored</span></div>
+      <div class="bkh-metric"><b id="bkh-metric-reviews">&mdash;</b><span>Awaiting review</span></div>
+      <div class="bkh-metric"><b id="bkh-metric-blockers">&mdash;</b><span>Items needing answers</span></div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h3>Only the exceptions <span style="font-size:10px;color:var(--mut);font-weight:700">NO ACCOUNTING LANGUAGE REQUIRED</span></h3>
+    <div id="bkh-exceptions" class="bkh-queue"><div class="note">Checking for anything that needs you&hellip;</div></div>
+  </section>
+
+  <section class="card span-all" id="bkh-review-section">
+    <h3>Document review queue <span style="font-size:10px;color:var(--mut);font-weight:700">ONE CLICK, ORIGINAL FILE ALWAYS KEPT</span></h3>
+    <p>Every uploaded document needs a quick human look before it counts as handled. Nothing is deleted or changed — marking one reviewed just records that a person looked at it, with a tamper-evident audit entry.</p>
+    <div id="bkh-review-list" class="bkh-review-list"><div class="note">Checking for documents awaiting review&hellip;</div></div>
+    <div id="bkh-review-status" class="bkh-upload-status"></div>
+  </section>
+
+  <section class="card span-all" id="bkh-controls-section">
+    <h3>QuickBooks sync <span id="bkh-controls-mode" class="bkh-controls-mode"></span></h3>
+    <p>A submitted expense opens a real approval request here before anything is queued for QuickBooks -- a different admin must approve it (the same person who submitted it never can). Even once approved, nothing is sent to QuickBooks until a bookkeeper or controller clicks Sync, and that click is itself a safe no-op unless live QuickBooks writes are turned on for this deployment.</p>
+    <div id="bkh-controls-list" class="bkh-review-list"><div class="note">Checking QuickBooks sync status&hellip;</div></div>
+    <div id="bkh-controls-status" class="bkh-upload-status"></div>
+  </section>
+
+  <section class="card span-all" id="bkh-tax-section">
+    <h3>Sales tax &amp; contractor 1099 <span style="font-size:10px;color:var(--mut);font-weight:700">MANUALLY TRACKED, FEEDS THE REAL REPORTS ABOVE</span></h3>
+    <p>HiveLogic has no invoicing/sales data of its own and no live 1099 feed yet, so both of these are a real, honest log &mdash; not automatic, but not fake either. Entries here are exactly what the close-readiness score, the accountant package, and the export above actually read.</p>
+
+    <div class="bkh-tax-sub">
+      <h4>Sales tax liability by state</h4>
+      <div id="bkh-tax-liability" class="bkh-tax-table"><div class="note">Loading sales-tax liability&hellip;</div></div>
+      <div class="bkh-tax-forms">
+        <form id="bkh-tax-collected-form" class="bkh-tax-form">
+          <b>Log tax collected from a client</b>
+          <input type="text" id="bkh-tc-state" placeholder="State (e.g. CT)" maxlength="2" required>
+          <input type="date" id="bkh-tc-date" required>
+          <input type="number" step="0.01" min="0" id="bkh-tc-taxable" placeholder="Taxable $" required>
+          <input type="number" step="0.01" min="0" id="bkh-tc-exempt" placeholder="Exempt $" value="0">
+          <input type="number" step="0.01" min="0" id="bkh-tc-collected" placeholder="Tax collected $" required>
+          <input type="text" id="bkh-tc-job" placeholder="Job ref (optional)">
+          <button type="submit" class="gbtn">Log collected</button>
+        </form>
+        <form id="bkh-tax-remitted-form" class="bkh-tax-form">
+          <b>Log tax remitted to the state</b>
+          <input type="text" id="bkh-tr-state" placeholder="State (e.g. CT)" maxlength="2" required>
+          <input type="date" id="bkh-tr-date" required>
+          <input type="number" step="0.01" min="0" id="bkh-tr-amount" placeholder="Amount paid $" required>
+          <button type="submit" class="gbtn">Log remitted</button>
+        </form>
+      </div>
+      <div id="bkh-tax-status" class="bkh-upload-status"></div>
+    </div>
+
+    <div class="bkh-tax-sub">
+      <h4>Contractor 1099 tracking &middot; tax year <input type="number" id="bkh-contractor-year" class="bkh-contractor-year-input"></h4>
+      <div id="bkh-contractor-list" class="bkh-tax-table"><div class="note">Loading tracked contractors&hellip;</div></div>
+      <form id="bkh-contractor-form" class="bkh-tax-form">
+        <b>Track a contractor for 1099</b>
+        <input type="text" id="bkh-ctr-name" placeholder="Vendor name (must match Expense Entry's vendor exactly)" required>
+        <label><input type="checkbox" id="bkh-ctr-track"> Track for 1099</label>
+        <label><input type="checkbox" id="bkh-ctr-w9"> W-9 on file</label>
+        <input type="text" id="bkh-ctr-taxid" placeholder="Tax ID last 4" maxlength="4">
+        <button type="submit" class="gbtn">Save</button>
+      </form>
+      <div id="bkh-contractor-status" class="bkh-upload-status"></div>
+    </div>
+  </section>
+
+  <section class="card span-all">
+    <h3>Evidence vault <span style="font-size:10px;color:var(--mut);font-weight:700">EVERY FILE IS CHECKSUM-PROTECTED</span></h3>
+    <div id="bkh-evidence-list" class="bkh-evidence-list"><div class="note">Loading evidence vault&hellip;</div></div>
+  </section>
+
+  <section class="card bkh-close-card span-all">
+    <h3>Prepare the period package <span style="font-size:10px;color:#b8ccdd;font-weight:700">ACCOUNTANT HANDOFF</span></h3>
+    <p>HiveLogic will only build a package once every required close control passes. Nothing is pre-built or stored &mdash; each download is generated fresh from the real ledger, expenses, and evidence on file.</p>
+    <div class="bkh-close-actions">
+      <button id="bkh-prepare" class="gbtn go" type="button" disabled>Prepare accountant package</button>
+      <button id="bkh-backup" class="gbtn" type="button">Back up now</button>
+      <span id="bkh-close-status" class="bkh-close-status"></span>
+    </div>
+    <div id="bkh-close-note" class="bkh-close-note"></div>
+    <div id="bkh-backup-status" class="bkh-close-status"></div>
+    <div class="bkh-close-note">A backup is a full, checksum-verified snapshot of every record this company has &mdash; the ledger, every expense, catalog item, purchase order, and the original file of every stored document. Never requires close readiness. Save the download somewhere durable (a second cloud drive or external disk).</div>
+  </section>
+
+  <section class="card bkh-close-card span-all">
+    <h3>Export for someone else <span style="font-size:10px;color:#b8ccdd;font-weight:700">AUDIENCE-SCOPED, ALWAYS AVAILABLE</span></h3>
+    <p>A lighter export than the accountant package above &mdash; doesn't require a full close, and each audience gets only what they should see: a lender or insurer export never includes the raw audit log or contractor identities.</p>
+    <div class="bkh-close-actions">
+      <select id="bkh-export-audience">
+        <option value="accountant">For my accountant &mdash; full detail</option>
+        <option value="lender">For a lender &mdash; no audit log or contractor identities</option>
+        <option value="insurer">For an insurer &mdash; expense summary only</option>
+        <option value="buyer">For a buyer &mdash; due-diligence detail</option>
+      </select>
+      <button id="bkh-export" class="gbtn" type="button">Download export</button>
+      <span id="bkh-export-status" class="bkh-close-status"></span>
+    </div>
+    <div class="bkh-close-note">Sales-tax and contractor sections now reflect real tracked data &mdash; log entries and mark 1099 contractors in the "Sales tax &amp; contractor 1099" card above to populate them.</div>
+  </section>
+</div>
+
+<dialog id="bkh-evidence-viewer" class="bkh-evidence-viewer">
+  <div class="bkh-evidence-viewer-head">
+    <b id="bkh-evidence-viewer-title">Original document</b>
+    <button id="bkh-evidence-viewer-close" type="button">Close</button>
+  </div>
+  <div class="bkh-evidence-viewer-body">
+    <img id="bkh-evidence-viewer-image" alt="Original document" hidden>
+    <iframe id="bkh-evidence-viewer-frame" title="Original document viewer" hidden></iframe>
+  </div>
+</dialog>

@@ -1,0 +1,204 @@
+<div class="lsent"><h1>The general ledger, <em>made real.</em></h1>
+<p>Create, approve, and post double-entry journal entries against the real ledger engine, then read trial balance, income statement, and balance sheet straight off what has actually posted. No QuickBooks write happens from this screen.</p></div>
+
+<div class="seg" id="glx-subnav" style="margin-bottom:12px">
+  <div class="opt sel" data-glx-tab="entries">Journal entries</div>
+  <div class="opt" data-glx-tab="reports">Financial reports</div>
+  <div class="opt" data-glx-tab="close">Close readiness</div>
+  <div class="opt" data-glx-tab="bank">Bank feed</div>
+</div>
+
+<div id="glx-panel-entries" class="glx-panel">
+
+  <div class="statrow" id="glx-statrow">
+    <div class="stat"><span>Pending approval</span><b id="glx-stat-pending">0</b><span class="tr">created, not yet approved</span></div>
+    <div class="stat"><span>Approved, not posted</span><b id="glx-stat-approved">0</b><span class="tr">ready to post</span></div>
+    <div class="stat"><span>Posted</span><b id="glx-stat-posted">0</b><span class="tr up">in the real ledger</span></div>
+    <div class="stat"><span>Total entries</span><b id="glx-stat-total">0</b><span class="tr">all statuses</span></div>
+  </div>
+
+  <div class="card" id="glx-create-card">
+    <h3>New journal entry <span style="font-size:10px;color:var(--mut);font-weight:700">AT LEAST TWO LINES, DEBITS MUST EQUAL CREDITS</span></h3>
+    <div class="bkx-grid2">
+      <label class="bkx-field"><span>Posting date</span><input type="date" id="glx-date"></label>
+      <label class="bkx-field"><span>Description</span><input type="text" id="glx-description" placeholder="What is this entry for"></label>
+      <label class="bkx-field"><span>Memo</span><input type="text" id="glx-memo" placeholder="Optional note"></label>
+      <label class="bkx-field"><span>Basis</span>
+        <select id="glx-basis">
+          <option value="">Company default (accrual)</option>
+          <option value="accrual">Accrual</option>
+          <option value="cash">Cash</option>
+        </select>
+      </label>
+      <label class="bkx-field"><span>Kind</span>
+        <select id="glx-kind">
+          <option value="standard">Standard</option>
+          <option value="adjustment">Adjustment (controller role only)</option>
+        </select>
+      </label>
+    </div>
+
+    <div id="glx-new-lines" style="margin-top:12px"></div>
+    <button class="gbtn" id="glx-add-line" type="button">+ Add line</button>
+
+    <div class="bkx-reconbar" id="glx-reconbar" style="margin-top:14px">
+      <div><span>Total debits</span><b id="glx-recon-debits">$0.00</b></div>
+      <div><span>Total credits</span><b id="glx-recon-credits">$0.00</b></div>
+      <div><span>Difference</span><b id="glx-recon-diff" class="bad">$0.00</b></div>
+    </div>
+
+    <div style="margin-top:14px">
+      <button class="gbtn go" id="glx-create" type="button">Create journal entry</button>
+    </div>
+    <div id="glx-create-status" class="note" style="display:none;margin-top:10px"></div>
+    <div class="note" style="text-align:left;margin-top:10px">
+      Separation of duties is enforced by the ledger engine itself: whoever creates an entry can never approve that same entry. If this company has only one admin user today, a second admin account is required to approve entries created here.
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>All journal entries <span style="font-size:10px;color:var(--mut);font-weight:700">CREATE &#8594; APPROVE &#8594; POST</span></h3>
+    <div id="glx-entries-list"><div class="note">Loading journal entries&hellip;</div></div>
+  </div>
+
+</div>
+
+<div id="glx-panel-reports" class="glx-panel" style="display:none">
+
+  <div class="card">
+    <h3>Chart of accounts sync <span style="font-size:10px;color:var(--mut);font-weight:700">ADMIN ONLY</span></h3>
+    <div class="note" style="text-align:left;margin-bottom:10px">The General Ledger’s chart of accounts starts as a generic placeholder list until this is run once. This pulls your real, live QuickBooks accounts and makes them the accounts every journal entry and report in this tab uses — so a submitted expense’s real QBO account always matches something here, and these reports reconcile to QuickBooks. Refuses automatically if this company already has any posted or pending journal entry (re-syncing would break those entries’ account references).</div>
+    <div>
+      <button class="gbtn go" id="glx-accounts-sync" type="button">Rebuild chart of accounts from QuickBooks</button>
+    </div>
+    <div id="glx-accounts-sync-status" class="note" style="display:none;margin-top:10px"></div>
+  </div>
+
+  <div class="card">
+    <h3>Financial reports <span style="font-size:10px;color:var(--mut);font-weight:700">READ-ONLY, COMPUTED FROM POSTED ENTRIES ONLY</span></h3>
+    <div class="bkx-grid2">
+      <label class="bkx-field"><span>Report</span>
+        <select id="glx-report-type">
+          <option value="trial-balance">Trial balance</option>
+          <option value="income-statement">Income statement</option>
+          <option value="balance-sheet">Balance sheet</option>
+          <option value="general-ledger">General ledger</option>
+          <option value="ar-aging">AR aging</option>
+          <option value="ap-aging">AP aging</option>
+          <option value="expense-summary">Expense summary</option>
+        </select>
+      </label>
+      <label class="bkx-field" id="glx-report-through-field"><span>Through date</span><input type="date" id="glx-report-through"></label>
+      <label class="bkx-field" id="glx-report-start-field" style="display:none"><span>Start date</span><input type="date" id="glx-report-start"></label>
+      <label class="bkx-field" id="glx-report-end-field" style="display:none"><span>End date</span><input type="date" id="glx-report-end"></label>
+      <label class="bkx-field" id="glx-report-groupby-field" style="display:none"><span>Group by</span><select id="glx-report-groupby"><option value="vendor">Vendor</option><option value="ownerType">Expense home</option></select></label>
+      <label class="bkx-field"><span>Basis</span>
+        <select id="glx-report-basis">
+          <option value="accrual">Accrual</option>
+          <option value="cash">Cash</option>
+        </select>
+      </label>
+    </div>
+    <div style="margin-top:12px">
+      <button class="gbtn go" id="glx-report-run" type="button">Run report</button>
+    </div>
+    <div id="glx-report-status" class="note" style="display:none;margin-top:10px"></div>
+  </div>
+
+  <div class="card" id="glx-report-result-card" style="display:none">
+    <h3 id="glx-report-result-title"></h3>
+    <div id="glx-report-result"></div>
+  </div>
+
+</div>
+
+<div id="glx-panel-close" class="glx-panel" style="display:none">
+
+  <div class="card">
+    <h3>Close readiness <span style="font-size:10px;color:var(--mut);font-weight:700">18-POINT CHECKLIST</span></h3>
+    <div class="bkx-grid2">
+      <label class="bkx-field"><span>Through date</span><input type="date" id="glx-close-through"></label>
+    </div>
+    <div style="margin-top:12px">
+      <button class="gbtn go" id="glx-close-check" type="button">Check close readiness</button>
+    </div>
+    <div id="glx-close-status" class="note" style="display:none;margin-top:10px"></div>
+  </div>
+
+  <div class="card" id="glx-close-note-card" style="display:none;border:2px dashed #c0392b">
+    <h3>Honesty note from the server</h3>
+    <div id="glx-close-note"></div>
+  </div>
+
+  <div class="card" id="glx-close-result-card" style="display:none">
+    <h3 id="glx-close-headline"></h3>
+    <div id="glx-close-summary" class="note" style="text-align:left;margin-bottom:10px"></div>
+    <ul id="glx-close-checklist" class="bkx-checklist"></ul>
+  </div>
+
+  <div class="card">
+    <h3>Hash-chain integrity <span style="font-size:10px;color:var(--mut);font-weight:700">OPTIONAL &mdash; VERIFIES THE LEDGER AGAINST AN INDEPENDENT APPEND-ONLY LOG</span></h3>
+    <button class="gbtn" id="glx-audit-verify" type="button">Verify audit chain</button>
+    <div id="glx-audit-status" class="note" style="display:none;margin-top:10px"></div>
+    <div id="glx-audit-result" style="margin-top:10px"></div>
+  </div>
+
+</div>
+
+<div id="glx-panel-bank" class="glx-panel" style="display:none">
+
+  <div class="statrow" id="glx-bank-statrow">
+    <div class="stat"><span>Unmatched</span><b id="glx-bank-stat-unmatched">0</b><span class="tr down">need a decision</span></div>
+    <div class="stat"><span>Classified, pending post</span><b id="glx-bank-stat-pending">0</b><span class="tr">approve &amp; post to fully resolve</span></div>
+    <div class="stat"><span>Matched / classified</span><b id="glx-bank-stat-resolved">0</b><span class="tr up">resolved</span></div>
+    <div class="stat"><span>Accounts reconciled</span><b id="glx-bank-stat-reconciled">0</b><span class="tr">through their last statement</span></div>
+  </div>
+
+  <div class="card">
+    <h3>Import a statement <span style="font-size:10px;color:var(--mut);font-weight:700">CSV ONLY &mdash; UPLOADED FILE, NOT A LIVE BANK CONNECTION</span></h3>
+    <p style="color:var(--mut);font-size:13px;margin:-6px 0 12px">Download a CSV export from your bank or card portal and upload it here. Needs a Date column and either an Amount column or separate Debit/Credit columns. Re-uploading the exact same file for the same account is always safe &mdash; it will not create duplicates.</p>
+    <div class="bkx-grid2">
+      <label class="bkx-field"><span>Account</span><select id="glx-bank-import-account"></select></label>
+      <label class="bkx-field"><span>Statement file (.csv)</span><input type="file" id="glx-bank-import-file" accept=".csv,text/csv"></label>
+    </div>
+    <button class="gbtn go" id="glx-bank-import-btn" type="button" style="margin-top:10px">Import statement</button>
+    <div id="glx-bank-import-status" class="note" style="display:none;margin-top:10px"></div>
+  </div>
+
+  <div class="card">
+    <h3>Imported transactions <span style="font-size:10px;color:var(--mut);font-weight:700">MATCH TO AN EXPENSE, OR CLASSIFY DIRECTLY</span></h3>
+    <div class="bkx-grid2">
+      <label class="bkx-field"><span>Account</span><select id="glx-bank-filter-account"><option value="">All accounts</option></select></label>
+      <label class="bkx-field"><span>Status</span>
+        <select id="glx-bank-filter-status">
+          <option value="">All statuses</option>
+          <option value="unmatched">Unmatched</option>
+          <option value="matched">Matched</option>
+          <option value="classified_pending">Classified, pending post</option>
+          <option value="classified">Classified</option>
+        </select>
+      </label>
+    </div>
+    <div id="glx-bank-transactions"><div class="note">Loading bank feed&hellip;</div></div>
+  </div>
+
+  <div class="card">
+    <h3>Reconcile an account <span style="font-size:10px;color:var(--mut);font-weight:700">BOOK BALANCE IS COMPUTED FROM THE REAL LEDGER, NEVER TYPED IN</span></h3>
+    <p style="color:var(--mut);font-size:13px;margin:-6px 0 12px">Every imported transaction in the period must already be matched, classified, or excluded before this can complete.</p>
+    <div class="bkx-grid2">
+      <label class="bkx-field"><span>Account</span><select id="glx-bank-reconcile-account"></select></label>
+      <label class="bkx-field"><span>Start date</span><input type="date" id="glx-bank-reconcile-start"></label>
+      <label class="bkx-field"><span>End date</span><input type="date" id="glx-bank-reconcile-end"></label>
+      <label class="bkx-field"><span>Statement beginning balance</span><input type="number" step="0.01" id="glx-bank-reconcile-begin" placeholder="0.00"></label>
+      <label class="bkx-field"><span>Statement ending balance</span><input type="number" step="0.01" id="glx-bank-reconcile-endbal" placeholder="0.00"></label>
+    </div>
+    <button class="gbtn go" id="glx-bank-reconcile-btn" type="button" style="margin-top:10px">Reconcile</button>
+    <div id="glx-bank-reconcile-status" class="note" style="display:none;margin-top:10px"></div>
+  </div>
+
+  <div class="card">
+    <h3>Completed reconciliations <span style="font-size:10px;color:var(--mut);font-weight:700">VERIFY RE-CHECKS EACH SNAPSHOT AGAINST THE INDEPENDENT AUDIT LOG</span></h3>
+    <div id="glx-bank-reconciliations"><div class="note">Loading reconciliations&hellip;</div></div>
+  </div>
+
+</div>

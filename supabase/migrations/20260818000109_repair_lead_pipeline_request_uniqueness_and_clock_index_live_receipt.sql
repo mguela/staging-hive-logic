@@ -1,0 +1,6 @@
+-- Live receipt only: Supabase recorded the production application under
+-- 20260818000109. The actual replay-safe repair remains in
+-- 20260818150000_repair_lead_pipeline_request_uniqueness_and_clock_index.sql
+-- so clean local resets run it after its 20260818120000/140000 dependencies.
+-- Do not move that implementation earlier; lead_pipeline.request_id does not
+-- exist before those migrations on a fresh database.

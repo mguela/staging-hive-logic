@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HiveLogic — Card Character Upgrade</title>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700;800&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#484f64; --ink-strong:#333a4e;
+    --canvas:#f0f1f6; --card:#fff; --line:#dadde8;
+    --rail:#161e2e;
+    --gold-deep:#59718a; --gold-bg:#e9eff4;
+    --green:#1B7A50; --green-bg:#e6f2ec;
+    --red:#c65b4e; --red-bg:#f9ebe8;
+    --amber:#b07a1f; --amber-bg:#fdf3df;
+    --purple:#6A3FB5; --purple-bg:#f0eafd;
+    --mut:#8b92a6;
+    --mono:'JetBrains Mono',monospace;
+    --sans:'Montserrat',sans-serif;
+    --orange-grad:linear-gradient(135deg,#FFC94B 0%,#FF9D3C 60%,#F5793B 100%);
+    --shadow:inset 0 1px 0 rgba(255,255,255,.85), 0 10px 18px rgba(53,76,89,.13), 0 3px 6px rgba(53,76,89,.10);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:var(--sans);background:var(--canvas);color:var(--ink);padding:22px 14px;display:flex;justify-content:center}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:22px;width:100%;max-width:820px}
+
+  /* ============ THE NEW CARD SYSTEM ============ */
+  .card{
+    position:relative;
+    background:var(--card);
+    border:1.5px solid var(--line);
+    border-radius:14px;
+    box-shadow:var(--shadow);
+    padding:24px 18px 16px;
+    transition:transform .18s, box-shadow .18s, border-color .18s;
+  }
+  .card:hover{transform:translateY(-3px);border-color:var(--ac);box-shadow:inset 0 1px 0 rgba(255,255,255,.85),0 16px 26px rgba(53,76,89,.18),0 4px 8px rgba(53,76,89,.12)}
+
+  /* SIGNATURE: title chip notched into the card's top border (fieldset style) */
+  .title{
+    position:absolute;top:-11px;left:14px;
+    display:flex;align-items:center;gap:6px;
+    background:var(--card);
+    border:1.5px solid var(--ac);
+    border-radius:99px;
+    padding:3px 12px 3px 9px;
+    font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:1.4px;
+    color:var(--ac);
+    box-shadow:0 2px 5px rgba(53,76,89,.10);
+  }
+  .title .hex{font-size:8px}
+
+  /* hex watermark, bottom-right corner */
+  .card::after{
+    content:"⬡";
+    position:absolute;right:12px;bottom:6px;
+    font-size:26px;color:var(--ac);opacity:.08;pointer-events:none;
+  }
+
+  /* category accents */
+  .money{--ac:var(--green)}
+  .ops{--ac:var(--gold-deep)}
+  .alert{--ac:var(--red)}
+  .watch{--ac:var(--purple)}
+  .today{--ac:#e08a2e}
+
+  /* card innards */
+  .big{font-size:30px;font-weight:800;color:var(--ink-strong);line-height:1}
+  .sub{font-size:11px;color:var(--mut);margin-top:6px;line-height:1.5}
+  .sub b{color:var(--ink)}
+  .live{display:inline-flex;align-items:center;gap:4px;font-family:var(--mono);font-size:7.5px;letter-spacing:1px;color:var(--green);background:var(--green-bg);border-radius:99px;padding:2px 8px;margin-left:8px;vertical-align:middle}
+  .live .d{width:4px;height:4px;border-radius:50%;background:var(--green)}
+
+  .row{display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--line);font-size:11.5px}
+  .row:last-child{border-bottom:none}
+  .row .dot{width:6px;height:6px;border-radius:50%;flex:none}
+  .row .n{margin-left:auto;font-family:var(--mono);font-size:9px;color:var(--mut)}
+
+  .decide{display:flex;align-items:center;gap:8px;background:var(--red-bg);border-left:3px solid var(--red);border-radius:8px;padding:8px 10px;font-size:11px;font-weight:600;margin-top:4px}
+  .decide .btn{margin-left:auto;font-family:var(--mono);font-size:8px;letter-spacing:1px;color:#fff;background:var(--red);border-radius:99px;padding:3px 9px;flex:none}
+  .decide.am{background:var(--amber-bg);border-color:var(--amber)}
+  .decide.am .btn{background:var(--amber)}
+
+  .foot{font-family:var(--mono);font-size:7.5px;letter-spacing:.8px;color:var(--mut);margin-top:12px}
+  .lbl{font-size:12px;font-weight:700;color:var(--ink-strong)}
+</style>
+</head>
+<body>
+<div class="grid">
+
+  <!-- MONEY card -->
+  <div class="card money">
+    <div class="title"><span class="hex">⬡</span>AVAILABLE CASH</div>
+    <div class="big">$95K<span class="live"><span class="d"></span>LIVE</span></div>
+    <div class="sub">True cash — bank minus deposit liabilities · <b>QuickBooks</b></div>
+    <div class="foot">SRC: QUICKBOOKS · SYNCED 6:53 AM</div>
+  </div>
+
+  <!-- MONEY card 2 -->
+  <div class="card money">
+    <div class="title"><span class="hex">⬡</span>OWED TO YOU</div>
+    <div class="big">$321K<span class="live"><span class="d"></span>LIVE</span></div>
+    <div class="sub"><b>36</b> invoices overdue · <b>44</b> open invoices · Jobber</div>
+    <div class="foot">SRC: JOBBER · SYNCED 6:53 AM</div>
+  </div>
+
+  <!-- ALERT card -->
+  <div class="card alert" style="grid-column:1/-1">
+    <div class="title"><span class="hex">⬡</span>TODAY'S DECISIONS · 6 NEED YOU</div>
+    <div class="decide">🔴 ~2.56 weeks of cash runway at current run-rate<span class="btn">DECIDE</span></div>
+    <div class="decide am">🟡 34 invoices past due — $60,157 — chase or write off?<span class="btn">DECIDE</span></div>
+    <div class="foot">EST. COMPLETION: 20 MIN · REINA'S BRIEF</div>
+  </div>
+
+  <!-- WATCHING card -->
+  <div class="card watch">
+    <div class="title"><span class="hex">⬡</span>WATCHING</div>
+    <div class="row"><span class="dot" style="background:var(--red)"></span>No-margin fade flagged<span class="n">6/37</span></div>
+    <div class="row"><span class="dot" style="background:var(--amber)"></span>11 jobs unscheduled<span class="n">30d</span></div>
+    <div class="row"><span class="dot" style="background:var(--green)"></span>Crew load next 7 days<span class="n">26 visits</span></div>
+    <div class="foot">RULES →</div>
+  </div>
+
+  <!-- OPS card -->
+  <div class="card ops">
+    <div class="title"><span class="hex">⬡</span>TODAY'S SCHEDULE</div>
+    <div class="lbl">0 visits</div>
+    <div class="sub">Nothing on the board. Next: <b>Monday, Aug 3</b></div>
+    <div class="foot">SRC: JOBBER · FULL SCHEDULE →</div>
+  </div>
+
+</div>
+</body>
+</html>

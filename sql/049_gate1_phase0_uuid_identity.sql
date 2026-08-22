@@ -1,0 +1,15 @@
+create table if not exists public.external_refs (id uuid primary key default gen_random_uuid(), entity_type text not null, entity_id uuid not null, system text not null default 'jobber', external_id text not null, created_at timestamptz not null default now(), unique (system, entity_type, external_id));
+alter table public.clients add column if not exists uuid_id uuid default gen_random_uuid();
+alter table public.jobs add column if not exists uuid_id uuid default gen_random_uuid();
+alter table public.invoices add column if not exists uuid_id uuid default gen_random_uuid();
+update public.clients set uuid_id = gen_random_uuid() where uuid_id is null;
+update public.jobs set uuid_id = gen_random_uuid() where uuid_id is null;
+update public.invoices set uuid_id = gen_random_uuid() where uuid_id is null;
+create unique index if not exists ux_clients_uuid on public.clients(uuid_id);
+create unique index if not exists ux_jobs_uuid on public.jobs(uuid_id);
+create unique index if not exists ux_invoices_uuid on public.invoices(uuid_id);
+insert into public.external_refs (entity_type, entity_id, system, external_id) select 'client', uuid_id, 'jobber', jobber_id from public.clients where jobber_id is not null on conflict (system, entity_type, external_id) do nothing;
+insert into public.external_refs (entity_type, entity_id, system, external_id) select 'job', uuid_id, 'jobber', jobber_id from public.jobs where jobber_id is not null on conflict (system, entity_type, external_id) do nothing;
+insert into public.external_refs (entity_type, entity_id, system, external_id) select 'invoice', uuid_id, 'jobber', jobber_id from public.invoices where jobber_id is not null on conflict (system, entity_type, external_id) do nothing;
+alter table public.external_refs enable row level security;
+revoke all on public.external_refs from anon, authenticated;

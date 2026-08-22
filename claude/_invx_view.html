@@ -1,0 +1,121 @@
+<div id="view-invx" style="display:none">
+  <div style="max-width:1080px;margin:0 auto;padding:18px 16px 60px">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:16px;flex-wrap:wrap">
+      <div>
+        <div style="font-family:var(--sans);font-weight:900;font-size:22px;color:#0f172a">Invoicing</div>
+        <div style="color:var(--mut);font-size:12px;font-weight:700;margin-top:2px">Real invoices, live from Jobber. Create a draft here; payments are recorded in Jobber/QuickBooks.</div>
+      </div>
+      <button class="btn-save" onclick="ivxOpenCreate()">+ New Invoice</button>
+    </div>
+    <div id="ivx-summary" style="margin-bottom:14px"></div>
+    <div id="ivx-create" style="display:none"></div>
+    <div style="display:inline-flex;gap:2px;background:#f1f5f9;border-radius:10px;padding:3px;margin-bottom:14px">
+      <button id="ivx-tab-open" onclick="ivxSetMode('open')" style="border:none;border-radius:8px;padding:7px 14px;font-family:var(--sans);font-weight:800;font-size:12px;cursor:pointer;background:#fff;color:#0f172a">Open &amp; drafts</button>
+      <button id="ivx-tab-all" onclick="ivxSetMode('all')" style="border:none;border-radius:8px;padding:7px 14px;font-family:var(--sans);font-weight:800;font-size:12px;cursor:pointer;background:transparent;color:var(--mut)">All recent</button>
+    </div>
+    <div id="ivx-list"><div style="color:var(--mut);padding:44px;text-align:center;font-weight:700">Loading&hellip;</div></div>
+  </div>
+</div>
+<script>
+var IVX = { invoices: [], clientsById: {}, mode: 'open' };
+function ivxEsc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
+function ivxMoney(n){ n=+n||0; return '$'+n.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+function ivxInp(){ return 'border:1.5px solid var(--line);border-radius:9px;padding:10px 11px;font-family:var(--sans);font-size:12px;font-weight:700;width:100%;outline:none;background:#fff;box-sizing:border-box'; }
+function ivxBadge(s){ var m={paid:['#047857','#d1fae5'],past_due:['#b91c1c','#fee2e2'],awaiting_payment:['#b45309','#fef3c7'],draft:['#475569','#f1f5f9'],bad_debt:['#6b7280','#f3f4f6']}; var c=m[s]||['#475569','#f1f5f9']; return '<span style="background:'+c[1]+';color:'+c[0]+';font-weight:800;font-size:10px;padding:3px 9px;border-radius:99px;text-transform:uppercase;letter-spacing:.04em">'+ivxEsc((s||'draft').replace(/_/g,' '))+'</span>'; }
+function ivxEmpty(t,s){ return '<div style="border:1.5px dashed var(--line);border-radius:14px;padding:44px;text-align:center;background:#fff"><div style="font-family:var(--sans);font-weight:900;font-size:16px;color:#0f172a">'+ivxEsc(t)+'</div><div style="color:var(--mut);font-size:12px;font-weight:700;margin-top:6px">'+ivxEsc(s)+'</div></div>'; }
+function ivxSetMode(m){ IVX.mode=m; var o=document.getElementById('ivx-tab-open'), a=document.getElementById('ivx-tab-all'); if(o){ o.style.background=(m==='open'?'#fff':'transparent'); o.style.color=(m==='open'?'#0f172a':'var(--mut)'); } if(a){ a.style.background=(m==='all'?'#fff':'transparent'); a.style.color=(m==='all'?'#0f172a':'var(--mut)'); } ivxRender(); }
+function ivxLoad(){
+  var el=document.getElementById('ivx-list'); if(!el)return;
+  el.innerHTML='<div style="color:var(--mut);padding:44px;text-align:center;font-weight:700">Loading&hellip;</div>';
+  var base=window.API||'';
+  Promise.all([
+    fetch(base+'/api/invoices?limit=3000').then(function(r){return r.json();}).catch(function(){return {};}),
+    fetch(base+'/api/clients?limit=3000').then(function(r){return r.json();}).catch(function(){return {};})
+  ]).then(function(res){
+    var inv=res[0]||{}, cl=res[1]||{};
+    if(!inv.ok){ el.innerHTML=ivxEmpty('Could not load invoices',inv.error||'Please try again.'); return; }
+    IVX.invoices=inv.invoices||[];
+    IVX.clientsById={}; (cl.clients||[]).forEach(function(c){ IVX.clientsById[c.id]=c; });
+    ivxRender();
+  }).catch(function(e){ el.innerHTML=ivxEmpty('Network error',e.message); });
+}
+function ivxClientName(id){ var c=IVX.clientsById[id]; return c?(c.name||c.companyName||''):''; }
+function ivxIsOpen(inv){ return inv.status==='past_due'||inv.status==='awaiting_payment'||inv.status==='draft'; }
+function ivxRender(){
+  var el=document.getElementById('ivx-list'), sum=document.getElementById('ivx-summary'); if(!el)return;
+  var all=IVX.invoices||[];
+  // AR summary — only genuinely-owed statuses (matches the Command Center tile).
+  var arRows=all.filter(function(i){ return i.status==='past_due'||i.status==='awaiting_payment'; });
+  var ar=arRows.reduce(function(s,i){ return s+(+i.balance||0); },0);
+  var pastDue=all.filter(function(i){ return i.status==='past_due'; }).length;
+  var drafts=all.filter(function(i){ return i.status==='draft'; }).length;
+  if(sum){ sum.innerHTML='<div style="display:flex;gap:10px;flex-wrap:wrap">'
+    +'<div style="flex:1;min-width:160px;border:1.5px solid var(--line);border-radius:13px;padding:13px 15px;background:#fff"><div style="color:var(--mut);font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.05em">Owed to you</div><div style="font-family:var(--sans);font-weight:900;font-size:22px;color:#0f172a;margin-top:3px">'+ivxMoney(ar)+'</div><div style="color:var(--mut);font-size:11px;font-weight:700">'+arRows.length+' open &middot; '+pastDue+' past due</div></div>'
+    +'<div style="flex:1;min-width:160px;border:1.5px solid var(--line);border-radius:13px;padding:13px 15px;background:#fff"><div style="color:var(--mut);font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.05em">Drafts</div><div style="font-family:var(--sans);font-weight:900;font-size:22px;color:#0f172a;margin-top:3px">'+drafts+'</div><div style="color:var(--mut);font-size:11px;font-weight:700">not sent yet</div></div>'
+    +'</div>'; }
+  var rows=all.slice();
+  if(IVX.mode==='open'){ rows=rows.filter(ivxIsOpen); }
+  var order={past_due:0,awaiting_payment:1,draft:2,awaiting:1};
+  rows.sort(function(a,b){ 
+    if(IVX.mode==='all'){ return String(b.issuedDate||'').localeCompare(String(a.issuedDate||'')); }
+    var oa=(order[a.status]!=null?order[a.status]:9), ob=(order[b.status]!=null?order[b.status]:9); 
+    if(oa!==ob)return oa-ob; 
+    return String(b.issuedDate||'').localeCompare(String(a.issuedDate||'')); 
+  });
+  var capped=false;
+  if(IVX.mode==='all'&&rows.length>150){ rows=rows.slice(0,150); capped=true; }
+  if(!rows.length){ el.innerHTML=ivxEmpty(IVX.mode==='open'?'No open invoices':'No invoices', IVX.mode==='open'?'Nothing is awaiting payment right now.':'Nothing to show.'); return; }
+  var html='<div style="display:flex;flex-direction:column;gap:10px">';
+  rows.forEach(function(i){ html+=ivxCard(i); });
+  html+='</div>';
+  if(capped) html+='<div style="color:var(--mut);font-size:11px;font-weight:700;text-align:center;padding:14px">Showing the 150 most recent. Use search in Jobber for older invoices.</div>';
+  el.innerHTML=html;
+}
+function ivxCard(i){
+  var name=ivxClientName(i.clientId);
+  var right='';
+  if(i.status==='paid'){ right='<div style="color:#047857;font-weight:800;font-size:12px">Paid</div>'; }
+  else if(i.status==='bad_debt'){ right='<div style="color:#6b7280;font-weight:800;font-size:12px">Written off</div>'; }
+  else { right='<div style="color:var(--mut);font-size:11px;font-weight:700;margin-top:2px">Balance '+ivxMoney(i.balance)+'</div>'; }
+  var due=i.dueDate?('<div style="color:'+(i.status==='past_due'?'#b91c1c':'var(--mut)')+';font-size:11px;font-weight:700;margin-top:4px">Due '+ivxEsc(i.dueDate)+'</div>'):'';
+  var jobber=i.jobberUrl?('<a href="'+ivxEsc(i.jobberUrl)+'" target="_blank" rel="noopener" style="text-decoration:none"><button style="border:none;border-radius:9px;padding:8px 13px;font-family:var(--sans);font-weight:800;font-size:12px;cursor:pointer;background:#eef2ff;color:#4338ca">Open in Jobber &#8599;</button></a>'):'';
+  return '<div style="border:1.5px solid var(--line);border-radius:14px;padding:15px 16px;background:#fff">'
+    +'<div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start">'
+    +'<div style="min-width:0"><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span style="font-family:var(--sans);font-weight:900;font-size:14px;color:#0f172a">'+ivxEsc(i.invoiceNumber?('#'+i.invoiceNumber):'Invoice')+'</span>'+ivxBadge(i.status)+'</div>'
+    +'<div style="color:#0f172a;font-size:13px;font-weight:700;margin-top:7px">'+ivxEsc(i.subject||name||'Invoice')+'</div>'
+    +(name?'<div style="color:var(--mut);font-size:11px;font-weight:700;margin-top:4px">'+ivxEsc(name)+'</div>':'')+'</div>'
+    +'<div style="text-align:right;flex-shrink:0"><div style="font-family:var(--sans);font-weight:900;font-size:18px;color:#0f172a">'+ivxMoney(i.total)+'</div>'+right+due+'</div></div>'
+    +(jobber?'<div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">'+jobber+'</div>':'')
+    +'</div>';
+}
+function ivxOpenCreate(){
+  var box=document.getElementById('ivx-create'); if(!box)return;
+  var opts='';
+  var list=Object.keys(IVX.clientsById).map(function(k){return IVX.clientsById[k];}).filter(function(c){return c&&!c.isArchived&&!c.isLead;}).sort(function(a,b){return String(a.name||'').localeCompare(String(b.name||''));});
+  list.slice(0,2000).forEach(function(c){ opts+='<option value="'+ivxEsc(c.name)+'"></option>'; });
+  box.innerHTML='<div style="border:1.5px solid var(--line);border-radius:14px;padding:16px;background:#fbfcfe;margin-bottom:14px">'
+    +'<div style="font-family:var(--sans);font-weight:900;font-size:15px;color:#0f172a;margin-bottom:12px">New draft invoice</div>'
+    +'<div style="display:flex;flex-direction:column;gap:10px">'
+    +'<label style="font-size:11px;font-weight:800;color:var(--mut);display:block">Client (optional)<input id="ivx-client" list="ivx-clientlist" placeholder="Start typing a client name" style="'+ivxInp()+';margin-top:5px"><datalist id="ivx-clientlist">'+opts+'</datalist></label>'
+    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><label style="font-size:11px;font-weight:800;color:var(--mut);display:block">Amount<input id="ivx-amt" type="number" min="0" step="0.01" placeholder="0.00" style="'+ivxInp()+';margin-top:5px"></label><label style="font-size:11px;font-weight:800;color:var(--mut);display:block">Due date<input id="ivx-due" type="date" style="'+ivxInp()+';margin-top:5px"></label></div>'
+    +'</div>'
+    +'<div style="color:var(--mut);font-size:11px;font-weight:700;margin-top:10px">Saved as a draft in HiveLogic &mdash; not sent to the client and not pushed to Jobber/QuickBooks.</div>'
+    +'<div style="display:flex;gap:8px;margin-top:12px"><button class="btn-save" onclick="ivxSubmitCreate()">Save draft</button><button class="btn-ghost" onclick="document.getElementById(\'ivx-create\').style.display=\'none\'">Cancel</button></div>'
+    +'</div>';
+  box.style.display='block';
+  box.scrollIntoView({behavior:'smooth',block:'nearest'});
+}
+function ivxSubmitCreate(){
+  var amt=parseFloat((document.getElementById('ivx-amt').value||''));
+  if(!(amt>0)){ chirpToast('&#9888; Enter a dollar amount'); return; }
+  var typed=(document.getElementById('ivx-client').value||'').trim();
+  var clientId=null;
+  if(typed){ var hit=Object.keys(IVX.clientsById).map(function(k){return IVX.clientsById[k];}).filter(function(c){return c&&String(c.name||'').toLowerCase()===typed.toLowerCase();})[0]; if(hit)clientId=hit.id; }
+  var due=document.getElementById('ivx-due').value||null;
+  var h={'Content-Type':'application/json'}; var t=hlTokenSync(); if(t)h['Authorization']='Bearer '+t;
+  fetch('/api/track1?resource=create_invoice',{method:'POST',headers:h,body:JSON.stringify({amount:amt,clientId:clientId,dueDate:due})}).then(function(r){return r.json();}).then(function(d){
+    if(d&&d.ok){ chirpToast('&#10003; Draft invoice saved &mdash; not sent, not in Jobber/QBO'); document.getElementById('ivx-create').style.display='none'; ivxLoad(); }
+    else chirpToast('&#9888; '+((d&&d.error)||'Could not save the draft'));
+  }).catch(function(e){ chirpToast('&#9888; '+e.message); });
+}
+</script>

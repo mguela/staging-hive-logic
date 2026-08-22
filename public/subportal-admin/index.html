@@ -1,0 +1,581 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HiveLogic — Sub Portal (Staff)</title>
+<style>
+  :root{
+    --bg:#0e1320; --card:#171f30; --ink:#c9d3e4; --ink2:#9cabc6; --ink3:#6f7d9a;
+    --brand:#9db8d4; --brand-dark:#8fa9c4; --brand-bg:#223049; --line:#26304a;
+    --good:#58c68f; --good-deep:#1B7A50; --good-bg:#1b3129;
+    --warn:#d7a94e; --warn-bg:#37301b;
+    --bad:#e08a7e; --bad-deep:#c65b4e; --bad-bg:#3a2521;
+    --radius:16px;
+    --shadow:0 10px 30px rgba(22,30,46,.35);
+    --shadow-deep:0 24px 70px rgba(22,30,46,.45);
+  }
+  *{box-sizing:border-box; margin:0; padding:0; font-family:'Segoe UI',system-ui,-apple-system,sans-serif;}
+  html,body{background:var(--bg); color:var(--ink); min-height:100vh;}
+  .wrap{max-width:1100px; margin:0 auto; padding:24px 20px 80px;}
+  h1{font-size:22px; margin-bottom:4px;}
+  .sub{color:var(--ink3); font-size:13.5px; margin-bottom:22px;}
+  .card{background:var(--card); border:1px solid var(--line); border-radius:var(--radius); padding:18px; margin-bottom:14px; box-shadow:var(--shadow);}
+  .hero{border:1.5px solid var(--brand-dark); background:linear-gradient(180deg,#223049 0%,#171f30 100%); box-shadow:var(--shadow-deep);}
+  input,select,textarea{width:100%; padding:12px; font-size:15px; border:1.5px solid var(--line); border-radius:12px; background:#0e1320; color:var(--ink); font-family:inherit;}
+  textarea{resize:vertical; min-height:70px;}
+  input::placeholder,textarea::placeholder{color:var(--ink3);}
+  input:focus,select:focus,textarea:focus{outline:none; border-color:var(--brand-dark); box-shadow:0 0 0 3px rgba(143,169,196,.15);}
+  label{font-size:12.5px; font-weight:700; display:block; margin:0 2px 6px; color:var(--ink2);}
+  button{cursor:pointer; font-family:inherit;}
+  .bigbtn{background:var(--brand); color:#0e1320; font-size:14.5px; font-weight:700; padding:11px 18px; border:none; border-radius:12px; box-shadow:var(--shadow);}
+  .bigbtn[disabled]{opacity:.5; pointer-events:none;}
+  .ghostbtn{background:var(--card); color:var(--ink); border:1.5px solid var(--line); box-shadow:none; font-size:13.5px; font-weight:700; padding:9px 14px; border-radius:10px;}
+  .smbtn{font-size:12.5px; font-weight:700; padding:8px 12px; border-radius:9px; border:1.5px solid var(--line); background:var(--card); color:var(--ink);}
+  .smbtn.good{background:var(--good-deep); border:none; color:#eaf7f0;}
+  .smbtn.bad{background:var(--card); color:var(--bad); border-color:var(--bad-deep);}
+  .note{font-size:12.5px; color:var(--ink3); margin-top:8px;}
+  .okmsg{background:var(--good-bg); color:var(--good); font-weight:700; padding:12px; border-radius:12px; margin:10px 0;}
+  .errmsg{background:var(--bad-bg); color:var(--bad); font-weight:700; padding:12px; border-radius:12px; margin:10px 0;}
+  .pill{font-size:11px; font-weight:700; padding:3px 10px; border-radius:99px; white-space:nowrap; display:inline-block;}
+  .pill.g{background:var(--good-bg); color:var(--good);}
+  .pill.w{background:var(--warn-bg); color:var(--warn);}
+  .pill.b{background:var(--bad-bg); color:var(--bad);}
+  .pill.n{background:var(--brand-bg); color:var(--brand);}
+  .row{display:flex; justify-content:space-between; align-items:center; gap:10px; padding:12px 6px; border-bottom:1px solid var(--line);}
+  .row:last-child{border-bottom:none;}
+  .row .l{flex:1; min-width:0;}
+  .row .l b{display:block; font-size:14.5px;}
+  .row .l span{color:var(--ink3); font-size:12px;}
+  .sublist{max-height:520px; overflow-y:auto;}
+  .subrow{display:flex; justify-content:space-between; align-items:center; gap:10px; padding:13px 8px; border-bottom:1px solid var(--line); cursor:pointer; border-radius:8px;}
+  .subrow:hover{background:var(--brand-bg);}
+  .subrow:last-child{border-bottom:none;}
+  .subrow b{display:block; font-size:14.5px;}
+  .subrow span{color:var(--ink3); font-size:12px;}
+  .badges{display:flex; gap:6px; align-items:center;}
+  .topbar{display:flex; gap:12px; align-items:flex-end; flex-wrap:wrap; margin-bottom:4px;}
+  .topbar > div{flex:1; min-width:180px;}
+  .spinner{width:26px; height:26px; border-radius:50%; border:3px solid var(--line); border-top-color:var(--brand); animation:spin .8s linear infinite; margin:20px auto;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+  a{color:var(--brand);}
+  .tabs{display:flex; gap:6px; flex-wrap:wrap; margin-bottom:14px;}
+  .tab{padding:9px 14px; border-radius:10px; font-size:13px; font-weight:700; background:var(--card); border:1.5px solid var(--line); color:var(--ink3);}
+  .tab.active{background:var(--brand-bg); border-color:var(--brand-dark); color:var(--brand);}
+  .stack{display:flex; flex-direction:column; gap:10px;}
+  .kv{display:grid; grid-template-columns:120px 1fr; gap:4px 10px; font-size:13.5px;}
+  .kv b{color:var(--ink2); font-weight:700;}
+  .thread{max-height:360px; overflow-y:auto; display:flex; flex-direction:column; gap:8px; padding:4px;}
+  .msg{max-width:75%; padding:10px 13px; border-radius:14px; font-size:13.5px;}
+  .msg.staff{align-self:flex-end; background:var(--brand-bg); color:var(--ink);}
+  .msg.sub{align-self:flex-start; background:var(--card); border:1px solid var(--line);}
+  .msg .t{font-size:10.5px; color:var(--ink3); margin-top:4px;}
+  .inlineform{display:grid; gap:10px; grid-template-columns:1fr 1fr; margin-bottom:6px;}
+  .inlineform .full{grid-column:1 / -1;}
+  .copybox{display:flex; gap:8px; align-items:center; background:#0b0f1a; border:1px solid var(--line); border-radius:10px; padding:10px 12px; font-size:12.5px; word-break:break-all;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>🛠️ Sub Portal — Staff Side</h1>
+  <div class="sub">Invite subs, send RFQs, review bids, answer questions, propose schedule, review invoices, and message subs. Everything here writes to the same live sub_* tables the real <a href="/subportal/" target="_blank">/subportal/</a> app reads from.</div>
+  <div id="content"><div class="spinner"></div></div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+// Same Supabase project + anon key as the main HiveLogic app and
+// clientportal-admin — served from the same domain, so the staff member's
+// existing HiveLogic login session is picked up automatically.
+const HL_SUPABASE_URL = 'https://sqhusuuhlmcmkeowdrga.supabase.co';
+const HL_SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNxaHVzdXVobG1jbWtlb3dkcmdhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQxMjkyMjAsImV4cCI6MjA5OTcwNTIyMH0.PszXL0D8KJC0MEYgbTduSPEcPn2g1pGx0IMK3YGzBcI';
+const sb = window.supabase.createClient(HL_SUPABASE_URL, HL_SUPABASE_ANON_KEY, { auth: { persistSession: true, autoRefreshToken: true } });
+
+const content = document.getElementById('content');
+let TOKEN = null;
+let SUBS = [];
+let CURRENT_SUB_ID = null;
+let CURRENT_DETAIL = null;
+let CURRENT_TAB = 'overview';
+
+function esc(s) { const d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
+function dateShort(d) { return d ? new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : ''; }
+function dtShort(d) { return d ? new Date(d).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : ''; }
+function money(n) { return (n === null || n === undefined || n === '') ? '—' : ('$' + Number(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })); }
+
+async function api(action, opts = {}) {
+  const headers = { 'Content-Type': 'application/json', Authorization: 'Bearer ' + TOKEN };
+  const qs = opts.query ? '&' + new URLSearchParams(opts.query).toString() : '';
+  const res = await fetch(`/api/subportal?action=${action}${qs}`, {
+    method: opts.method || 'GET',
+    headers,
+    body: opts.body ? JSON.stringify(opts.body) : undefined,
+  });
+  const json = await res.json().catch(() => ({ ok: false, error: 'Something went wrong.' }));
+  if (!res.ok || json.ok === false) throw new Error(json.error || 'Something went wrong.');
+  return json;
+}
+
+async function boot() {
+  const { data: { session } } = await sb.auth.getSession();
+  if (!session) {
+    content.innerHTML = `
+      <div class="card hero" style="max-width:420px;">
+        <b style="display:block; margin-bottom:6px;">Staff sign-in required</b>
+        <div class="note" style="margin:0 0 14px;">This page uses your regular HiveLogic login. Sign in below, or <a href="/">open the main app</a>, sign in there, and come back.</div>
+        <label>Email</label>
+        <input id="li-email" type="email" autocomplete="username">
+        <div style="height:10px;"></div>
+        <label>Password</label>
+        <input id="li-pass" type="password" autocomplete="current-password">
+        <div style="height:14px;"></div>
+        <button class="bigbtn" id="li-btn" style="width:100%;">Sign in</button>
+        <div id="li-msg"></div>
+      </div>`;
+    document.getElementById('li-btn').onclick = async () => {
+      const msg = document.getElementById('li-msg');
+      msg.innerHTML = '';
+      const { error } = await sb.auth.signInWithPassword({
+        email: document.getElementById('li-email').value.trim(),
+        password: document.getElementById('li-pass').value,
+      });
+      if (error) { msg.innerHTML = `<div class="errmsg">${esc(error.message)}</div>`; return; }
+      boot();
+    };
+    return;
+  }
+  TOKEN = session.access_token;
+  renderSubsList();
+}
+
+// ---------------------------------------------------------------- SUBS LIST
+async function renderSubsList(opts = {}) {
+  content.innerHTML = `<div class="spinner"></div>`;
+  let subsRes, docsRes;
+  try {
+    [subsRes, docsRes] = await Promise.all([
+      api('subs_list', { query: opts.q ? { q: opts.q } : {} }),
+      api('docs_expiring'),
+    ]);
+    SUBS = subsRes.subs;
+  } catch (e) {
+    content.innerHTML = `<div class="errmsg">${esc(e.message)}</div>`;
+    return;
+  }
+
+  const expiring = docsRes.documents.slice(0, 5);
+
+  content.innerHTML = `
+    ${expiring.length ? `
+    <div class="card">
+      <b style="font-size:14.5px;">⚠️ Documents needing attention (${docsRes.documents.length})</b>
+      <div class="stack" style="margin-top:10px;">
+        ${expiring.map(d => `
+          <div class="row">
+            <div class="l"><b>${esc(d.sub ? d.sub.company_name : 'Unknown sub')}</b><span>${esc(d.doc_type)} · ${d.expires_at ? 'expires ' + dateShort(d.expires_at) : 'no expiry set'}</span></div>
+            <span class="pill ${d.status === 'expired' ? 'b' : 'w'}">${esc(d.status)}</span>
+          </div>`).join('')}
+      </div>
+    </div>` : ''}
+
+    <div class="card">
+      <b style="font-size:14.5px;">➕ Invite a sub</b>
+      <div class="inlineform" style="margin-top:10px;">
+        <div><label>Company name</label><input id="inv-company" placeholder="Acme Plumbing"></div>
+        <div><label>Contact name</label><input id="inv-contact" placeholder="Jane Doe"></div>
+        <div><label>Phone</label><input id="inv-phone" placeholder="555-0100"></div>
+        <div><label>Email</label><input id="inv-email" type="email" placeholder="jane@acme.com"></div>
+      </div>
+      <button class="bigbtn" id="inv-btn">Send invite link</button>
+      <div id="inv-out"></div>
+    </div>
+
+    <div class="card">
+      <div class="topbar">
+        <div><label>Search subs</label><input id="sub-search" placeholder="Company or contact name…" value="${esc(opts.q || '')}"></div>
+      </div>
+      <div class="sublist" id="sub-list"></div>
+    </div>`;
+
+  document.getElementById('inv-btn').onclick = async () => {
+    const btn = document.getElementById('inv-btn');
+    const out = document.getElementById('inv-out');
+    const company_name = document.getElementById('inv-company').value.trim();
+    if (!company_name) { out.innerHTML = `<div class="errmsg">Company name is required.</div>`; return; }
+    btn.disabled = true; btn.textContent = 'Sending…';
+    try {
+      const r = await api('invite', { method: 'POST', body: {
+        company_name,
+        contact_name: document.getElementById('inv-contact').value.trim() || undefined,
+        phone: document.getElementById('inv-phone').value.trim() || undefined,
+        email: document.getElementById('inv-email').value.trim() || undefined,
+      }});
+      out.innerHTML = `
+        <div class="okmsg">Invite created for ${esc(r.sub.company_name)}.</div>
+        <div class="copybox"><span style="flex:1;">${esc(r.inviteUrl)}</span><button class="smbtn" onclick="navigator.clipboard.writeText('${r.inviteUrl}').then(()=>this.textContent='Copied!')">Copy</button></div>
+        <div class="note">${esc(r.note)}</div>`;
+      // Don't call renderSubsList() here — a full redraw would wipe the
+      // invite link above before staff can copy it. Just fold the new sub
+      // into the in-memory list and redraw the list rows underneath.
+      SUBS = [{ ...r.sub, openRfqs: 0, docsExpiring: 0 }, ...SUBS.filter((s) => s.id !== r.sub.id)];
+      drawSubList(SUBS);
+    } catch (e) {
+      out.innerHTML = `<div class="errmsg">${esc(e.message)}</div>`;
+    } finally {
+      btn.disabled = false; btn.textContent = 'Send invite link';
+    }
+  };
+
+  drawSubList(SUBS);
+
+  document.getElementById('sub-search').oninput = (e) => {
+    clearTimeout(window.__subSearchT);
+    const q = e.target.value;
+    window.__subSearchT = setTimeout(() => renderSubsList({ q }), 300);
+  };
+}
+
+function drawSubList(subs) {
+  const list = document.getElementById('sub-list');
+  if (!list) return;
+  const statusPill = (s) => {
+    const map = { active: 'g', invited: 'n', onboarding: 'w', suspended: 'b' };
+    return `<span class="pill ${map[s] || 'n'}">${esc(s)}</span>`;
+  };
+  list.innerHTML = subs.length ? subs.map(s => `
+    <div class="subrow" onclick="openSub('${s.id}')">
+      <div><b>${esc(s.company_name)}</b><span>${esc(s.contact_name || 'no contact name yet')} · ${esc(s.phone || s.email || 'no contact info yet')}</span></div>
+      <div class="badges">
+        ${s.openRfqs ? `<span class="pill w">${s.openRfqs} open RFQ${s.openRfqs === 1 ? '' : 's'}</span>` : ''}
+        ${s.docsExpiring ? `<span class="pill b">${s.docsExpiring} doc${s.docsExpiring === 1 ? '' : 's'}</span>` : ''}
+        ${statusPill(s.status)}
+      </div>
+    </div>`).join('') : `<div class="note">No subs match. Invite one above to get started.</div>`;
+}
+
+// ---------------------------------------------------------------- SUB DETAIL
+async function openSub(subId) {
+  CURRENT_SUB_ID = subId;
+  CURRENT_TAB = 'overview';
+  await loadAndRenderDetail();
+}
+
+async function loadAndRenderDetail() {
+  content.innerHTML = `<div class="spinner"></div>`;
+  try {
+    CURRENT_DETAIL = await api('sub_detail', { query: { sub_id: CURRENT_SUB_ID } });
+  } catch (e) {
+    content.innerHTML = `<div class="errmsg">${esc(e.message)}</div><button class="ghostbtn" onclick="renderSubsList()">← All subs</button>`;
+    return;
+  }
+  renderDetail();
+}
+
+function renderDetail() {
+  const d = CURRENT_DETAIL;
+  const tabs = [
+    ['overview', 'Overview'],
+    ['rfqs', `RFQs (${d.rfqs.length})`],
+    ['rfis', `RFIs (${d.rfis.filter(r => r.status === 'open').length} open)`],
+    ['schedule', `Schedule (${d.schedule.length})`],
+    ['invoices', `Invoices (${d.invoices.length})`],
+    ['messages', 'Messages'],
+  ];
+  content.innerHTML = `
+    <button class="ghostbtn" style="margin-bottom:14px;" onclick="renderSubsList()">← All subs</button>
+    <div class="card hero">
+      <b style="font-size:18px;">${esc(d.sub.company_name)}</b>
+      <div class="note" style="margin-top:4px;">${esc(d.sub.contact_name || 'no contact name')} · ${esc(d.sub.phone || '—')} · ${esc(d.sub.email || '—')}</div>
+    </div>
+    <div class="tabs" id="tabs"></div>
+    <div id="tabcontent"></div>`;
+
+  const tabsEl = document.getElementById('tabs');
+  tabsEl.innerHTML = tabs.map(([key, label]) => `<button class="tab ${CURRENT_TAB === key ? 'active' : ''}" data-tab="${key}">${label}</button>`).join('');
+  tabsEl.querySelectorAll('.tab').forEach(btn => {
+    btn.onclick = () => { CURRENT_TAB = btn.dataset.tab; renderDetail(); };
+  });
+
+  const tc = document.getElementById('tabcontent');
+  if (CURRENT_TAB === 'overview') renderOverviewTab(tc, d);
+  else if (CURRENT_TAB === 'rfqs') renderRfqsTab(tc, d);
+  else if (CURRENT_TAB === 'rfis') renderRfisTab(tc, d);
+  else if (CURRENT_TAB === 'schedule') renderScheduleTab(tc, d);
+  else if (CURRENT_TAB === 'invoices') renderInvoicesTab(tc, d);
+  else if (CURRENT_TAB === 'messages') renderMessagesTab(tc, d);
+}
+
+function renderOverviewTab(tc, d) {
+  const s = d.sub;
+  const b = d.banking;
+  tc.innerHTML = `
+    <div class="card">
+      <b style="font-size:14.5px;">Profile</b>
+      <div class="kv" style="margin-top:10px;">
+        <b>Status</b><div>${esc(s.status)}</div>
+        <b>Language</b><div>${s.preferred_language === 'es' ? 'Spanish' : 'English'}</div>
+        <b>License</b><div>${esc(s.license_number || '—')} ${esc(s.license_type ? '(' + s.license_type + ')' : '')}</div>
+        <b>AP contact</b><div>${esc(s.ap_contact_name || '—')} ${esc(s.ap_email ? '· ' + s.ap_email : '')}</div>
+        <b>Accepts CC</b><div>${s.accepts_cc ? 'Yes' : 'No / not set'}</div>
+        <b>Invited</b><div>${dateShort(s.invited_at)}</div>
+        <b>Onboarded</b><div>${s.onboarded_at ? dateShort(s.onboarded_at) : 'not yet — onboards automatically once they add a name + phone'}</div>
+      </div>
+    </div>
+    <div class="card">
+      <b style="font-size:14.5px;">Banking</b>
+      <div class="note" style="margin-top:6px;">${b ? `${esc(b.provider || 'no provider yet')} · ${esc(b.masked_account || 'no account on file')} · ACH ${b.accepts_ach ? 'accepted' : 'not accepted'}` : 'Not provided yet. Never a raw account number — only a masked value the sub sets themselves after a fresh re-verification.'}</div>
+    </div>
+    <div class="card">
+      <b style="font-size:14.5px;">Documents (${d.documents.length})</b>
+      <div class="stack" style="margin-top:10px;">
+        ${d.documents.length ? d.documents.map(doc => `
+          <div class="row">
+            <div class="l"><b>${esc(doc.doc_type.toUpperCase())}</b><span>${doc.expires_at ? 'expires ' + dateShort(doc.expires_at) : 'no expiry set'} · uploaded ${dateShort(doc.uploaded_at)}</span></div>
+            <span class="pill ${doc.status === 'current' ? 'g' : (doc.status === 'expired' ? 'b' : 'w')}">${esc(doc.status)}</span>
+          </div>`).join('') : `<div class="note">No documents uploaded yet.</div>`}
+      </div>
+    </div>
+    <div class="card">
+      <b style="font-size:14.5px;">Recent activity</b>
+      <div class="stack" style="margin-top:10px;">
+        ${d.auditLog.length ? d.auditLog.map(a => `
+          <div class="row">
+            <div class="l"><b>${esc(a.action.replace(/_/g, ' '))}</b><span>${esc(a.actor)} · ${dtShort(a.created_at)}</span></div>
+          </div>`).join('') : `<div class="note">No activity logged yet.</div>`}
+      </div>
+    </div>`;
+}
+
+function renderRfqsTab(tc, d) {
+  const statusPill = (s) => {
+    const map = { sent: 'n', viewed: 'n', bid_submitted: 'w', awarded: 'g', declined: 'b', expired: 'b' };
+    return `<span class="pill ${map[s] || 'n'}">${esc(s.replace(/_/g, ' '))}</span>`;
+  };
+  tc.innerHTML = `
+    <div class="card">
+      <b style="font-size:14.5px;">Send a new RFQ</b>
+      <div class="inlineform" style="margin-top:10px;">
+        <div class="full"><label>Title</label><input id="rfq-title" placeholder="Rough-in plumbing — 214 Maple St"></div>
+        <div><label>Job # / reference</label><input id="rfq-jobref" placeholder="optional"></div>
+        <div><label>Bid due date</label><input id="rfq-due" type="date"></div>
+        <div class="full"><label>Scope</label><textarea id="rfq-scope" placeholder="What needs bidding…"></textarea></div>
+      </div>
+      <button class="bigbtn" id="rfq-send">Send RFQ</button>
+      <div id="rfq-out"></div>
+    </div>
+    <div class="card">
+      <b style="font-size:14.5px;">RFQs on this sub</b>
+      <div class="stack" style="margin-top:10px;" id="rfq-list">
+        ${d.rfqs.length ? d.rfqs.map(r => `
+          <div class="row" style="align-items:flex-start;">
+            <div class="l">
+              <b>${esc(r.title)}</b>
+              <span>${r.job_ref ? '#' + esc(r.job_ref) + ' · ' : ''}due ${r.due_date ? dateShort(r.due_date) : 'no date set'}</span>
+              ${r.status === 'bid_submitted' ? `<div class="note" style="margin-top:4px;">Bid: <b style="color:var(--ink);">${money(r.bid_amount)}</b>${r.bid_notes ? ' — ' + esc(r.bid_notes) : ''}</div>` : ''}
+            </div>
+            <div style="display:flex; flex-direction:column; gap:6px; align-items:flex-end;">
+              ${statusPill(r.status)}
+              ${['sent', 'viewed', 'bid_submitted'].includes(r.status) ? `
+                <div style="display:flex; gap:6px;">
+                  <button class="smbtn good" onclick="reviewRfq('${r.id}','awarded')">Award</button>
+                  <button class="smbtn bad" onclick="reviewRfq('${r.id}','declined')">Decline</button>
+                </div>` : ''}
+            </div>
+          </div>`).join('') : `<div class="note">No RFQs sent yet.</div>`}
+      </div>
+    </div>`;
+
+  document.getElementById('rfq-send').onclick = async () => {
+    const btn = document.getElementById('rfq-send');
+    const out = document.getElementById('rfq-out');
+    const title = document.getElementById('rfq-title').value.trim();
+    if (!title) { out.innerHTML = `<div class="errmsg">Title is required.</div>`; return; }
+    btn.disabled = true; btn.textContent = 'Sending…';
+    try {
+      await api('rfq_create', { method: 'POST', body: {
+        sub_id: CURRENT_SUB_ID,
+        title,
+        job_ref: document.getElementById('rfq-jobref').value.trim() || undefined,
+        due_date: document.getElementById('rfq-due').value || undefined,
+        scope: document.getElementById('rfq-scope').value.trim() || undefined,
+      }});
+      await loadAndRenderDetail();
+    } catch (e) {
+      out.innerHTML = `<div class="errmsg">${esc(e.message)}</div>`;
+      btn.disabled = false; btn.textContent = 'Send RFQ';
+    }
+  };
+}
+
+async function reviewRfq(rfqId, decision) {
+  try {
+    await api('rfq_review', { method: 'POST', body: { rfq_id: rfqId, decision } });
+    await loadAndRenderDetail();
+  } catch (e) {
+    alert(e.message);
+  }
+}
+
+function renderRfisTab(tc, d) {
+  tc.innerHTML = `
+    <div class="card">
+      <b style="font-size:14.5px;">Questions from this sub</b>
+      <div class="stack" style="margin-top:10px;">
+        ${d.rfis.length ? d.rfis.map(r => `
+          <div class="row" style="align-items:flex-start; flex-direction:column;">
+            <div style="display:flex; justify-content:space-between; width:100%; align-items:flex-start; gap:10px;">
+              <div class="l"><b>${esc(r.question)}</b><span>${r.job_ref ? '#' + esc(r.job_ref) + ' · ' : ''}asked ${dtShort(r.created_at)}</span></div>
+              <span class="pill ${r.status === 'answered' ? 'g' : 'w'}">${esc(r.status)}</span>
+            </div>
+            ${r.answer ? `<div class="note" style="margin-top:6px;">Answer: ${esc(r.answer)}</div>` : `
+              <div style="width:100%; margin-top:8px; display:flex; gap:8px;">
+                <input id="rfi-ans-${r.id}" placeholder="Type an answer…" style="flex:1;">
+                <button class="smbtn good" onclick="answerRfi('${r.id}')">Send</button>
+              </div>`}
+          </div>`).join('') : `<div class="note">No questions yet.</div>`}
+      </div>
+    </div>`;
+}
+
+async function answerRfi(rfiId) {
+  const input = document.getElementById(`rfi-ans-${rfiId}`);
+  const answer = input.value.trim();
+  if (!answer) return;
+  try {
+    await api('rfi_answer', { method: 'POST', body: { rfi_id: rfiId, answer } });
+    await loadAndRenderDetail();
+  } catch (e) {
+    alert(e.message);
+  }
+}
+
+function renderScheduleTab(tc, d) {
+  const statusPill = (s) => {
+    const map = { proposed: 'w', approved: 'g', change_requested: 'b' };
+    return `<span class="pill ${map[s] || 'n'}">${esc(s.replace(/_/g, ' '))}</span>`;
+  };
+  tc.innerHTML = `
+    <div class="card">
+      <b style="font-size:14.5px;">Propose a schedule item</b>
+      <div class="inlineform" style="margin-top:10px;">
+        <div class="full"><label>Title</label><input id="sch-title" placeholder="Framing inspection"></div>
+        <div><label>Job # / reference</label><input id="sch-jobref" placeholder="optional"></div>
+        <div></div>
+        <div><label>Start</label><input id="sch-start" type="datetime-local"></div>
+        <div><label>End (optional)</label><input id="sch-end" type="datetime-local"></div>
+      </div>
+      <button class="bigbtn" id="sch-send">Propose to sub</button>
+      <div id="sch-out"></div>
+    </div>
+    <div class="card">
+      <b style="font-size:14.5px;">Schedule items</b>
+      <div class="stack" style="margin-top:10px;">
+        ${d.schedule.length ? d.schedule.map(it => `
+          <div class="row" style="align-items:flex-start;">
+            <div class="l">
+              <b>${esc(it.title)}</b>
+              <span>${dtShort(it.start_at)}${it.end_at ? ' – ' + dtShort(it.end_at) : ''}</span>
+              ${it.change_note ? `<div class="note" style="margin-top:4px;">Change requested: ${esc(it.change_note)}</div>` : ''}
+            </div>
+            ${statusPill(it.status)}
+          </div>`).join('') : `<div class="note">No schedule items yet.</div>`}
+      </div>
+    </div>`;
+
+  document.getElementById('sch-send').onclick = async () => {
+    const btn = document.getElementById('sch-send');
+    const out = document.getElementById('sch-out');
+    const title = document.getElementById('sch-title').value.trim();
+    const start_at = document.getElementById('sch-start').value;
+    if (!title || !start_at) { out.innerHTML = `<div class="errmsg">Title and start time are required.</div>`; return; }
+    btn.disabled = true; btn.textContent = 'Sending…';
+    try {
+      await api('schedule_item_create', { method: 'POST', body: {
+        sub_id: CURRENT_SUB_ID,
+        title,
+        job_ref: document.getElementById('sch-jobref').value.trim() || undefined,
+        start_at: new Date(start_at).toISOString(),
+        end_at: document.getElementById('sch-end').value ? new Date(document.getElementById('sch-end').value).toISOString() : undefined,
+      }});
+      await loadAndRenderDetail();
+    } catch (e) {
+      out.innerHTML = `<div class="errmsg">${esc(e.message)}</div>`;
+      btn.disabled = false; btn.textContent = 'Propose to sub';
+    }
+  };
+}
+
+function renderInvoicesTab(tc, d) {
+  const statusPill = (s) => {
+    const map = { submitted: 'w', scheduled: 'n', paid: 'g' };
+    return `<span class="pill ${map[s] || 'n'}">${esc(s)}</span>`;
+  };
+  tc.innerHTML = `
+    <div class="card">
+      <b style="font-size:14.5px;">Invoices</b>
+      <div class="stack" style="margin-top:10px;">
+        ${d.invoices.length ? d.invoices.map(inv => `
+          <div class="row" style="align-items:flex-start;">
+            <div class="l">
+              <b>${money(inv.amount)}${inv.amount_source === 'pending_ocr' ? ' (amount not confirmed yet)' : ''}</b>
+              <span>${inv.job_ref ? '#' + esc(inv.job_ref) + ' · ' : ''}submitted ${dateShort(inv.submitted_at)}${inv.payment_due ? ' · due ' + dateShort(inv.payment_due) : ''}${inv.paid_at ? ' · paid ' + dateShort(inv.paid_at) : ''}</span>
+            </div>
+            <div style="display:flex; flex-direction:column; gap:6px; align-items:flex-end;">
+              ${statusPill(inv.status)}
+              ${inv.status !== 'paid' ? `
+                <div style="display:flex; gap:6px;">
+                  ${inv.status === 'submitted' ? `<button class="smbtn" onclick="updateInvoice('${inv.id}','scheduled')">Schedule</button>` : ''}
+                  <button class="smbtn good" onclick="updateInvoice('${inv.id}','paid')">Mark paid</button>
+                </div>` : ''}
+            </div>
+          </div>`).join('') : `<div class="note">No invoices submitted yet.</div>`}
+      </div>
+    </div>`;
+}
+
+async function updateInvoice(invoiceId, status) {
+  try {
+    await api('invoice_status_update', { method: 'POST', body: { invoice_id: invoiceId, status } });
+    await loadAndRenderDetail();
+  } catch (e) {
+    alert(e.message);
+  }
+}
+
+function renderMessagesTab(tc, d) {
+  tc.innerHTML = `
+    <div class="card">
+      <div class="thread" id="msg-thread">
+        ${d.messages.length ? d.messages.map(m => `
+          <div class="msg ${m.sender}">${esc(m.body)}<div class="t">${dtShort(m.created_at)}</div></div>`).join('') : `<div class="note">No messages yet.</div>`}
+      </div>
+      <div style="display:flex; gap:8px; margin-top:12px;">
+        <input id="msg-input" placeholder="Message this sub…">
+        <button class="bigbtn" id="msg-send" style="flex-shrink:0;">Send</button>
+      </div>
+      <div id="msg-out"></div>
+    </div>`;
+  const thread = document.getElementById('msg-thread');
+  thread.scrollTop = thread.scrollHeight;
+
+  document.getElementById('msg-send').onclick = async () => {
+    const input = document.getElementById('msg-input');
+    const body = input.value.trim();
+    if (!body) return;
+    const btn = document.getElementById('msg-send');
+    btn.disabled = true;
+    try {
+      await api('staff_message_send', { method: 'POST', body: { sub_id: CURRENT_SUB_ID, body } });
+      await loadAndRenderDetail();
+    } catch (e) {
+      document.getElementById('msg-out').innerHTML = `<div class="errmsg">${esc(e.message)}</div>`;
+      btn.disabled = false;
+    }
+  };
+}
+
+boot();
+</script>
+  <script src="/voice-input.js" defer></script>
+</body>
+</html>

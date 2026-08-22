@@ -1,0 +1,1942 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Hive Marketing — Command Center</title>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<style>
+  body.cc-embedded .cc-logo, body.cc-embedded .cc-controlled, body.cc-embedded .cc-legacy-link { display:none !important; }
+  :root{
+    --navy:#161e2e; --navy2:#25304a; --gold:#748a9e; --gold-deep:#59718a;
+    --cream:#f0f1f6; --card:#ffffff; --ink:#484f64; --muted:#5d657b;
+    --green:#1B7A50; --amber:#7e86a0; --border:#dadde8;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;font-family:'Montserrat',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--cream);color:var(--ink);}
+  .cc-shell{display:block;min-height:100vh;}
+  .cc-topbar{position:sticky;top:0;z-index:50;display:flex;align-items:center;gap:16px;background:var(--card);border-bottom:1px solid var(--border);padding:12px 28px;}
+  .cc-logo{display:flex;align-items:center;gap:10px;flex-shrink:0;}
+  .cc-logo .hex{width:32px;height:32px;background:var(--gold);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0;}
+  .cc-logo-text{line-height:1.15;}
+  .cc-logo-text b{display:block;font-size:14px;color:var(--ink);}
+  .cc-logo-text span{display:block;font-size:10.5px;color:var(--muted);font-weight:700;}
+  .cc-controlled{font-size:10.5px;color:var(--muted);flex-shrink:0;}
+  .cc-controlled b{color:var(--ink);}
+  .cc-nav{display:flex;align-items:center;gap:3px;flex-wrap:wrap;background:var(--cream);padding:4px;border-radius:11px;border:1px solid var(--border);flex:1;}
+  .cc-nav a{display:flex;align-items:center;gap:6px;color:var(--muted);text-decoration:none;padding:7px 12px;border-radius:8px;font-size:12.5px;font-weight:600;white-space:nowrap;}
+  .cc-nav a svg{width:14px;height:14px;flex-shrink:0;}
+  .cc-nav a.active{background:var(--card);color:var(--ink);box-shadow:0 1px 2px rgba(20,25,40,.08);}
+  .cc-nav a:hover{color:var(--ink);}
+  .cc-legacy-link{flex-shrink:0;}
+  .cc-legacy-link a{color:var(--muted);font-size:11.5px;text-decoration:none;}
+  .cc-legacy-link a:hover{color:var(--ink);}
+  .cc-main{padding:32px 40px;max-width:1320px;margin:0 auto;}
+  .cc-page-section{margin-bottom:40px;padding-bottom:40px;border-bottom:1px solid var(--border);}
+  .cc-page-section:last-child{border-bottom:none;margin-bottom:0;padding-bottom:0;}
+  @media (max-width:760px){.cc-topbar{flex-wrap:wrap;} .cc-main{padding:20px 16px;}}
+  .cc-h1{font-size:30px;font-weight:800;margin:0 0 6px;color:var(--navy);}
+  .cc-sub{font-size:15px;color:var(--muted);margin:0 0 28px;}
+  .cc-cards-row{display:flex;gap:18px;margin-bottom:24px;}
+  .cc-card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:22px;box-shadow:0 1px 3px rgba(20,20,20,.04);}
+  .cc-stat-card{flex:1;display:flex;align-items:center;gap:16px;}
+  .cc-icon-circle{width:52px;height:52px;border-radius:50%;background:#fdeecb;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+  .cc-icon-circle svg{width:24px;height:24px;color:var(--gold-deep);}
+  .cc-stat-val{font-size:24px;font-weight:800;color:var(--navy);line-height:1.2;}
+  .cc-stat-label{font-size:13px;color:var(--muted);}
+  .cc-home-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:24px;}
+  .cc-home-tile{display:block;background:var(--card);border:1px solid var(--border);border-radius:16px;padding:24px;text-decoration:none;color:inherit;transition:box-shadow .15s, transform .15s;}
+  .cc-home-tile:hover{box-shadow:0 6px 18px rgba(20,20,20,.09);transform:translateY(-1px);}
+  .cc-home-tile-title{font-weight:800;font-size:16.5px;color:var(--navy);margin:12px 0 6px;}
+  .cc-home-tile-sub{font-size:13px;color:var(--muted);line-height:1.4;}
+  @media (max-width:760px){.cc-home-grid{grid-template-columns:1fr;}}
+  .cc-nav-more-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:rgba(255,255,255,.4);padding:16px 12px 6px;}
+  .cc-bar-row{display:flex;align-items:center;gap:12px;margin-bottom:10px;}
+  .cc-bar-label{width:170px;flex-shrink:0;font-size:13px;color:var(--ink);font-weight:600;}
+  .cc-bar-track{flex:1;background:#f1ede2;border-radius:6px;height:14px;overflow:hidden;}
+  .cc-bar-fill{background:var(--gold);height:100%;border-radius:6px;}
+  .cc-bar-value{width:90px;text-align:right;flex-shrink:0;font-size:12.5px;color:var(--muted);}
+  .cc-pill{display:inline-block;font-size:11px;font-weight:700;background:#efeee9;color:var(--muted);border-radius:999px;padding:2px 9px;margin-top:4px;}
+  .cc-list{background:var(--card);border:1px solid var(--border);border-radius:16px;overflow:hidden;margin-bottom:24px;}
+  .cc-list-row{display:flex;align-items:center;gap:14px;padding:16px 20px;border-bottom:1px solid var(--border);}
+  .cc-list-row:last-child{border-bottom:none;}
+  .cc-list-icon{width:38px;height:38px;border-radius:10px;background:#fdeecb;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+  .cc-list-icon svg{width:19px;height:19px;color:var(--gold-deep);}
+  .cc-list-body{flex:1;min-width:0;}
+  .cc-list-title{font-weight:700;font-size:14.5px;color:var(--navy);}
+  .cc-list-desc{font-size:12.5px;color:var(--muted);margin-top:1px;}
+  .cc-chev{color:#c7c2b3;font-size:16px;}
+  .cc-status{font-size:13px;font-weight:700;white-space:nowrap;text-align:right;}
+  .cc-status.ready{color:var(--green);}
+  .cc-status.pending{color:var(--amber);}
+  .cc-status.off{color:#9a9488;}
+  .cc-status svg{width:14px;height:14px;vertical-align:-2px;margin-right:3px;flex-shrink:0;}
+  .cc-status-sub{display:block;font-size:11.5px;font-weight:500;color:var(--muted);max-width:230px;white-space:normal;}
+  .cc-btn-row{display:flex;gap:12px;}
+  .cc-btn{border:none;border-radius:11px;padding:13px 22px;font-size:14.5px;font-weight:700;cursor:pointer;}
+  .cc-btn-primary{background:var(--gold);color:var(--navy);}
+  .cc-btn-primary:hover{background:var(--gold-deep);}
+  .cc-btn-secondary{background:#fff;color:var(--navy);border:1.5px solid #d8d3c5;}
+  .cc-btn-secondary:hover{background:#f3f0e8;}
+  .cc-btn-block{width:100%;}
+  .cc-ready-row{display:flex;gap:18px;margin-bottom:22px;}
+  .cc-ready-card{flex:1;background:var(--card);border:1px solid var(--border);border-radius:16px;padding:24px;text-align:center;}
+  .cc-ready-card .cc-icon-circle{margin:0 auto 14px;width:60px;height:60px;}
+  .cc-ready-card .cc-icon-circle svg{width:27px;height:27px;}
+  .cc-ready-title{font-weight:800;font-size:15.5px;color:var(--navy);margin-bottom:4px;min-height:38px;}
+  .cc-ready-sub{font-size:12px;color:var(--muted);margin-bottom:14px;}
+  .cc-callout{display:flex;gap:14px;background:#fdf6e3;border:1px solid #f0dfa8;border-radius:14px;padding:16px 18px;margin-bottom:24px;align-items:flex-start;}
+  .cc-callout .hex{width:30px;height:30px;background:var(--gold);border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0;}
+  .cc-callout p{margin:0;font-size:13.5px;color:#4a4530;line-height:1.5;}
+  .cc-footer-bar{display:flex;align-items:center;gap:12px;background:#eef1fb;border-radius:14px;padding:16px 20px;font-size:14px;color:#33406b;}
+  .cc-footer-bar .check{width:26px;height:26px;border-radius:50%;background:var(--navy);color:#fff;display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0;}
+  .cc-slider-wrap{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:28px;margin-bottom:24px;}
+  .cc-slider-minmax{display:flex;justify-content:space-between;font-size:13px;color:var(--muted);margin-bottom:8px;font-weight:700;}
+  input[type=range]{width:100%;height:6px;border-radius:4px;background:#e7e2d6;-webkit-appearance:none;margin:4px 0 18px;}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:22px;height:22px;border-radius:50%;background:var(--gold);border:3px solid #fff;box-shadow:0 0 0 1px #d8d3c5;cursor:pointer;}
+  .cc-slider-value{text-align:center;font-size:30px;font-weight:800;color:var(--navy);}
+  .cc-slider-value span{font-size:15px;font-weight:600;color:var(--muted);}
+  .cc-slider-est{text-align:center;font-size:14.5px;color:var(--muted);margin-top:6px;}
+  .cc-slider-est b{color:var(--green);}
+  .cc-empty{padding:26px;text-align:center;color:var(--muted);font-size:14px;}
+  .cc-loading{padding:40px;text-align:center;color:var(--muted);}
+  .cc-badge-count{color:var(--green);font-weight:800;}
+  .cc-conn-header{display:flex;justify-content:space-between;align-items:baseline;}
+  a.cc-plain{color:inherit;text-decoration:none;}
+  .cc-results-table{width:100%;border-collapse:collapse;background:var(--card);border:1px solid var(--border);border-radius:16px;overflow:hidden;}
+  .cc-results-table th{text-align:left;font-size:12px;color:var(--muted);padding:12px 16px;background:#f6f3ea;border-bottom:1px solid var(--border);}
+  .cc-results-table td{padding:12px 16px;font-size:13.5px;border-bottom:1px solid var(--border);color:var(--ink);}
+  .cc-results-table tr:last-child td{border-bottom:none;}
+  .cc-tag{display:inline-block;font-size:11px;font-weight:700;padding:2px 8px;border-radius:6px;background:#eef1fb;color:#33406b;}
+  .cc-field-row{display:flex;gap:18px;margin-bottom:18px;}
+  .cc-field{flex:1;background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px 18px;}
+  .cc-field label{display:block;font-size:13px;font-weight:700;color:var(--navy);margin-bottom:8px;}
+  .cc-field input[type=number],.cc-field select{width:100%;border:1.5px solid #d8d3c5;border-radius:9px;padding:10px 12px;font-size:14.5px;font-family:inherit;color:var(--ink);background:#fff;}
+  .cc-field-hint{font-size:12px;color:var(--muted);margin-top:6px;}
+  .cc-approval-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;}
+  @media (max-width:1000px){.cc-approval-grid{grid-template-columns:1fr;}}
+  .cc-approval-card{background:var(--card);border:1px solid var(--border);border-radius:14px;overflow:hidden;box-shadow:0 1px 3px rgba(20,20,20,.04);}
+  .cc-approval-head{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border-bottom:1px solid var(--border);background:var(--cream);}
+  .cc-approval-plat{display:flex;align-items:center;gap:8px;font-size:12.5px;font-weight:700;color:var(--navy);}
+  .cc-approval-plat .ic{width:22px;height:22px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:11px;color:#fff;}
+  .cc-approval-body{padding:14px;}
+  .cc-approval-caption{font-size:12.5px;color:var(--ink);line-height:1.5;margin-bottom:10px;}
+  .cc-approval-meta{font-size:11.5px;color:var(--muted);margin-bottom:10px;}
+  .cc-status-chip{display:inline-block;font-size:10.5px;font-weight:700;padding:3px 9px;border-radius:999px;margin-bottom:10px;}
+  .cc-status-chip.draft{background:#eef1fb;color:#33406b;}
+  .cc-status-chip.pending_review{background:#fdeecb;color:var(--gold-deep);}
+  .cc-status-chip.scheduled{background:#e6f4ec;color:var(--green);}
+  .cc-status-chip.posted{background:#e6f4ec;color:var(--green);}
+  .cc-status-chip.rejected{background:#fbe7e5;color:#b23327;}
+  .cc-status-chip.failed{background:#fbe7e5;color:#b23327;}
+  .cc-approval-actions{display:flex;gap:8px;flex-wrap:wrap;}
+  .cc-approval-error{font-size:11.5px;color:#b23327;background:#fbe7e5;border-radius:8px;padding:8px 10px;margin-bottom:10px;line-height:1.4;}
+</style>
+</head>
+<body>
+<script>if (new URLSearchParams(location.search).get('embedded')) { document.body.classList.add('cc-embedded'); }</script>
+<div class="cc-shell">
+  <div class="cc-topbar">
+    <div class="cc-logo">
+      <div class="hex">🐝</div>
+      <div class="cc-logo-text"><b>Hive</b><span>Marketing</span></div>
+    </div>
+    <nav class="cc-nav" id="cc-nav"></nav>
+    <div class="cc-controlled">Controlled by <b>Reina</b></div>
+      </div>
+  <main class="cc-main" id="cc-main"><div class="cc-loading">Loading real data&hellip;</div></main>
+</div>
+
+<script src="/hl-shared-auth.js"></script>
+<script>
+(function(){
+  // Same helper every other authed HiveLogic module uses to read the
+  // Supabase session token straight out of localStorage (see hlTokenSync
+  // in index.html) -- this page is served from the same origin so the
+  // same session applies with no separate login.
+  // Marketing Suite Phase 2 (2026-07-30): this used to be its own separate
+  // copy of the same token-parsing logic that lives in public/index.html.
+  // Both are now the one shared /hl-shared-auth.js module (loaded via a
+  // <script> tag above) -- this is a thin delegating wrapper so every
+  // existing call site below (hlTokenSync()) keeps working unchanged.
+  function hlTokenSync(){ return window.HL_AUTH.hlTokenSync(); }
+  function api(resource, opts){
+    opts = opts || {};
+    var h = opts.headers ? Object.assign({}, opts.headers) : {};
+    var t = hlTokenSync();
+    if (t) h.Authorization = 'Bearer ' + t;
+    if (opts.body) h['Content-Type'] = 'application/json';
+    return fetch('/api/marketing?resource=' + resource, Object.assign({}, opts, {headers:h}))
+      .then(function(r){ return r.json(); });
+  }
+  function apiSocial(resource, opts){
+    opts = opts || {};
+    var h = opts.headers ? Object.assign({}, opts.headers) : {};
+    var t = hlTokenSync();
+    if (t) h.Authorization = 'Bearer ' + t;
+    if (opts.body) h['Content-Type'] = 'application/json';
+    return fetch('/api/social-posts?resource=' + resource, Object.assign({}, opts, {headers:h}))
+      .then(function(r){ return r.json(); });
+  }
+
+  function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+  function money(n){ return '$' + Math.round(Number(n)||0).toLocaleString('en-US'); }
+
+  var ICONS = {
+    home:'<path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/>',
+    doc:'<rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/>',
+    calendar:'<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/>',
+    chart:'<path d="M4 20V10M12 20V4M20 20v-7"/>',
+    link:'<path d="M9 15l6-6"/><path d="M8 8l1-1a4 4 0 015.7 0 4 4 0 010 5.7l-1 1"/><path d="M16 16l-1 1a4 4 0 01-5.7 0 4 4 0 010-5.7l1-1"/>',
+    dollar:'<path d="M12 2v20M17 6.5c0-1.9-2.2-3.5-5-3.5s-5 1.6-5 3.5S9.2 10 12 10s5 1.6 5 3.5-2.2 3.5-5 3.5-5-1.6-5-3.5"/>',
+    users:'<circle cx="9" cy="8" r="3.2"/><path d="M2.5 19c0-3.5 3-6 6.5-6s6.5 2.5 6.5 6"/><circle cx="17" cy="8.5" r="2.6"/><path d="M16 13c2.8.3 5 2.6 5 5.6"/>',
+    search:'<circle cx="10.5" cy="10.5" r="6.5"/><path d="M20 20l-5-5"/>',
+    play:'<circle cx="12" cy="12" r="9.5"/><path d="M10 8.5l6 3.5-6 3.5z"/>',
+    mail:'<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3.5 6l8.5 7 8.5-7"/>',
+    star:'<path d="M12 2.5l2.9 6 6.6.7-4.9 4.5 1.3 6.5L12 16.9 6.1 20.2l1.3-6.5-4.9-4.5 6.6-.7z"/>',
+    rocket:'<path d="M12 2c3 1.5 5 4.7 5 9 0 3-1 6-2 8l-3-2-3 2c-1-2-2-5-2-8 0-4.3 2-7.5 5-9z"/><circle cx="12" cy="10" r="1.6"/><path d="M8 17l-2.5 3.5M16 17l2.5 3.5"/>',
+    monitor:'<rect x="2.5" y="4" width="19" height="13" rx="2"/><path d="M9 21h6M12 17v4"/>',
+    chat:'<path d="M3 5h18v11H8l-5 4z"/>',
+    check:'<path d="M4 12.5l5 5L20 6"/>',
+    clock:'<circle cx="12" cy="12" r="9.5"/><path d="M12 7v5l3.5 2"/>',
+    globe:'<circle cx="12" cy="12" r="9.5"/><path d="M2.5 12h19M12 2.5c2.8 2.6 4.3 6 4.3 9.5s-1.5 6.9-4.3 9.5c-2.8-2.6-4.3-6-4.3-9.5s1.5-6.9 4.3-9.5z"/>',
+    ad:'<path d="M3 9l7-5v16l-7-5z"/><path d="M10 6h6a5 5 0 010 10h-6"/>',
+    store:'<path d="M3 9l1.5-5h15L21 9"/><rect x="4" y="9" width="16" height="11" rx="1"/><path d="M4 9a4 4 0 008 0 4 4 0 008 0"/>',
+    phone:'<path d="M5 3h4l2 5-2.5 2a12 12 0 006 6l2-2.5 5 2v4a2 2 0 01-2.2 2A18 18 0 013 5.2 2 2 0 015 3z"/>',
+    plus:'<path d="M12 5v14M5 12h14"/>',
+    arrow:'<path d="M5 12h14M13 6l6 6-6 6"/>',
+    idea:'<path d="M9 18h6M10 21h4"/><path d="M12 3a6 6 0 00-3.5 10.9c.6.45 1 1.15 1 1.95V16h5v-.15c0-.8.4-1.5 1-1.95A6 6 0 0012 3z"/>',
+  };
+  function icon(name){ return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">' + (ICONS[name]||ICONS.doc) + '</svg>'; }
+
+  var NAV = [
+    {key:'home', label:'Home', icon:'home'},
+    {key:'plan', label:'Plan', icon:'doc'},
+    {key:'ready_for_you', label:'Ready for You', icon:'rocket'},
+    {key:'content_approval', label:'Content Approval', icon:'chat'},
+    {key:'ideas', label:'Ideas', icon:'idea'},
+    {key:'calendar', label:'Calendar', icon:'calendar'},
+    {key:'results', label:'Results', icon:'chart'},
+    {key:'changes', label:'Change Requests', icon:'chat'},
+    {key:'connections', label:'Connections', icon:'link'},
+  ];
+
+  // Primary nav matches the approved Figure 1 mockup exactly: Home / Plan /
+  // Calendar / Results / Connections. Everything already shipped that isn't
+  // in the mockup (Ready for You, Content Approval, Ideas, Change Requests)
+  // stays fully reachable via the same hash routes -- grouped under "More"
+  // so the sidebar reads as 5 items at a glance instead of 9 equal tabs.
+  var NAV_PRIMARY_KEYS = ['home', 'plan', 'calendar', 'results', 'connections'];
+  function navItem(key){ return NAV.filter(function(n){ return n.key === key; })[0]; }
+  var NAV_PRIMARY = NAV_PRIMARY_KEYS.map(navItem);
+  var NAV_MORE = NAV.filter(function(n){ return NAV_PRIMARY_KEYS.indexOf(n.key) === -1; });
+
+  var STATE = { data:null };
+
+  function renderNav(active){
+    function itemHtml(n){
+      return '<a href="#' + n.key + '" class="' + (n.key===active?'active':'') + '">' + icon(n.icon) + '<span>' + n.label + '</span></a>';
+    }
+    // One continuous scrolling page shows every section at once, so nav is
+    // a flat row of jump-to-section pill tabs (matches the approved v3
+    // mockup) instead of a primary/secondary split -- nothing hidden.
+    document.getElementById('cc-nav').innerHTML = NAV.map(itemHtml).join('');
+  }
+
+  // ---------- Connect Everything ----------
+  function connIconFor(key){
+    return {website_cms:'globe', google_ads:'ad', google_business_profile:'store', email:'mail', meta_ads:'chat', sms:'phone'}[key] || 'link';
+  }
+  function statusMarkup(item){
+    if (item.state === 'not_connected') {
+      return '<span class="cc-status off cc-connect-trigger" data-channel-key="' + esc(item.key) + '" style="cursor:pointer">+ Connect<span class="cc-status-sub">' + esc(item.note) + '</span></span>';
+    }
+    if (item.ready) {
+      return '<span class="cc-status ready">' + icon('check') + ' Connected<span class="cc-status-sub">' + esc(item.note) + '</span></span>';
+    }
+    return '<span class="cc-status pending">' + icon('clock') + ' In progress<span class="cc-status-sub">' + esc(item.note) + '</span></span>';
+  }
+    function ccOpenConnectModal(channelKey){
+    api('connector_catalog').then(function(r){
+      if (!r || !r.ok) { window.alert((r && r.error) || 'Could not load connection options. Try refreshing.'); return; }
+      var entry = (r.catalog || []).filter(function(c){ return c.key === channelKey; })[0];
+      if (!entry) { window.alert('Could not find that channel.'); return; }
+
+      var overlay = document.createElement('div');
+      overlay.style.cssText = 'position:fixed;inset:0;background:rgba(14,29,58,0.55);display:flex;align-items:center;justify-content:center;z-index:9999;padding:20px;';
+      function close(){ document.body.removeChild(overlay); }
+      overlay.addEventListener('click', function(ev){ if (ev.target === overlay) close(); });
+
+      var card = document.createElement('div');
+      card.style.cssText = 'width:480px;max-width:100%;max-height:88vh;overflow:auto;padding:26px;background:var(--card);border-radius:16px;box-shadow:0 12px 40px rgba(14,29,58,0.25);';
+      overlay.appendChild(card);
+
+      var title = document.createElement('h3');
+      title.style.cssText = 'margin:0 0 4px;font-size:19px;color:var(--ink);';
+      title.textContent = 'Connect ' + entry.label;
+      card.appendChild(title);
+
+      if (entry.authMethod === 'env_managed') {
+        var infoEnv = document.createElement('div');
+        infoEnv.style.cssText = 'font-size:13px;color:var(--muted);margin:10px 0 18px;line-height:1.5;';
+        infoEnv.textContent = 'This channel is connected through your HiveLogic server configuration, not from here -- there is nothing to set up in this screen.';
+        card.appendChild(infoEnv);
+        var closeBtn1 = document.createElement('button');
+        closeBtn1.className = 'cc-btn cc-btn-secondary';
+        closeBtn1.textContent = 'Close';
+        closeBtn1.addEventListener('click', close);
+        card.appendChild(closeBtn1);
+        document.body.appendChild(overlay);
+        return;
+      }
+
+      if (entry.authMethod === 'oauth' && (!entry.fields || !entry.fields.length)) {
+        var infoOauth = document.createElement('div');
+        infoOauth.style.cssText = 'font-size:13px;color:var(--muted);margin:10px 0 18px;line-height:1.5;';
+        infoOauth.textContent = entry.label + ' connects through OAuth, and that sign-in flow is not wired up for self-serve setup in HiveLogic yet. Contact HiveLogic support to get this channel connected.';
+        card.appendChild(infoOauth);
+        var closeBtn2 = document.createElement('button');
+        closeBtn2.className = 'cc-btn cc-btn-secondary';
+        closeBtn2.textContent = 'Close';
+        closeBtn2.addEventListener('click', close);
+        card.appendChild(closeBtn2);
+        document.body.appendChild(overlay);
+        return;
+      }
+
+      var errEl = document.createElement('div');
+      errEl.style.cssText = 'font-size:12.5px;color:#a33;margin-bottom:10px;min-height:1em;';
+      card.appendChild(errEl);
+
+      var inputs = {};
+      (entry.fields || []).forEach(function(f){
+        var label = document.createElement('label');
+        label.style.cssText = 'display:block;font-size:12.5px;font-weight:700;margin-bottom:4px;color:var(--ink);';
+        label.textContent = f.label + (f.required ? ' *' : '');
+        card.appendChild(label);
+
+        var input;
+        if (f.type === 'select' && Array.isArray(f.options)) {
+          input = document.createElement('select');
+          f.options.forEach(function(opt){
+            var o = document.createElement('option');
+            o.value = opt; o.textContent = opt;
+            input.appendChild(o);
+          });
+        } else {
+          input = document.createElement('input');
+          input.type = f.secret ? 'password' : 'text';
+        }
+        input.style.cssText = 'width:100%;box-sizing:border-box;padding:9px 11px;margin-bottom:4px;border:1px solid var(--border);border-radius:9px;font-size:13.5px;';
+        // Task #104: resume-my-own-setup prefill. Only a real value the owner
+        // already saved for this exact platform pre-fills here -- never a
+        // guess. Secret-typed fields (apiKey) are never pre-filled with the
+        // real secret; savedSecretFields only tells us one already exists.
+        var savedValue = (entry.savedValues && Object.prototype.hasOwnProperty.call(entry.savedValues, f.name)) ? entry.savedValues[f.name] : null;
+        var hasSavedSecret = !!(f.secret && Array.isArray(entry.savedSecretFields) && entry.savedSecretFields.indexOf(f.name) !== -1);
+        if (!f.secret && savedValue) { input.value = savedValue; }
+        card.appendChild(input);
+        inputs[f.name] = input;
+
+        if (hasSavedSecret) {
+          var secretHint = document.createElement('div');
+          secretHint.style.cssText = 'font-size:11.5px;color:var(--muted);margin-bottom:4px;';
+          secretHint.textContent = 'Already saved -- leave blank to keep it, or enter a new value to replace it.';
+          card.appendChild(secretHint);
+        }
+
+        if (f.helpText) {
+          var hint = document.createElement('div');
+          hint.style.cssText = 'font-size:11.5px;color:var(--muted);margin-bottom:14px;';
+          hint.textContent = f.helpText;
+          card.appendChild(hint);
+        }
+      });
+
+      var btnRow = document.createElement('div');
+      btnRow.style.cssText = 'display:flex;gap:10px;margin-top:10px;';
+      card.appendChild(btnRow);
+
+      var cancelBtn = document.createElement('button');
+      cancelBtn.className = 'cc-btn cc-btn-secondary';
+      cancelBtn.style.flex = '1';
+      cancelBtn.textContent = 'Cancel';
+      cancelBtn.addEventListener('click', close);
+      btnRow.appendChild(cancelBtn);
+
+      var saveBtn = document.createElement('button');
+      saveBtn.className = 'cc-btn cc-btn-primary';
+      saveBtn.style.flex = '1';
+      saveBtn.textContent = 'Save & Connect';
+      saveBtn.addEventListener('click', function(){
+        errEl.textContent = '';
+        var fieldValues = {};
+        var missing = [];
+        (entry.fields || []).forEach(function(f){
+          var val = inputs[f.name].value.trim();
+          var keepsSavedSecret = !!(f.secret && !val && Array.isArray(entry.savedSecretFields) && entry.savedSecretFields.indexOf(f.name) !== -1);
+          if (f.required && !val && !keepsSavedSecret) missing.push(f.label);
+          fieldValues[f.name] = val;
+        });
+        if (missing.length) { errEl.textContent = missing.join(', ') + (missing.length === 1 ? ' is' : ' are') + ' required.'; return; }
+        saveBtn.disabled = true;
+        saveBtn.textContent = 'Saving...';
+        api('setup_account_fields', { method: 'POST', body: JSON.stringify({ platform: channelKey, fields: fieldValues }) })
+          .then(function(r2){
+            if (!r2 || !r2.ok) {
+              errEl.textContent = (r2 && r2.error) || 'Could not save that connection. Try again.';
+              saveBtn.disabled = false;
+              saveBtn.textContent = 'Save & Connect';
+              return;
+            }
+            close();
+            loadAndRender();
+          }).catch(function(e){
+            errEl.textContent = 'Could not reach the server: ' + e.message;
+            saveBtn.disabled = false;
+            saveBtn.textContent = 'Save & Connect';
+          });
+      });
+      btnRow.appendChild(saveBtn);
+
+      document.body.appendChild(overlay);
+    }).catch(function(e){
+      window.alert('Could not reach the server: ' + e.message);
+    });
+  }
+
+
+function renderConnections(data){
+    var c = data.connections;
+    var rows = c.items.map(function(it){
+      return '<div class="cc-list-row"><div class="cc-list-icon">' + icon(connIconFor(it.key)) + '</div>' +
+        '<div class="cc-list-body"><div class="cc-list-title">' + esc(it.label) + '</div></div>' +
+        statusMarkup(it) + '</div>';
+    }).join('');
+    return '<div class="cc-conn-header"><h1 class="cc-h1">Connect Everything</h1></div>' +
+      '<p class="cc-sub"><span class="cc-badge-count">' + c.connected + ' of ' + c.total + '</span> connected</p>' +
+      '<div class="cc-list">' + rows + '</div>' +
+      '<button class="cc-btn cc-btn-primary cc-btn-block" onclick="location.hash=\'plan\'">Continue to Your Plan</button>';
+  }
+
+  // ---------- Content Approval Queue (real api/social-posts.js backend) ----------
+  var SOCIAL_PLATFORM_ICON = { facebook_page:{bg:'linear-gradient(135deg,#1877f2,#0a5bc4)',glyph:'FB'}, instagram:{bg:'linear-gradient(135deg,#4d1f8a,#c13584,#e88a4c)',glyph:'IG'}, tiktok_video:{bg:'#000',glyph:'TT'} };
+  var SOCIAL_SURFACE_LABEL = { facebook_page:'Facebook Page', instagram:'Instagram', tiktok_video:'TikTok' };
+  var SOCIAL_STATUS_LABEL = { draft:'Draft', pending_review:'Pending review', scheduled:'Scheduled', posted:'Posted', rejected:'Rejected', failed:'Failed' };
+
+  function renderApprovalCard(p){
+    var plat = SOCIAL_PLATFORM_ICON[p.surface] || {bg:'var(--navy)',glyph:'?'};
+    var label = SOCIAL_SURFACE_LABEL[p.surface] || p.surface;
+    var caption = (p.content && p.content.text) ? esc(p.content.text) : '<span style="color:var(--muted)">(no text)</span>';
+    var statusLbl = SOCIAL_STATUS_LABEL[p.status] || p.status;
+    var meta = '';
+    if (p.status === 'scheduled' && p.scheduled_for) meta = 'Scheduled for ' + esc(new Date(p.scheduled_for).toLocaleString());
+    if (p.status === 'posted' && p.posted_at) meta = 'Posted ' + esc(new Date(p.posted_at).toLocaleString());
+    if (p.status === 'rejected' && p.rejection_reason) meta = 'Rejected: ' + esc(p.rejection_reason);
+    var errorHtml = (p.status === 'failed' && p.last_error) ? '<div class="cc-approval-error">' + esc(p.last_error) + '</div>' : '';
+    var actions = '';
+    if (p.status === 'draft') {
+      actions = '<button class="cc-btn cc-btn-primary cc-social-action" data-action="approve" data-post-id="' + esc(p.id) + '">Approve</button>' + '<button class="cc-btn cc-btn-secondary cc-social-action" data-action="reject" data-post-id="' + esc(p.id) + '">Reject</button>';
+    } else if (p.status === 'pending_review') {
+      actions = '<button class="cc-btn cc-btn-primary cc-social-action" data-action="publish" data-post-id="' + esc(p.id) + '">Publish now</button>' + '<button class="cc-btn cc-btn-secondary cc-social-action" data-action="schedule" data-post-id="' + esc(p.id) + '">Schedule</button>';
+    } else if (p.status === 'scheduled') {
+      actions = '<button class="cc-btn cc-btn-secondary cc-social-action" data-action="publish" data-post-id="' + esc(p.id) + '">Publish now instead</button>' + '<button class="cc-btn cc-btn-secondary cc-social-action" data-action="schedule" data-post-id="' + esc(p.id) + '">Reschedule</button>';
+    }
+    return '<div class="cc-approval-card">' +
+      '<div class="cc-approval-head"><div class="cc-approval-plat"><span class="ic" style="background:' + plat.bg + '">' + plat.glyph + '</span>' + esc(label) + '</div></div>' +
+      '<div class="cc-approval-body">' +
+        '<span class="cc-status-chip ' + p.status + '">' + esc(statusLbl) + '</span>' +
+        '<div class="cc-approval-caption">' + caption + '</div>' +
+        (meta ? '<div class="cc-approval-meta">' + meta + '</div>' : '') +
+        errorHtml +
+        (actions ? '<div class="cc-approval-actions">' + actions + '</div>' : '') +
+      '</div>' +
+    '</div>';
+  }
+
+  function renderContentApproval(){
+    return apiSocial('social_posts').then(function(r){
+      if (!r || !r.ok) {
+        return '<h1 class="cc-h1">Content Approval Queue</h1><div class="cc-card cc-empty">' + esc((r && r.error) || 'Could not load content drafts.') + '</div>';
+      }
+      var posts = r.posts || [];
+      var open = posts.filter(function(p){ return p.status === 'draft' || p.status === 'pending_review' || p.status === 'scheduled'; });
+      var done = posts.filter(function(p){ return p.status === 'posted' || p.status === 'rejected' || p.status === 'failed'; });
+      var cardsHtml;
+      if (!open.length) {
+        cardsHtml = '<div class="cc-card cc-empty">Nothing waiting right now. Reina posts drafts here as soon as there is something for you to review.</div>';
+      } else {
+        cardsHtml = '<div class="cc-approval-grid">' + open.map(renderApprovalCard).join('') + '</div>';
+      }
+      var doneHtml = '';
+      if (done.length) {
+        doneHtml = '<h2 style="font-size:15px;margin:26px 0 12px;color:var(--navy);">Recent history</h2><div class="cc-approval-grid">' + done.slice(0,6).map(renderApprovalCard).join('') + '</div>';
+      }
+      return '<h1 class="cc-h1">Content Approval Queue</h1>' +
+        '<p class="cc-sub">Every post Reina drafts for Facebook Page, Instagram, and TikTok. Nothing publishes until you approve it here.</p>' +
+        cardsHtml + doneHtml;
+    });
+  }
+
+  // ---------- Ready for You ----------
+  function renderReadyForYou(data){
+    var items = data.readyForYou.items;
+    STATE.readyForYouItems = items;
+    var cardsHtml;
+    if (!items.length) {
+      cardsHtml = '<div class="cc-card cc-empty">Nothing needs your review right now. Reina will surface real approvals here as soon as there is something worth your time.</div>';
+    } else {
+      cardsHtml = '<div class="cc-ready-row">' + items.slice(0,3).map(function(it){
+        var extra = '';
+        if (it.amountCents != null || it.maxAmountCents != null) {
+          extra += '<div class="cc-ready-sub">' + (it.amountCents != null ? money(it.amountCents/100) : 'Amount TBD') + (it.maxAmountCents != null ? (' of ' + money(it.maxAmountCents/100) + ' max') : '') + '</div>';
+        }
+        if (it.targetDescription) {
+          extra += '<div class="cc-ready-sub">' + esc(it.targetDescription) + '</div>';
+        }
+        if (it.confidence != null) {
+          extra += '<div class="cc-ready-sub">Confidence: ' + Math.round(it.confidence*100) + '%</div>';
+        }
+        if (Array.isArray(it.risks) && it.risks.length) {
+          extra += '<div class="cc-ready-sub">Risks: ' + esc(it.risks.join(', ')) + '</div>';
+        }
+        return '<div class="cc-ready-card"><div class="cc-icon-circle">' + icon('rocket') + '</div>' +
+          '<div class="cc-ready-title">' + esc(it.title) + '</div>' +
+          '<div class="cc-ready-sub">' + esc(it.subtitle) + '</div>' +
+          extra +
+          '<button class="cc-btn cc-btn-primary" onclick="ccApprove(\''+ it.id + '\')">' + esc(it.actionLabel) + '</button>' + (it.approvalId ? '<button class="cc-btn cc-btn-secondary" style="margin-top:8px;margin-left:8px;" onclick="ccReject(\''+ it.approvalId + '\')">Reject</button>' : '') + '</div>';
+      }).join('') + '</div>';
+      if (items.length > 3) {
+        cardsHtml += '<p class="cc-sub" style="margin-top:-8px">+' + (items.length-3) + ' more waiting below once you clear these.</p>';
+      }
+    }
+    var footerCount = data.readyForYou.sentLast7Days;
+    return '<h1 class="cc-h1">Ready for You</h1>' +
+      '<p class="cc-sub">Reina filters routine marketing work from your queue -- these are the ones that need you.</p>' +
+      cardsHtml +
+      '<div class="cc-footer-bar" style="margin-top:22px"><div class="check">' + icon('check') + '</div>' +
+      (footerCount > 0
+        ? 'Reina sent ' + footerCount + ' real campaign email(s) on your behalf in the last 7 days.'
+        : 'No campaigns have been sent yet -- approve one above to get Reina started.') + '</div>';
+  }
+
+  // ---------- Approve in place (UX-03) ----------
+  var OPP_KEY_BY_CAMPAIGN_TYPE = { review_request: 'review_requests', estimate_recovery: 'unsold_estimates', reactivation: 'reactivate_customers', seasonal: 'seasonal_promotion' };
+
+  function defaultReviewRequestTemplate(reviewLink){
+    return {
+      subject: 'Quick favor, {{clientName}}?',
+      body: 'Hi {{clientName}},\n\n' +
+        'Thanks again for choosing Greenwich Handyman, Inc.{{jobTitle}}! If you have a minute, we would really appreciate a quick Google review:\n' +
+        (reviewLink || '{{reviewLink}}') + '\n\n' +
+        'It helps other homeowners find us and means a lot to our team.\n\n' +
+        'Thanks so much,\nGreenwich Handyman, Inc.'
+    };
+  }
+
+  function defaultTemplateForCampaign(type, reviewLink){
+    if (type === 'review_request') return defaultReviewRequestTemplate(reviewLink);
+    if (type === 'estimate_recovery') {
+      return {
+        subject: 'Still thinking it over, {{clientName}}?',
+        body: 'Hi {{clientName}},\n\n' +
+          'We wanted to follow up on the estimate we sent for {{quoteTitle}} ({{quoteTotal}}). No pressure at all -- just wanted to check in and see if you had any questions, or if anything changed on your end.\n\n' +
+          'Happy to walk through the details again or adjust the scope if that helps.\n\n' +
+          'Thanks so much,\nGreenwich Handyman, Inc.'
+      };
+    }
+    if (type === 'reactivation') {
+      return {
+        subject: "It's been a while, {{clientName}}!",
+        body: 'Hi {{clientName}},\n\n' +
+          'It has been a bit since we finished up {{jobTitle}} for you, and we wanted to check in -- hope everything is still holding up well!\n\n' +
+          'If anything around the house needs attention, we would love to help again.\n\n' +
+          'Thanks so much,\nGreenwich Handyman, Inc.'
+      };
+    }
+    if (type === 'seasonal') {
+      return {
+        subject: 'A seasonal offer for {{clientName}}',
+        body: 'Hi {{clientName}},\n\n' +
+          "We're reaching out with a seasonal offer we think you'll like -- [add your offer details here].\n\n" +
+          'Let us know if you would like to schedule anything.\n\n' +
+          'Thanks so much,\nGreenwich Handyman, Inc.'
+      };
+    }
+    return { subject: '', body: '' };
+  }
+
+  // Reject a real pending marketing_approvals row. Available on any card
+// that has a real approvalId (legacy fallback cards, which have no
+// approval row yet, never show this button). Does not delete the
+// underlying campaign draft (if any) -- the owner can still edit or
+// delete it separately.
+function ccReject(approvalId){
+    if (!window.confirm("Reject this and remove it from your queue? This will not delete the underlying draft.")) return;
+    var reason = (window.prompt("Optional: add a reason (or leave blank).") || "").trim();
+    api("approval_reject", { method: "POST", body: JSON.stringify({ approvalId: approvalId, reason: reason || undefined }) }).then(function(d){
+      if (!d || !d.ok) { window.alert((d && d.error) || "Could not reject."); return; }
+      loadAndRender();
+    }).catch(function(e){ window.alert("Could not reject: " + e.message); });
+  }
+
+  function ccApprove(campaignId){
+    var item = (STATE.readyForYouItems || []).filter(function(x){ return x.id === campaignId; })[0];
+    if (!item) { window.alert('Could not find that campaign. Try refreshing.'); return; }
+    var isReviewRequest = item.type === 'review_request';
+    var sampleOppKey = OPP_KEY_BY_CAMPAIGN_TYPE[item.type];
+    var remaining = (item.recipientCount || 0) - (item.sentCount || 0);
+
+    var configPromise = isReviewRequest ? api('config').catch(function(){ return null; }) : Promise.resolve(null);
+    var samplePromise = sampleOppKey
+      ? api('opportunity_candidates&key=' + encodeURIComponent(sampleOppKey)).then(function(d){
+          var c = (d && d.ok && d.candidates && d.candidates[0]) || null;
+          if (!c) return null;
+          return {
+            clientName: c.clientName,
+            jobTitle: c.jobTitle || c.lastJobTitle || null,
+            quoteTitle: c.quoteTitle || null,
+            quoteTotal: c.quoteTotal != null ? money(c.quoteTotal) : null
+          };
+        }).catch(function(){ return null; })
+      : Promise.resolve(null);
+
+    Promise.all([configPromise, samplePromise]).then(function(results){
+      var config = results[0];
+      var sample = results[1];
+      var reviewLink = config && config.reviewLink;
+      var defaults = defaultTemplateForCampaign(item.type, reviewLink);
+
+      var overlay = document.createElement('div');
+      overlay.style.cssText = 'position:fixed;inset:0;background:rgba(14,29,58,0.55);display:flex;align-items:center;justify-content:center;z-index:9999;padding:20px;';
+      overlay.addEventListener('click', function(ev){ if (ev.target === overlay) close(); });
+
+      var card = document.createElement('div');
+      card.style.cssText = 'width:560px;max-width:100%;max-height:88vh;overflow:auto;padding:26px;background:var(--card);border-radius:16px;box-shadow:0 12px 40px rgba(14,29,58,0.25);';
+      overlay.appendChild(card);
+
+      var title = document.createElement('h3');
+      title.style.cssText = 'margin:0 0 4px;font-size:19px;color:var(--ink);';
+      title.textContent = 'Send: ' + item.title;
+      card.appendChild(title);
+
+      var sub = document.createElement('div');
+      sub.style.cssText = 'font-size:13px;color:var(--muted);margin-bottom:16px;';
+      sub.textContent = 'Will send to ' + remaining + ' unsent recipient' + (remaining === 1 ? '' : 's') + '.';
+      card.appendChild(sub);
+
+      if (isReviewRequest && !reviewLink) {
+        var warn = document.createElement('div');
+        warn.style.cssText = 'background:#fdf6e3;color:#4a4530;border:1px solid #f0dfa8;border-radius:10px;padding:10px 12px;font-size:12.5px;margin-bottom:14px;';
+        warn.textContent = 'No Google review link is set for this deployment yet -- add it in Vercel before sending, or edit the link into the body below.';
+        card.appendChild(warn);
+      }
+
+      var subjLabel = document.createElement('label');
+      subjLabel.style.cssText = 'display:block;font-size:12.5px;font-weight:700;margin-bottom:4px;color:var(--ink);';
+      subjLabel.textContent = 'Subject';
+      card.appendChild(subjLabel);
+      var subjInput = document.createElement('input');
+      subjInput.type = 'text';
+      subjInput.value = defaults.subject;
+      subjInput.style.cssText = 'width:100%;box-sizing:border-box;padding:9px 11px;margin-bottom:14px;border:1px solid var(--border);border-radius:9px;font-size:13.5px;';
+      card.appendChild(subjInput);
+
+      var bodyLabel = document.createElement('label');
+      bodyLabel.style.cssText = 'display:block;font-size:12.5px;font-weight:700;margin-bottom:4px;color:var(--ink);';
+      bodyLabel.textContent = 'Body (merge fields: {{clientName}}, {{jobTitle}})';
+      card.appendChild(bodyLabel);
+      var bodyInput = document.createElement('textarea');
+      bodyInput.value = defaults.body;
+      bodyInput.rows = 8;
+      bodyInput.style.cssText = 'width:100%;box-sizing:border-box;padding:9px 11px;margin-bottom:14px;border:1px solid var(--border);border-radius:9px;font-size:13.5px;font-family:inherit;resize:vertical;';
+      card.appendChild(bodyInput);
+
+      var regenRow = document.createElement('div');
+      regenRow.style.cssText = 'margin-bottom:14px;';
+      var regenBtn = document.createElement('button');
+      regenBtn.className = 'cc-btn cc-btn-secondary';
+      regenBtn.style.cssText = 'margin:0;padding:8px 13px;font-size:12.5px;';
+      regenBtn.textContent = 'Regenerate copy with AI';
+      regenBtn.addEventListener('click', function(){
+        regenBtn.disabled = true;
+        var origRegenText = regenBtn.textContent;
+        regenBtn.textContent = 'Regenerating...';
+        api('campaign_regenerate_copy', { method: 'POST', body: JSON.stringify({ campaignId: campaignId }) }).then(function(d){
+          regenBtn.disabled = false;
+          regenBtn.textContent = origRegenText;
+          if (!d || !d.ok) { window.alert((d && d.error) || 'Could not regenerate copy.'); return; }
+          subjInput.value = d.subject;
+          bodyInput.value = d.body;
+          renderPreview();
+        }).catch(function(e){
+          regenBtn.disabled = false;
+          regenBtn.textContent = origRegenText;
+          window.alert('Could not regenerate copy: ' + e.message);
+        });
+      });
+      regenRow.appendChild(regenBtn);
+      card.appendChild(regenRow);
+
+      var previewLabel = document.createElement('div');
+      previewLabel.style.cssText = 'font-size:12.5px;font-weight:700;margin-bottom:4px;color:var(--muted);';
+      previewLabel.textContent = sample ? ('Preview, using a real recipient (' + sample.clientName + '):') : 'Preview:';
+      card.appendChild(previewLabel);
+      var preview = document.createElement('div');
+      preview.style.cssText = 'background:var(--cream);border:1px solid var(--border);border-radius:9px;padding:11px 13px;font-size:13.5px;white-space:pre-wrap;margin-bottom:18px;max-height:180px;overflow:auto;';
+      card.appendChild(preview);
+
+      function renderPreview(){
+        var jobPhrase = (sample && sample.jobTitle) ? (' for ' + sample.jobTitle) : '';
+        var name = sample ? sample.clientName : 'there';
+        var rendered = bodyInput.value.replaceAll('{{clientName}}', name).replaceAll('{{jobTitle}}', jobPhrase).replaceAll('{{quoteTitle}}', (sample && sample.quoteTitle) || '').replaceAll('{{quoteTotal}}', (sample && sample.quoteTotal) || '');
+        preview.textContent = rendered;
+      }
+      bodyInput.addEventListener('input', renderPreview);
+      renderPreview();
+
+      var testRow = document.createElement('div');
+      testRow.style.cssText = 'display:flex;gap:8px;align-items:center;margin-bottom:18px;padding:11px 13px;background:#eef1fb;border:1px solid var(--border);border-radius:9px;';
+      var testInput = document.createElement('input');
+      testInput.type = 'email';
+      testInput.placeholder = 'you@example.com';
+      testInput.style.cssText = 'flex:1;padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-size:12.5px;';
+      var testBtn = document.createElement('button');
+      testBtn.className = 'cc-btn cc-btn-secondary';
+      testBtn.style.cssText = 'margin:0;white-space:nowrap;padding:9px 14px;font-size:13px;';
+      testBtn.textContent = 'Send test to me';
+      testBtn.addEventListener('click', function(){
+        var to = testInput.value.trim();
+        if (!to) { window.alert('Enter an email address to send the test to.'); return; }
+        var subject = subjInput.value.trim();
+        var body = bodyInput.value.trim();
+        if (!subject || !body) { window.alert('Subject and body are required.'); return; }
+        var jobPhrase = (sample && sample.jobTitle) ? (' for ' + sample.jobTitle) : '';
+        var name = sample ? sample.clientName : 'there';
+        var rendered = body.replaceAll('{{clientName}}', name).replaceAll('{{jobTitle}}', jobPhrase).replaceAll('{{quoteTitle}}', (sample && sample.quoteTitle) || '').replaceAll('{{quoteTotal}}', (sample && sample.quoteTotal) || '');
+        testBtn.disabled = true;
+        var origTestText = testBtn.textContent;
+        testBtn.textContent = 'Sending...';
+        api('test_send', { method: 'POST', body: JSON.stringify({ to: to, subject: subject, body: rendered }) }).then(function(d){
+          testBtn.disabled = false;
+          testBtn.textContent = origTestText;
+          if (!d || !d.ok) { window.alert((d && d.error) || 'Could not send test email.'); return; }
+          window.alert('Test email sent to ' + to + '. Nothing else was touched -- no recipients were marked sent.');
+        }).catch(function(e){
+          testBtn.disabled = false;
+          testBtn.textContent = origTestText;
+          window.alert('Could not send test email: ' + e.message);
+        });
+      });
+      testRow.appendChild(testInput);
+      testRow.appendChild(testBtn);
+      card.appendChild(testRow);
+
+      var reinaRow = document.createElement('div');
+      reinaRow.style.cssText = 'margin-bottom:18px;padding:11px 13px;background:#f4f1fb;border:1px solid var(--border);border-radius:9px;';
+      var reinaLabel = document.createElement('div');
+      reinaLabel.style.cssText = 'font-size:12.5px;font-weight:700;margin-bottom:6px;color:var(--ink);';
+      reinaLabel.textContent = 'Ask Reina about this campaign';
+      reinaRow.appendChild(reinaLabel);
+      var reinaInputRow = document.createElement('div');
+      reinaInputRow.style.cssText = 'display:flex;gap:8px;align-items:center;';
+      var reinaInput = document.createElement('input');
+      reinaInput.type = 'text';
+      reinaInput.placeholder = 'e.g. Why was this recommended? Who will this reach?';
+      reinaInput.style.cssText = 'flex:1;padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-size:12.5px;';
+      var reinaBtn = document.createElement('button');
+      reinaBtn.className = 'cc-btn cc-btn-secondary';
+      reinaBtn.style.cssText = 'margin:0;white-space:nowrap;padding:9px 14px;font-size:13px;';
+      reinaBtn.textContent = 'Ask Reina';
+      var reinaAnswer = document.createElement('div');
+      reinaAnswer.style.cssText = 'display:none;margin-top:10px;font-size:13px;line-height:1.5;color:var(--ink);white-space:pre-wrap;';
+      function askReina(){
+        var question = reinaInput.value.trim();
+        if (!question) { window.alert('Type a question for Reina first.'); return; }
+        reinaBtn.disabled = true;
+        var origReinaText = reinaBtn.textContent;
+        reinaBtn.textContent = 'Asking...';
+        api('campaign_ask_reina', { method: 'POST', body: JSON.stringify({ campaignId: campaignId, question: question }) }).then(function(d){
+          reinaBtn.disabled = false;
+          reinaBtn.textContent = origReinaText;
+          if (!d || !d.ok) { window.alert((d && d.error) || 'Could not get an answer from Reina.'); return; }
+          reinaAnswer.textContent = d.answer;
+          reinaAnswer.style.display = 'block';
+        }).catch(function(e){
+          reinaBtn.disabled = false;
+          reinaBtn.textContent = origReinaText;
+          window.alert('Could not ask Reina: ' + e.message);
+        });
+      }
+      reinaBtn.addEventListener('click', askReina);
+      reinaInput.addEventListener('keydown', function(ev){ if (ev.key === 'Enter') { ev.preventDefault(); askReina(); } });
+      reinaInputRow.appendChild(reinaInput);
+      reinaInputRow.appendChild(reinaBtn);
+      reinaRow.appendChild(reinaInputRow);
+      reinaRow.appendChild(reinaAnswer);
+      card.appendChild(reinaRow);
+
+      var actions = document.createElement('div');
+      actions.style.cssText = 'display:flex;gap:10px;justify-content:space-between;align-items:center;';
+      var rejectBtn = document.createElement('button');
+      rejectBtn.className = 'cc-btn cc-btn-secondary';
+      rejectBtn.style.cssText = 'margin:0;color:#a33;border-color:#e3b8b8;';
+      rejectBtn.textContent = 'Reject';
+      rejectBtn.addEventListener('click', function(){
+        if (!window.confirm('Reject and permanently delete this draft campaign? This cannot be undone.')) return;
+        rejectBtn.disabled = true;
+        cancelBtn.disabled = true;
+        var origRejectText = rejectBtn.textContent;
+        rejectBtn.textContent = 'Rejecting...';
+        api('campaign_delete', { method: 'POST', body: JSON.stringify({ campaignId: campaignId, confirm: true }) }).then(function(d){
+          if (!d || !d.ok) {
+            window.alert((d && d.error) || 'Could not reject this campaign.');
+            rejectBtn.disabled = false;
+            cancelBtn.disabled = false;
+            rejectBtn.textContent = origRejectText;
+            return;
+          }
+          close();
+          loadAndRender();
+        }).catch(function(e){
+          rejectBtn.disabled = false;
+          cancelBtn.disabled = false;
+          rejectBtn.textContent = origRejectText;
+          window.alert('Could not reject this campaign: ' + e.message);
+        });
+      });
+      var actionsRight = document.createElement('div');
+      actionsRight.style.cssText = 'display:flex;gap:10px;';
+      var cancelBtn = document.createElement('button');
+      cancelBtn.className = 'cc-btn cc-btn-secondary';
+      cancelBtn.style.margin = '0';
+      cancelBtn.textContent = 'Cancel';
+      cancelBtn.addEventListener('click', close);
+      var saveDraftBtn = document.createElement('button');
+      saveDraftBtn.className = 'cc-btn cc-btn-secondary';
+      saveDraftBtn.style.margin = '0';
+      saveDraftBtn.textContent = 'Save Draft';
+      saveDraftBtn.addEventListener('click', function(){
+        var subject = subjInput.value.trim();
+        var body = bodyInput.value.trim();
+        if (!subject) { window.alert('Subject is required.'); return; }
+        if (!body) { window.alert('Body is required.'); return; }
+        saveDraftBtn.disabled = true;
+        var origSaveText = saveDraftBtn.textContent;
+        saveDraftBtn.textContent = 'Saving...';
+        api('campaign_update', { method: 'POST', body: JSON.stringify({ campaignId: campaignId, subject: subject, body: body }) }).then(function(d){
+          saveDraftBtn.disabled = false;
+          if (!d || !d.ok) { saveDraftBtn.textContent = origSaveText; window.alert((d && d.error) || 'Could not save draft.'); return; }
+          saveDraftBtn.textContent = 'Saved';
+          setTimeout(function(){ saveDraftBtn.textContent = origSaveText; }, 1500);
+        }).catch(function(e){
+          saveDraftBtn.disabled = false;
+          saveDraftBtn.textContent = origSaveText;
+          window.alert('Could not save draft: ' + e.message);
+        });
+      });
+      var sendBtn = document.createElement('button');
+      sendBtn.className = 'cc-btn cc-btn-primary';
+      sendBtn.style.margin = '0';
+      sendBtn.textContent = remaining ? ('Send to ' + remaining + ' recipient' + (remaining === 1 ? '' : 's')) : 'Send Now';
+      sendBtn.addEventListener('click', function(){
+        var subject = subjInput.value.trim();
+        var body = bodyInput.value.trim();
+        if (!subject) { window.alert('Subject is required.'); return; }
+        if (!body) { window.alert('Body is required.'); return; }
+        if (!window.confirm('This sends a real email to every unsent recipient on this campaign. Send now?')) return;
+        sendBtn.disabled = true;
+        cancelBtn.disabled = true;
+        var origSendText = sendBtn.textContent;
+        sendBtn.textContent = 'Sending...';
+        api('campaign_send', { method: 'POST', body: JSON.stringify({ campaignId: campaignId, subject: subject, body: body }) }).then(function(d){
+          if (!d || !d.ok) {
+            window.alert((d && d.error) || 'Could not send campaign.');
+            sendBtn.disabled = false;
+            cancelBtn.disabled = false;
+            sendBtn.textContent = origSendText;
+            return;
+          }
+          window.alert('Sent ' + d.sent + ' of ' + d.attempted + ' emails' + (d.failed ? (', ' + d.failed + ' failed') : '') + (d.skippedNoEmail ? (', ' + d.skippedNoEmail + ' skipped (no email on file)') : '') + '.');
+          close();
+          loadAndRender();
+        }).catch(function(e){
+          sendBtn.disabled = false;
+          cancelBtn.disabled = false;
+          sendBtn.textContent = origSendText;
+          window.alert('Could not send campaign: ' + e.message);
+        });
+      });
+      actionsRight.appendChild(cancelBtn);
+      actionsRight.appendChild(saveDraftBtn);
+      actionsRight.appendChild(sendBtn);
+      actions.appendChild(rejectBtn);
+      actions.appendChild(actionsRight);
+      card.appendChild(actions);
+
+      function close(){ if (overlay.parentNode) overlay.parentNode.removeChild(overlay); document.removeEventListener('keydown', onKey); }
+      function onKey(ev){ if (ev.key === 'Escape') close(); }
+      document.addEventListener('keydown', onKey);
+      document.body.appendChild(overlay);
+      subjInput.focus();
+    });
+  }
+
+  // ---------- Your Plan ----------
+  function planIconFor(key){ return {google_ads:'search', meta_ads:'play', email:'mail', website_cms:'star'}[key] || 'doc'; }
+  function renderPlan(data){
+    return api('command_center_channel_performance').catch(function(){ return null; }).then(function(chPerf){
+    var p = data.plan;
+    var budgetDollars = Math.round(data.budget.monthlyCents/100);
+    var rows = p.channels.map(function(ch){
+      return '<div class="cc-list-row"><div class="cc-list-icon">' + icon(planIconFor(ch.key)) + '</div>' +
+        '<div class="cc-list-body"><div class="cc-list-title">' + esc(ch.label) + ' <span style="font-weight:500;color:var(--muted)">&mdash; ' + esc(ch.blurb) + '</span></div>' +
+        '<div class="cc-list-desc">' + esc(ch.status) + '</div></div>' +
+        '<span class="cc-chev">' + (ch.ready ? '✅' : '›') + '</span></div>';
+    }).join('');
+    var channelChart = ccChannelBarChart(data.budget.channels);
+    var f = p.forecast || {status:'blocked_assumptions', message:'Set your assumptions to see a forecast.'};
+    function bandLabel(k){ return {conservative:'Conservative', expected:'Expected', upside:'Upside'}[k] || k; }
+    var rangeHtml = '';
+    if (f.status === 'ready') {
+      var order = ['conservative','expected','upside'];
+      var rowsBand = order.map(function(k){
+        var b = f.bands[k];
+        return '<tr><td>' + bandLabel(k) + '</td><td>' + b.qualifiedLeads + '</td><td>' + b.soldJobs + '</td><td>' + money(b.revenueCents/100) + '</td><td>' + money(b.grossProfitCents/100) + '</td></tr>';
+      }).join('');
+      rangeHtml = '<div class="cc-card" style="margin-bottom:24px;">' +
+        '<div class="cc-list-title" style="margin-bottom:12px;">Conservative / Expected / Upside range</div>' +
+        '<table class="cc-results-table"><thead><tr><th>Scenario</th><th>Qualified leads</th><th>Sold jobs</th><th>Revenue</th><th>Gross profit</th></tr></thead><tbody>' + rowsBand + '</tbody></table>' +
+        '<div class="cc-list-desc" style="margin-top:12px;">' + esc(f.methodology || '') + '</div>' +
+      '</div>';
+    }
+    var assumpBtnLabel = (f.status === 'blocked_assumptions') ? 'Set Assumptions' : 'Edit Assumptions';
+    return '<h1 class="cc-h1">Your Marketing Plan</h1>' +
+      '<p class="cc-sub">Reina builds this from your real connections, customer list, and budget -- not a guess.</p>' +
+      '<div class="cc-cards-row">' +
+        '<div class="cc-card cc-stat-card"><div class="cc-icon-circle">' + icon('dollar') + '</div>' +
+          '<div><div class="cc-stat-val">' + money(budgetDollars) + '</div><div class="cc-stat-label">maximum per month</div></div></div>' +
+        '<div class="cc-card cc-stat-card"><div class="cc-icon-circle">' + icon('users') + '</div>' +
+          (f.status === 'ready'
+            ? '<div><div class="cc-stat-val">' + Math.round(f.bands[f.headlineBand].qualifiedLeads) + '</div><div class="cc-stat-label">qualified leads per month (' + bandLabel(f.headlineBand) + ')<span class="cc-pill">Estimate, not a guarantee</span></div></div>'
+            : '<div><div class="cc-stat-val">Not yet</div><div class="cc-stat-label">' + esc(f.message || 'Set your assumptions to see a forecast.') + '</div></div>') +
+        '</div>' +
+      '</div>' +
+      rangeHtml +
+      channelChart +
+      ccChannelPerformanceTable(chPerf) +
+      '<div class="cc-list">' + rows + '</div>' +
+      '<div class="cc-btn-row"><button class="cc-btn cc-btn-secondary" onclick="location.hash=\'budget\'">Adjust Budget</button>' +
+      '<button class="cc-btn cc-btn-secondary" onclick="location.hash=\'assumptions\'">' + assumpBtnLabel + '</button>' +
+      '<a class="cc-plain" href="#connections"><button class="cc-btn cc-btn-secondary">Review Connections</button></a></div>';
+    });
+  }
+
+  // ---------- Adjust Your Budget: channel allocation preview ----------
+  var OWNED_CHANNEL_KEYS = ['email', 'sms', 'google_business_profile', 'website_cms'];
+
+  // Owned channels (email, sms, google business profile, website/seo) are
+  // protected first since their cost is near zero. Paid channels split the
+  // rest by their current share, dropping any that would fall below its
+  // own min viable spend. No capacity cap or confidence score here -- no
+  // real data source for either exists yet.
+  function ccChannelAllocationPreview(newTotalCents, channels, connectionItems){
+    if (!Number.isFinite(newTotalCents) || !Array.isArray(channels)) return null;
+    var connByKey = {};
+    (connectionItems || []).forEach(function(c){ connByKey[c.key] = c; });
+    var rows = channels.map(function(c){
+      var conn = connByKey[c.key];
+      var isOwned = OWNED_CHANNEL_KEYS.indexOf(c.key) !== -1;
+      var connected = !conn || conn.ready;
+      var eligible = !c.paused && connected;
+      return {
+        key: c.key, label: c.label, isOwned: isOwned, eligible: eligible,
+        currentCents: c.monthlyCents || 0, minViableSpendCents: c.minViableSpendCents,
+        excludedReason: c.paused ? 'paused' : (!connected ? 'not connected' : null),
+      };
+    });
+    var ownedEligible = rows.filter(function(r){ return r.eligible && r.isOwned; });
+    var paidEligible = rows.filter(function(r){ return r.eligible && !r.isOwned; });
+    var ineligible = rows.filter(function(r){ return !r.eligible; });
+    var ownedTotal = ownedEligible.reduce(function(s,r){ return s + r.currentCents; }, 0);
+    var remaining = newTotalCents - ownedTotal;
+    var result = [];
+    var note;
+    if (remaining < 0) {
+      var scale = ownedTotal > 0 ? (newTotalCents / ownedTotal) : 0;
+      ownedEligible.forEach(function(r){
+        result.push({ key: r.key, label: r.label, previewCents: Math.max(0, Math.round(r.currentCents * scale)), changed: true, excludedReason: null });
+      });
+      paidEligible.forEach(function(r){
+        result.push({ key: r.key, label: r.label, previewCents: 0, changed: r.currentCents !== 0, excludedReason: null });
+      });
+      note = 'This budget is below what your owned channels (Email, Text, Google Business Profile, Website/SEO) need, so paid channels would pause and owned channels would scale down together.';
+    } else {
+      ownedEligible.forEach(function(r){
+        result.push({ key: r.key, label: r.label, previewCents: r.currentCents, changed: false, excludedReason: null });
+      });
+      if (!paidEligible.length) {
+        note = remaining > 0
+          ? 'No paid channels are connected and active right now, so this increase has nowhere to go until you connect or unpause one.'
+          : 'Owned channels stay protected first; no paid channels are connected and active right now.';
+      } else {
+        var paidBaseTotal = paidEligible.reduce(function(s,r){ return s + r.currentCents; }, 0);
+        var active = paidEligible.map(function(r){
+          return { key: r.key, label: r.label, minViableSpendCents: r.minViableSpendCents, currentCents: r.currentCents,
+            share: paidBaseTotal > 0 ? (r.currentCents / paidBaseTotal) : (1 / (paidEligible.length || 1)) };
+        });
+        var dropped = [];
+        var pool = remaining;
+        var changedAny = true;
+        while (changedAny && active.length) {
+          changedAny = false;
+          var shareTotal = active.reduce(function(s,r){ return s + r.share; }, 0);
+          for (var i = 0; i < active.length; i++) {
+            var r = active[i];
+            var proposed = shareTotal > 0 ? Math.round(pool * (r.share / shareTotal)) : 0;
+            if (r.minViableSpendCents != null && proposed > 0 && proposed < r.minViableSpendCents) {
+              dropped.push(r);
+              active.splice(i, 1);
+              changedAny = true;
+              break;
+            }
+          }
+        }
+        var shareTotalFinal = active.reduce(function(s,r){ return s + r.share; }, 0);
+        active.forEach(function(r){
+          var proposed = shareTotalFinal > 0 ? Math.round(pool * (r.share / shareTotalFinal)) : 0;
+          result.push({ key: r.key, label: r.label, previewCents: proposed, changed: proposed !== r.currentCents, excludedReason: null });
+        });
+        dropped.forEach(function(r){
+          result.push({ key: r.key, label: r.label, previewCents: 0, changed: true, excludedReason: 'below minimum viable spend' });
+        });
+        note = dropped.length
+          ? ('At this budget, ' + dropped.map(function(r){ return r.label; }).join(', ') + (dropped.length === 1 ? ' would drop below its minimum viable spend and pause' : ' would drop below their minimum viable spend and pause') + ', so the rest of your paid channels would pick up the difference.')
+          : 'Owned channels stay protected first; the rest is split across your paid channels in their current proportions.';
+      }
+    }
+    ineligible.forEach(function(r){
+      if (result.some(function(x){ return x.key === r.key; })) return;
+      result.push({ key: r.key, label: r.label, previewCents: 0, changed: r.currentCents !== 0, excludedReason: r.excludedReason });
+    });
+    return { rows: result, note: note };
+  }
+
+  // ---------- Adjust Your Budget ----------
+    // Mirrors api/marketing.js's computeForecast() 'ready'-path math exactly
+  // (same CC_FORECAST_BANDS multipliers, same formula) so the budget slider
+  // can show a live lead-range preview as it moves, with no round-trip API
+  // call per tick and nothing saved until Save Budget is clicked. Reads only
+  // the exact real assumptions the server already returned in
+  // data.plan.forecast.inputs -- never invents its own numbers, and returns
+  // null (never a fabricated estimate) when any required real input is missing.
+  var CC_FORECAST_BANDS = { conservative: 0.65, expected: 1.0, upside: 1.35 };
+  function ccLiveForecastText(inputs, budgetDollars){
+    if (!inputs || inputs.grossMarginPct == null || inputs.qualifiedLeadRatePer100 == null || inputs.closeRatePct == null || !inputs.avgJobValueCents) return null;
+    var band = (inputs.riskPosture === 'conservative') ? 'conservative' : (inputs.riskPosture === 'aggressive' ? 'upside' : 'expected');
+    var mult = CC_FORECAST_BANDS[band];
+    var qualifiedLeads = (budgetDollars/100) * inputs.qualifiedLeadRatePer100 * mult;
+    var soldJobs = qualifiedLeads * (inputs.closeRatePct/100);
+    if (inputs.maxNewJobsPerMonth != null) soldJobs = Math.min(soldJobs, inputs.maxNewJobsPerMonth);
+    var leadsR = Math.round(qualifiedLeads*10)/10;
+    var jobsR = Math.round(soldJobs*10)/10;
+    var bandLabelText = band === 'conservative' ? 'Conservative' : (band === 'upside' ? 'Upside' : 'Expected');
+    return money(budgetDollars) + '/month \u2192 ~' + leadsR + ' qualified leads, ~' + jobsR + ' sold jobs (' + bandLabelText + ')';
+  }
+
+function renderBudget(data){
+    var min = data.budget.min/100, max = data.budget.max/100, val = data.budget.monthlyCents/100;
+    var f = data.plan.forecast || {status:'blocked_assumptions'};
+    var channels = data.budget.channels || [];
+    var connectionItems = (data.connections && data.connections.items) || [];
+    setTimeout(function(){
+      var slider = document.getElementById('cc-budget-slider');
+      var out = document.getElementById('cc-budget-val');
+      var est = document.getElementById('cc-budget-est');
+      function renderChannelPreview(){
+        var box = document.getElementById('cc-channel-preview');
+        if (!box) return;
+        var totalCents = Math.round(Number(slider.value) * 100);
+        var preview = ccChannelAllocationPreview(totalCents, channels, connectionItems);
+        if (!preview) { box.innerHTML = ''; return; }
+        var rowsHtml = preview.rows.map(function(r){
+          var tag = r.excludedReason ? (' <span class="cc-tag">' + esc(r.excludedReason) + '</span>') : (r.changed ? ' <span class="cc-tag">changed</span>' : '');
+          return '<div class="cc-list-desc">' + esc(r.label) + ': ' + money(r.previewCents/100) + tag + '</div>';
+        }).join('');
+        box.innerHTML = '<div class="cc-list-title" style="margin-bottom:8px;">Live Channel Allocation Preview</div>' + rowsHtml + '<p class="cc-sub" style="margin-top:8px;">' + esc(preview.note) + '</p>';
+      }
+      renderChannelPreview();
+      slider.addEventListener('input', function(){
+        out.textContent = money(slider.value);
+        if (est && f.status === 'ready') {
+          var liveText = ccLiveForecastText(f.inputs, Number(slider.value));
+          if (liveText) est.textContent = liveText;
+        }
+        renderChannelPreview();
+      });
+      document.getElementById('cc-budget-save').addEventListener('click', function(){
+        var btn = this; btn.disabled = true; btn.textContent = 'Saving...';
+        api('command_center_budget', {method:'POST', body: JSON.stringify({monthlyDollars: Number(slider.value)})}).then(function(){
+          location.hash = 'plan'; loadAndRender();
+        });
+      });
+      var chBtn = document.getElementById('cc-channels-save');
+      if (chBtn) {
+        chBtn.addEventListener('click', function(){
+          var btn = this; btn.disabled = true; btn.textContent = 'Saving...';
+          var payload = {};
+          channels.forEach(function(c){
+            function num(id){ var v = document.getElementById(id).value; return v === '' ? null : Number(v); }
+            payload[c.key] = {
+              monthlyDollars: num('cc-ch-' + c.key + '-monthly') || 0,
+              minViableSpendDollars: num('cc-ch-' + c.key + '-min'),
+              dailyMaxDollars: num('cc-ch-' + c.key + '-daily'),
+              testingAllowanceDollars: num('cc-ch-' + c.key + '-testing') || 0,
+              approvalThresholdDollars: num('cc-ch-' + c.key + '-approval'),
+              paused: document.getElementById('cc-ch-' + c.key + '-paused').checked,
+            };
+          });
+          api('command_center_budget_channels', {method:'POST', body: JSON.stringify({monthlyDollars: Number(slider.value), channels: payload})}).then(function(){
+            loadAndRender();
+          }).catch(function(e){
+            btn.disabled = false; btn.textContent = 'Save Channel Settings';
+            window.alert('Could not save channel settings: ' + e.message);
+          });
+        });
+      }
+
+      var recBtn = document.getElementById('cc-budget-recommend');
+      if (recBtn) {
+        recBtn.addEventListener('click', function(){
+          var btn = this; btn.disabled = true; btn.textContent = 'Loading...';
+          api('setup_budget_recommendation&monthlyDollars=' + Number(slider.value)).then(function(r){
+            btn.disabled = false; btn.textContent = 'See Recommended Split';
+            if (!r || !r.ok) { window.alert((r && r.error) || 'Could not load a recommendation.'); return; }
+            renderRecommendation(r);
+          }).catch(function(e){
+            btn.disabled = false; btn.textContent = 'See Recommended Split';
+            window.alert('Could not load a recommendation: ' + e.message);
+          });
+        });
+      }
+      function renderRecommendation(rec){
+        var box = document.getElementById('cc-budget-recommendation');
+        if (!box) return;
+        var rowsHtml = rec.channels.map(function(c){
+          var dataTag = c.hasRealData === true ? '<span class="cc-tag">real data</span>'
+            : (c.hasRealData === false ? '<span class="cc-tag">no data yet</span>' : '');
+          return '<div class="cc-list-desc" style="margin-bottom:6px;">' + esc(c.label) + ': ' +
+            money(c.recommendedMonthlyCents/100) + ' (currently ' + money(c.currentMonthlyCents/100) + ') ' +
+            dataTag + '<br><span style="font-size:12px;color:var(--muted,#888)">' + esc(c.rationale) + '</span></div>';
+        }).join('');
+        box.innerHTML = '<div class="cc-list-title" style="margin-bottom:8px;">Recommended Split (last ' + rec.lookbackDays + ' days)</div>' +
+          '<p class="cc-sub" style="margin-bottom:10px;">' + esc(rec.summary) + '</p>' +
+          rowsHtml +
+          (rec.notes && rec.notes.length ? '<p class="cc-sub" style="margin-top:8px;">' + rec.notes.map(esc).join(' ') + '</p>' : '') +
+          '<div class="cc-btn-row" style="margin-top:12px;"><button class="cc-btn cc-btn-secondary" id="cc-budget-recommendation-apply">Apply These Numbers</button></div>';
+        var applyBtn = document.getElementById('cc-budget-recommendation-apply');
+        if (applyBtn) {
+          applyBtn.addEventListener('click', function(){
+            rec.channels.forEach(function(c){
+              var input = document.getElementById('cc-ch-' + c.key + '-monthly');
+              if (input) input.value = Math.round(c.recommendedMonthlyCents/100);
+            });
+            window.alert('Recommended numbers filled in below. Review them, then click Save Channel Settings to keep them.');
+          });
+        }
+      }
+    }, 0);
+    return '<h1 class="cc-h1">Adjust Your Budget</h1>' +
+      '<p class="cc-sub">Move the slider to choose your monthly budget.</p>' +
+      '<div class="cc-slider-wrap">' +
+        '<div class="cc-slider-minmax"><span>' + money(min) + '</span><span>' + money(max) + '</span></div>' +
+        '<input type="range" id="cc-budget-slider" min="' + min + '" max="' + max + '" step="250" value="' + val + '">' +
+        '<div class="cc-slider-value" id="cc-budget-val">' + money(val) + '<span> per month</span></div>' +
+        '<div class="cc-slider-est" id="cc-budget-est">' + (f.status === 'ready' ? (ccLiveForecastText(f.inputs, val) || 'See your Plan screen for the lead range this budget could hit.') : 'Set your assumptions on the Plan screen to see a lead range for this budget.') + '</div>' +
+      '</div>' +
+      (channels.length ? '<div class="cc-card" id="cc-channel-preview" style="margin-top:16px;"></div>' : '') +
+      '<div class="cc-callout"><div class="hex">🐝</div><p>This sets the ceiling for paid channels once they\'re connected and launch-ready. Email nurture keeps running at no extra cost regardless of this number.</p></div>' +
+      '<div class="cc-btn-row"><button class="cc-btn cc-btn-primary" id="cc-budget-save">Save Budget</button>' +
+      '<button class="cc-btn cc-btn-secondary" onclick="location.hash=\'plan\'">Go Back</button></div>' +
+      (channels.length ? (
+        '<div class="cc-card" style="margin-top:24px;">' +
+        '<div class="cc-list-title" style="margin-bottom:10px;">Channel Budgets &amp; Pacing</div>' +
+        '<p class="cc-sub" style="margin-bottom:16px;">Optional per-channel limits. Leave a field blank to leave it unset.</p>' +
+        '<div class="cc-btn-row" style="margin-bottom:16px;"><button class="cc-btn cc-btn-secondary" id="cc-budget-recommend">See Recommended Split</button></div>' +
+        '<div class="cc-card" id="cc-budget-recommendation" style="margin-bottom:16px;"></div>' +
+        channels.map(function(c){
+          function dv(cents){ return cents == null ? '' : (cents/100); }
+          return '<div class="cc-card" style="margin-bottom:12px;">' +
+            '<div class="cc-list-desc" style="font-weight:600;margin-bottom:8px;">' + esc(c.label) + '</div>' +
+            '<label>Monthly $ <input type="number" min="0" step="1" id="cc-ch-' + c.key + '-monthly" value="' + (c.monthlyCents/100) + '"></label> ' +
+            '<label>Min viable spend $ <input type="number" min="0" step="1" id="cc-ch-' + c.key + '-min" value="' + dv(c.minViableSpendCents) + '"></label> ' +
+            '<label>Daily max $ <input type="number" min="0" step="1" id="cc-ch-' + c.key + '-daily" value="' + dv(c.dailyMaxCents) + '"></label> ' +
+            '<label>Testing allowance $ <input type="number" min="0" step="1" id="cc-ch-' + c.key + '-testing" value="' + (c.testingAllowanceCents/100) + '"></label> ' +
+            '<label>Approval threshold $ <input type="number" min="0" step="1" id="cc-ch-' + c.key + '-approval" value="' + dv(c.approvalThresholdCents) + '"></label> ' +
+            '<label><input type="checkbox" id="cc-ch-' + c.key + '-paused"' + (c.paused ? ' checked' : '') + '> Paused</label>' +
+          '</div>';
+        }).join('') +
+        '<div class="cc-btn-row"><button class="cc-btn cc-btn-primary" id="cc-channels-save">Save Channel Settings</button></div>' +
+        '</div>'
+      ) : '');
+  }
+
+  // ---------- Planning Assumptions ----------
+  function renderAssumptions(data){
+    return api('command_center_assumptions').then(function(r){
+      var a = (r && r.assumptions) || {grossMarginPct:null, qualifiedLeadRatePer100:null, closeRatePct:null, maxNewJobsPerMonth:null, riskPosture:'balanced', avgJobValueCents:null};
+      var ref = (r && r.reference) || {};
+      var refAvg = ref.realAvgJobValueCents;
+      var refJobs = ref.realHistoricalJobsPerMonth;
+      var refEstCount = ref.realOpenEstimatesCount;
+      var refEstValue = ref.realOpenEstimatesValue;
+      var refEstStale = ref.realOpenEstimatesStaleCount;
+      var rationale = (r && r.rationale) || [];
+      setTimeout(function(){
+        var btn = document.getElementById('cc-assump-save');
+        if (!btn) return;
+        btn.addEventListener('click', function(){
+          btn.disabled = true; btn.textContent = 'Saving...';
+          var body = {
+            grossMarginPct: document.getElementById('cc-a-margin').value,
+            qualifiedLeadRatePer100: document.getElementById('cc-a-leadrate').value,
+            closeRatePct: document.getElementById('cc-a-close').value,
+            maxNewJobsPerMonth: document.getElementById('cc-a-maxjobs').value,
+            avgJobValueDollars: document.getElementById('cc-a-avgjob').value,
+            riskPosture: document.getElementById('cc-a-risk').value
+          };
+          api('command_center_assumptions', {method:'POST', body: JSON.stringify(body)}).then(function(res){
+            if (!res || !res.ok) { btn.disabled = false; btn.textContent = 'Save Assumptions'; alert((res && res.error) || 'Could not save.'); return; }
+            location.hash = 'plan'; loadAndRender();
+          });
+        });
+      }, 0);
+      function field(id, label, value, opts){
+        opts = opts || {};
+        var attrs = '';
+        if (opts.min != null) attrs += ' min="' + opts.min + '"';
+        if (opts.max != null) attrs += ' max="' + opts.max + '"';
+        if (opts.step != null) attrs += ' step="' + opts.step + '"';
+        if (opts.placeholder) attrs += ' placeholder="' + esc(opts.placeholder) + '"';
+        return '<div class="cc-field"><label>' + esc(label) + '</label>' +
+          '<input type="number" id="' + id + '" value="' + (value == null ? '' : value) + '"' + attrs + '>' +
+          (opts.hint ? '<div class="cc-field-hint">' + esc(opts.hint) + '</div>' : '') +
+        '</div>';
+      }
+      var riskOptions = ['conservative','balanced','aggressive'].map(function(k){
+        return '<option value="' + k + '"' + (a.riskPosture === k ? ' selected' : '') + '>' + k.charAt(0).toUpperCase() + k.slice(1) + '</option>';
+      }).join('');
+      return '<h1 class="cc-h1">Planning Assumptions</h1>' +
+        '<p class="cc-sub">These are your own numbers, not something Reina invents -- there is no real conversion history yet to estimate them from.</p>' +
+        '<div class="cc-card" style="margin-bottom:24px;">' +
+          '<div class="cc-list-title" style="margin-bottom:10px;">Real reference data</div>' +
+          '<div class="cc-list-desc">' + (refAvg ? 'Average job value: ' + money(refAvg/100) : 'No priced jobs synced yet') + ' &middot; ' + (refJobs ? refJobs + ' jobs/month historical average (all sources)' : 'Not enough job history yet') + ' &middot; ' + (refEstCount ? refEstCount + ' open estimate' + (refEstCount === 1 ? '' : 's') + ' awaiting response (' + money(refEstValue) + (refEstStale ? ', ' + refEstStale + ' stale 30+ days' : '') + ')' : 'No open estimates awaiting response') + '</div>' +
+        '</div>' +
+        (rationale.length ? (
+          '<div class="cc-card" style="margin-bottom:24px;">' +
+          '<div class="cc-list-title" style="margin-bottom:10px;">Why this plan</div>' +
+          rationale.map(function(item){
+            var tag = item.priority === 'blocker' ? 'Blocker' : (item.priority === 'opportunity' ? 'Opportunity' : 'Note');
+            return '<div class="cc-list-desc" style="margin-bottom:8px;"><span class="cc-tag">' + esc(tag) + '</span> ' + esc(item.text) + '</div>';
+          }).join('') +
+          '</div>'
+        ) : '') +
+        '<div class="cc-field-row">' +
+          field('cc-a-margin', 'Gross margin %', a.grossMarginPct, {min:0, max:100, step:0.1, hint:'What share of revenue is profit after direct costs.'}) +
+          field('cc-a-leadrate', 'Qualified leads per $100 spent', a.qualifiedLeadRatePer100, {min:0, step:0.1, hint:'Your best estimate -- no ad history exists yet to measure this.'}) +
+        '</div>' +
+        '<div class="cc-field-row">' +
+          field('cc-a-close', 'Close rate %', a.closeRatePct, {min:0, max:100, step:0.1, hint:'Share of qualified leads that become paying jobs.'}) +
+          field('cc-a-maxjobs', 'Max new jobs/month (optional)', a.maxNewJobsPerMonth, {min:0, step:1, hint:'Caps the forecast at what your crew can actually take on.'}) +
+        '</div>' +
+        '<div class="cc-field-row">' +
+          field('cc-a-avgjob', 'Avg job value $ override (optional)', a.avgJobValueCents == null ? null : (a.avgJobValueCents/100), {min:0, step:1, placeholder: refAvg ? String(Math.round(refAvg/100)) : '', hint:'Leave blank to use the real average above.'}) +
+          '<div class="cc-field"><label>Risk posture</label><select id="cc-a-risk">' + riskOptions + '</select><div class="cc-field-hint">Which band headlines your Plan screen.</div></div>' +
+        '</div>' +
+        '<div class="cc-btn-row"><button class="cc-btn cc-btn-primary" id="cc-assump-save">Save Assumptions</button>' +
+        '<button class="cc-btn cc-btn-secondary" onclick="location.hash=\'plan\'">Go Back</button></div>';
+    });
+  }
+
+  // ---------- Calendar (Phase 10 -- real scheduled campaign sends) ----------
+  function calendarIconFor(ev){
+    return { email: 'mail', sms: 'phone' }[ev.channel] || 'calendar';
+  }
+  function calendarDateLabel(iso){
+    if (!iso) return 'Unscheduled';
+    var d = new Date(iso);
+    if (isNaN(d.getTime())) return 'Unscheduled';
+    return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+  }
+  function calendarRangeLabel(schedule){
+    if (!schedule.windowStart || !schedule.windowEnd) return 'in the current rolling window';
+    return 'from ' + calendarDateLabel(schedule.windowStart) + ' to ' + calendarDateLabel(schedule.windowEnd);
+  }
+  function renderCalendar(data){
+    var schedule = (data && data.schedule) || { events: [], notYetTracked: [] };
+    var events = schedule.events || [];
+    var rows = events.length ? events.map(function(ev){
+      return '<div class="cc-list-row"><div class="cc-list-icon">' + icon(calendarIconFor(ev)) + '</div>' +
+        '<div class="cc-list-body"><div class="cc-list-title">' + esc(ev.name) + '</div>' +
+        '<div class="cc-list-desc">' + esc(calendarDateLabel(ev.scheduledAt)) + ' &middot; ' + esc(ev.channel || '') + '</div></div>' +
+        '<span class="cc-tag">' + esc(ev.status) + '</span></div>';
+    }).join('') : '';
+    var listOrEmpty = events.length
+      ? '<div class="cc-list">' + rows + '</div>'
+      : '<div class="cc-card cc-empty">No campaign sends are scheduled in this window. Approve something from <a class="cc-plain" style="color:var(--gold-deep);font-weight:700" href="#home">Ready for You</a> to put one on the calendar.</div>';
+    var notYetHtml = (schedule.notYetTracked && schedule.notYetTracked.length)
+      ? '<p class="cc-sub" style="margin-top:16px">Not yet tracked on this calendar: ' + esc(schedule.notYetTracked.join(', ').split('_').join(' ')) + '.</p>'
+      : '';
+    return '<h1 class="cc-h1">Calendar</h1>' +
+      '<p class="cc-sub">Real scheduled campaign sends ' + esc(calendarRangeLabel(schedule)) + '.</p>' +
+      listOrEmpty +
+      notYetHtml;
+  }
+
+  // ---------- Results (real campaign performance + attribution) ----------
+  // Phase 18 extension: this view previously only rendered the raw
+  // `campaigns` resource (recipients/sent/response-rate/booked). It now
+  // also fetches the real `attribution` resource (the same first-touch
+  // engine already wired into the legacy dashboard's Results & Attribution
+  // panel, see commit 0b2f5a5) and renders it as a second section below --
+  // reusing this file's own existing cc-cards-row/cc-stat-card/cc-results-
+  // table styling, no new CSS. The attribution fetch is wrapped in its own
+  // .catch so a failure there degrades that section honestly without
+  // breaking the pre-existing campaigns table above it.
+  function renderResults(data){
+    return Promise.all([
+      api('campaigns'),
+      api('attribution').catch(function(){ return null; }),
+    ]).then(function(results){
+      var r = results[0];
+      var attr = results[1];
+      var campaigns = (r && r.campaigns) || [];
+      var rowsHtml = campaigns.length ? campaigns.map(function(c){
+        return '<tr><td>' + esc(c.name) + '<div><span class="cc-tag">' + esc(c.status) + '</span></div></td>' +
+          '<td>' + c.recipientCount + '</td><td>' + c.sent + '</td>' +
+          '<td>' + (c.responseRate==null ? '—' : c.responseRate + '%') + '</td>' +
+          '<td>' + c.booked + '</td><td>' + money(c.bookedValue) + '</td></tr>';
+      }).join('') : '<tr><td colspan="6" style="text-align:center;color:var(--muted)">No campaigns yet.</td></tr>';
+
+      var attrOk = !!(attr && attr.ok);
+      var lastTouch = attrOk ? (attr.lastTouch || null) : null;
+      var lastTouchByCampaign = {};
+      (lastTouch && lastTouch.campaigns || []).forEach(function(c){ lastTouchByCampaign[c.campaignId] = c; });
+      var assisted = attrOk ? (attr.assisted || null) : null;
+      var assistedByCampaign = {};
+      (assisted && assisted.campaigns || []).forEach(function(c){ assistedByCampaign[c.campaignId] = c; });
+      var coverage = attrOk ? attr.attributionCoveragePct : null;
+      var attrCards = '<div class="cc-cards-row">' +
+        '<div class="cc-card cc-stat-card"><div class="cc-icon-circle">' + icon('chart') + '</div>' +
+          '<div><div class="cc-stat-val">' + (coverage != null ? coverage + '%' : 'Not yet') + '</div><div class="cc-stat-label">attribution coverage<span class="cc-pill">Real completed jobs matched to a real prior send</span></div></div></div>' +
+        '<div class="cc-card cc-stat-card"><div class="cc-icon-circle">' + icon('dollar') + '</div>' +
+          '<div><div class="cc-stat-val">' + money(attrOk ? (attr.totalAttributedRevenueCents || 0) / 100 : 0) + '</div><div class="cc-stat-label">attributed revenue (first-touch)</div></div></div>' +
+        '<div class="cc-card cc-stat-card"><div class="cc-icon-circle">' + icon('users') + '</div>' +
+          '<div><div class="cc-stat-val">' + (attrOk ? (attr.totalUnattributedJobs || 0) : '—') + '</div><div class="cc-stat-label">unattributed jobs</div></div></div>' +
+        (lastTouch ? ('<div class="cc-card cc-stat-card"><div class="cc-icon-circle">' + icon('dollar') + '</div>' +
+          '<div><div class="cc-stat-val">' + money((lastTouch.totalAttributedRevenueCents || 0) / 100) + '</div><div class="cc-stat-label">attributed revenue (last-touch)</div></div></div>') : '') +
+        (assisted ? ('<div class="cc-card cc-stat-card"><div class="cc-icon-circle">' + icon('users') + '</div>' +
+          '<div><div class="cc-stat-val">' + (assisted.totalAssistedConversions || 0) + '</div><div class="cc-stat-label">assisted conversions</div></div></div>') : '') +
+        '</div>';
+
+      var attrCampaigns = attrOk ? (attr.campaigns || []) : [];
+      var attrRowsHtml = attrCampaigns.length ? attrCampaigns.map(function(c){
+        var lt = lastTouchByCampaign[c.campaignId];
+        return '<tr><td>' + esc(c.name) + '</td><td>' + c.recipientsSent + '</td><td>' + c.respondedCount + '</td>' +
+          '<td>' + c.bookedCount + '</td><td>' + c.firstTouchJobCount + '</td>' +
+          '<td>' + (c.firstTouchRevenueCents ? money(c.firstTouchRevenueCents / 100) : '—') + '</td>' +
+          '<td>' + (lt ? lt.lastTouchJobCount : '—') + '</td>' +
+          '<td>' + (lt && lt.lastTouchRevenueCents ? money(lt.lastTouchRevenueCents / 100) : '—') + '</td>' +
+          '<td>' + (assistedByCampaign[c.campaignId] ? assistedByCampaign[c.campaignId].assistedConversions : '—') + '</td></tr>';
+      }).join('') : ('<tr><td colspan="9" style="text-align:center;color:var(--muted)">' + (attrOk ? 'No campaigns yet -- attribution will populate once real campaigns send and jobs complete.' : 'Could not load attribution.') + '</td></tr>');
+
+      var attrNote = attrOk
+        ? ('First-touch model: a job is credited to the earliest real campaign send to that client on or before the day it completed. Last-touch model: the same real jobs credited to the latest real send instead. Assisted model: a campaign is credited whenever it touched the customer before the closing send. ' + esc(attr.notYetMeasurableReason || ''))
+        : 'Could not load attribution data.';
+
+      return '<h1 class="cc-h1">Results</h1>' +
+        '<p class="cc-sub">Real performance from every campaign Reina has sent.</p>' +
+        '<table class="cc-results-table" style="margin-bottom:24px;"><thead><tr><th>Campaign</th><th>Recipients</th><th>Sent</th><th>Response rate</th><th>Booked</th><th>Booked value</th></tr></thead>' +
+        '<tbody>' + rowsHtml + '</tbody></table>' +
+        '<h1 class="cc-h1" style="font-size:22px;">Attribution</h1>' +
+        '<p class="cc-sub">Which campaign gets credit for a completed job -- the same real first-touch model shown on the legacy Results panel, not a second, independent estimate.</p>' +
+        attrCards +
+        '<table class="cc-results-table"><thead><tr><th>Campaign</th><th>Recipients</th><th>Responded</th><th>Booked</th><th>First-touch jobs</th><th>First-touch revenue</th><th>Last-touch jobs</th><th>Last-touch revenue</th><th>Assisted conversions</th></tr></thead>' +
+        '<tbody>' + attrRowsHtml + '</tbody></table>' +
+        '<div class="cc-list-desc" style="margin-top:12px;">' + attrNote + '</div>';
+    });
+  }
+
+  // ---------- Reina: Change Requests (M1a approvals) ----------
+  function confTag(c){
+    if (c == null) return '';
+    var cls = c >= 80 ? 'ready' : (c >= 60 ? 'pending' : 'off');
+    return '<span class="cc-status ' + cls + '" style="position:static;white-space:nowrap">' + c + '% confidence</span>';
+  }
+  function crBullets(label, arr){
+    if (!arr || !arr.length) return '';
+    return '<div style="margin-top:8px"><strong style="font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)">' + label + '</strong>' +
+      '<ul style="margin:4px 0 0;padding-left:18px">' + arr.map(function(g){ return '<li>' + esc(g) + '</li>'; }).join('') + '</ul></div>';
+  }
+  function renderChangeRequests(){
+    return api('reina_change_requests').then(function(r){
+      if (!r || !r.ok) {
+        return '<h1 class="cc-h1">Change Requests</h1><div class="cc-card cc-empty">' + esc((r && r.error) || 'Could not load change requests.') + '</div>';
+      }
+      var items = r.pending || [];
+      STATE.changeRequests = items;
+      var header = '<h1 class="cc-h1">Change Requests</h1>' +
+        '<p class="cc-sub">Reina reads the client message and drafts a recommendation here. Approving records your decision -- it does not create the change order or email the client yet.</p>';
+      if (!items.length) {
+        return header + '<div class="cc-card cc-empty">Nothing waiting. Reina posts here whenever a client asks to change a job.</div>';
+      }
+      var cards = items.map(function(it){
+        var amount = it.needsEstimatorPricing
+          ? '<span class="cc-tag">Needs estimator pricing</span>'
+          : '<strong>' + money((it.amountCents || 0) / 100) + '</strong> <span class="cc-sub" style="font-size:12px">(client-stated)</span>';
+        var testBadge = it.isTest ? '<span class="cc-tag" style="background:#fde68a;color:#92400e;margin-right:6px">test</span>' : '';
+        return '<div class="cc-card" style="margin-bottom:14px">' +
+          '<div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start">' +
+            '<div class="cc-list-title">' + testBadge + esc(it.title) + '</div>' + confTag(it.confidence) +
+          '</div>' +
+          '<div class="cc-sub" style="margin:2px 0 10px">' + esc(it.target || '') + ' &middot; ' + amount + '</div>' +
+          '<div style="white-space:pre-wrap;line-height:1.5">' + esc(it.rationale) + '</div>' +
+          crBullets('Risks', it.risks) +
+          crBullets('Open gaps', it.gaps) +
+          '<div style="display:flex;gap:10px;margin-top:14px">' +
+            '<button class="cc-btn cc-btn-primary" onclick="ccReinaDecide(\'' + esc(it.id) + '\',\'approved\')">Approve</button>' +
+            '<button class="cc-btn" onclick="ccReinaDecide(\'' + esc(it.id) + '\',\'rejected\')">Reject</button>' +
+          '</div></div>';
+      }).join('');
+      return header + '<div>' + cards + '</div>';
+    });
+  }
+  function ccReinaDecide(id, decision){
+    var reason = null;
+    if (decision === 'rejected') {
+      reason = window.prompt('Optional: why are you rejecting this? (leave blank to skip)') || null;
+    }
+    api('reina_change_request_decide', { method:'POST', body: JSON.stringify({ id:id, decision:decision, reason:reason }) })
+      .then(function(r){
+        if (!r || !r.ok) { window.alert((r && r.error) || 'Could not save your decision.'); return; }
+        render(); // the decided row is no longer pending -- reload the list
+      })
+      .catch(function(){ window.alert('Could not reach the server. Try again.'); });
+  }
+  window.ccReinaDecide = ccReinaDecide;
+  // ---------- Ideas (Phase 9: owner-submitted ideas -> future campaign briefs) ----------
+  // Text-only submission for now -- matches api/marketing.js's handleIdeasPost,
+  // which rejects any other inputMode because no voice/photo/video/document
+  // upload or transcription pipeline exists yet. Do not add a file picker
+  // here until that backend pipeline is real.
+  function renderIdeas(data){
+    return api('ideas').then(function(r){
+      var notSynced = r && r.ok === false && /not set up yet/i.test(r.error || '');
+      var ideas = (r && r.ok && r.ideas) || [];
+      var rowsHtml = ideas.length ? ideas.map(function(idea){
+        var when = idea.createdAt ? new Date(idea.createdAt).toLocaleDateString() : '';
+        var attLine = idea.attachmentCount ? (' · ' + idea.attachmentCount + (idea.attachmentCount === 1 ? ' attachment' : ' attachments')) : '';
+        var statusLine = esc(idea.status) + (when ? ' · ' + esc(when) : '') + attLine;
+        var actionHtml = (idea.status === 'submitted' || idea.status === 'error')
+          ? '<button class="cc-btn cc-btn-secondary" style="margin-top:6px;padding:7px 12px;font-size:12.5px" onclick="ccGenerateBrief(\'' + idea.id + '\')">' + (idea.status === 'error' ? 'Retry Brief' : 'Generate Brief') + '</button>'
+          : (idea.status === 'brief_ready'
+            ? (idea.campaignId
+              ? '<div style="margin-top:6px;font-size:12.5px;color:var(--green);font-weight:600">Campaign created</div>'
+              : '<button class="cc-btn cc-btn-primary" style="margin-top:6px;padding:7px 12px;font-size:12.5px" onclick="ccCreateCampaignFromIdea(\'' + idea.id + '\')">Create Campaign</button>')
+            : '');
+        // Attaching more evidence (a follow-up photo, a document) stays
+        // useful even after a brief already exists -- not gated by status.
+        var addFileHtml = '<label class="cc-btn cc-btn-secondary" style="margin-top:6px;margin-left:6px;padding:7px 12px;font-size:12.5px;display:inline-block;cursor:pointer">+ Add file<input type="file" style="display:none" onchange="ccAttachFileToIdea(\'' + idea.id + '\', this)"></label>';
+        var errorHtml = (idea.status === 'error' && idea.errorReason)
+          ? '<div style="color:#b3261e;font-size:12px;margin-top:4px">' + esc(idea.errorReason) + '</div>'
+          : '';
+        var briefHtml = '';
+        if (idea.brief && idea.brief.summary) {
+          var chHtml = (idea.brief.recommendedChannels || []).map(function(c){
+            return '<div style="font-size:12.5px;margin-top:4px"><b>' + esc(c.channel) + '</b> -- ' + esc(c.why) + '</div>';
+          }).join('');
+          briefHtml = '<div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border)"><div style="font-size:13px">' + esc(idea.brief.summary) + '</div>' + chHtml + '</div>';
+        }
+        var gapHtml = (idea.gapFlags && idea.gapFlags.length)
+          ? '<div style="margin-top:6px;font-size:12px;color:var(--muted)">Needs: ' + idea.gapFlags.map(function(g){ return esc(g); }).join('; ') + '</div>'
+          : '';
+        return '<div class="cc-list-row"><div class="cc-list-icon">' + icon('idea') + '</div>' +
+          '<div class="cc-list-body"><div class="cc-list-title">' + esc(idea.rawText) + '</div>' +
+          '<div style="font-size:12px;color:var(--muted);margin-top:2px">' + statusLine + '</div>' +
+          errorHtml + briefHtml + gapHtml + actionHtml + addFileHtml + '</div></div>';
+      }).join('') : '<div class="cc-card cc-empty">No ideas submitted yet -- type one below and Reina will start turning it into a real campaign brief.</div>';
+      var notice = notSynced ? '<div style="background:#fdf6e3;color:#4a4530;border:1px solid #f0dfa8;border-radius:10px;padding:10px 12px;font-size:12.5px;margin-bottom:14px;">Ideas storage is not set up yet in this environment -- your idea will not be saved until the migration runs.</div>' : '';
+      return '<h1 class="cc-h1">Ideas</h1>' +
+        '<p class="cc-sub">Tell Reina about an idea -- a promotion, a new service, anything -- and she will start turning it into a real campaign brief.</p>' +
+        notice +
+        '<div class="cc-card">' +
+          '<textarea id="cc-idea-text" rows="4" placeholder="e.g. We should run a fall gutter-cleaning promo for past customers" style="width:100%;box-sizing:border-box;padding:9px 11px;border:1px solid var(--border);border-radius:9px;font-size:13.5px;font-family:inherit;resize:vertical;"></textarea>' +
+          '<button class="cc-btn cc-btn-primary" style="margin-top:10px" onclick="ccSubmitIdea()">Submit Idea</button>' +
+          '<div id="cc-idea-error" style="color:#b3261e;font-size:12.5px;margin-top:8px"></div>' +
+        '</div>' +
+        '<div class="cc-card" style="margin-top:14px">' +
+          '<div style="font-size:13px;font-weight:600;margin-bottom:4px">Or attach a photo, video, voice note, or document</div>' +
+          '<div style="font-size:12.5px;color:var(--muted);margin-bottom:8px">Reina will treat the file as a new idea -- add an optional caption if you want.</div>' +
+          '<input type="text" id="cc-idea-file-caption" placeholder="Optional caption" style="width:100%;box-sizing:border-box;padding:8px 10px;border:1px solid var(--border);border-radius:9px;font-size:13px;font-family:inherit;margin-bottom:8px;">' +
+          '<label class="cc-btn cc-btn-secondary" style="display:inline-block;cursor:pointer">Choose File<input type="file" id="cc-idea-file-input" style="display:none" onchange="ccSubmitIdeaFile(this)"></label>' +
+          '<span id="cc-idea-file-name" style="font-size:12.5px;color:var(--muted);margin-left:8px"></span>' +
+          '<div id="cc-idea-file-error" style="color:#b3261e;font-size:12.5px;margin-top:8px"></div>' +
+        '</div>' +
+        '<div class="cc-list" style="margin-top:18px">' + rowsHtml + '</div>';
+    });
+  }
+
+  function ccSubmitIdea(){
+    var el = document.getElementById('cc-idea-text');
+    var errEl = document.getElementById('cc-idea-error');
+    var text = el ? el.value.trim() : '';
+    if (errEl) errEl.textContent = '';
+    if (!text) { if (errEl) errEl.textContent = 'Type an idea first.'; return; }
+    api('ideas', { method: 'POST', body: JSON.stringify({ inputMode: 'text', rawText: text }) }).then(function(r){
+      if (!r || !r.ok) { if (errEl) errEl.textContent = (r && r.error) || 'Could not submit that idea.'; return; }
+      render();
+    }).catch(function(){
+      if (errEl) errEl.textContent = 'Could not reach the server. Check your connection and try again.';
+    });
+  }
+
+  function ccGenerateBrief(ideaId){
+    api('ideas_process', { method: 'POST', body: JSON.stringify({ ideaId: ideaId }) }).then(function(r){
+      if (!r || !r.ok) { window.alert((r && r.error) || 'Could not generate a brief for that idea.'); }
+      render();
+    }).catch(function(){
+      window.alert('Could not reach the server. Check your connection and try again.');
+    });
+  }
+
+  // Task #101: turns a ready brief into a real campaign in one click, reusing
+  // the exact same handleCampaignsPost validation/eligibility path a manually
+  // created campaign goes through -- if the brief's channel(s) aren't
+  // automatable yet (or the idea has no real audience for an email send),
+  // the server's honest error surfaces here rather than a fabricated success.
+  function ccCreateCampaignFromIdea(ideaId){
+    api('idea_create_campaign', { method: 'POST', body: JSON.stringify({ ideaId: ideaId }) }).then(function(r){
+      if (!r || !r.ok) { window.alert((r && r.error) || 'Could not create a campaign for that idea.'); return; }
+      render();
+    }).catch(function(){
+      window.alert('Could not reach the server. Check your connection and try again.');
+    });
+  }
+
+  // Phase 9 upload-wiring slice (2026-07-31): real file attachments for
+  // Ideas, backed by resource=idea_attachments (api/marketing.js) and
+  // marketing_attachments (sql/039). readFileAsDataUrl turns a browser
+  // File into the base64 data: URL the backend's uploadDataUrl() expects
+  // -- the same shape the sub-portal's own camera-capture uploads use.
+  function readFileAsDataUrl(file){
+    return new Promise(function(resolve, reject){
+      var reader = new FileReader();
+      reader.onload = function(){ resolve(reader.result); };
+      reader.onerror = function(){ reject(new Error('Could not read that file.')); };
+      reader.readAsDataURL(file);
+    });
+  }
+
+  function attachmentKindForFile(file){
+    var t = (file.type || '').toLowerCase();
+    if (t.indexOf('image/') === 0) return 'photo';
+    if (t.indexOf('video/') === 0) return 'video';
+    if (t.indexOf('audio/') === 0) return 'audio';
+    return 'document';
+  }
+
+  // Conservative client-side guard: this deployment's serverless functions
+  // parse the whole request body as JSON, so a very large base64 payload
+  // risks a confusing platform-level 413 rather than the honest error
+  // below. 4MB is deliberately conservative, not a real measured ceiling.
+  var CC_MAX_ATTACHMENT_BYTES = 4 * 1024 * 1024;
+
+  function ccSubmitIdeaFile(inputEl){
+    var errEl = document.getElementById('cc-idea-file-error');
+    var nameEl = document.getElementById('cc-idea-file-name');
+    var captionEl = document.getElementById('cc-idea-file-caption');
+    if (errEl) errEl.textContent = '';
+    var file = inputEl && inputEl.files && inputEl.files[0];
+    if (!file) return;
+    if (nameEl) nameEl.textContent = file.name;
+    if (file.size > CC_MAX_ATTACHMENT_BYTES) {
+      if (errEl) errEl.textContent = 'That file is too large for this environment right now (max 4MB). Try a smaller file.';
+      inputEl.value = '';
+      return;
+    }
+    var attachmentType = attachmentKindForFile(file);
+    // handleIdeasPost's inputMode vocabulary (text/voice_note/photo/video/
+    // document) doesn't match attachmentType's vocabulary (photo/video/
+    // audio/document) for the audio case -- map it here rather than
+    // reusing attachmentType directly as inputMode.
+    var ideaInputMode = attachmentType === 'audio' ? 'voice_note' : attachmentType;
+    var caption = captionEl ? captionEl.value.trim() : '';
+    readFileAsDataUrl(file).then(function(dataUrl){
+      return api('ideas', { method: 'POST', body: JSON.stringify({ inputMode: ideaInputMode, rawText: caption || undefined }) }).then(function(r){
+        if (!r || !r.ok) throw new Error((r && r.error) || 'Could not create an idea for that file.');
+        return api('idea_attachments', { method: 'POST', body: JSON.stringify({ ideaId: r.idea.id, attachmentType: attachmentType, fileDataUrl: dataUrl, fileName: file.name }) });
+      });
+    }).then(function(r){
+      if (!r || !r.ok) { if (errEl) errEl.textContent = (r && r.error) || 'Could not attach that file.'; return; }
+      render();
+    }).catch(function(e){
+      if (errEl) errEl.textContent = (e && e.message) || 'Could not attach that file.';
+    });
+  }
+
+  function ccAttachFileToIdea(ideaId, inputEl){
+    var file = inputEl && inputEl.files && inputEl.files[0];
+    if (!file) return;
+    if (file.size > CC_MAX_ATTACHMENT_BYTES) {
+      window.alert('That file is too large for this environment right now (max 4MB). Try a smaller file.');
+      inputEl.value = '';
+      return;
+    }
+    var attachmentType = attachmentKindForFile(file);
+    readFileAsDataUrl(file).then(function(dataUrl){
+      return api('idea_attachments', { method: 'POST', body: JSON.stringify({ ideaId: ideaId, attachmentType: attachmentType, fileDataUrl: dataUrl, fileName: file.name }) });
+    }).then(function(r){
+      if (!r || !r.ok) { window.alert((r && r.error) || 'Could not attach that file.'); return; }
+      render();
+    }).catch(function(e){
+      window.alert((e && e.message) || 'Could not attach that file.');
+    });
+  }
+
+  // ---------- Home (Figure 1 mockup: unified 2x2 dashboard) ----------
+  function ccHomeTile(iconName, title, summary, routeKey, badgeCount){
+    var badge = badgeCount ? ('<span class="cc-badge-count" style="margin-left:8px;">' + badgeCount + '</span>') : '';
+    return '<a class="cc-home-tile" href="#' + routeKey + '">' +
+      '<div class="cc-icon-circle">' + icon(iconName) + '</div>' +
+      '<div class="cc-home-tile-title">' + esc(title) + badge + '</div>' +
+      '<div class="cc-home-tile-sub">' + esc(summary) + '</div>' +
+    '</a>';
+  }
+
+  function renderHome(data){
+    return Promise.all([
+      api('attribution').catch(function(){ return null; }),
+      api('command_center_budget_pacing').catch(function(){ return null; }),
+      api('command_center_goal').catch(function(){ return null; })
+    ]).then(function(ccHomeResults){
+      var attr = ccHomeResults[0];
+      var pacing = ccHomeResults[1];
+      var goal = ccHomeResults[2];
+      var attrOk = !!(attr && attr.ok);
+      var spendCents = (data.budget && data.budget.monthlyCents) || 0;
+      var revenueCents = attrOk ? (attr.totalAttributedRevenueCents || 0) : null;
+      var roiText = (attrOk && spendCents > 0 && revenueCents != null)
+        ? (Math.round((revenueCents / spendCents) * 10) / 10) + 'x'
+        : 'Not yet';
+      var totalResponded = 0;
+      if (attrOk && Array.isArray(attr.campaigns)) {
+        attr.campaigns.forEach(function(c){ totalResponded += (c.respondedCount || 0); });
+      }
+      var cplText = (attrOk && spendCents > 0 && totalResponded > 0)
+        ? money((spendCents / 100) / totalResponded)
+        : 'Not yet';
+
+      var f = (data.plan && data.plan.forecast) || {status:'blocked_assumptions'};
+      var planSummary = f.status === 'ready'
+        ? Math.round(f.bands[f.headlineBand].qualifiedLeads) + ' qualified leads/mo projected (' + ({conservative:'Conservative',expected:'Expected',upside:'Upside'}[f.headlineBand] || f.headlineBand) + ')'
+        : 'Set your assumptions to see a real forecast.';
+
+      var readyCount = data.readyForYou.items.length;
+      var readySummary = readyCount > 0
+        ? readyCount + ' item' + (readyCount === 1 ? '' : 's') + ' waiting for your review'
+        : 'Nothing waiting for you right now.';
+
+      var connSummary = data.connections.connected + ' of ' + data.connections.total + ' connected';
+      var connMissing = data.connections.total - data.connections.connected;
+
+      var budgetSummary = 'Budget: ' + money(Math.round(spendCents / 100)) + '/mo maximum';
+
+      var headline = '<div class="cc-cards-row">' +
+        '<div class="cc-card cc-stat-card"><div class="cc-icon-circle">' + icon('chart') + '</div>' +
+          '<div><div class="cc-stat-val">' + roiText + '</div><div class="cc-stat-label">blended ROI' +
+          (attrOk ? '<span class="cc-pill">Attributed revenue vs. current budget</span>' : '<span class="cc-pill">Needs attribution data</span>') +
+          '</div></div></div>' +
+        '<div class="cc-card cc-stat-card"><div class="cc-icon-circle">' + icon('dollar') + '</div>' +
+          '<div><div class="cc-stat-val">' + cplText + '</div><div class="cc-stat-label">cost per lead' +
+          (attrOk ? '' : '<span class="cc-pill">Needs attribution data</span>') +
+          '</div></div></div>' +
+      '</div>';
+
+      var pacingVal, pacingLabelHtml;
+      if (pacing && pacing.ok && pacing.configured) {
+        var pacingPct = pacing.pctUsed != null ? Math.round(pacing.pctUsed * 100) : null;
+        pacingVal = pacingPct != null ? (pacingPct + '%') : 'Not yet';
+        pacingLabelHtml = 'of budget cap used this month' +
+          (pacing.overPace ? '<span class="cc-pill" style="background:#fee2e2;color:#991b1b;">Pacing over cap</span>' : '<span class="cc-pill">On pace</span>');
+      } else {
+        pacingVal = 'Not yet';
+        pacingLabelHtml = 'budget pacing<span class="cc-pill">No ad budget cap set up yet</span>';
+      }
+
+      var goalVal, goalLabelHtml;
+      if (goal && goal.ok && goal.goalCents != null) {
+        var goalPct = goal.pct != null ? Math.round(goal.pct * 100) : null;
+        goalVal = goalPct != null ? (goalPct + '%') : 'Not yet';
+        goalLabelHtml = 'of quarterly goal (' + money(goal.goalCents/100) + ')' +
+          '<span class="cc-pill">' + money((goal.progressCents||0)/100) + ' so far this quarter</span>';
+      } else {
+        goalVal = 'Not set';
+        goalLabelHtml = 'quarterly revenue goal<span class="cc-pill">Set a goal to track progress</span>';
+      }
+
+      var pacingGoalRow = '<div class="cc-cards-row">' +
+        '<div class="cc-card cc-stat-card"><div class="cc-icon-circle">' + icon('dollar') + '</div>' +
+          '<div><div class="cc-stat-val">' + pacingVal + '</div><div class="cc-stat-label">' + pacingLabelHtml + '</div></div></div>' +
+        '<div class="cc-card cc-stat-card"><div class="cc-icon-circle">' + icon('chart') + '</div>' +
+          '<div><div class="cc-stat-val">' + goalVal + '</div><div class="cc-stat-label">' + goalLabelHtml +
+          ' <a href="javascript:void(0)" onclick="ccSetQuarterlyGoal()" style="font-size:11px;">Set goal</a></div></div></div>' +
+      '</div>';
+
+      var grid = '<div class="cc-home-grid">' +
+        ccHomeTile('doc', 'Your 90-Day Marketing Plan', planSummary, 'plan') +
+        ccHomeTile('dollar', 'Adjust Your Budget', budgetSummary, 'budget') +
+        ccHomeTile('rocket', 'Ready for You', readySummary, 'ready_for_you', readyCount > 0 ? readyCount : null) +
+        ccHomeTile('link', 'Connect Everything', connSummary, 'connections', connMissing > 0 ? connMissing : null) +
+      '</div>';
+
+      return '<h1 class="cc-h1">Home</h1>' +
+        '<p class="cc-sub">Everything Reina is doing for your marketing, at a glance.</p>' +
+        headline + pacingGoalRow + grid +
+        '<div style="margin-top:4px"><button class="cc-btn cc-btn-secondary" onclick="ccExportOwnerReport()">Export Owner Report</button></div>';
+    });
+  }
+
+  function ccExportOwnerReport(){
+    if (!STATE.data) { window.alert('Data is still loading -- try again in a moment.'); return; }
+    var d = STATE.data;
+    api('attribution').catch(function(){ return null; }).then(function(attr){
+      var attrOk = !!(attr && attr.ok);
+      var spendCents = (d.budget && d.budget.monthlyCents) || 0;
+      var revenueCents = attrOk ? (attr.totalAttributedRevenueCents || 0) : 0;
+      var roiText = (attrOk && spendCents > 0) ? (Math.round((revenueCents / spendCents) * 10) / 10) + 'x' : 'Not yet available';
+      var f = (d.plan && d.plan.forecast) || {status:'blocked_assumptions'};
+      var planLine = f.status === 'ready'
+        ? (Math.round(f.bands[f.headlineBand].qualifiedLeads) + ' qualified leads/mo projected (' + f.headlineBand + ')')
+        : 'Forecast not yet available -- set your assumptions first.';
+      var channelRows = ((d.budget && d.budget.channels) || []).map(function(c){
+        return '<tr><td>' + esc(c.label) + '</td><td>' + money((c.monthlyCents || 0) / 100) + '/mo</td><td>' + (c.paused ? 'Paused' : 'Active') + '</td></tr>';
+      }).join('');
+      var html = '<!doctype html><html><head><meta charset="utf-8"><title>HiveLogic Marketing Owner Report</title>' +
+        '<style>body{font-family:Arial,Helvetica,sans-serif;padding:32px;color:#12213f;max-width:760px;margin:0 auto;}' +
+        'h1{margin-bottom:2px;} .sub{color:#6b7280;font-size:13px;margin-bottom:24px;}' +
+        'table{border-collapse:collapse;width:100%;margin:14px 0 26px;}' +
+        'td,th{border:1px solid #e7e2d6;padding:8px 10px;text-align:left;font-size:13px;}' +
+        'th{background:#faf7f0;}</style></head><body>' +
+        '<h1>Marketing Owner Report</h1>' +
+        '<div class="sub">Generated ' + esc(new Date().toString()) + ' &middot; HiveLogic</div>' +
+        '<table><tr><th>Metric</th><th>Value</th></tr>' +
+        '<tr><td>Monthly budget (maximum)</td><td>' + money(Math.round(spendCents / 100)) + '</td></tr>' +
+        '<tr><td>Blended ROI (attributed revenue &divide; spend)</td><td>' + roiText + '</td></tr>' +
+        '<tr><td>Connections</td><td>' + d.connections.connected + ' of ' + d.connections.total + ' connected</td></tr>' +
+        '<tr><td>Ready for your review</td><td>' + d.readyForYou.items.length + ' item(s)</td></tr>' +
+        '<tr><td>Plan forecast</td><td>' + esc(planLine) + '</td></tr>' +
+        '</table>' +
+        '<h2 style="font-size:16px;">Channel budget</h2>' +
+        '<table><tr><th>Channel</th><th>Monthly budget</th><th>Status</th></tr>' + channelRows + '</table>' +
+        '<p style="font-size:11px;color:#6b7280;">All figures reflect real HiveLogic data as of the time this report was generated. Anything not yet measurable is labeled "Not yet available" rather than estimated.</p>' +
+        '</body></html>';
+      var blob = new Blob([html], {type: 'text/html'});
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement('a');
+      a.href = url;
+      a.download = 'hivelogic-marketing-owner-report-' + new Date().toISOString().slice(0,10) + '.html';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(function(){ URL.revokeObjectURL(url); }, 4000);
+    }).catch(function(){
+      window.alert('Could not generate the report right now. Try again in a moment.');
+    });
+  }
+  window.ccExportOwnerReport = ccExportOwnerReport;
+
+  function ccSetQuarterlyGoal(){
+    var input = window.prompt('Set your quarterly revenue goal in dollars (leave blank to clear it).', '');
+    if (input === null) return;
+    var trimmed = input.trim();
+    var goalDollars = trimmed === '' ? null : Number(trimmed);
+    if (goalDollars !== null && (!isFinite(goalDollars) || goalDollars < 0)) {
+      window.alert('Enter a number 0 or greater.');
+      return;
+    }
+    api('command_center_goal', {method:'POST', body: JSON.stringify({goalDollars: goalDollars})})
+      .then(function(r){
+        if (!r || !r.ok) { window.alert((r && r.error) || 'Could not save the goal.'); return; }
+        render();
+      }).catch(function(e){ window.alert('Could not save the goal: ' + e.message); });
+  }
+  window.ccSetQuarterlyGoal = ccSetQuarterlyGoal;
+
+  // ---------- Channel comparison bar chart (real current monthly spend) ----------
+  function ccChannelBarChart(channels){
+    var items = (channels || []).filter(function(c){ return !c.paused && (c.monthlyCents || 0) > 0; })
+      .map(function(c){ return {label: c.label, cents: c.monthlyCents || 0}; });
+    if (!items.length) return '';
+    items.sort(function(a,b){ return b.cents - a.cents; });
+    var max = items.reduce(function(m,c){ return Math.max(m, c.cents); }, 0);
+    var barsHtml = items.map(function(c){
+      var pct = max > 0 ? Math.max(2, Math.round((c.cents / max) * 100)) : 0;
+      return '<div class="cc-bar-row">' +
+        '<div class="cc-bar-label">' + esc(c.label) + '</div>' +
+        '<div class="cc-bar-track"><div class="cc-bar-fill" style="width:' + pct + '%"></div></div>' +
+        '<div class="cc-bar-value">' + money(c.cents / 100) + '/mo</div>' +
+      '</div>';
+    }).join('');
+    return '<div class="cc-card" style="margin-bottom:24px;">' +
+      '<div class="cc-list-title" style="margin-bottom:12px;">Channel Comparison (current monthly spend)</div>' +
+      barsHtml +
+    '</div>';
+  }
+
+  // ---------- Real leads + cost-per-lead by channel (Plan tab) ----------
+  // Leads grouped by lead_pipeline.lead_source (sql/013); cost-per-lead only
+  // computed for the handful of sources with an honest match to a paid
+  // channel we track real spend for -- every other source shows its real
+  // lead count with no invented cost figure attached.
+  function ccChannelPerformanceTable(perf){
+    if (!perf || !perf.ok || !perf.configured || !perf.rows || !perf.rows.length) {
+      return '<div class="cc-card" style="margin-bottom:24px;">' +
+        '<div class="cc-list-title" style="margin-bottom:8px;">Leads by Channel</div>' +
+        '<div class="cc-list-desc">No leads with a logged source yet -- this fills in as leads come in through the Leads page.</div>' +
+      '</div>';
+    }
+    var rowsHtml = perf.rows.map(function(r){
+      var label = r.source.charAt(0).toUpperCase() + r.source.slice(1);
+      var cpl = r.costPerLeadCents != null ? money(r.costPerLeadCents/100) : 'Not yet';
+      return '<tr><td>' + esc(label) + '</td><td>' + r.leads + '</td><td>' + cpl + '</td></tr>';
+    }).join('');
+    return '<div class="cc-card" style="margin-bottom:24px;">' +
+      '<div class="cc-list-title" style="margin-bottom:12px;">Leads by Channel (' + perf.totalLeads + ' total)</div>' +
+      '<table class="cc-results-table"><thead><tr><th>Source</th><th>Leads</th><th>Cost per lead</th></tr></thead><tbody>' + rowsHtml + '</tbody></table>' +
+      '<div class="cc-list-desc" style="margin-top:10px;">Cost per lead only shown where real spend is tracked for that channel.</div>' +
+    '</div>';
+  }
+
+  function screenFor(route, data){
+    if (route === 'plan') return renderPlan(data);
+    if (route === 'budget') return renderBudget(data);
+    if (route === 'connections') return renderConnections(data);
+    if (route === 'ready_for_you') return renderReadyForYou(data);
+    if (route === 'content_approval') return renderContentApproval();
+    if (route === 'calendar') return renderCalendar(data);
+    if (route === 'results') return renderResults(data);
+    if (route === 'changes') return renderChangeRequests(data);
+    if (route === 'ideas') return renderIdeas(data);
+    if (route === 'assumptions') return renderAssumptions(data);
+    // Home gets an explicit route so hitting #home always renders the
+    // real Figure-1 dashboard (renderHome), instead of relying only on
+    // the adaptive fallback below -- that fallback is intentionally left
+    // untouched (still covers any unrecognized/empty route) per the
+    // existing marketing-command-center-nav.test.mjs regression coverage.
+    if (route === 'home') return renderHome(data);
+    // home: adaptive
+    if (data.connections.connected < data.connections.total) return renderConnections(data);
+    if (data.readyForYou.items.length) return renderReadyForYou(data);
+    return renderPlan(data);
+  }
+
+  function route(){ return (location.hash || '#home').slice(1); }
+
+  function render(){
+    if (!STATE.data) return;
+    var r = route();
+    var navActive = (r === 'budget' || r === 'assumptions') ? 'plan' : r;
+    renderNav(navActive);
+    var data = STATE.data;
+    var sections = [
+      {key:'home', out: renderHome(data)},
+      {key:'content_approval', out: renderContentApproval()},
+      {key:'plan', out: renderPlan(data)},
+      {key:'ready_for_you', out: renderReadyForYou(data)},
+      {key:'calendar', out: renderCalendar(data)},
+      {key:'results', out: renderResults(data)},
+      {key:'connections', out: renderConnections(data)},
+      {key:'ideas', out: renderIdeas(data)},
+      {key:'changes', out: renderChangeRequests(data)}
+    ];
+    document.getElementById('cc-main').innerHTML = '<div class="cc-loading">Loading real data&hellip;</div>';
+    Promise.all(sections.map(function(s){
+      return Promise.resolve(s.out).then(function(html){ return {key:s.key, html:html}; });
+    })).then(function(built){
+      document.getElementById('cc-main').innerHTML = built.map(function(s){
+        return '<section class="cc-page-section" id="cc-section-' + s.key + '">' + s.html + '</section>';
+      }).join('');
+      if (navActive && navActive !== 'home') {
+        var target = document.getElementById('cc-section-' + navActive);
+        if (target) target.scrollIntoView({behavior:'smooth', block:'start'});
+      }
+    });
+  }
+
+  function loadAndRender(){
+    return api('command_center').then(function(r){
+      if (!r || !r.ok) {
+        document.getElementById('cc-main').innerHTML = '<div class="cc-empty">' + esc((r && r.error) || 'Could not load the Command Center. Try refreshing.') + '</div>';
+        return;
+      }
+      STATE.data = r;
+      render();
+    }).catch(function(){
+      document.getElementById('cc-main').innerHTML = '<div class="cc-empty">Could not reach the server. Check your connection and refresh.</div>';
+    });
+  }
+
+  function ccSocialReview(postId, decision){
+    var reason = null;
+    if (decision === 'reject') {
+      reason = (window.prompt('Optional: add a reason for rejecting this (or leave blank).') || '').trim();
+      if (!window.confirm('Reject this draft? Reina will not publish it.')) return;
+    }
+    apiSocial('social_post_review', { method:'POST', body: JSON.stringify({ postId: postId, decision: decision, reason: reason || undefined }) })
+      .then(function(r){
+        if (!r || !r.ok) { window.alert((r && r.error) || 'Could not update this post.'); return; }
+        render();
+      }).catch(function(e){ window.alert('Could not update this post: ' + e.message); });
+  }
+
+  function ccSocialSchedule(postId){
+    var when = window.prompt('Schedule for when? Example: 2026-08-06 09:00', '');
+    if (!when) return;
+    var d = new Date(when);
+    if (isNaN(d.getTime())) { window.alert('Could not understand that date/time.'); return; }
+    apiSocial('social_post_schedule', { method:'POST', body: JSON.stringify({ postId: postId, scheduledFor: d.toISOString() }) })
+      .then(function(r){
+        if (!r || !r.ok) { window.alert((r && r.error) || 'Could not schedule this post.'); return; }
+        render();
+      }).catch(function(e){ window.alert('Could not schedule this post: ' + e.message); });
+  }
+
+  function ccSocialPublish(postId){
+    if (!window.confirm('Publish this right now, for real?')) return;
+    apiSocial('social_post_publish', { method:'POST', body: JSON.stringify({ postId: postId }) })
+      .then(function(r){
+        if (!r || !r.ok) { window.alert((r && r.error) || 'Could not publish this post.'); return; }
+        render();
+      }).catch(function(e){ window.alert('Could not publish this post: ' + e.message); });
+  }
+
+  document.addEventListener('click', function(e){
+    var connectTrigger = e.target.closest && e.target.closest('.cc-connect-trigger');
+    if (connectTrigger) { ccOpenConnectModal(connectTrigger.getAttribute('data-channel-key')); return; }
+    var btn = e.target.closest && e.target.closest('.cc-social-action');
+    if (!btn) return;
+    var action = btn.getAttribute('data-action');
+    var postId = btn.getAttribute('data-post-id');
+    if (action === 'approve') ccSocialReview(postId, 'approve');
+    else if (action === 'reject') ccSocialReview(postId, 'reject');
+    else if (action === 'publish') ccSocialPublish(postId);
+    else if (action === 'schedule') ccSocialSchedule(postId);
+  });
+
+  window.addEventListener('hashchange', render);
+  loadAndRender();
+})();
+</script>
+  <script src="/voice-input.js" defer></script>
+</body>
+</html>

@@ -1,0 +1,44 @@
+<div class="lsent"><h1>Purchase orders <em>you can trust.</em></h1>
+<p>Company-numbered, job-linked, approved before the money moves — and when it can't wait for approval, that's on record too, clearly marked.</p></div>
+
+<div class="statrow" id="pox-statrow">
+  <div class="stat"><span>Draft approvals</span><b id="pox-stat-drafts">0</b><span class="tr">awaiting a different approver</span></div>
+  <div class="stat"><span>Open orders</span><b id="pox-stat-open">0</b><span class="tr">ordered, received, or billed</span></div>
+  <div class="stat"><span>Exceptions</span><b id="pox-stat-exceptions">0</b><span class="tr down">need a decision</span></div>
+  <div class="stat"><span>Approved actual</span><b id="pox-stat-actual">$0.00</b><span class="tr">received against open &amp; closed POs</span></div>
+</div>
+
+<div class="card">
+  <h3>New purchase order <span style="font-size:10px;color:var(--mut);font-weight:700">PLANNED OR AFTER-THE-FACT</span></h3>
+  <div class="bkx-grid2">
+    <label class="bkx-field">
+      <span>Order type</span>
+      <select id="pox-order-type">
+        <option value="planned">Planned — before the money moves</option>
+        <option value="after_the_fact">After-the-fact — no PO existed beforehand</option>
+      </select>
+    </label>
+    <label class="bkx-field"><span>Job</span><input type="text" id="pox-job" placeholder="Job number or name"></label>
+    <label class="bkx-field"><span>Overhead category</span><input type="text" id="pox-overhead" placeholder="Only if not job-tied"></label>
+    <label class="bkx-field"><span>Vendor / subcontractor</span><input type="text" id="pox-vendor" placeholder="Search QuickBooks vendors"></label>
+  </div>
+  <label class="bkx-field" id="pox-after-reason-field" style="display:none;margin-top:10px">
+    <span>Reason no PO existed beforehand</span>
+    <input type="text" id="pox-after-reason" placeholder="Required — e.g. truck broke down, emergency parts run">
+  </label>
+  <div id="pox-after-reason-note" class="note" style="display:none;margin-top:6px;color:#c0392b">
+    <b>Not preapproved.</b> This record stays visibly separate from planned, preapproved purchase orders in every report and export, permanently.
+  </div>
+  <div id="pox-new-lines" style="margin-top:10px"></div>
+  <button class="gbtn" id="pox-add-line" type="button">+ Add line</button>
+  <div style="margin-top:14px">
+    <button class="gbtn go" id="pox-create" type="button">Create purchase order</button>
+  </div>
+  <div id="pox-create-status" class="note" style="display:none;margin-top:10px"></div>
+</div>
+
+<div class="card">
+  <h3>All purchase orders <span style="font-size:10px;color:var(--mut);font-weight:700">ORDERED &#8594; RECEIVED &#8594; BILLED &#8594; CLOSED</span></h3>
+  <label class="bkx-field pox-search"><span>Find a PO</span><input type="search" id="pox-search" placeholder="PO number, vendor, job, status"></label>
+  <div id="pox-list"></div>
+</div>

@@ -1,0 +1,1139 @@
+<!doctype html>
+<!--
+  HiveLogic — Owner Setup Wizard
+  Slice 4 of "Company Setup + Cost Model V1".
+  Static page served by Vercel from /public (no build step, no framework, no bundler).
+  NOTE: the onboarding-session backend (/api/onboarding) is PENDING and may 404 at
+  runtime. Every onboarding-persist call is wrapped in try/catch and the wizard stays
+  fully usable client-side; a muted "progress not saved (backend pending)" note is shown
+  instead of breaking. The cost-model endpoints (/api/cost-model) are live.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#161e2e">
+<title>HiveLogic Owner Setup</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#484f64; --canvas:#f0f1f6; --card:#ffffff; --line:#dadde8; --rail:#161e2e;
+    --gold:#748a9e; --green:#1B7A50; --red:#c65b4e; --orange:#f5793b;
+    --ink-soft:#6c7488; --ink-mute:#98a0b3;
+    --radius:15px;
+    --shadow:0 8px 24px rgba(22,30,46,.07);
+    --shadow-lg:0 18px 50px rgba(22,30,46,.12);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    font-family:'Montserrat',system-ui,-apple-system,"Segoe UI",sans-serif;
+    -webkit-font-smoothing:antialiased;
+    background:var(--canvas);color:var(--ink);
+    -webkit-tap-highlight-color:transparent;line-height:1.5;
+  }
+  .mono{font-family:'JetBrains Mono',ui-monospace,monospace;font-variant-numeric:tabular-nums}
+  a{color:var(--green);text-decoration:none}
+  a:hover{text-decoration:underline}
+  .hidden{display:none !important}
+
+  /* ---------------- layout shell ---------------- */
+  .shell{display:flex;min-height:100vh}
+  .rail{
+    width:270px;flex-shrink:0;background:var(--rail);color:#c6cede;
+    padding:26px 22px;display:flex;flex-direction:column;gap:22px;
+    position:sticky;top:0;height:100vh;overflow-y:auto;
+  }
+  .rail .brand{display:flex;align-items:center;gap:11px}
+  .rail .brand .mark{
+    width:38px;height:38px;flex-shrink:0;display:flex;align-items:center;justify-content:center;
+  }
+  .rail .brand .wm{font-weight:800;font-size:17px;letter-spacing:-.01em;color:#e7ecf4}
+  .rail .brand .wm b{color:#fff}
+  .rail .brand .tag{font-size:8px;font-weight:700;letter-spacing:.22em;color:var(--gold);
+    font-family:'JetBrains Mono',monospace;margin-top:2px}
+  .rail h3{font-size:10px;text-transform:uppercase;letter-spacing:.12em;color:var(--gold);
+    margin:0;font-weight:700}
+  .rail .steps{display:flex;flex-direction:column;gap:2px}
+  .rail .rstep{
+    display:flex;align-items:center;gap:12px;padding:11px 12px;border-radius:11px;
+    cursor:pointer;transition:background .14s;font-size:13px;font-weight:600;color:#9aa5bb;
+    border:1px solid transparent;text-align:left;background:none;font-family:inherit;width:100%;
+  }
+  .rail .rstep:hover{background:rgba(255,255,255,.045)}
+  .rail .rstep .dot{
+    width:24px;height:24px;flex-shrink:0;border-radius:50%;border:1.6px solid #38425a;
+    display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;
+    font-family:'JetBrains Mono',monospace;color:#8894ad;background:#1d273b;
+  }
+  .rail .rstep.done .dot{background:var(--green);border-color:var(--green);color:#fff}
+  .rail .rstep.skipped .dot{background:#39435b;border-color:#39435b;color:var(--gold)}
+  .rail .rstep.active{background:rgba(245,121,59,.12);color:#fff;border-color:rgba(245,121,59,.4)}
+  .rail .rstep.active .dot{border-color:var(--orange);color:#fff;background:var(--orange)}
+  .rail .rstep .lbl{flex:1;min-width:0}
+  .rail .rstep .sub{font-size:10px;color:#606d86;font-weight:500;margin-top:1px}
+  .rail .foot{margin-top:auto;font-size:9.5px;color:#59637c;font-family:'JetBrains Mono',monospace;
+    letter-spacing:.05em;line-height:1.7}
+
+  .content{flex:1;min-width:0;display:flex;flex-direction:column}
+  .topbar{
+    display:none;align-items:center;justify-content:space-between;
+    background:var(--rail);color:#fff;padding:14px 18px;position:sticky;top:0;z-index:20;
+  }
+  .topbar .wm{font-weight:800;font-size:15px;color:#e7ecf4}
+  .topbar .wm b{color:#fff}
+  .topbar .prog{font-size:11px;color:var(--gold);font-family:'JetBrains Mono',monospace;font-weight:700}
+
+  /* mobile progress dots */
+  .dotsbar{display:none;gap:7px;padding:14px 18px 0;align-items:center;justify-content:center;flex-wrap:wrap}
+  .dotsbar .d{width:9px;height:9px;border-radius:50%;background:var(--line);transition:all .16s}
+  .dotsbar .d.active{background:var(--orange);transform:scale(1.35)}
+  .dotsbar .d.done{background:var(--green)}
+  .dotsbar .d.skipped{background:var(--gold)}
+
+  .stage{max-width:720px;width:100%;margin:0 auto;padding:34px 26px 60px}
+
+  .steptag{font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--gold);
+    font-family:'JetBrains Mono',monospace}
+  h1.title{font-size:26px;font-weight:800;color:#333a4c;margin:6px 0 6px;letter-spacing:-.01em}
+  .lede{font-size:14.5px;color:var(--ink-soft);margin:0 0 22px;max-width:560px}
+
+  .card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);
+    padding:22px;box-shadow:var(--shadow);margin-bottom:16px}
+  .card h2{font-size:12px;text-transform:uppercase;letter-spacing:.07em;color:var(--gold);margin:0 0 14px;font-weight:700}
+
+  label{display:block;font-size:12px;font-weight:700;color:var(--ink-soft);margin-bottom:6px;letter-spacing:.01em}
+  input[type=text],input[type=number],select{
+    width:100%;border:1.5px solid var(--line);border-radius:11px;padding:12px 13px;
+    font-size:14.5px;font-family:inherit;background:#fbfbfd;color:var(--ink);margin-bottom:15px;
+  }
+  input:focus,select:focus{outline:none;border-color:var(--gold);background:#fff}
+  input::placeholder{color:var(--ink-mute)}
+  .field-row{display:grid;grid-template-columns:1fr 1fr;gap:0 16px}
+  .field-row-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:0 16px}
+
+  .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;
+    border:none;border-radius:12px;padding:13px 22px;font-size:14px;font-weight:700;
+    font-family:inherit;cursor:pointer;transition:filter .14s,transform .06s}
+  .btn:active{transform:translateY(1px)}
+  .btn.primary{background:var(--orange);color:#fff;box-shadow:0 6px 16px rgba(245,121,59,.28)}
+  .btn.primary:hover{filter:brightness(1.05)}
+  .btn.green{background:var(--green);color:#fff;box-shadow:0 6px 16px rgba(27,122,80,.24)}
+  .btn.ghost{background:#fff;border:1.5px solid var(--line);color:var(--ink)}
+  .btn.ghost:hover{border-color:var(--gold)}
+  .btn:disabled{opacity:.5;cursor:default}
+  .btn.wide{width:100%}
+
+  .navrow{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:24px}
+  .navrow .right{display:flex;align-items:center;gap:12px}
+  .skiplink{background:none;border:none;color:var(--ink-mute);font-size:13px;font-weight:600;
+    font-family:inherit;cursor:pointer;text-decoration:underline;padding:8px 4px}
+  .skiplink:hover{color:var(--ink-soft)}
+  .backlink{background:none;border:none;color:var(--ink-soft);font-size:13.5px;font-weight:700;
+    font-family:inherit;cursor:pointer;padding:8px 0}
+  .backlink:hover{color:var(--ink)}
+
+  /* trade / option cards */
+  .optgrid{display:grid;grid-template-columns:1fr 1fr;gap:13px}
+  .opt{
+    border:1.6px solid var(--line);border-radius:14px;padding:18px 16px;cursor:pointer;
+    background:#fff;transition:border-color .14s,box-shadow .14s,transform .06s;text-align:left;
+    font-family:inherit;position:relative}
+  .opt:hover{border-color:var(--gold);box-shadow:var(--shadow)}
+  .opt:active{transform:translateY(1px)}
+  .opt.sel{border-color:var(--orange);box-shadow:0 0 0 3px rgba(245,121,59,.14)}
+  .opt .em{font-size:26px;display:block;margin-bottom:9px}
+  .opt .on{font-size:15px;font-weight:800;color:#333a4c}
+  .opt .os{font-size:12px;color:var(--ink-soft);margin-top:3px}
+  .opt .badge{position:absolute;top:12px;right:12px;font-size:9px;font-weight:700;
+    letter-spacing:.06em;text-transform:uppercase;background:#eef4f0;color:var(--green);
+    padding:3px 7px;border-radius:20px;font-family:'JetBrains Mono',monospace}
+
+  /* trade category chips (step 1) */
+  .catbar{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:15px}
+  .catchip{border:1.4px solid var(--line);border-radius:999px;padding:8px 13px;cursor:pointer;
+    background:#fff;font-family:inherit;font-size:13px;font-weight:700;color:#333a4c;
+    transition:border-color .14s,background .14s}
+  .catchip:hover{border-color:var(--gold)}
+  .catchip.sel{border-color:var(--orange);background:rgba(245,121,59,.08)}
+  .catchip .catn{font-size:11px;color:var(--gold);font-family:'JetBrains Mono',monospace;margin-left:5px}
+
+  /* metric tiles */
+  .metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:6px}
+  .metric{border:1px solid var(--line);border-radius:13px;padding:15px;background:#fbfbfd}
+  .metric .k{font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--gold);font-weight:700}
+  .metric .v{font-size:23px;font-weight:700;color:#333a4c;margin-top:5px;font-family:'JetBrains Mono',monospace;letter-spacing:-.01em}
+  .metric .v.small{font-size:18px}
+
+  /* roster list */
+  .roster{display:flex;flex-direction:column;gap:10px;margin-bottom:14px}
+  .rrow{display:grid;grid-template-columns:1fr 150px 40px;gap:10px;align-items:start}
+  .rrow input,.rrow select{margin-bottom:0}
+  .rrow .del{border:1.5px solid var(--line);background:#fff;border-radius:10px;color:var(--red);
+    font-size:16px;font-weight:700;cursor:pointer;height:45px;font-family:inherit}
+  .rrow .del:hover{border-color:var(--red)}
+
+  /* notes / banners */
+  .note{font-size:12.5px;color:var(--ink-mute);margin-top:6px}
+  .banner{border-radius:12px;padding:13px 15px;font-size:13px;font-weight:600;margin:4px 0 14px;line-height:1.5}
+  .banner.info{background:#eef1f7;color:#4a5468;border:1px solid var(--line)}
+  .banner.warn{background:#fdf2ec;color:#a5502e;border:1px solid #f3d3c1}
+  .banner.good{background:#eaf5ef;color:#1a6b47;border:1px solid #c4e5d3}
+  .banner .em{margin-right:6px}
+
+  .checklist{list-style:none;margin:10px 0 0;padding:0;display:flex;flex-direction:column;gap:9px}
+  .checklist li{display:flex;align-items:center;gap:10px;font-size:13.5px;color:var(--ink)}
+  .checklist li .ci{width:22px;height:22px;border-radius:50%;flex-shrink:0;display:flex;
+    align-items:center;justify-content:center;font-size:12px;font-weight:700}
+  .checklist li.ok .ci{background:var(--green);color:#fff}
+  .checklist li.todo .ci{background:#eef1f7;color:var(--ink-mute);border:1.5px solid var(--line)}
+
+  .saved-note{font-size:11.5px;color:var(--ink-mute);font-family:'JetBrains Mono',monospace;
+    display:inline-flex;align-items:center;gap:6px;margin-top:2px}
+  .saved-note.ok{color:var(--green)}
+
+  /* confidence ring */
+  .conf{display:flex;align-items:center;gap:20px;flex-wrap:wrap}
+  .ring{width:104px;height:104px;flex-shrink:0}
+  .ring .num{font-family:'JetBrains Mono',monospace;font-weight:700;font-size:24px;fill:#333a4c}
+
+  /* sign-in / loading panels */
+  .center-screen{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}
+  .panel{background:var(--card);border:1px solid var(--line);border-radius:18px;
+    padding:38px 34px;max-width:420px;width:100%;text-align:center;box-shadow:var(--shadow-lg)}
+  .panel .mk{margin:0 auto 18px;display:flex;align-items:center;justify-content:center}
+  .panel h2{font-size:20px;font-weight:800;color:#333a4c;margin:0 0 8px}
+  .panel p{font-size:14px;color:var(--ink-soft);margin:0 0 22px}
+  .spinner{width:34px;height:34px;border:3px solid var(--line);border-top-color:var(--orange);
+    border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 16px}
+  @keyframes spin{to{transform:rotate(360deg)}}
+
+  @media (max-width:820px){
+    .rail{display:none}
+    .topbar{display:flex}
+    .dotsbar{display:flex}
+    .stage{padding:22px 16px 54px}
+    .field-row,.field-row-3{grid-template-columns:1fr}
+    .optgrid{grid-template-columns:1fr}
+    .rrow{grid-template-columns:1fr 120px 40px}
+    h1.title{font-size:22px}
+  }
+</style>
+</head>
+<body>
+
+<!-- ============ loading ============ -->
+<div id="loading" class="center-screen">
+  <div class="panel">
+    <div class="spinner"></div>
+    <h2>Loading your setup…</h2>
+    <p>One moment while we check your account.</p>
+  </div>
+</div>
+
+<!-- ============ signed-out ============ -->
+<div id="signin" class="center-screen hidden">
+  <div class="panel">
+    <div class="mk">
+      <svg viewBox="0 0 224 120" width="120" height="64" aria-hidden="true">
+        <polygon points="112,6 158.8,33 158.8,87 112,114 65.2,87 65.2,33" fill="none" stroke="#748a9e" stroke-width="7"/>
+        <polygon points="86,28 98,34 98,86 86,92" fill="#748a9e"/>
+        <polygon points="138,28 126,34 126,86 138,92" fill="#748a9e"/>
+        <rect x="98" y="54" width="28" height="12" fill="#748a9e"/>
+      </svg>
+    </div>
+    <h2>Please sign in first</h2>
+    <p>You need to be signed in to the HiveLogic app before running Owner Setup.</p>
+    <a class="btn primary wide" href="/">Go to HiveLogic sign-in →</a>
+  </div>
+</div>
+
+<!-- ============ create company (self-serve first run) ============ -->
+<div id="provision" class="center-screen hidden">
+  <div class="panel">
+    <div class="mk">
+      <svg viewBox="0 0 224 120" width="120" height="64" aria-hidden="true">
+        <polygon points="112,6 158.8,33 158.8,87 112,114 65.2,87 65.2,33" fill="none" stroke="#748a9e" stroke-width="7"/>
+        <polygon points="86,28 98,34 98,86 86,92" fill="#748a9e"/>
+        <polygon points="138,28 126,34 126,86 138,92" fill="#748a9e"/>
+        <rect x="98" y="54" width="28" height="12" fill="#748a9e"/>
+      </svg>
+    </div>
+    <h2>Name your company</h2>
+    <p>Let's set up your company in HiveLogic. You can change any of this later.</p>
+    <div style="text-align:left;margin-top:14px">
+      <label for="pv-name">Company name</label>
+      <input type="text" id="pv-name" placeholder="e.g. Acme Electric" autocomplete="organization">
+      <div id="pv-err" class="hidden" style="color:#c65b4e;font-size:13px;font-weight:600;margin-top:8px"></div>
+    </div>
+    <button class="btn primary wide" id="pv-go" onclick="createCompany()" style="margin-top:16px">Create company →</button>
+  </div>
+</div>
+
+<!-- ============ wizard ============ -->
+<div id="wizard" class="shell hidden">
+  <aside class="rail">
+    <div class="brand">
+      <div class="mark">
+        <svg viewBox="0 0 224 120" width="34" height="34" aria-hidden="true">
+          <polygon points="112,6 158.8,33 158.8,87 112,114 65.2,87 65.2,33" fill="none" stroke="#c6cede" stroke-width="7"/>
+          <polygon points="86,28 98,34 98,86 86,92" fill="#748a9e"/>
+          <polygon points="138,28 126,34 126,86 138,92" fill="#748a9e"/>
+          <rect x="98" y="54" width="28" height="12" fill="#c6cede"/>
+        </svg>
+      </div>
+      <div>
+        <div class="wm"><b>Hive</b>Logic</div>
+        <div class="tag">OWNER SETUP</div>
+      </div>
+    </div>
+    <div>
+      <h3>Setup steps</h3>
+      <div class="steps" id="rail-steps"></div>
+    </div>
+    <div class="foot">
+      COMPANY SETUP + COST MODEL V1<br>
+      SLICE 4 · WIZARD
+    </div>
+  </aside>
+
+  <div class="content">
+    <div class="topbar">
+      <div class="wm"><b>Hive</b>Logic Setup</div>
+      <div class="prog" id="top-prog">1 / 7</div>
+    </div>
+    <div class="dotsbar" id="dotsbar"></div>
+    <div class="stage" id="stage"></div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+"use strict";
+
+/* ---------------- Supabase bootstrap ---------------- */
+var SUPABASE_URL = 'https://sqhusuuhlmcmkeowdrga.supabase.co';
+var SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNxaHVzdXVobG1jbWtlb3dkcmdhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQxMjkyMjAsImV4cCI6MjA5OTcwNTIyMH0.PszXL0D8KJC0MEYgbTduSPEcPn2g1pGx0IMK3YGzBcI';
+var sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { auth: { persistSession: true, autoRefreshToken: true } });
+
+/* ---------------- helpers ---------------- */
+function esc(s){
+  return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){
+    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
+  });
+}
+function $(id){ return document.getElementById(id); }
+function money(n){
+  if(n == null || n === '' || isNaN(n)) return '—';
+  return '$' + Number(n).toLocaleString('en-US', { maximumFractionDigits: 2 });
+}
+function pct(n){
+  if(n == null || n === '' || isNaN(n)) return '—';
+  return Number(n).toLocaleString('en-US', { maximumFractionDigits: 1 }) + '%';
+}
+function num(n, digits){
+  if(n == null || n === '' || isNaN(n)) return '—';
+  return Number(n).toLocaleString('en-US', { maximumFractionDigits: digits == null ? 2 : digits });
+}
+
+async function token(){
+  var sess = await sb.auth.getSession();
+  return (sess.data.session && sess.data.session.access_token) || '';
+}
+async function apiFetch(url, opts){
+  opts = opts || {};
+  var t = await token();
+  opts.headers = opts.headers || {};
+  opts.headers['Authorization'] = 'Bearer ' + t;
+  if(opts.body && !opts.headers['Content-Type']) opts.headers['Content-Type'] = 'application/json';
+  var r = await fetch(url, opts);
+  var data = null;
+  try { data = await r.json(); } catch(e){ data = null; }
+  return { status: r.status, ok: r.ok, data: data };
+}
+
+/* ---------------- step model ---------------- */
+var STEPS = [
+  { key:'trade',         label:'Trade',           sub:'What you do' },
+  { key:'company',       label:'Company profile', sub:'Confirm details' },
+  { key:'connect_books', label:'Connect books',   sub:'QuickBooks' },
+  { key:'crew',          label:'Crew roster',     sub:'Your team' },
+  { key:'rate',          label:'Bill rate',       sub:'Break-even' },
+  { key:'import',        label:'Import clients',  sub:'Jobs & customers' },
+  { key:'live',          label:'Go live',         sub:'Finish' }
+];
+function stepIndex(key){ for(var i=0;i<STEPS.length;i++){ if(STEPS[i].key === key) return i; } return 0; }
+
+// Fallback list only — used if the live /api/onboarding?resource=trades catalog
+// can't load (endpoint 404 / empty). The real step 1 is driven by the `trades`
+// table (63 rows across 8 categories), loaded into APP.tradeCategories.
+var TRADE_OPTIONS = [
+  { key:'design_build', slug:'design_build', em:'🏗️', name:'Design / Build',  sub:'Full remodels & new builds', seed:true },
+  { key:'handyman',     slug:'handyman',     em:'🔧', name:'Handyman',        sub:'Repairs, service & T&M',      seed:false },
+  { key:'electric',     slug:'electric',     em:'⚡', name:'Electric',         sub:'Electrical contracting',      seed:false },
+  { key:'plumbing',     slug:'plumbing',     em:'🚰', name:'Plumbing',         sub:'Plumbing contracting',        seed:false }
+];
+
+/* ---------------- app state ---------------- */
+var APP = {
+  sessionId: null,
+  current: 'trade',
+  status: {},          // step_key -> status ('complete'|'skipped'|'in_progress')
+  payloads: {},        // step_key -> last payload
+  confidence: null,
+  persistOK: true,     // false once an onboarding call 404s
+  needsProvision: false, // true when a signed-in user has no company yet (self-serve first run)
+  assumptions: null,
+  rates: null,
+  ratesLoaded: false,
+  trade: null,                 // selected trade slug
+  tradeMeta: null,             // selected trade row {name, slug, benchmark_key, benchmark_native, ...}
+  tradeCategories: null,       // [{ category, category_sort, trades:[...] }] from the API
+  tradeCategory: null,         // selected category name
+  seedResult: null,
+  company: { legal_name:'Greenwich Handyman', dba:'GH Co.', primary_trade:'', region:'northeast' },
+  roster: [],
+  billRate: ''
+};
+
+/* ---------------- onboarding persistence (graceful) ---------------- */
+async function persistStep(stepKey, status, payload){
+  APP.status[stepKey] = status;
+  if(payload) APP.payloads[stepKey] = payload;
+  var body = { step_key: stepKey, status: status, payload: payload || {} };
+  if(APP.sessionId) body.session_id = APP.sessionId;
+  try {
+    var res = await apiFetch('/api/onboarding?resource=step', { method:'POST', body: JSON.stringify(body) });
+    if(res.status === 404){ APP.persistOK = false; return false; }
+    if(res.ok){
+      APP.persistOK = true;
+      if(res.data && res.data.session){
+        if(res.data.session.id) APP.sessionId = res.data.session.id;
+        if(res.data.session.confidence_score != null) APP.confidence = res.data.session.confidence_score;
+      }
+      return true;
+    }
+    return false;
+  } catch(e){
+    APP.persistOK = false;
+    return false;
+  }
+}
+
+async function loadSession(){
+  try {
+    var res = await apiFetch('/api/onboarding?resource=session');
+    if(res.status === 404){ APP.persistOK = false; return; }
+    if(res.ok && res.data && res.data.session){
+      APP.persistOK = true;
+      var s = res.data.session;
+      if(s.id) APP.sessionId = s.id;
+      if(s.confidence_score != null) APP.confidence = s.confidence_score;
+      if(s.current_step) APP.current = s.current_step;
+      if(Array.isArray(res.data.steps)){
+        res.data.steps.forEach(function(st){
+          if(st && st.step_key){
+            APP.status[st.step_key] = st.status;
+            if(st.payload) APP.payloads[st.step_key] = st.payload;
+          }
+        });
+      }
+    }
+  } catch(e){
+    APP.persistOK = false;
+  }
+}
+
+/* ---------------- cost-model data ---------------- */
+async function loadAssumptions(){
+  try {
+    var res = await apiFetch('/api/cost-model?resource=assumptions');
+    if(res.ok && res.data){
+      if(res.data.assumptions) APP.assumptions = res.data.assumptions;
+      if(res.data.rates){ APP.rates = res.data.rates; APP.ratesLoaded = true; }
+    }
+  } catch(e){}
+}
+async function loadRates(){
+  try {
+    var res = await apiFetch('/api/cost-model?resource=rates');
+    if(res.ok && res.data && res.data.rates){ APP.rates = res.data.rates; APP.ratesLoaded = true; }
+  } catch(e){}
+}
+async function loadTrades(){
+  try {
+    var res = await apiFetch('/api/onboarding?resource=trades');
+    if(res.ok && res.data && Array.isArray(res.data.categories) && res.data.categories.length){
+      APP.tradeCategories = res.data.categories;
+    }
+  } catch(e){ /* fall back to TRADE_OPTIONS in viewTrade */ }
+}
+
+/* ---------------- rate readiness ---------------- */
+// The browser NEVER computes break-even. If a rate we need is null, we tell the
+// owner which assumption inputs are still missing so the backend can fill them.
+var RATE_NEEDS = [
+  { field:'billable_hours',   need:'billable hours (revenue + field headcount + utilization)' },
+  { field:'field_wages',      need:'field wages' },
+  { field:'field_burden',     need:'labor burden %' },
+  { field:'overhead_total',   need:'overhead expenses' }
+];
+function missingRateInputs(){
+  var r = APP.rates || {};
+  var miss = [];
+  RATE_NEEDS.forEach(function(n){
+    if(r[n.field] == null) miss.push(n.need);
+  });
+  return miss;
+}
+
+/* ============================================================
+   RENDER
+   ============================================================ */
+function renderRail(){
+  var wrap = $('rail-steps');
+  var idx = stepIndex(APP.current);
+  wrap.innerHTML = STEPS.map(function(st, i){
+    var status = APP.status[st.key];
+    var cls = 'rstep';
+    if(st.key === APP.current) cls += ' active';
+    else if(status === 'complete') cls += ' done';
+    else if(status === 'skipped') cls += ' skipped';
+    var dot = status === 'complete' ? '✓' : (status === 'skipped' ? '–' : (i + 1));
+    return '<button class="' + cls + '" onclick="goto(\'' + st.key + '\')">' +
+      '<span class="dot">' + dot + '</span>' +
+      '<span class="lbl">' + esc(st.label) + '<span class="sub">' + esc(st.sub) + '</span></span>' +
+    '</button>';
+  }).join('');
+
+  $('top-prog').textContent = (idx + 1) + ' / ' + STEPS.length;
+
+  $('dotsbar').innerHTML = STEPS.map(function(st, i){
+    var status = APP.status[st.key];
+    var cls = 'd';
+    if(st.key === APP.current) cls += ' active';
+    else if(status === 'complete') cls += ' done';
+    else if(status === 'skipped') cls += ' skipped';
+    return '<span class="' + cls + '"></span>';
+  }).join('');
+}
+
+function savedNote(){
+  if(APP.persistOK) return '<span class="saved-note ok">● progress saved</span>';
+  return '<span class="saved-note">○ progress not saved (backend pending)</span>';
+}
+
+function stepHead(idx, title, lede){
+  return '<div class="steptag">Step ' + (idx + 1) + ' of ' + STEPS.length + '</div>' +
+    '<h1 class="title">' + esc(title) + '</h1>' +
+    '<p class="lede">' + esc(lede) + '</p>';
+}
+
+// nav row shared by most steps
+function navRow(idx, opts){
+  opts = opts || {};
+  var backBtn = idx > 0
+    ? '<button class="backlink" onclick="goto(\'' + STEPS[idx - 1].key + '\')">← Back</button>'
+    : '<span></span>';
+  var skip = opts.skippable === false ? '' :
+    '<button class="skiplink" onclick="skipStep(\'' + STEPS[idx].key + '\')">Skip this step</button>';
+  var nextLabel = opts.nextLabel || 'Save & continue';
+  var nextCall = opts.nextCall || ('completeStep(\'' + STEPS[idx].key + '\')');
+  var nextBtn = opts.hideNext ? '' :
+    '<button class="btn primary" onclick="' + nextCall + '">' + esc(nextLabel) + '</button>';
+  return '<div class="navrow">' + backBtn +
+    '<div class="right">' + skip + nextBtn + '</div></div>' +
+    '<div style="text-align:right;margin-top:10px;">' + savedNote() + '</div>';
+}
+
+function render(){
+  renderRail();
+  var idx = stepIndex(APP.current);
+  var key = APP.current;
+  var stage = $('stage');
+  if(key === 'trade') stage.innerHTML = viewTrade(idx);
+  else if(key === 'company') stage.innerHTML = viewCompany(idx);
+  else if(key === 'connect_books') stage.innerHTML = viewConnect(idx);
+  else if(key === 'crew') stage.innerHTML = viewCrew(idx);
+  else if(key === 'rate') stage.innerHTML = viewRate(idx);
+  else if(key === 'import') stage.innerHTML = viewImport(idx);
+  else if(key === 'live') stage.innerHTML = viewLive(idx);
+  window.scrollTo(0, 0);
+}
+
+/* ---------------- Step 1: Trade ---------------- */
+// Flatten every loaded trade across categories.
+function allTrades(){
+  if(!APP.tradeCategories) return [];
+  return APP.tradeCategories.reduce(function(acc, c){ return acc.concat(c.trades); }, []);
+}
+// Look up one trade row by slug.
+function findTrade(slug){
+  var all = allTrades();
+  for(var i=0;i<all.length;i++){ if(all[i].slug === slug) return all[i]; }
+  return null;
+}
+
+function seedNoteHtml(){
+  if(!APP.seedResult) return '';
+  if(APP.seedResult.seeded > 0){
+    return '<div class="banner good"><span class="em">✓</span>Seeded ' + APP.seedResult.seeded +
+      ' benchmark cost lines for this trade. You can fine-tune them later in the Cost Model.</div>';
+  }
+  if(APP.seedResult.conflict){
+    return '<div class="banner info"><span class="em">ℹ</span>Cost lines already exist for your company — kept your existing numbers (benchmark not re-seeded).</div>';
+  }
+  return '<div class="banner warn"><span class="em">⚠</span>No benchmark data is available for this trade yet — you can still continue and enter your own numbers in the Cost Model.</div>';
+}
+
+function viewTrade(idx){
+  var head = stepHead(idx, 'What kind of work do you do?',
+    'Pick a category, then your primary trade. Trades marked BENCHMARK READY come with starter cost numbers you can adjust.');
+
+  // Fallback: if the trades catalog didn't load, use the small hardcoded list.
+  if(!APP.tradeCategories || !APP.tradeCategories.length){
+    var opts = TRADE_OPTIONS.map(function(o){
+      var sel = APP.trade === o.slug ? ' sel' : '';
+      return '<button class="opt' + sel + '" onclick="selectTrade(\'' + o.slug + '\')">' +
+        (o.seed ? '<span class="badge">Benchmark ready</span>' : '') +
+        '<span class="em">' + o.em + '</span>' +
+        '<span class="on">' + esc(o.name) + '</span>' +
+        '<span class="os">' + esc(o.sub) + '</span>' +
+      '</button>';
+    }).join('');
+    return head +
+      '<div class="card"><h2>Primary trade</h2><div class="optgrid">' + opts + '</div>' + seedNoteHtml() + '</div>' +
+      navRow(idx, { nextCall: "completeStep('trade')", nextLabel: 'Continue' });
+  }
+
+  // Category chips.
+  var chips = APP.tradeCategories.map(function(c, i){
+    var sel = APP.tradeCategory === c.category ? ' sel' : '';
+    return '<button class="catchip' + sel + '" onclick="selectCategory(' + i + ')">' +
+      esc(c.category) + '<span class="catn">' + c.trades.length + '</span></button>';
+  }).join('');
+
+  // Trades within the chosen category.
+  var tradesHtml;
+  if(APP.tradeCategory){
+    var cat = null;
+    for(var k=0;k<APP.tradeCategories.length;k++){ if(APP.tradeCategories[k].category === APP.tradeCategory){ cat = APP.tradeCategories[k]; break; } }
+    tradesHtml = '<div class="optgrid">' + (cat ? cat.trades : []).map(function(t){
+      var sel = APP.trade === t.slug ? ' sel' : '';
+      return '<button class="opt' + sel + '" onclick="selectTrade(\'' + esc(t.slug) + '\')">' +
+        (t.benchmark_native ? '<span class="badge">Benchmark ready</span>' : '') +
+        '<span class="on">' + esc(t.name) + '</span>' +
+        '<span class="os">' + esc(t.description || '') + '</span>' +
+      '</button>';
+    }).join('') + '</div>';
+  } else {
+    tradesHtml = '<div style="padding:6px 2px;font-size:13px;color:var(--ink-mute)">Choose a category above to see its trades.</div>';
+  }
+
+  return head +
+    '<div class="card"><h2>Category</h2><div class="catbar">' + chips + '</div>' +
+      '<h2 style="margin-top:6px">Primary trade</h2>' + tradesHtml +
+      seedNoteHtml() +
+    '</div>' +
+    navRow(idx, { nextCall: "completeStep('trade')", nextLabel: 'Continue' });
+}
+
+function selectCategory(i){
+  var c = APP.tradeCategories && APP.tradeCategories[i];
+  if(!c) return;
+  APP.tradeCategory = c.category;
+  render();
+}
+
+async function selectTrade(slug){
+  APP.trade = slug;
+  APP.tradeMeta = findTrade(slug); // null in the fallback path
+  APP.company.primary_trade = slug;
+  APP.seedResult = null;
+  render();
+
+  // Seed cost lines from the benchmark keyed by benchmark_key (not the slug).
+  // If there's no benchmark_key, there's nothing to seed — say so honestly.
+  var benchKey = APP.tradeMeta ? APP.tradeMeta.benchmark_key : slug;
+  if(!benchKey){
+    APP.seedResult = { seeded:0, conflict:false };
+    render();
+    return;
+  }
+  try {
+    var res = await apiFetch('/api/cost-model?resource=seed_from_benchmark', {
+      method:'POST',
+      body: JSON.stringify({ trade: benchKey, size_band:'2m_5m', region:'northeast' })
+    });
+    if(res.status === 409){
+      APP.seedResult = { conflict:true, seeded:0 };
+    } else if(res.ok && res.data){
+      APP.seedResult = { seeded: (res.data.seeded || 0), conflict:false };
+      if(res.data.rates){ APP.rates = res.data.rates; APP.ratesLoaded = true; }
+    } else {
+      APP.seedResult = { seeded:0, conflict:false };
+    }
+  } catch(e){
+    APP.seedResult = { seeded:0, conflict:false };
+  }
+  render();
+}
+
+/* ---------------- Step 2: Company ---------------- */
+var TZ_OPTIONS = [
+  ['America/New_York','Eastern (New York)'],
+  ['America/Chicago','Central (Chicago)'],
+  ['America/Denver','Mountain (Denver)'],
+  ['America/Phoenix','Arizona (no DST)'],
+  ['America/Los_Angeles','Pacific (Los Angeles)'],
+  ['America/Anchorage','Alaska'],
+  ['Pacific/Honolulu','Hawaii']
+];
+function optionsFor(list, val){
+  return list.map(function(o){
+    return '<option value="' + esc(o[0]) + '"' + (String(val||'') === o[0] ? ' selected' : '') + '>' + esc(o[1]) + '</option>';
+  }).join('');
+}
+function fld(id, label, val, ph){
+  return '<div><label for="' + id + '">' + esc(label) + '</label>' +
+    '<input type="text" id="' + id + '" value="' + esc(val || '') + '" placeholder="' + esc(ph || '') + '"></div>';
+}
+function viewCompany(idx){
+  var c = APP.company;
+  // Prefer the live trades catalog; fall back to the small hardcoded list.
+  var tradeSource = allTrades();
+  if(!tradeSource.length) tradeSource = TRADE_OPTIONS;
+  var tradeOpts = '<option value="">—</option>' + tradeSource.map(function(o){
+    return '<option value="' + esc(o.slug) + '"' + (c.primary_trade === o.slug ? ' selected' : '') + '>' + esc(o.name) + '</option>';
+  }).join('');
+  var regionOpts = optionsFor([['northeast','Northeast'],['southeast','Southeast'],['midwest','Midwest'],['southwest','Southwest'],['west','West']], c.region);
+  var tzOpts = '<option value="">—</option>' + optionsFor(TZ_OPTIONS, c.timezone || 'America/New_York');
+  return stepHead(idx, 'Confirm your company profile', 'We prefilled what we know. Fill in the rest — this is your company of record, and it labels reports, invoices, and the client-facing portal.') +
+    '<div class="card"><h2>Identity</h2>' +
+      '<div class="field-row">' +
+        fld('c-legal','Legal name', c.legal_name, 'Legal business name') +
+        fld('c-dba','DBA / doing business as', c.dba, 'Trade name') +
+      '</div>' +
+      '<div class="field-row">' +
+        '<div><label for="c-trade">Primary trade</label><select id="c-trade">' + tradeOpts + '</select></div>' +
+        '<div><label for="c-industry">Industry</label><input type="text" id="c-industry" value="' + esc(c.industry) + '" placeholder="e.g. Handyman"></div>' +
+      '</div>' +
+    '</div>' +
+    '<div class="card"><h2>Contact</h2>' +
+      '<div class="field-row-3">' +
+        fld('c-phone','Phone', c.phone, '(203) 555-0100') +
+        fld('c-email','Email', c.email, 'office@company.com') +
+        fld('c-website','Website', c.website, 'company.com') +
+      '</div>' +
+    '</div>' +
+    '<div class="card"><h2>Business address</h2>' +
+      '<div class="field-row">' +
+        fld('c-addr1','Street', c.address_line1, '123 Main St') +
+        fld('c-addr2','Street 2 (unit, suite)', c.address_line2, 'Unit 4B') +
+      '</div>' +
+      '<div class="field-row-3">' +
+        fld('c-city','City', c.city, '') +
+        fld('c-state','State', c.state, 'CT') +
+        fld('c-zip','ZIP', c.postal_code, '06830') +
+      '</div>' +
+    '</div>' +
+    '<div class="card"><h2>Tax, licensing &amp; locale</h2>' +
+      '<div class="field-row-3">' +
+        fld('c-ein','EIN / Federal Tax ID', c.ein, '00-0000000') +
+        fld('c-lic','Business license #', c.license_number, 'e.g. 103278') +
+        '<div><label for="c-region">Region</label><select id="c-region">' + regionOpts + '</select></div>' +
+      '</div>' +
+      '<div class="field-row">' +
+        '<div><label for="c-tz">Timezone</label><select id="c-tz">' + tzOpts + '</select></div>' +
+        '<div></div>' +
+      '</div>' +
+    '</div>' +
+    navRow(idx);
+}
+function readCompany(){
+  function v(id){ return $(id) ? $(id).value.trim() : undefined; }
+  var map = {
+    legal_name:'c-legal', dba:'c-dba', primary_trade:'c-trade', industry:'c-industry',
+    phone:'c-phone', email:'c-email', website:'c-website',
+    address_line1:'c-addr1', address_line2:'c-addr2', city:'c-city', state:'c-state', postal_code:'c-zip',
+    ein:'c-ein', license_number:'c-lic', region:'c-region', timezone:'c-tz'
+  };
+  Object.keys(map).forEach(function(k){
+    var val = v(map[k]);
+    if(val !== undefined) APP.company[k] = val;
+  });
+}
+
+/* Write the confirmed profile to the real companies row (not just the step payload). */
+async function saveCompanyToDb(){
+  var c = APP.company || {};
+  var patch = {
+    dba: c.dba || '', phone: c.phone || '', email: c.email || '', website: c.website || '',
+    address_line1: c.address_line1 || '', address_line2: c.address_line2 || '',
+    city: c.city || '', state: c.state || '', postal_code: c.postal_code || '',
+    ein: c.ein || '', license_number: c.license_number || '',
+    timezone: c.timezone || '', region: c.region || '',
+    primary_trade: c.primary_trade || '', industry: c.industry || ''
+  };
+  if((c.legal_name || '').trim()) patch.name = c.legal_name.trim();
+  try {
+    var res = await apiFetch('/api/company?resource=update', { method:'POST', body: JSON.stringify(patch) });
+    APP.companySaved = !!(res && res.ok);
+    return APP.companySaved;
+  } catch(e){ APP.companySaved = false; return false; }
+}
+
+/* Prefill the wizard from the real companies row so edits build on current data. */
+async function loadCompanyProfile(){
+  try {
+    var res = await apiFetch('/api/company?resource=get');
+    if(res.status === 404){ APP.needsProvision = true; return; }
+    APP.needsProvision = false;
+    if(res.ok && res.data && res.data.company){
+      var c = res.data.company;
+      var seed = {
+        legal_name: c.name, dba: c.dba, primary_trade: c.primary_trade, industry: c.industry,
+        region: c.region, timezone: c.timezone, phone: c.phone, email: c.email, website: c.website,
+        address_line1: c.address_line1, address_line2: c.address_line2, city: c.city,
+        state: c.state, postal_code: c.postal_code, ein: c.ein, license_number: c.license_number
+      };
+      Object.keys(seed).forEach(function(k){
+        if(seed[k] != null && seed[k] !== '') APP.company[k] = seed[k];
+      });
+    }
+  } catch(e){}
+}
+
+/* ---------------- Step 3: Connect books ---------------- */
+function viewConnect(idx){
+  return stepHead(idx, 'Connect QuickBooks', 'Link QuickBooks Online so HiveLogic can import your chart of accounts and keep job costs in sync. You can do this later.') +
+    '<div class="card"><h2>QuickBooks Online</h2>' +
+      '<div class="banner info"><span class="em">🔗</span>Connecting kicks off a one-time <b>chart-of-accounts import</b>. HiveLogic reads your accounts to categorize job costs — it never posts back to QuickBooks without your say-so.</div>' +
+      '<a class="btn green" href="/api/qbo" onclick="markConnectStarted()">Connect QuickBooks →</a>' +
+      '<div class="note">Opens the secure QuickBooks (Intuit) sign-in. When you come back, your accounts will be importing in the background.</div>' +
+    '</div>' +
+    navRow(idx, { nextLabel:'I\'ve connected — continue' });
+}
+function markConnectStarted(){
+  // fire-and-forget; the OAuth redirect navigates away
+  try { persistStep('connect_books', 'in_progress', { started:true }); } catch(e){}
+}
+
+/* ---------------- Step 4: Crew ---------------- */
+var ROLE_OPTIONS = ['Lead','Carpenter','Apprentice','Office'];
+function ensureRoster(){
+  if(!APP.roster.length){
+    APP.roster = [
+      { name:'', role:'Lead' },
+      { name:'', role:'Carpenter' }
+    ];
+  }
+}
+function viewCrew(idx){
+  ensureRoster();
+  var rows = APP.roster.map(function(m, i){
+    var roleOpts = ROLE_OPTIONS.map(function(r){
+      return '<option value="' + esc(r) + '"' + (m.role === r ? ' selected' : '') + '>' + esc(r) + '</option>';
+    }).join('');
+    return '<div class="rrow">' +
+      '<input type="text" data-ri="' + i + '" data-rf="name" value="' + esc(m.name) + '" placeholder="Team member name" oninput="rosterInput(this)">' +
+      '<select data-ri="' + i + '" data-rf="role" onchange="rosterInput(this)">' + roleOpts + '</select>' +
+      '<button class="del" onclick="rosterDel(' + i + ')" aria-label="Remove">×</button>' +
+    '</div>';
+  }).join('');
+  return stepHead(idx, 'Who\'s on your crew?', 'Add the people who work jobs. Roles help us split labor cost — you can refine them anytime. (No user accounts are created here; this saves to your setup.)') +
+    '<div class="card"><h2>Crew roster</h2>' +
+      '<div class="roster">' + rows + '</div>' +
+      '<button class="btn ghost" onclick="rosterAdd()">+ Add crew member</button>' +
+    '</div>' +
+    navRow(idx);
+}
+function rosterInput(el){
+  var i = parseInt(el.getAttribute('data-ri'), 10);
+  var f = el.getAttribute('data-rf');
+  if(APP.roster[i]) APP.roster[i][f] = el.value;
+}
+function rosterAdd(){ ensureRoster(); APP.roster.push({ name:'', role:'Carpenter' }); render(); }
+function rosterDel(i){ APP.roster.splice(i, 1); render(); }
+
+/* ---------------- Step 5: Rate ---------------- */
+function viewRate(idx){
+  var r = APP.rates || {};
+  var miss = missingRateInputs();
+  var incomplete = !APP.ratesLoaded || miss.length > 0 ||
+    (r.breakeven_hourly_rate == null && r.loaded_labor_rate == null);
+
+  var metrics =
+    '<div class="metrics">' +
+      rateTile('Break-even hourly', r.breakeven_hourly_rate == null ? '—' : money(r.breakeven_hourly_rate)) +
+      rateTile('Loaded labor rate', r.loaded_labor_rate == null ? '—' : money(r.loaded_labor_rate)) +
+      rateTile('Overhead / billable hr', r.overhead_per_billable_hour == null ? '—' : money(r.overhead_per_billable_hour)) +
+      rateTile('Min markup', r.min_markup_pct == null ? '—' : pct(r.min_markup_pct)) +
+    '</div>';
+
+  var body;
+  if(incomplete){
+    var list = miss.length
+      ? '<ul style="margin:8px 0 0 18px;padding:0;font-size:13px;color:#a5502e;">' +
+          miss.map(function(m){ return '<li>' + esc(m) + '</li>'; }).join('') + '</ul>'
+      : '';
+    body = '<div class="banner warn"><span class="em">⚠</span>We can\'t show a real break-even yet — some cost inputs are still missing. Add these first:' + list +
+      '</div>' + metrics +
+      '<div class="note">Numbers shown as “—” will fill in automatically once those assumptions are entered in the Cost Model. We never estimate them in the browser.</div>';
+  } else {
+    body = metrics + '<div class="note">These are live figures from your Cost Model — HiveLogic computes them, not this page.</div>';
+  }
+
+  // target bill-rate entry + comparison (compare only; no computation)
+  var compare = '';
+  var typed = parseFloat(APP.billRate);
+  if(!isNaN(typed) && typed > 0 && r.breakeven_hourly_rate != null){
+    var diff = typed - Number(r.breakeven_hourly_rate);
+    var over = diff >= 0;
+    compare = '<div class="banner ' + (over ? 'good' : 'warn') + '"><span class="em">' + (over ? '✓' : '⚠') + '</span>' +
+      'At ' + money(typed) + '/hr you\'re ' + money(Math.abs(diff)) + '/hr ' +
+      (over ? 'above' : 'below') + ' your break-even of ' + money(r.breakeven_hourly_rate) + '.' +
+      (over ? ' That margin covers profit and reserve.' : ' You\'d lose money at this rate — raise it above break-even.') +
+    '</div>';
+  } else if(!isNaN(typed) && typed > 0){
+    compare = '<div class="banner info"><span class="em">ℹ</span>Saved ' + money(typed) + '/hr. We\'ll compare it to break-even once your cost inputs are complete.</div>';
+  }
+
+  return stepHead(idx, 'Set your bill rate', 'Here\'s your live break-even. Enter the hourly rate you want to charge and we\'ll show your margin against it.') +
+    '<div class="card"><h2>Your live cost figures</h2>' + body + '</div>' +
+    '<div class="card"><h2>Target bill rate</h2>' +
+      '<label for="rate-in">Hourly rate you plan to charge</label>' +
+      '<input type="number" id="rate-in" min="0" step="1" value="' + esc(APP.billRate) + '" placeholder="e.g. 145" oninput="rateTyped(this.value)">' +
+      compare +
+    '</div>' +
+    navRow(idx);
+}
+function rateTile(k, v){
+  return '<div class="metric"><div class="k">' + esc(k) + '</div><div class="v small">' + v + '</div></div>';
+}
+var rateDebounce = null;
+function rateTyped(v){
+  APP.billRate = v;
+  if(rateDebounce) clearTimeout(rateDebounce);
+  rateDebounce = setTimeout(function(){
+    var stage = $('stage');
+    // re-render only the comparison area by re-rendering the step
+    if(APP.current === 'rate'){ var idx = stepIndex('rate'); stage.innerHTML = viewRate(idx); renderRail(); }
+  }, 500);
+}
+
+/* ---------------- Step 6: Import ---------------- */
+function viewImport(idx){
+  return stepHead(idx, 'Import your clients & jobs', 'Pull your existing customers and jobs into HiveLogic so estimates, scheduling and job costing all line up.') +
+    '<div class="card"><h2>Client & job import</h2>' +
+      '<div class="banner info"><span class="em">📥</span>If you connected QuickBooks, customers come across with your accounts. To bring in jobs and history, use the importer in the main app.</div>' +
+      '<a class="btn green" href="/#/import">Open the importer →</a>' +
+      '<div class="note">Not sure yet? Skip this — you can import anytime from Settings → Import in HiveLogic.</div>' +
+    '</div>' +
+    navRow(idx, { nextLabel:'Continue' });
+}
+
+/* ---------------- Step 7: Live ---------------- */
+function viewLive(idx){
+  // confidence ring
+  var score = APP.confidence;
+  var ring = confidenceRing(score);
+
+  // remaining checklist derived from step statuses
+  var items = STEPS.slice(0, 6).map(function(st){
+    var done = APP.status[st.key] === 'complete';
+    var skipped = APP.status[st.key] === 'skipped';
+    var stateLabel = done ? 'Done' : (skipped ? 'Skipped — optional' : 'Not started');
+    var cls = done ? 'ok' : 'todo';
+    var icon = done ? '✓' : (skipped ? '–' : '');
+    return '<li class="' + cls + '"><span class="ci">' + icon + '</span>' +
+      '<span>' + esc(st.label) + ' — <b style="font-weight:700;color:' + (done ? 'var(--green)' : 'var(--ink-mute)') + '">' + esc(stateLabel) + '</b></span></li>';
+  }).join('');
+
+  var confText = score == null
+    ? '<div class="note" style="margin-top:2px;">Confidence score will appear once the onboarding backend is live.</div>'
+    : '<div class="note" style="margin-top:2px;">Your setup confidence. It climbs as you complete steps and add real data.</div>';
+
+  return stepHead(idx, 'You\'re set up 🎉', 'Nice work. Here\'s where your account stands — you can revisit any step from the left rail.') +
+    '<div class="card"><h2>Setup confidence</h2>' +
+      '<div class="conf">' + ring +
+        '<div style="flex:1;min-width:200px;">' + confText + '</div>' +
+      '</div>' +
+    '</div>' +
+    '<div class="card"><h2>Where things stand</h2><ul class="checklist">' + items + '</ul></div>' +
+    '<div class="card" style="text-align:center;">' +
+      '<a class="btn primary wide" href="/setup/cost-model.html">Go to Cost Model →</a>' +
+      '<div class="note" style="margin-top:12px;">' + savedNote() + '</div>' +
+    '</div>' +
+    '<div class="navrow"><button class="backlink" onclick="goto(\'' + STEPS[idx - 1].key + '\')">← Back</button><span></span></div>';
+}
+function confidenceRing(score){
+  var has = score != null && !isNaN(score);
+  var v = has ? Math.max(0, Math.min(100, Number(score))) : 0;
+  var R = 44, C = 2 * Math.PI * R;
+  var off = C * (1 - v / 100);
+  var color = v >= 70 ? '#1B7A50' : (v >= 40 ? '#f5793b' : '#c65b4e');
+  var label = has ? Math.round(v) : '—';
+  return '<svg class="ring" viewBox="0 0 104 104">' +
+    '<circle cx="52" cy="52" r="' + R + '" fill="none" stroke="#e6e9f0" stroke-width="9"/>' +
+    (has ? '<circle cx="52" cy="52" r="' + R + '" fill="none" stroke="' + color + '" stroke-width="9" stroke-linecap="round" stroke-dasharray="' + C.toFixed(1) + '" stroke-dashoffset="' + off.toFixed(1) + '" transform="rotate(-90 52 52)"/>' : '') +
+    '<text class="num" x="52" y="52" text-anchor="middle" dominant-baseline="central">' + label + '</text>' +
+  '</svg>';
+}
+
+/* ============================================================
+   NAVIGATION + PERSISTENCE
+   ============================================================ */
+function goto(key){
+  // capture any in-progress edits before leaving the current step
+  captureCurrent();
+  APP.current = key;
+  render();
+  // record that we're on this step (best effort)
+  if(!APP.status[key]) { try { persistStep(key, 'in_progress', currentPayload(key)); } catch(e){} }
+  if(key === 'live') finalizeLive();
+}
+
+function captureCurrent(){
+  if(APP.current === 'company') readCompany();
+  // roster + rate captured live via input handlers
+}
+
+function currentPayload(key){
+  if(key === 'trade') return {
+    trade: APP.trade,                                                   // slug (kept for resume compat)
+    slug: APP.trade,
+    benchmark_key: APP.tradeMeta ? APP.tradeMeta.benchmark_key : null,
+    trade_name: APP.tradeMeta ? APP.tradeMeta.name : null,
+    category: APP.tradeCategory,
+    seeded: APP.seedResult ? APP.seedResult.seeded : null
+  };
+  if(key === 'company') return { company: APP.company };
+  if(key === 'connect_books') return {};
+  if(key === 'crew') return { roster: APP.roster.filter(function(m){ return (m.name || '').trim(); }) };
+  if(key === 'rate') return { target_bill_rate: parseFloat(APP.billRate) || null };
+  if(key === 'import') return {};
+  if(key === 'live') return {};
+  return {};
+}
+
+async function completeStep(key){
+  captureCurrent();
+  // The company step writes to the real companies row, not just the step payload.
+  if(key === 'company') await saveCompanyToDb();
+  await persistStep(key, 'complete', currentPayload(key));
+  var idx = stepIndex(key);
+  var nextKey = idx < STEPS.length - 1 ? STEPS[idx + 1].key : 'live';
+  APP.current = nextKey;
+  render();
+  if(nextKey === 'live') finalizeLive();
+}
+
+async function skipStep(key){
+  captureCurrent();
+  await persistStep(key, 'skipped', currentPayload(key));
+  var idx = stepIndex(key);
+  var nextKey = idx < STEPS.length - 1 ? STEPS[idx + 1].key : 'live';
+  APP.current = nextKey;
+  render();
+  if(nextKey === 'live') finalizeLive();
+}
+
+async function finalizeLive(){
+  // On reaching completion, mark the session complete (best effort).
+  await persistStep('live', 'complete', {});
+  // reflect any confidence returned
+  render();
+}
+
+/* ============================================================
+   BOOT
+   ============================================================ */
+async function boot(){
+  var sess = await sb.auth.getSession();
+  if(!sess.data.session){
+    $('loading').classList.add('hidden');
+    $('signin').classList.remove('hidden');
+    return;
+  }
+  // load in parallel; all are best-effort
+  await Promise.all([ loadSession(), loadAssumptions(), loadCompanyProfile(), loadTrades() ]);
+  // make sure we have rates for the rate step
+  if(!APP.ratesLoaded) await loadRates();
+
+  // prefill primary_trade from any resumed trade payload; restore the trade
+  // meta + category from the loaded catalog so step 1 reopens where it was.
+  if(APP.payloads.trade && APP.payloads.trade.trade){
+    APP.trade = APP.payloads.trade.trade;
+    if(!APP.company.primary_trade) APP.company.primary_trade = APP.trade;
+    APP.tradeMeta = findTrade(APP.trade);
+    APP.tradeCategory = (APP.payloads.trade.category) || (APP.tradeMeta ? APP.tradeMeta.category : null);
+  }
+  if(APP.payloads.company && APP.payloads.company.company){
+    APP.company = Object.assign(APP.company, APP.payloads.company.company);
+  }
+  if(APP.payloads.crew && Array.isArray(APP.payloads.crew.roster) && APP.payloads.crew.roster.length){
+    APP.roster = APP.payloads.crew.roster.slice();
+  }
+  if(APP.payloads.rate && APP.payloads.rate.target_bill_rate != null){
+    APP.billRate = String(APP.payloads.rate.target_bill_rate);
+  }
+
+  $('loading').classList.add('hidden');
+
+  // Self-serve first run: a signed-in user with no company names theirs first.
+  if(APP.needsProvision){
+    $('provision').classList.remove('hidden');
+    var nameEl = document.getElementById('pv-name');
+    if(nameEl) nameEl.focus();
+    return;
+  }
+
+  $('wizard').classList.remove('hidden');
+  render();
+  if(APP.current === 'live') finalizeLive();
+}
+
+async function createCompany(){
+  var nameEl = document.getElementById('pv-name');
+  var err = document.getElementById('pv-err');
+  var btn = document.getElementById('pv-go');
+  var name = (nameEl && nameEl.value || '').trim();
+  err.classList.add('hidden'); err.textContent = '';
+  if(!name){ err.textContent = 'Please enter a company name.'; err.classList.remove('hidden'); return; }
+  btn.disabled = true; btn.textContent = 'Creating…';
+  try {
+    var res = await apiFetch('/api/company?resource=provision', { method:'POST', body: JSON.stringify({ name: name }) });
+    if(!(res.ok && res.data && res.data.ok)) throw new Error((res.data && res.data.error) || 'Could not create your company. Please try again.');
+    // Now they have a company — hydrate the wizard the same way boot() does.
+    APP.needsProvision = false;
+    APP.company.legal_name = (res.data.company && res.data.company.name) || name;
+    await loadCompanyProfile();
+    await Promise.all([ loadSession(), loadAssumptions() ]);
+    if(!APP.ratesLoaded) await loadRates();
+    $('provision').classList.add('hidden');
+    $('wizard').classList.remove('hidden');
+    render();
+  } catch(e){
+    err.textContent = e.message; err.classList.remove('hidden');
+    btn.disabled = false; btn.textContent = 'Create company →';
+  }
+}
+
+// react to sign-out in another tab
+sb.auth.onAuthStateChange(function(event, session){
+  if(!session && !$('signin').classList.contains('hidden') === false){
+    // if we lose the session while using the wizard, send to sign-in
+    if($('wizard') && !$('wizard').classList.contains('hidden')){
+      $('wizard').classList.add('hidden');
+      $('signin').classList.remove('hidden');
+    }
+  }
+});
+
+boot();
+</script>
+</body>
+</html>

@@ -1,0 +1,629 @@
+<!doctype html>
+<!-- Admin Team surface for HiveLogic: invite / edit / remove W-2 & 1099 hires. Pay edits sync to Gusto (hire_update -> gusto_push). Remove is ARCHIVE-ONLY — it removes from the active roster and NEVER auto-terminates Gusto payroll. Static, vanilla, no build. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HiveLogic — Team</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#484f64; --canvas:#f0f1f6; --card:#ffffff; --line:#dadde8; --rail:#161e2e;
+    --gold:#748a9e; --green:#1B7A50; --red:#c65b4e; --cta:#f5793b;
+    --blue:#3d6fa5; --grey:#8a90a2; --amber:#b7791f;
+    --ink2:#6b7488; --ink3:#98a0b4;
+    --radius:12px;
+    --shadow:0 1px 2px rgba(22,30,46,.05), 0 6px 18px rgba(22,30,46,.05);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{font-family:'Montserrat',system-ui,-apple-system,"Segoe UI",sans-serif;background:var(--canvas);color:var(--ink);-webkit-font-smoothing:antialiased;font-size:14px;line-height:1.4}
+  .mono{font-family:'JetBrains Mono',ui-monospace,monospace;font-variant-numeric:tabular-nums}
+  a{color:var(--blue);text-decoration:none}
+  a:hover{text-decoration:underline}
+
+  header.top{background:var(--rail);color:#eef1f7;padding:16px 22px;display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:10px}
+  header.top .brand{display:flex;flex-direction:column;gap:3px}
+  header.top h1{font-size:16px;margin:0;font-weight:800;letter-spacing:.02em}
+  header.top .sub{font-size:11.5px;color:#9aa6bd;font-weight:500;max-width:620px;line-height:1.45}
+  header.top nav{display:flex;gap:14px;font-size:12px;font-weight:700}
+  header.top nav a{color:#c3ccdd}
+  header.top nav a:hover{color:#fff}
+
+  main{max-width:1080px;margin:0 auto;padding:22px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);margin-bottom:18px;overflow:hidden}
+  .card > .card-hd{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px 18px;border-bottom:1px solid var(--line)}
+  .card > .card-hd h2{font-size:12px;text-transform:uppercase;letter-spacing:.07em;color:var(--ink2);margin:0;font-weight:800}
+  .card > .card-hd .count{font-size:11px;color:var(--ink3);font-weight:600}
+  .card-bd{padding:16px 18px}
+
+  label.f{display:block;font-size:10.5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--ink2);margin-bottom:5px}
+  input[type=text],input[type=email],input[type=number],select{width:100%;border:1.5px solid var(--line);border-radius:9px;padding:9px 10px;font-size:13.5px;font-family:'Montserrat',sans-serif;background:#fbfbfe;color:var(--ink)}
+  input[type=number],input.num{font-family:'JetBrains Mono',ui-monospace,monospace;font-variant-numeric:tabular-nums}
+  select{font-size:13px}
+  input:focus,select:focus{outline:none;border-color:var(--cta);background:#fff}
+  input.bad{border-color:var(--red);background:#fdf3f2}
+
+  .fw{position:relative}
+  .fw .err{display:none;color:var(--red);font-size:10.5px;font-weight:700;margin-top:3px}
+  .fw.showerr .err{display:block}
+
+  /* invite form grid */
+  .igrid{display:grid;grid-template-columns:1fr 1fr;gap:12px 14px;margin-bottom:12px}
+  .igrid .col-2{grid-column:span 2}
+  .rate-wrap{position:relative}
+  .rate-wrap .rhint{position:absolute;right:10px;top:50%;transform:translateY(-50%);font-size:11px;color:var(--ink3);font-weight:700;font-family:'JetBrains Mono',ui-monospace,monospace;pointer-events:none}
+  .rate-wrap input{padding-right:42px}
+
+  /* segmented control */
+  .seg{display:inline-flex;border:1.5px solid var(--line);border-radius:9px;overflow:hidden;background:#fbfbfe}
+  .seg button{border:none;background:transparent;color:var(--ink2);padding:8px 14px;font-size:12.5px;font-weight:700;cursor:pointer;font-family:inherit}
+  .seg button + button{border-left:1.5px solid var(--line)}
+  .seg button.on{background:var(--rail);color:#fff}
+  .seg.sm button{padding:6px 11px;font-size:11.5px}
+
+  .btn{border:1px solid var(--line);background:#fff;color:var(--ink);border-radius:9px;padding:8px 14px;font-size:12.5px;font-weight:700;cursor:pointer;font-family:inherit}
+  .btn:hover{border-color:var(--ink3)}
+  .btn.cta{background:var(--cta);border-color:var(--cta);color:#fff}
+  .btn.cta:hover{filter:brightness(1.05)}
+  .btn.sm{padding:6px 11px;font-size:11.5px}
+  .btn.danger:hover{border-color:var(--red);color:var(--red)}
+  .btn[disabled]{opacity:.55;cursor:not-allowed}
+
+  /* success / notice panels */
+  .panel{border-radius:10px;padding:13px 15px;font-size:13px;margin-top:14px;line-height:1.5}
+  .panel.ok{background:#e6f3ec;border:1px solid #c5e5d3;color:#166a45}
+  .panel.amber{background:#fbf3e2;border:1px solid #ecdcb4;color:#8a6314}
+  .panel.err{background:#fdf3f2;border:1px solid #f0cfc9;color:#a3453a}
+  .panel .plink{display:flex;gap:8px;margin-top:10px;align-items:stretch}
+  .panel .plink input{flex:1;font-size:12px;background:#fff;border-color:#c5e5d3;color:var(--ink)}
+  .panel .pnote{font-size:12px;margin-top:8px;color:inherit;opacity:.9}
+
+  /* roster table */
+  .tbl-wrap{overflow-x:auto}
+  table.roster{width:100%;border-collapse:collapse;font-size:13px}
+  table.roster th{text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink3);font-weight:700;padding:8px 12px;border-bottom:1px solid var(--line);white-space:nowrap}
+  table.roster td{padding:11px 12px;border-bottom:1px solid #eceef4;vertical-align:middle}
+  table.roster tr:last-child td{border-bottom:none}
+  table.roster td.name{font-weight:700;color:var(--rail)}
+  table.roster td.rate{font-family:'JetBrains Mono',ui-monospace,monospace;font-variant-numeric:tabular-nums;white-space:nowrap}
+  .rowacts{display:flex;gap:7px;justify-content:flex-end}
+
+  .pill{display:inline-block;padding:2px 9px;border-radius:20px;font-size:10px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;border:1px solid transparent;white-space:nowrap}
+  .pill.w2{background:#eaf1fa;color:#2f5f96;border-color:#cfe0f2}
+  .pill.c1099{background:#f3efe4;color:#7a6a3d;border-color:#e3d8bd}
+  .pill.hourly{background:#eef0f4;color:#6b7488;border-color:#dcdfe8}
+  .pill.salary{background:#e9eef3;color:#3d5a78;border-color:#cdd9e5}
+  .pill.field{background:#e6f3ec;color:#166a45;border-color:#c5e5d3}
+  .pill.office{background:#eef0f4;color:#6b7488;border-color:#dcdfe8}
+  .glink{color:var(--green);font-weight:700;font-size:12px}
+  .gnone{color:var(--ink3);font-weight:600;font-size:13px}
+
+  /* inline row editor */
+  tr.editrow td{background:#fafbfe;padding:0}
+  .editor{padding:14px 16px}
+  .editor .egrid{display:grid;grid-template-columns:1.4fr 1fr 1fr;gap:12px;margin-bottom:12px}
+  .editor .erow2{display:flex;flex-wrap:wrap;gap:16px;align-items:flex-end;margin-bottom:12px}
+  .editor .eacts{display:flex;gap:8px}
+
+  .gate{max-width:460px;margin:80px auto;text-align:center;padding:34px 26px}
+  .gate .h{font-size:20px;font-weight:800;color:var(--rail);margin-bottom:10px}
+  .gate p{color:var(--ink2);font-size:14px;margin:0 0 20px}
+
+  .errbox{border:1px solid #f0cfc9;background:#fdf3f2;color:#a3453a;border-radius:10px;padding:14px 16px;font-size:13px;display:flex;align-items:center;justify-content:space-between;gap:12px}
+  .errbox .btn{background:#fff}
+
+  #toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%) translateY(20px);background:var(--rail);color:#fff;padding:11px 20px;border-radius:10px;font-size:13px;font-weight:600;box-shadow:0 12px 34px rgba(22,30,46,.32);opacity:0;pointer-events:none;transition:opacity .25s,transform .25s;z-index:99;max-width:88vw;text-align:center}
+  #toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+  #toast.err{background:var(--red)}
+  #toast.amber{background:var(--amber)}
+
+  .muted{color:var(--ink3);font-size:12.5px;text-align:center;padding:22px 0}
+  .hidden{display:none !important}
+  .spin{padding:40px;text-align:center;color:var(--ink3);font-size:13px}
+  .footlinks{text-align:center;padding:6px 0 4px;font-size:12px;font-weight:700;color:var(--ink3)}
+  .footlinks a{margin:0 10px}
+  @media(max-width:720px){
+    .igrid{grid-template-columns:1fr}
+    .igrid .col-2{grid-column:span 1}
+    .editor .egrid{grid-template-columns:1fr}
+  }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="brand">
+    <h1>Team</h1>
+    <div class="sub">Invite new hires, edit pay, and manage your crew — W-2 and 1099. Pay changes sync to Gusto.</div>
+  </div>
+  <nav>
+    <a href="/setup/">&larr; Company Setup</a>
+    <a href="/">Home</a>
+  </nav>
+</header>
+
+<div id="gate" class="gate card hidden">
+  <div class="h">Please sign in to the HiveLogic app first</div>
+  <p>You need an active HiveLogic session to invite and manage your team.</p>
+  <a class="btn cta" href="/">Go to HiveLogic sign-in</a>
+</div>
+
+<main id="app" class="hidden">
+
+  <!-- INVITE A HIRE -->
+  <section class="card">
+    <div class="card-hd">
+      <h2>Invite a hire</h2>
+      <span class="count" id="envNote"></span>
+    </div>
+    <div class="card-bd">
+      <form id="inviteForm" autocomplete="off">
+        <div class="igrid">
+          <div class="fw">
+            <label class="f" for="i_first">First name</label>
+            <input type="text" id="i_first" placeholder="Jordan">
+            <small class="err"></small>
+          </div>
+          <div class="fw">
+            <label class="f" for="i_last">Last name</label>
+            <input type="text" id="i_last" placeholder="Rivera">
+            <small class="err"></small>
+          </div>
+          <div class="fw col-2">
+            <label class="f" for="i_email">Email</label>
+            <input type="email" id="i_email" placeholder="jordan@example.com">
+            <small class="err"></small>
+          </div>
+          <div class="fw">
+            <label class="f">Worker type</label>
+            <div class="seg" id="i_worker" role="group">
+              <button type="button" data-worker="employee" class="on">W-2 employee</button>
+              <button type="button" data-worker="subcontractor">1099 contractor</button>
+            </div>
+          </div>
+          <div class="fw">
+            <label class="f">Pay type</label>
+            <div class="seg" id="i_paytype" role="group">
+              <button type="button" data-paytype="hourly" class="on">Hourly</button>
+              <button type="button" data-paytype="salary">Salary</button>
+            </div>
+          </div>
+          <div class="fw">
+            <label class="f" for="i_rate">Rate</label>
+            <div class="rate-wrap">
+              <input type="number" step="0.01" min="0" id="i_rate" class="num" placeholder="0.00">
+              <span class="rhint" id="i_ratehint">/hr</span>
+            </div>
+            <small class="err"></small>
+          </div>
+          <div class="fw">
+            <label class="f" for="i_title">Job title</label>
+            <input type="text" id="i_title" placeholder="Field technician">
+            <small class="err"></small>
+          </div>
+        </div>
+        <button type="submit" class="btn cta" id="inviteBtn">Send invite</button>
+      </form>
+      <div id="inviteResult"></div>
+    </div>
+  </section>
+
+  <!-- ROSTER -->
+  <section class="card">
+    <div class="card-hd">
+      <h2>Your team</h2>
+      <span class="count" id="rosterCount"></span>
+    </div>
+    <div class="card-bd">
+      <div id="roster"><div class="spin">Loading team…</div></div>
+    </div>
+  </section>
+
+  <div class="footlinks">
+    <a href="/setup/payroll.html">Payroll</a>
+    <a href="/setup/cost-model.html">Cost model</a>
+    <a href="/setup/registries.html">Registries</a>
+  </div>
+
+</main>
+
+<div id="toast"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+var SUPABASE_URL = 'https://sqhusuuhlmcmkeowdrga.supabase.co';
+var SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNxaHVzdXVobG1jbWtlb3dkcmdhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQxMjkyMjAsImV4cCI6MjA5OTcwNTIyMH0.PszXL0D8KJC0MEYgbTduSPEcPn2g1pGx0IMK3YGzBcI';
+var sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { auth: { persistSession: true, autoRefreshToken: true } });
+
+/* ---------- helpers ---------- */
+function esc(s){
+  return String(s==null?'':s).replace(/[&<>"']/g,function(c){
+    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
+  });
+}
+function $(sel,root){ return (root||document).querySelector(sel); }
+function $all(sel,root){ return Array.prototype.slice.call((root||document).querySelectorAll(sel)); }
+
+function money(v){
+  if(v==null||v==='') return '—';
+  var n=Number(v); if(!isFinite(n)) return '—';
+  return '$'+n.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+}
+
+/* every /api call goes through here — always attaches Authorization: Bearer <token> */
+async function token(){
+  var s = await sb.auth.getSession();
+  return s.data.session ? s.data.session.access_token : '';
+}
+async function api(method, path, body){
+  var t = await token();
+  if(!t) throw new Error('No session');
+  var opts = { method:method, headers:{ Authorization:'Bearer '+t } };
+  if(body){ opts.headers['Content-Type']='application/json'; opts.body=JSON.stringify(body); }
+  var r = await fetch(path, opts);
+  var j;
+  try{ j = await r.json(); }catch(e){ throw new Error('HTTP '+r.status); }
+  if(!r.ok || !j || j.ok===false) throw new Error((j&&j.error)?j.error:('HTTP '+r.status));
+  return j;
+}
+
+var _tt=null;
+function toast(msg,kind){
+  var el=$('#toast'); el.textContent=msg;
+  el.className='show'+(kind?' '+kind:'');
+  if(_tt) clearTimeout(_tt);
+  _tt=setTimeout(function(){ el.className=kind||''; },3600);
+}
+
+/* ---------- segmented control wiring ---------- */
+function segValue(id){
+  var on = $('#'+id+' button.on');
+  return on ? (on.getAttribute('data-worker')||on.getAttribute('data-paytype')) : '';
+}
+function bindSeg(id,onchange){
+  $all('#'+id+' button').forEach(function(b){
+    b.addEventListener('click', function(){
+      $all('#'+id+' button').forEach(function(x){ x.classList.remove('on'); });
+      b.classList.add('on');
+      if(onchange) onchange();
+    });
+  });
+}
+
+/* ---------- inline field errors ---------- */
+function fwOf(el){ return el.closest ? el.closest('.fw') : null; }
+function showErr(el,msg){
+  el.classList.add('bad');
+  var fw=fwOf(el);
+  if(fw){ fw.classList.add('showerr'); var e=fw.querySelector('.err'); if(e) e.textContent=msg; }
+}
+function clearErr(el){
+  el.classList.remove('bad');
+  var fw=fwOf(el);
+  if(fw){ fw.classList.remove('showerr'); var e=fw.querySelector('.err'); if(e) e.textContent=''; }
+}
+
+/* ---------- INVITE ---------- */
+function updateRateHint(){
+  $('#i_ratehint').textContent = segValue('i_paytype')==='salary' ? '/yr' : '/hr';
+}
+
+async function submitInvite(e){
+  e.preventDefault();
+  var first=$('#i_first'), last=$('#i_last'), email=$('#i_email'), rate=$('#i_rate'), title=$('#i_title');
+  [first,last,email,rate,title].forEach(clearErr);
+  $('#inviteResult').innerHTML='';
+
+  var ok=true;
+  if(!first.value.trim()){ showErr(first,'Required'); ok=false; }
+  if(!last.value.trim()){ showErr(last,'Required'); ok=false; }
+  var em=email.value.trim();
+  if(!em){ showErr(email,'Required'); ok=false; }
+  else if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(em)){ showErr(email,'Enter a valid email'); ok=false; }
+  var rraw=rate.value.trim();
+  if(rraw===''){ showErr(rate,'Required'); ok=false; }
+  else if(!isFinite(parseFloat(rraw)) || parseFloat(rraw)<0){ showErr(rate,'Enter a valid rate'); ok=false; }
+  if(!ok) return;
+
+  var actor_type = segValue('i_worker');           /* employee | subcontractor */
+  var pay_type   = segValue('i_paytype');           /* hourly | salary */
+  var body = {
+    first_name: first.value.trim(),
+    last_name:  last.value.trim(),
+    email:      em,
+    actor_type: actor_type,
+    pay_type:   pay_type,
+    rate:       parseFloat(rraw),
+    title:      title.value.trim(),
+    is_field:   true
+  };
+
+  var btn=$('#inviteBtn');
+  btn.disabled=true; btn.textContent='Sending…';
+  try{
+    var j = await api('POST','/api/invites?resource=create', body);
+    renderInviteSuccess(j);
+    $('#inviteForm').reset();
+    /* reset segmented controls to defaults */
+    ['i_worker','i_paytype'].forEach(function(id){
+      var btns=$all('#'+id+' button');
+      btns.forEach(function(x,i){ x.classList.toggle('on', i===0); });
+    });
+    updateRateHint();
+    toast('Invite created');
+    await loadRoster();
+  }catch(err){
+    $('#inviteResult').innerHTML = '<div class="panel err">Could not create invite: '+esc(err.message)+'</div>';
+    toast('Invite failed', 'err');
+  }finally{
+    btn.disabled=false; btn.textContent='Send invite';
+  }
+}
+
+function renderInviteSuccess(j){
+  var link = j.redeem_link || '';
+  var emailLine = j.email_sent
+    ? 'We emailed the onboarding link to the hire.'
+    : 'Copy the onboarding link below and send it to the hire.';
+  var html = '<div class="panel ok">'
+    + '<strong>Invite created.</strong> '+esc(emailLine)
+    + '<div class="plink">'
+    +   '<input type="text" id="redeemLink" readonly value="'+esc(link)+'">'
+    +   '<button type="button" class="btn sm" id="copyLink">Copy link</button>'
+    + '</div>'
+    + '<div class="pnote">Send this link to the hire. When they finish onboarding, they’re created in Gusto automatically.</div>'
+    + (j.email_note ? '<div class="pnote">'+esc(j.email_note)+'</div>' : '')
+    + '</div>';
+  $('#inviteResult').innerHTML = html;
+  var copyBtn=$('#copyLink');
+  if(copyBtn){
+    copyBtn.addEventListener('click', function(){
+      var inp=$('#redeemLink');
+      inp.select(); inp.setSelectionRange(0, 99999);
+      var done=function(){ copyBtn.textContent='Copied!'; setTimeout(function(){ copyBtn.textContent='Copy link'; },1600); };
+      if(navigator.clipboard && navigator.clipboard.writeText){
+        navigator.clipboard.writeText(inp.value).then(done, function(){ try{document.execCommand('copy'); done();}catch(e){} });
+      } else { try{ document.execCommand('copy'); done(); }catch(e){} }
+    });
+  }
+}
+
+/* ---------- ROSTER ---------- */
+var _roster = [];
+
+async function loadRoster(){
+  $('#roster').innerHTML='<div class="spin">Loading team…</div>';
+  try{
+    var j = await api('GET','/api/gusto?resource=roster');
+    _roster = j.roster || [];
+    if(j.environment){
+      $('#envNote').textContent = (j.connected===false ? 'Gusto not connected' : 'Gusto: '+j.environment);
+    } else {
+      $('#envNote').textContent = '';
+    }
+    renderRoster(_roster);
+  }catch(err){
+    $('#roster').innerHTML = '<div class="errbox"><span>Could not load team: '+esc(err.message)
+      + '</span><button class="btn sm" id="retryRoster">Retry</button></div>';
+    var rb=$('#retryRoster'); if(rb) rb.addEventListener('click', loadRoster);
+  }
+}
+
+function workerPill(pay_class){
+  var is1099 = String(pay_class||'').toLowerCase().indexOf('1099')>=0
+            || String(pay_class||'').toLowerCase()==='contractor'
+            || String(pay_class||'').toLowerCase()==='subcontractor';
+  return is1099
+    ? '<span class="pill c1099">1099</span>'
+    : '<span class="pill w2">W-2</span>';
+}
+function is1099Class(pay_class){
+  var s=String(pay_class||'').toLowerCase();
+  return s.indexOf('1099')>=0 || s==='contractor' || s==='subcontractor';
+}
+function payPill(pay_type){
+  var pt=String(pay_type||'hourly').toLowerCase();
+  return pt==='salary'
+    ? '<span class="pill salary">Salary</span>'
+    : '<span class="pill hourly">Hourly</span>';
+}
+function rateText(pay_type, base_rate){
+  if(base_rate==null||base_rate==='') return '—';
+  var suffix = String(pay_type||'hourly').toLowerCase()==='salary' ? '/yr' : '/hr';
+  return money(base_rate)+' '+suffix;
+}
+
+function renderRoster(list){
+  var wrap=$('#roster');
+  if(!list || list.length===0){
+    wrap.innerHTML='<div class="muted">No one on the team yet — invite your first hire above.</div>';
+    $('#rosterCount').textContent='';
+    return;
+  }
+  var linked=0;
+  var rows='';
+  list.forEach(function(p){
+    if(p.gusto_employee_uuid) linked++;
+    rows += rosterRowHtml(p);
+  });
+  var html = '<div class="tbl-wrap"><table class="roster">'
+    + '<thead><tr>'
+    +   '<th>Name</th><th>Worker</th><th>Pay</th><th>Rate</th><th>Field/Office</th><th>Gusto</th><th></th>'
+    + '</tr></thead><tbody>'
+    + rows
+    + '</tbody></table></div>';
+  wrap.innerHTML=html;
+  $('#rosterCount').textContent = list.length+' on the team, '+linked+' linked to Gusto';
+
+  wrap.querySelectorAll('[data-edit-id]').forEach(function(b){
+    b.addEventListener('click', function(){ openEditor(b.getAttribute('data-edit-id')); });
+  });
+  wrap.querySelectorAll('[data-remove-id]').forEach(function(b){
+    b.addEventListener('click', function(){ removeHire(b.getAttribute('data-remove-id')); });
+  });
+}
+
+function rosterRowHtml(p){
+  var id=p.id;
+  var field = p.is_field
+    ? '<span class="pill field">Field</span>'
+    : '<span class="pill office">Office</span>';
+  var gusto = p.gusto_employee_uuid
+    ? '<span class="glink">✓ linked</span>'
+    : '<span class="gnone">—</span>';
+  return '<tr data-row="'+esc(id)+'">'
+    +   '<td class="name">'+esc(p.display_name)+'</td>'
+    +   '<td>'+workerPill(p.pay_class)+'</td>'
+    +   '<td>'+payPill(p.pay_type)+'</td>'
+    +   '<td class="rate">'+esc(rateText(p.pay_type, p.base_rate))+'</td>'
+    +   '<td>'+field+'</td>'
+    +   '<td>'+gusto+'</td>'
+    +   '<td><div class="rowacts">'
+    +     '<button class="btn sm" data-edit-id="'+esc(id)+'">Edit</button>'
+    +     '<button class="btn sm danger" data-remove-id="'+esc(id)+'">Remove</button>'
+    +   '</div></td>'
+    + '</tr>';
+}
+
+/* ---------- EDIT (inline editor row) ---------- */
+function findPerson(id){
+  for(var i=0;i<_roster.length;i++){ if(String(_roster[i].id)===String(id)) return _roster[i]; }
+  return null;
+}
+
+function openEditor(id){
+  var p=findPerson(id);
+  if(!p) return;
+  var row=$('#roster').querySelector('tr[data-row="'+cssq(id)+'"]');
+  if(!row) return;
+  /* close any other open editor */
+  $all('#roster tr.editrow').forEach(function(r){ r.parentNode.removeChild(r); });
+
+  var is1099 = is1099Class(p.pay_class);
+  var isSalary = String(p.pay_type||'hourly').toLowerCase()==='salary';
+  var editor=document.createElement('tr');
+  editor.className='editrow';
+  editor.setAttribute('data-editrow', id);
+  editor.innerHTML = '<td colspan="7"><div class="editor">'
+    + '<div class="egrid">'
+    +   '<div class="fw"><label class="f">Name</label><input type="text" id="e_name" value="'+esc(p.display_name)+'"><small class="err"></small></div>'
+    +   '<div class="fw"><label class="f">Job title</label><input type="text" id="e_title" value="'+esc(p.title||'')+'" placeholder="Job title"></div>'
+    +   '<div class="fw"><label class="f">Rate</label><div class="rate-wrap"><input type="number" step="0.01" min="0" id="e_rate" class="num" value="'+esc(p.base_rate)+'"><span class="rhint" id="e_ratehint">'+(isSalary?'/yr':'/hr')+'</span></div><small class="err"></small></div>'
+    + '</div>'
+    + '<div class="erow2">'
+    +   '<div class="fw"><label class="f">Worker type</label><div class="seg sm" id="e_worker">'
+    +     '<button type="button" data-worker="employee" class="'+(is1099?'':'on')+'">W-2</button>'
+    +     '<button type="button" data-worker="subcontractor" class="'+(is1099?'on':'')+'">1099</button>'
+    +   '</div></div>'
+    +   '<div class="fw"><label class="f">Pay type</label><div class="seg sm" id="e_paytype">'
+    +     '<button type="button" data-paytype="hourly" class="'+(isSalary?'':'on')+'">Hourly</button>'
+    +     '<button type="button" data-paytype="salary" class="'+(isSalary?'on':'')+'">Salary</button>'
+    +   '</div></div>'
+    +   '<div class="fw"><label class="f">Field / Office</label><div class="seg sm" id="e_field">'
+    +     '<button type="button" data-field="1" class="'+(p.is_field?'on':'')+'">Field</button>'
+    +     '<button type="button" data-field="0" class="'+(p.is_field?'':'on')+'">Office</button>'
+    +   '</div></div>'
+    + '</div>'
+    + '<div class="eacts">'
+    +   '<button class="btn cta sm" id="e_save">Save</button>'
+    +   '<button class="btn sm" id="e_cancel">Cancel</button>'
+    + '</div>'
+    + '</div></td>';
+  row.parentNode.insertBefore(editor, row.nextSibling);
+
+  bindSeg('e_worker');
+  bindSeg('e_paytype', function(){
+    $('#e_ratehint', editor).textContent = segValue('e_paytype')==='salary' ? '/yr' : '/hr';
+  });
+  bindSeg('e_field');
+  $('#e_cancel', editor).addEventListener('click', function(){
+    editor.parentNode.removeChild(editor);
+  });
+  $('#e_save', editor).addEventListener('click', function(){ saveEdit(id, editor); });
+}
+
+async function saveEdit(id, editor){
+  var nameEl=$('#e_name',editor), rateEl=$('#e_rate',editor), titleEl=$('#e_title',editor);
+  clearErr(nameEl); clearErr(rateEl);
+  var ok=true;
+  if(!nameEl.value.trim()){ showErr(nameEl,'Required'); ok=false; }
+  var rraw=rateEl.value.trim();
+  if(rraw===''){ showErr(rateEl,'Required'); ok=false; }
+  else if(!isFinite(parseFloat(rraw)) || parseFloat(rraw)<0){ showErr(rateEl,'Enter a valid rate'); ok=false; }
+  if(!ok) return;
+
+  var worker = segValue('e_worker');   /* employee | subcontractor */
+  var pay_type = segValue('e_paytype');
+  var is_field = $('#e_field button.on',editor).getAttribute('data-field')==='1';
+  var pay_class = worker==='subcontractor' ? '1099' : 'W-2';
+
+  var body = {
+    id: id,
+    display_name: nameEl.value.trim(),
+    pay_type: pay_type,
+    pay_class: pay_class,
+    base_rate: parseFloat(rraw),
+    is_field: is_field,
+    title: titleEl.value.trim()
+  };
+
+  var saveBtn=$('#e_save',editor);
+  saveBtn.disabled=true; saveBtn.textContent='Saving…';
+  try{
+    var j = await api('POST','/api/team?resource=hire_update', body);
+    var gp = j.gusto_push;
+    if(gp && gp.ok){
+      toast('Saved. Synced to Gusto', null);
+    } else if(gp && gp.ok===false){
+      var reason = gp.error || gp.reason || gp.status || 'unknown';
+      toast('Saved in HiveLogic; Gusto not updated: '+reason, 'amber');
+    } else {
+      toast('Saved');
+    }
+    await loadRoster();
+  }catch(err){
+    saveBtn.disabled=false; saveBtn.textContent='Save';
+    toast('Save failed: '+err.message, 'err');
+  }
+}
+
+/* ---------- REMOVE (archive only — never terminates Gusto payroll) ---------- */
+async function removeHire(id){
+  var p=findPerson(id);
+  var name = p ? p.display_name : 'this person';
+  if(!window.confirm('Archive '+name+'? This removes them from the active roster but does NOT touch Gusto payroll.')) return;
+  try{
+    var j = await api('POST','/api/team?resource=hire_archive', { id:id });
+    if(j.gusto_termination_needed){
+      toast('Archived. ⚠ Remember to terminate them in Gusto to stop payroll.', 'amber');
+    } else {
+      toast('Archived.');
+    }
+    await loadRoster();
+  }catch(err){
+    toast('Archive failed: '+err.message, 'err');
+  }
+}
+
+function cssq(s){ return String(s).replace(/"/g,'\\"'); }
+
+/* ---------- boot ---------- */
+(async function(){
+  var sess = await sb.auth.getSession();
+  if(!sess.data.session){
+    $('#gate').classList.remove('hidden');
+    return;
+  }
+  $('#app').classList.remove('hidden');
+  bindSeg('i_worker');
+  bindSeg('i_paytype', updateRateHint);
+  updateRateHint();
+  $('#inviteForm').addEventListener('submit', submitInvite);
+  loadRoster();
+})();
+</script>
+</body>
+</html>

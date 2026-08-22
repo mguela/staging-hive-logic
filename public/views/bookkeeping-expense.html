@@ -1,0 +1,149 @@
+<div class="bkx-intro">
+  <div class="lsent" style="padding:24px 4px 0"><h1>Give every dollar <em>a home.</em></h1>
+  <p>Capture it, assign it, reconcile it, then send it to QuickBooks. Reina reads the receipt and recommends where it belongs — you confirm or correct her.</p></div>
+  <div class="bkx-rule"><b>Finalization rule</b><span id="bkx-rule-text">$0.00 still needs a home</span></div>
+</div>
+<aside id="bkx-bookkeeper-alert" class="bkx-alert" style="display:none"><b>⚠ Unrecorded expenses need attention</b><span id="bkx-bookkeeper-alert-text"></span></aside>
+
+<div class="card" id="bkx-reina-card">
+  <h3>Reina receipt scan <span style="font-size:10px;color:var(--mut);font-weight:700">START WITH A PHOTO</span></h3>
+  <div class="w">
+    <span class="wic">&#128248;</span>
+    <div><b>Reina reads the receipt and recommends where the expense belongs.</b><span>You confirm or correct her. The original file is protected in the evidence vault immediately.</span></div>
+  </div>
+  <div style="margin-top:10px">
+    <button class="gbtn go" id="bkx-photo-receipt" type="button">Photo receipt</button>
+    <button class="gbtn" id="bkx-choose-file" type="button">Drop or choose a file</button>
+    <input type="file" id="bkx-file-input" accept="image/*,application/pdf" capture="environment" style="display:none">
+  </div>
+  <div id="bkx-reina-status" class="note" style="display:none;margin-top:10px"></div>
+</div>
+
+<div class="card" id="bkx-transaction-card">
+  <h3>1. Transaction <span style="font-size:10px;color:var(--mut);font-weight:700">WHAT WAS PURCHASED AND HOW WAS IT PAID</span></h3>
+  <div class="bkx-grid2">
+    <label class="bkx-field">
+      <span>Bookkeeping treatment</span>
+      <select id="bkx-treatment">
+        <option value="paid">Paid purchase / receipt</option>
+        <option value="bill">Unpaid vendor bill</option>
+      </select>
+      <small>Records the expense and the bank or card used.</small>
+    </label>
+    <label class="bkx-field">
+      <span>Vendor / subcontractor</span>
+      <input type="text" id="bkx-vendor" list="bkx-vendor-list" placeholder="Search QuickBooks vendors" autocomplete="off">
+      <datalist id="bkx-vendor-list"></datalist>
+      <small id="bkx-vendor-count">Loading QBO vendors&#8230;</small>
+    </label>
+    <label class="bkx-field">
+      <span>Transaction date</span>
+      <input type="date" id="bkx-date">
+    </label>
+    <label class="bkx-field" id="bkx-due-date-field">
+      <span>Bill due date</span>
+      <input type="date" id="bkx-due-date">
+      <small>Required for Accounts Payable and aging.</small>
+    </label>
+    <label class="bkx-field">
+      <span>Receipt subtotal</span>
+      <input type="number" step="0.01" min="0" id="bkx-subtotal" placeholder="0.00">
+    </label>
+    <label class="bkx-field">
+      <span>Sales tax total</span>
+      <input type="number" step="0.01" min="0" id="bkx-tax-total" placeholder="0.00">
+    </label>
+    <label class="bkx-field">
+      <span>Sales-tax state</span>
+      <select id="bkx-tax-state"><option value="">Choose state</option></select>
+      <small>Select a state to calculate tax.</small>
+    </label>
+    <label class="bkx-field">
+      <span>Tax rate %</span>
+      <input type="number" step="0.001" min="0" id="bkx-tax-rate" placeholder="0.000">
+    </label>
+    <label class="bkx-field">
+      <span>Total amount</span>
+      <input type="number" step="0.01" min="0" id="bkx-total" placeholder="0.00">
+    </label>
+    <label class="bkx-field" id="bkx-paid-from-field">
+      <span>Paid from</span>
+      <select id="bkx-paid-from"><option value="">Choose bank or card</option></select>
+    </label>
+    <label class="bkx-field" id="bkx-payment-type-field">
+      <span>Payment type</span>
+      <select id="bkx-payment-type">
+        <option value="CreditCard">Credit card</option>
+        <option value="Cash">Cash</option>
+        <option value="Check">Check</option>
+      </select>
+    </label>
+    <label class="bkx-field">
+      <span>Reference / last 4</span>
+      <input type="text" id="bkx-reference" placeholder="Order or check number">
+    </label>
+    <label class="bkx-field">
+      <span>Fulfills purchase order (optional)</span>
+      <select id="bkx-po-link"><option value="">No linked purchase order</option></select>
+      <small>Marks that purchase order billed automatically when you submit this expense.</small>
+    </label>
+  </div>
+  <label class="bkx-field" style="margin-top:10px">
+    <span>Memo</span>
+    <input type="text" id="bkx-memo" placeholder="Optional note for this transaction">
+  </label>
+  <div class="bkx-dropzone" id="bkx-dropzone">
+    <span class="wic">&#8593;</span>
+    <div>
+      <b>Drop, scan, or choose a receipt</b>
+      <span>Drag a file here, tap to browse, or use "Photo receipt" above.</span>
+      <div id="bkx-attached-name" class="note" style="display:none"></div>
+    </div>
+    <span id="bkx-attached-badge" class="tr" style="display:none">Attached</span>
+  </div>
+  <div id="bkx-evidence-preview" class="bkx-evidence-doc" style="display:none">
+    <div class="bkx-evidence-thumb">
+      <img id="bkx-evidence-thumb-image" alt="Receipt thumbnail" style="display:none">
+      <iframe id="bkx-evidence-thumb-pdf" title="Receipt PDF thumbnail" tabindex="-1" style="display:none"></iframe>
+      <button id="bkx-evidence-thumb-open" class="bkx-evidence-thumb-open" type="button" aria-label="Open receipt full screen">Open full screen</button>
+    </div>
+    <div class="bkx-evidence-info">
+      <p>ORIGINAL DOCUMENT</p>
+      <h3 id="bkx-evidence-name">Receipt</h3>
+      <small id="bkx-evidence-detail">Stored in the evidence vault</small>
+      <button id="bkx-evidence-view-full" class="gbtn" type="button">View full screen</button>
+    </div>
+  </div>
+</div>
+
+<div class="card" id="bkx-lines-card">
+  <h3>2. Receipt lines &amp; ownership <span style="font-size:10px;color:var(--mut);font-weight:700">SPLIT ACROSS OWNERS</span></h3>
+  <p style="color:var(--mut);font-size:13px;margin:-6px 0 12px">Split items across owners, give products searchable nicknames, and add reusable materials to the HiveLogic catalog.</p>
+  <div id="bkx-lines"></div>
+  <button class="gbtn" id="bkx-add-line" type="button">+ Add receipt line</button>
+</div>
+
+<div class="bkx-reconbar" id="bkx-reconbar">
+  <div><span>Expense total</span><b id="bkx-recon-total">$0.00</b></div>
+  <div><span>Assigned</span><b id="bkx-recon-assigned">$0.00</b></div>
+  <div><span>Difference</span><b id="bkx-recon-diff" class="bad">$0.00</b></div>
+</div>
+
+<div class="card" id="bkx-control-card">
+  <h3>Control check <span style="font-size:10px;color:var(--mut);font-weight:700">FINALIZATION IS BLOCKED UNTIL EVERY CHECK PASSES</span></h3>
+  <p id="bkx-control-headline" style="font-weight:700;margin:0 0 10px"></p>
+  <ul id="bkx-control-list" class="bkx-checklist"></ul>
+</div>
+
+<div class="bkx-submitbar">
+  <button class="gbtn" id="bkx-save-draft" type="button">Save draft</button>
+  <button class="gbtn go" id="bkx-submit" type="button" disabled>Submit for review</button>
+</div>
+
+<dialog id="bkx-evidence-viewer" class="bkx-evidence-viewer">
+  <div class="bkx-evidence-viewer-head"><b id="bkx-evidence-viewer-title">Receipt</b><button id="bkx-evidence-viewer-close" type="button">Close</button></div>
+  <div class="bkx-evidence-viewer-body">
+    <img id="bkx-evidence-viewer-image" alt="Full-size receipt" style="display:none">
+    <iframe id="bkx-evidence-viewer-pdf" title="Full-size receipt PDF" style="display:none"></iframe>
+  </div>
+</dialog>

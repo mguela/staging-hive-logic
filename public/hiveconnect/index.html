@@ -1,0 +1,804 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HiveConnect</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><polygon points='50,5 90,27 90,73 50,95 10,73 10,27' fill='%23f59e0b'/></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+<script>try{if(localStorage.getItem('hive_theme')==='dark')document.documentElement.setAttribute('data-theme','dark');}catch(e){}</script>
+</head>
+<body>
+
+<!-- ===== AUTH SCREEN ===== -->
+<div id="auth-screen" class="auth-screen hidden">
+  <div class="auth-card">
+    <div class="auth-logo">
+      <svg viewBox="0 0 100 100" width="60" height="60"><defs><linearGradient id="hlB" x1="0" y1="0" x2="0.4" y2="1"><stop offset="0" stop-color="#eef4fa"/><stop offset=".45" stop-color="#aebccf"/><stop offset=".62" stop-color="#7f92a9"/><stop offset="1" stop-color="#c6d3e0"/></linearGradient></defs><polygon points="50,4 90,27 90,73 50,96 10,73 10,27" fill="#141c2b" stroke="url(#hlB)" stroke-width="5" stroke-linejoin="round"/><g fill="url(#hlB)"><polygon points="30,29 45,29 42,50 45,71 30,71 33,50"/><polygon points="55,29 70,29 67,50 70,71 55,71 58,50"/><rect x="41" y="45" width="18" height="9"/></g></svg>
+    </div>
+    <h1>Hive<span>Connect</span></h1>
+    <p class="auth-sub">Control the chatter.</p>
+    <form id="auth-form">
+      <label class="auth-label" for="auth-email">Email</label>
+      <input type="email" id="auth-email" placeholder="you@ghgrp.net" autocomplete="email" required>
+      <label class="auth-label" for="auth-password">Password</label>
+      <input type="password" id="auth-password" placeholder="••••••••" autocomplete="current-password" required>
+      <button type="submit" id="auth-submit">Sign in →</button>
+      <div id="auth-error" class="auth-error hidden"></div>
+      <button type="button" id="auth-forgot" class="auth-forgot">Forgot password?</button>
+    </form>
+    <p class="auth-note">GH Co. · Team Comms Platform</p>
+  </div>
+</div>
+
+<!-- ===== JOIN (invite link) SCREEN ===== -->
+<div id="join-screen" class="auth-screen hidden">
+  <div class="auth-card">
+    <div class="auth-logo">
+      <svg viewBox="0 0 100 100" width="60" height="60"><defs><linearGradient id="hlB" x1="0" y1="0" x2="0.4" y2="1"><stop offset="0" stop-color="#eef4fa"/><stop offset=".45" stop-color="#aebccf"/><stop offset=".62" stop-color="#7f92a9"/><stop offset="1" stop-color="#c6d3e0"/></linearGradient></defs><polygon points="50,4 90,27 90,73 50,96 10,73 10,27" fill="#141c2b" stroke="url(#hlB)" stroke-width="5" stroke-linejoin="round"/><g fill="url(#hlB)"><polygon points="30,29 45,29 42,50 45,71 30,71 33,50"/><polygon points="55,29 70,29 67,50 70,71 55,71 58,50"/><rect x="41" y="45" width="18" height="9"/></g></svg>
+    </div>
+    <h1 id="join-h1">Join Hive<span>Connect</span></h1>
+    <p class="auth-sub" id="join-sub">You've been invited</p>
+    <form id="join-form">
+      <label class="auth-label">Your name</label>
+      <input type="text" id="join-name" placeholder="Jane Doe" autocomplete="name" required>
+      <label class="auth-label">Email</label>
+      <input type="email" id="join-email" placeholder="you@ghgrp.net" autocomplete="email" required>
+      <label class="auth-label">Username</label>
+      <input type="text" id="join-username" placeholder="jane" autocomplete="username" required>
+      <label class="auth-label">Create a password</label>
+      <input type="password" id="join-password" placeholder="At least 8 characters" autocomplete="new-password" required>
+      <button type="submit" id="join-submit">Join →</button>
+      <div id="join-error" class="auth-error hidden"></div>
+    </form>
+    <p class="auth-note" id="join-note">Already have an account? Ask your admin, or open the app link.</p>
+  </div>
+</div>
+
+<!-- ===== APP ===== -->
+<div id="app" class="app hidden">
+
+  <!-- Far-left nav rail -->
+  <nav class="nav-rail">
+    <div class="rail-logo" title="HiveConnect">
+      <svg viewBox="0 0 100 100" width="28" height="28"><defs><linearGradient id="hlA" x1="0" y1="0" x2="0.4" y2="1"><stop offset="0" stop-color="#eef4fa"/><stop offset=".45" stop-color="#aebccf"/><stop offset=".62" stop-color="#7f92a9"/><stop offset="1" stop-color="#c6d3e0"/></linearGradient></defs><polygon points="50,4 90,27 90,73 50,96 10,73 10,27" fill="#141c2b" stroke="url(#hlA)" stroke-width="6" stroke-linejoin="round"/><g fill="url(#hlA)"><polygon points="30,29 45,29 42,50 45,71 30,71 33,50"/><polygon points="55,29 70,29 67,50 70,71 55,71 58,50"/><rect x="41" y="45" width="18" height="9"/></g></svg>
+    </div>
+    <div class="rail-nav">
+      <button class="rail-btn active" data-tab="messages">
+        <span class="rail-ic"><svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z"/></svg></span>
+        <span class="rail-lbl">Messages</span>
+      </button>
+      <button class="rail-btn" data-tab="email">
+        <span class="rail-ic"><svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M22 7l-10 6L2 7"/></svg></span>
+        <span class="rail-lbl">Email</span>
+      </button>
+      <button class="rail-btn" data-tab="channels">
+        <span class="rail-ic"><svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="9" x2="20" y2="9"/><line x1="4" y1="15" x2="20" y2="15"/><line x1="10" y1="3" x2="8" y2="21"/><line x1="16" y1="3" x2="14" y2="21"/></svg></span>
+        <span class="rail-lbl">Channels</span>
+      </button>
+      <button class="rail-btn" data-tab="huddles">
+        <span class="rail-ic"><svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg></span>
+        <span class="rail-lbl">HiveVideo</span>
+      </button>
+      <button class="rail-btn" data-tab="chirp">
+        <span class="rail-ic"><svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 12a7.5 7.5 0 0115 0"/><path d="M8 12a4 4 0 018 0"/><circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none"/><line x1="12" y1="14" x2="12" y2="21"/></svg></span>
+        <span class="rail-lbl">Chirp</span>
+      </button>
+      <button class="rail-btn" data-tab="people">
+        <span class="rail-ic"><svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg></span>
+        <span class="rail-lbl">Contacts</span>
+      </button>
+      <button class="rail-btn" data-tab="tasks">
+        <span class="rail-ic"><svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg></span>
+        <span class="rail-lbl">Tasks</span>
+      </button>
+      <button class="rail-btn" data-tab="calendar">
+        <span class="rail-ic"><svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></span>
+        <span class="rail-lbl">Calendar</span>
+      </button>
+      <button class="rail-btn" data-tab="voip">
+        <span class="rail-ic"><svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72c.127.96.362 1.903.7 2.81a2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.338 1.85.573 2.81.7A2 2 0 0122 16.92z"/></svg></span>
+        <span class="rail-lbl">VoIP</span>
+      </button>
+    </div>
+    <div class="rail-spacer"></div>
+    <div class="rail-bottom">
+      <button class="rail-btn" id="settings-btn" title="Settings">
+        <span class="rail-ic"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 11-4 0v-.09a1.65 1.65 0 00-1-1.51 1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 110-4h.09a1.65 1.65 0 001.51-1 1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33h0a1.65 1.65 0 001-1.51V3a2 2 0 114 0v.09a1.65 1.65 0 001 1.51h0a1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82v0a1.65 1.65 0 001.51 1H21a2 2 0 110 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg></span>
+        <span class="rail-lbl">Settings</span>
+      </button>
+      <button class="rail-btn" id="help-btn" title="Help">
+        <span class="rail-ic"><svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 015.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>
+        <span class="rail-lbl">Help</span>
+      </button>
+      <button class="rail-avatar" id="me-chip" title="You">
+        <div class="avatar" id="me-avatar"></div><span class="presence-dot me-dot"></span>
+        <span class="hidden" id="me-name"></span><span class="hidden" id="me-role"></span>
+      </button>
+    </div>
+  </nav>
+
+  <!-- Sidebar (second column) -->
+  <aside class="sidebar">
+    <div class="sidebar-header">
+      <span class="sidebar-title" id="sidebar-title">Messages</span>
+      <div class="header-btns">
+        <button class="icon-btn bell-btn" id="bell-btn" title="Notifications">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8a6 6 0 10-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 01-3.4 0"/></svg>
+          <span id="bell-badge" class="bell-badge hidden">0</span>
+        </button>
+      </div>
+    </div>
+
+    <div class="sidebar-scroll hidden" id="panel-channels">
+      <button class="new-channel-cta" id="new-channel-btn"><span>＋</span> New channel</button>
+      <div id="divisions"></div>
+    </div>
+    <div class="sidebar-scroll" id="panel-messages"></div>
+
+    <div class="sidebar-scroll hidden" id="panel-huddles"></div>
+    <div class="sidebar-scroll hidden" id="panel-people"></div>
+    <div class="sidebar-scroll hidden" id="panel-chirp"></div>
+    <div class="sidebar-scroll hidden" id="panel-email"></div>
+    <div class="sidebar-scroll hidden" id="panel-tasks"></div>
+    <div class="sidebar-scroll hidden" id="panel-calendar"></div>
+    <div class="sidebar-scroll hidden" id="panel-voip"></div>
+
+    <!-- Settings menu -->
+    <div id="settings-menu" class="settings-menu hidden">
+      <button class="sm-item" id="sm-profile"><span class="sm-ic">🎨</span> Edit profile</button>
+      <button class="sm-item" id="sm-password"><span class="sm-ic">🔑</span> Change password</button>
+      <button class="sm-item" id="sm-notif"><span class="sm-ic">🔔</span> Notifications <span class="sm-state" id="sm-notif-state">On</span></button>
+      <button class="sm-item" id="sm-theme"><span class="sm-ic" id="sm-theme-ic">🌙</span> <span id="sm-theme-label">Dark mode</span> <span class="sm-state" id="sm-theme-state">Off</span></button>
+      <button class="sm-item" id="sm-audio"><span class="sm-ic">🎙️</span> Audio &amp; mic</button>
+      <button class="sm-item admin-only hidden" id="sm-admin"><span class="sm-ic">🛡️</span> Admin / Setup</button>
+      <div class="sm-divider"></div>
+      <button class="sm-item danger" id="sm-signout"><span class="sm-ic">↩</span> Sign out</button>
+    </div>
+  </aside>
+
+  <!-- Main -->
+  <main class="main">
+    <header class="main-header">
+      <div>
+        <div class="channel-title" id="channel-title">#general</div>
+        <div class="channel-desc" id="channel-desc"></div>
+      </div>
+      <div class="header-right">
+        <button class="huddle-btn" id="huddle-btn" title="Start HiveVideo — video call, screen share">
+          <svg class="hb-ic" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 0118 0"/><rect x="2" y="12" width="4" height="7" rx="1.5"/><rect x="18" y="12" width="4" height="7" rx="1.5"/></svg>
+          <span class="hb-label" id="huddle-btn-label">HiveVideo</span>
+          <span class="hb-live hidden" id="huddle-btn-live"></span>
+        </button>
+        <button class="icon-btn hidden" id="channel-settings-btn" title="Channel settings">
+          <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 11-4 0v-.09a1.65 1.65 0 00-1-1.51 1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 110-4h.09a1.65 1.65 0 001.51-1 1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33h0a1.65 1.65 0 001-1.51V3a2 2 0 114 0v.09a1.65 1.65 0 001 1.51h0a1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82v0a1.65 1.65 0 001.51 1H21a2 2 0 110 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+        </button>
+        <button class="icon-btn pin-header-btn" id="pin-header-btn" title="Pinned messages">
+          <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 17v5"/><path d="M9 10.76V4a1 1 0 011-1h4a1 1 0 011 1v6.76a2 2 0 00.55 1.38l1.68 1.78A1 1 0 0117.18 16H6.82a1 1 0 01-.73-1.68l1.68-1.78A2 2 0 009 10.76z"/></svg>
+          <span id="pin-count" class="pin-count hidden">0</span>
+        </button>
+        <div class="search-box">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <input id="search-input" type="text" placeholder="Search messages…" autocomplete="off">
+        </div>
+      </div>
+    </header>
+    <div id="huddle-banner" class="huddle-banner hidden"></div>
+    <div id="pinned-panel" class="search-panel hidden">
+      <div class="notif-head"><span>📌 Pinned messages</span><button class="text-btn" id="pinned-close">Close</button></div>
+      <div id="pinned-list" class="notif-list"></div>
+    </div>
+    <div id="search-panel" class="search-panel hidden">
+      <div class="notif-head"><span id="search-title">Search results</span><button class="text-btn" id="search-close">Close</button></div>
+      <div id="search-results" class="notif-list"></div>
+    </div>
+    <div id="messages" class="messages"></div>
+    <div class="composer-wrap">
+      <div id="mention-menu" class="mention-menu hidden"></div>
+      <div id="upload-bar" class="upload-bar hidden"></div>
+      <div class="composer">
+        <button id="attach-btn" class="attach-btn" title="Attach photo or file">
+          <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></svg>
+        </button>
+        <input type="file" id="file-input" class="hidden" accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.heic,.mp4,.mov">
+        <button id="composer-emoji-btn" class="attach-btn emoji-btn" title="Emoji">😊</button>
+        <textarea id="composer-input" rows="1" placeholder="Message"></textarea>
+        <button id="send-btn" class="send-btn" title="Send">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M2 21l21-9L2 3v7l15 2-15 2z"/></svg>
+        </button>
+      </div>
+      <div class="composer-hint"><b>**bold**</b> · <i>*italic*</i> · <code>`code`</code> · @mention · Shift+Enter = new line</div>
+    </div>
+
+    <!-- ===== EMAIL APP (overlays the main area when the Email tab is active) ===== -->
+    <div id="email-view" class="email-view hidden">
+      <!-- toolbar -->
+      <div class="ev-toolbar">
+        <div class="ev-folder-name" id="ev-folder-name">Inbox</div>
+        <div class="ev-tb-actions">
+          <div class="ev-search"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg><input id="ev-search" type="text" placeholder="Search — e.g. from:jane subject:roof hasAttachment:true" autocomplete="off"></div>
+          <button class="icon-btn" id="ev-refresh" title="Refresh">
+            <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
+          </button>
+          <button class="primary-btn" id="ev-compose">✎ Compose</button>
+        </div>
+      </div>
+      <!-- body: message list | reading pane -->
+      <div class="ev-body">
+        <div class="ev-list" id="ev-list"></div>
+        <div class="ev-read" id="ev-read"><div class="ev-read-empty">Select a message to read it here.</div></div>
+      </div>
+
+      <!-- (email connect card below) -->
+      <div class="ev-connect hidden" id="ev-connect">
+        <div class="ev-connect-card">
+          <div class="ev-connect-ic"><svg viewBox="0 0 24 24" width="40" height="40" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M22 7l-10 6L2 7"/></svg></div>
+          <h2>Connect your mailbox</h2>
+          <p>Sign in with your Microsoft 365 account to read and send email right inside HiveConnect. You can add more than one mailbox.</p>
+          <button class="primary-btn" id="ev-signin">Sign in with Microsoft</button>
+          <div id="ev-setup-note" class="ev-setup-note hidden"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== TASKS (native HiveLogic task system) ===== -->
+    <div id="tasks-view" class="tc-view hidden">
+      <div class="tc-toolbar">
+        <div class="tc-title">✅ Tasks</div>
+        <span class="ev-c-spacer"></span>
+        <button class="icon-btn" id="tsk-refresh" title="Refresh"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg></button>
+      </div>
+      <div class="tsk-quickbar">
+        <input id="tsk-new-title" type="text" class="tsk-new-title" placeholder="Add a task and press Enter…" autocomplete="off">
+        <select id="tsk-new-owner" class="tsk-mini-select" title="Owner"></select>
+        <input id="tsk-new-due" type="date" title="Due date" class="tsk-mini-select">
+        <select id="tsk-new-priority" class="tsk-mini-select" title="Priority">
+          <option value="low">Low</option>
+          <option value="normal" selected>Normal</option>
+          <option value="high">High</option>
+          <option value="urgent">Urgent</option>
+        </select>
+        <input id="tsk-new-tag" type="text" class="tsk-mini-select tsk-tag-input" placeholder="Job/Client tag">
+        <button class="text-btn tsk-more-link" id="tsk-more-details">More Details</button>
+      </div>
+      <div id="tsk-list" class="tc-list"></div>
+    </div>
+
+    <!-- ===== CALENDAR ===== -->
+    <div id="calendar-view" class="tc-view hidden">
+      <div class="tc-toolbar">
+        <div class="tc-title">📅 Calendar</div>
+        <span class="ev-c-spacer"></span>
+        <button class="icon-btn" id="cal-refresh" title="Refresh"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg></button>
+        <button class="primary-btn" id="cal-new">＋ New event</button>
+      </div>
+      <div id="cal-list" class="tc-list"></div>
+      <div id="cal-connect" class="tc-connect hidden"></div>
+    </div>
+
+    <!-- ===== VOIP ===== -->
+    <div id="voip-view" class="tc-view hidden">
+      <div class="tc-toolbar" style="padding:13px 24px;background:#fff;border-bottom:1px solid #e3e5ec">
+        <div class="tc-title" style="display:flex;align-items:center;gap:10px">
+          <span style="width:34px;height:34px;border-radius:10px;background:#faeeec;display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0">📞</span>
+          <span><div style="font-size:15px;font-weight:800;color:#161e2e">VoIP</div><div style="font-size:10.5px;font-weight:600;color:#8b92a8;letter-spacing:.03em">Dispatch Center</div></span>
+        </div>
+        <span class="ev-c-spacer"></span>
+        <div id="voip-system-status" style="display:flex;flex-direction:column;gap:2px;padding:6px 14px;border:1px solid #e3e5ec;border-radius:10px;background:#fbfbfd;margin-right:10px">
+          <span style="font-size:8.5px;font-weight:800;color:#8b92a8;letter-spacing:.08em">SYSTEM STATUS</span>
+          <span style="display:flex;align-items:center;gap:6px">
+            <span class="voip-status-dot" style="width:7px;height:7px;border-radius:50%;background:#8b92a8;display:inline-block"></span>
+            <span class="voip-status-label" style="font-size:11.5px;font-weight:800;color:#161e2e">Checking...</span>
+          </span>
+        </div>
+        <button id="voip-settings-btn" title="Settings" style="width:auto;padding:0 16px;height:38px;border:1px solid #e3e5ec;border-radius:10px;background:#fff;display:flex;align-items:center;gap:7px;font-size:12.5px;font-weight:700;color:#484f64;cursor:pointer;margin-right:10px;font-family:inherit"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 11-4 0v-.09A1.65 1.65 0 009.5 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 110-4h.09A1.65 1.65 0 004.6 9.5a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 114 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 110 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>Settings</button>
+        <div id="voip-agent-status-wrap" style="position:relative">
+          <button id="voip-agent-status-btn" title="Set your availability" style="height:38px;padding:0 14px;border:1px solid #e3e5ec;border-radius:10px;background:#fff;display:flex;align-items:center;gap:8px;font-size:12.5px;font-weight:800;color:#161e2e;cursor:pointer;font-family:inherit">
+            <span id="voip-agent-status-dot" style="width:9px;height:9px;border-radius:50%;background:#8b92a8;display:inline-block"></span>
+            <span id="voip-agent-status-text">Offline</span>
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" style="opacity:.6"><path d="M6 9l6 6 6-6"/></svg>
+          </button>
+          <div id="voip-agent-status-menu" style="display:none;position:absolute;top:44px;right:0;z-index:50;background:#fff;border:1px solid #e3e5ec;border-radius:12px;box-shadow:0 14px 32px rgba(22,30,46,.14);padding:6px;min-width:190px"></div>
+        </div>
+      </div>
+      <div id="voip-list" class="tc-list" style="max-width:none;padding:16px 24px 28px;background:#f4f5f8"></div>
+    </div>
+
+    <!-- ===== CHIRP (Nextel-style push-to-talk) ===== -->
+    <div id="chirp-view" class="chirp-view hidden">
+      <!-- clocked-out gate -->
+      <div id="chirp-gate" class="chirp-gate hidden">
+        <div class="chirp-idle-ic">
+          <svg viewBox="0 0 24 24" width="46" height="46" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+        </div>
+        <h2>Chirp is off</h2>
+        <p>Turn Chirp on to send and receive push-to-talk.</p>
+        <button id="chirp-gate-clockin" class="primary-btn">🟢 Turn Chirp on</button>
+      </div>
+
+      <!-- idle: no line selected -->
+      <div id="chirp-idle" class="chirp-idle">
+        <div class="chirp-idle-ic">
+          <svg viewBox="0 0 24 24" width="46" height="46" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 12a7.5 7.5 0 0115 0"/><path d="M8 12a4 4 0 018 0"/><circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none"/><line x1="12" y1="14" x2="12" y2="21"/></svg>
+        </div>
+        <h2>Chirp</h2>
+        <p>Walkie-talkie for your crew. Pick someone on the left, then <b>hold to talk</b> — they hear you instantly.</p>
+      </div>
+
+      <!-- active line -->
+      <div id="chirp-line" class="chirp-line hidden">
+        <div class="chirp-peer">
+          <div id="chirp-peer-av"></div>
+          <div class="chirp-peer-meta">
+            <div id="chirp-peer-name" class="chirp-peer-name">—</div>
+            <div id="chirp-peer-status" class="chirp-peer-status">connecting…</div>
+          </div>
+          <button id="chirp-hangup" class="chirp-hangup" title="Close line">✕</button>
+        </div>
+
+        <div class="chirp-stage">
+          <div id="chirp-wave" class="chirp-wave"><span></span><span></span><span></span><span></span><span></span></div>
+          <button id="chirp-ptt" class="chirp-ptt" aria-label="Hold to talk">
+            <span class="chirp-ptt-ring"></span>
+            <span class="chirp-ptt-ic">
+              <svg viewBox="0 0 24 24" width="42" height="42" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z"/><path d="M19 10v2a7 7 0 01-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/></svg>
+            </span>
+            <span id="chirp-ptt-lbl" class="chirp-ptt-lbl">HOLD TO TALK</span>
+          </button>
+          <div class="chirp-hint">Hold the button (or press &amp; hold <b>Space</b>) to talk · release to listen</div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- Thread panel -->
+  <aside id="thread-panel" class="thread-panel hidden">
+    <header class="thread-header">
+      <span>Thread</span>
+      <button class="icon-btn" id="thread-close">✕</button>
+    </header>
+    <div id="thread-messages" class="messages thread-messages"></div>
+    <div class="composer thread-composer">
+      <button id="thread-emoji-btn" class="attach-btn emoji-btn" title="Emoji">😊</button>
+      <textarea id="thread-input" rows="1" placeholder="Reply…"></textarea>
+      <button id="thread-send-btn" class="send-btn" title="Send">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M2 21l21-9L2 3v7l15 2-15 2z"/></svg>
+      </button>
+    </div>
+  </aside>
+
+  <!-- Notifications dropdown -->
+  <div id="notif-panel" class="notif-panel hidden">
+    <div class="notif-head">
+      <span>Notifications</span>
+      <button class="text-btn" id="notif-clear">Mark all read</button>
+    </div>
+    <div id="notif-list" class="notif-list"></div>
+  </div>
+
+  <!-- New channel modal -->
+  <div id="modal-backdrop" class="modal-backdrop hidden">
+    <div class="modal">
+      <h2>Create channel</h2>
+      <label>Name</label>
+      <input id="nc-name" type="text" placeholder="e.g. job-site-updates" maxlength="40">
+      <label>Description <span class="muted">(optional)</span></label>
+      <input id="nc-desc" type="text" placeholder="What's it for?">
+      <label>Division</label>
+      <select id="nc-category" class="modal-select">
+        <option value="clients">👥 Client Comms</option>
+        <option value="vendors">🚚 Vendor Comms</option>
+        <option value="team">🧰 Teams</option>
+        <option value="channels" selected>💬 Channels</option>
+      </select>
+      <label class="check-row"><input type="checkbox" id="nc-private"> Private — invite only</label>
+      <div class="modal-actions">
+        <button class="text-btn" id="nc-cancel">Cancel</button>
+        <button class="primary-btn" id="nc-create">Create</button>
+      </div>
+      <div id="nc-error" class="auth-error hidden"></div>
+    </div>
+  </div>
+
+  <!-- Password modal -->
+  <div id="pw-backdrop" class="modal-backdrop hidden">
+    <div class="modal">
+      <h2>Change password</h2>
+      <label>New password</label>
+      <input id="pw-new" type="password" placeholder="At least 8 characters" autocomplete="new-password">
+      <label>Confirm new password</label>
+      <input id="pw-confirm" type="password" autocomplete="new-password">
+      <div class="modal-actions">
+        <button class="text-btn" id="pw-cancel">Cancel</button>
+        <button class="primary-btn" id="pw-save">Update password</button>
+      </div>
+      <div id="pw-msg" class="auth-error hidden"></div>
+    </div>
+  </div>
+
+  <!-- ===== ADMIN / SETUP OVERLAY ===== -->
+  <div id="admin-overlay" class="admin-overlay hidden">
+    <div class="admin-shell">
+      <div class="admin-head">
+        <div class="admin-title">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l7 4v6c0 5-3.5 8-7 10-3.5-2-7-5-7-10V6l7-4z"/></svg>
+          Workspace Setup
+        </div>
+        <button class="icon-btn" id="admin-close">✕</button>
+      </div>
+      <div class="admin-tabs">
+        <button class="admin-tab active" data-tab="members">Members</button>
+        <button class="admin-tab" data-tab="channels">Channels</button>
+        <button class="admin-tab" data-tab="integrations">🤖 Reina</button>
+        <button class="admin-tab" data-tab="settings">Settings</button>
+      </div>
+      <div class="admin-body">
+        <!-- Members -->
+        <div class="admin-pane" id="pane-members">
+          <div class="pane-toolbar">
+            <input id="member-filter" class="pane-search" type="text" placeholder="Filter people…">
+            <button class="mini-btn" id="link-btn" style="padding:9px 14px;font-size:12px">🔗 Invite link</button>
+            <button class="primary-btn" id="invite-btn">+ Add directly</button>
+          </div>
+          <div id="members-table" class="admin-table"></div>
+        </div>
+        <!-- Channels -->
+        <div class="admin-pane hidden" id="pane-channels">
+          <div class="pane-toolbar">
+            <input id="channel-filter" class="pane-search" type="text" placeholder="Filter channels…">
+            <label class="show-archived"><input type="checkbox" id="show-archived"> Show archived</label>
+          </div>
+          <div id="channels-table" class="admin-table"></div>
+        </div>
+        <!-- Integrations / Reina -->
+        <div class="admin-pane hidden" id="pane-integrations">
+          <div class="intg-intro">
+            <div class="intg-avatar" id="reina-avatar"></div>
+            <div>
+              <div class="intg-title">Reina — AI assistant integration</div>
+              <div class="intg-sub">Two secure hooks: Reina can <b>read</b> your comms (pull) and <b>post</b> into any channel. Everything is token-gated — no message ever leaves unless Reina asks for it.</div>
+            </div>
+          </div>
+
+          <div class="settings-card">
+            <div class="intg-card-head"><span class="intg-dot" style="background:#3b82f6"></span> Reina reads your comms</div>
+            <p class="intg-desc">Reina calls this endpoint with its token to fetch recent messages (newest first). Poll it on a schedule, or pass <code>p_since</code> to get only what's new.</p>
+            <label>Endpoint</label>
+            <div class="code-box"><code id="reina-read-url"></code><button class="mini-btn intg-copy" data-copy="reina-read-url">Copy</button></div>
+            <label>Example request (curl)</label>
+            <div class="code-box"><code id="reina-read-curl"></code><button class="mini-btn intg-copy" data-copy="reina-read-curl">Copy</button></div>
+            <div class="intg-actions">
+              <button class="mini-btn danger" id="reina-rotate">Rotate read token</button>
+              <span class="muted" id="reina-rotate-msg" style="font-size:11px"></span>
+            </div>
+          </div>
+
+          <div class="settings-card">
+            <div class="intg-card-head"><span class="intg-dot" style="background:#ffc94b"></span> Reina posts into a channel</div>
+            <p class="intg-desc">Create an incoming webhook bound to a channel. Reina (or n8n / Zapier / a script) POSTs to it and the message appears as <b>Reina 🤖</b> in that channel.</p>
+            <div class="intg-new-row">
+              <select id="wh-channel" class="modal-select" style="flex:1"></select>
+              <input id="wh-label" class="pane-search" type="text" placeholder="Label (e.g. Job alerts)" style="flex:1">
+              <button class="primary-btn" id="wh-create">Generate</button>
+            </div>
+            <div id="wh-list" class="admin-table" style="margin-top:12px"></div>
+          </div>
+        </div>
+
+        <!-- Settings -->
+        <div class="admin-pane hidden" id="pane-settings">
+          <div class="settings-card">
+            <label>Workspace name</label>
+            <input id="ws-name" type="text" placeholder="HiveConnect">
+            <button class="primary-btn" id="ws-save">Save</button>
+            <div id="ws-msg" class="auth-error hidden"></div>
+          </div>
+          <div class="settings-card">
+            <label>Email mailboxes</label>
+            <div id="settings-mailboxes" class="settings-mailboxes"></div>
+          </div>
+          <div class="settings-card">
+            <div class="settings-stat" id="settings-stats"></div>
+          </div>
+          <div class="settings-card roles-key">
+            <div class="rk-title">Role permissions</div>
+            <div class="rk-row"><b>Owner</b><span>Full control · only role that can manage other owners/admins' owner status</span></div>
+            <div class="rk-row"><b>Admin</b><span>Manage members, channels, roles, passwords · everything except demoting the owner</span></div>
+            <div class="rk-row"><b>Member</b><span>Standard access · join public channels, post, DM, create channels</span></div>
+            <div class="rk-row"><b>Guest</b><span>Restricted · only sees channels they're explicitly added to</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Invite modal -->
+  <div id="invite-backdrop" class="modal-backdrop hidden">
+    <div class="modal">
+      <h2>Invite member</h2>
+      <label>Full name</label>
+      <input id="inv-name" type="text" placeholder="e.g. Jane Doe">
+      <label>Email</label>
+      <input id="inv-email" type="text" placeholder="jane@ghgrp.net">
+      <label>Username</label>
+      <input id="inv-username" type="text" placeholder="auto from name">
+      <label>Role</label>
+      <select id="inv-role" class="modal-select">
+        <option value="member">Member</option>
+        <option value="admin">Admin</option>
+        <option value="guest">Guest</option>
+      </select>
+      <label>Add to channels <span class="muted" id="inv-ch-hint">(pick which channels they join now)</span></label>
+      <input id="inv-ch-filter" class="pane-search" type="text" placeholder="Filter channels…" style="margin-bottom:8px">
+      <div id="inv-channels" class="inv-channels"></div>
+      <div class="inv-ch-quick">
+        <button type="button" class="mini-btn" id="inv-ch-none">Clear</button>
+        <button type="button" class="mini-btn" id="inv-ch-public">All public</button>
+      </div>
+      <div class="modal-actions">
+        <button class="text-btn" id="inv-cancel">Cancel</button>
+        <button class="primary-btn" id="inv-create">Create account</button>
+      </div>
+      <div id="inv-msg" class="auth-error hidden"></div>
+    </div>
+  </div>
+
+  <!-- Credential result modal (shown once after create/reset) -->
+  <div id="cred-backdrop" class="modal-backdrop hidden">
+    <div class="modal">
+      <h2 id="cred-title">Account created</h2>
+      <p class="cred-note">Copy this now — the password is shown only once. Share it with the person; they can change it from the gear icon.</p>
+      <div class="cred-box">
+        <div class="cred-row"><span>Email</span><code id="cred-email"></code></div>
+        <div class="cred-row"><span>Password</span><code id="cred-pw"></code></div>
+      </div>
+      <div class="modal-actions">
+        <button class="primary-btn" id="cred-copy">Copy</button>
+        <button class="text-btn" id="cred-done">Done</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Create invite-link modal -->
+  <div id="link-backdrop" class="modal-backdrop hidden">
+    <div class="modal">
+      <h2>Create invite link</h2>
+      <p class="cred-note">Generates a shareable link. Whoever opens it sets their own password and joins — no email service needed. Single-use.</p>
+      <label>Email <span class="muted">(optional — lock the link to one person)</span></label>
+      <input id="lk-email" type="text" placeholder="leave blank for an open link">
+      <label>Role</label>
+      <select id="lk-role" class="modal-select">
+        <option value="member">Member</option>
+        <option value="admin">Admin</option>
+        <option value="guest">Guest</option>
+      </select>
+      <label>Add to channels <span class="muted" id="lk-ch-hint">(pick which channels they join)</span></label>
+      <input id="lk-ch-filter" class="pane-search" type="text" placeholder="Filter channels…" style="margin-bottom:8px">
+      <div id="lk-channels" class="inv-channels"></div>
+      <div class="inv-ch-quick">
+        <button type="button" class="mini-btn" id="lk-ch-none">Clear</button>
+        <button type="button" class="mini-btn" id="lk-ch-public">All public</button>
+      </div>
+      <label>Expires in (days)</label>
+      <input id="lk-expiry" type="text" value="14" style="max-width:100px">
+      <div class="modal-actions">
+        <button class="text-btn" id="lk-cancel">Cancel</button>
+        <button class="primary-btn" id="lk-create">Generate link</button>
+      </div>
+      <div id="lk-msg" class="auth-error hidden"></div>
+    </div>
+  </div>
+
+  <!-- Link result modal -->
+  <div id="linkres-backdrop" class="modal-backdrop hidden">
+    <div class="modal">
+      <h2>Invite link ready</h2>
+      <p class="cred-note">Share this link by text, email, or chat. It works once. <span id="linkres-scope"></span></p>
+      <div class="cred-box"><div class="cred-row" style="flex-direction:column;align-items:flex-start;gap:6px"><span>Link</span><code id="linkres-url" style="word-break:break-all;font-size:11px"></code></div></div>
+      <div class="modal-actions">
+        <button class="primary-btn" id="linkres-copy">Copy link</button>
+        <button class="text-btn" id="linkres-done">Done</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Channel members sub-modal -->
+  <div id="cm-backdrop" class="modal-backdrop hidden">
+    <div class="modal">
+      <h2 id="cm-title">Channel settings</h2>
+      <div class="cm-folder-row">
+        <label>Folder</label>
+        <select id="cm-folder" class="rec-input"></select>
+      </div>
+      <div class="cm-sub">Who has access</div>
+      <input id="cm-add-filter" class="pane-search" type="text" placeholder="Add someone…">
+      <div id="cm-list" class="cm-list"></div>
+      <div class="modal-actions"><button class="text-btn" id="cm-close">Close</button></div>
+    </div>
+  </div>
+
+  <!-- New DM picker -->
+  <div id="newdm-backdrop" class="modal-backdrop hidden">
+    <div class="modal">
+      <h2>New message</h2>
+      <input id="newdm-filter" class="pane-search" type="text" placeholder="Search people…" autocomplete="off">
+      <div id="newdm-list" class="cm-list"></div>
+      <div class="modal-actions"><button class="text-btn" id="newdm-close">Cancel</button></div>
+    </div>
+  </div>
+
+  <!-- My profile modal (avatar photo + color) -->
+  <div id="profile-backdrop" class="modal-backdrop hidden">
+    <div class="modal">
+      <h2>Your profile</h2>
+      <div class="profile-preview">
+        <div class="avatar profile-avatar" id="profile-avatar"></div>
+        <div class="profile-preview-name" id="profile-preview-name"></div>
+      </div>
+      <label>Display name</label>
+      <input id="profile-name" type="text" placeholder="Your name" maxlength="40">
+      <label>Photo</label>
+      <div class="profile-photo-row">
+        <button class="mini-btn" id="profile-upload-btn">Upload photo</button>
+        <button class="mini-btn danger hidden" id="profile-remove-btn">Remove photo</button>
+        <input type="file" id="profile-file" class="hidden" accept="image/*">
+        <span id="profile-upmsg" class="muted" style="font-size:11px"></span>
+      </div>
+      <label>Or pick a color</label>
+      <div id="profile-swatches" class="swatches"></div>
+      <div class="modal-actions">
+        <button class="text-btn" id="profile-cancel">Cancel</button>
+        <button class="primary-btn" id="profile-save">Save</button>
+      </div>
+      <div id="profile-msg" class="auth-error hidden"></div>
+    </div>
+  </div>
+
+  <!-- Audio & mic settings modal (shared: Chirp + HiveVideo) -->
+  <div id="audio-backdrop" class="modal-backdrop hidden">
+    <div class="modal">
+      <h2>Audio &amp; mic</h2>
+      <p class="aud-hint">These apply to both Chirp and HiveVideo.</p>
+      <label>Microphone</label>
+      <select id="aud-mic" class="aud-select"></select>
+      <label>Speaker</label>
+      <select id="aud-speaker" class="aud-select"></select>
+      <div id="aud-spk-note" class="aud-note hidden">Your browser can't switch speakers here — it uses the system default.</div>
+      <label>Volume <span id="aud-vol-val" class="aud-vol-val">100%</span></label>
+      <input id="aud-vol" type="range" min="0" max="100" value="100" class="aud-range">
+      <label>Test your mic</label>
+      <div class="aud-test-row">
+        <button class="mini-btn" id="aud-test">Test mic</button>
+        <div class="aud-meter"><div class="aud-meter-fill" id="aud-meter-fill"></div></div>
+      </div>
+      <div id="aud-msg" class="aud-msg hidden"></div>
+      <div class="modal-actions">
+        <button class="primary-btn" id="aud-done">Done</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Email compose modal -->
+  <div id="ev-compose-backdrop" class="modal-backdrop hidden">
+    <div class="modal ev-compose-modal">
+      <div class="ev-c-head"><h2 id="ev-c-title">New email</h2><button class="icon-btn" id="ev-c-close">✕</button></div>
+      <div class="ev-c-from-row"><label>From</label><select id="ev-c-from" class="modal-select"></select></div>
+      <div class="ev-c-field"><label>To</label><div class="ev-chipfield" id="ev-c-to-field"><input id="ev-c-to" type="text" placeholder="name@example.com"></div></div>
+      <div class="ev-c-field ev-c-cc hidden" id="ev-c-cc-row"><label>Cc</label><div class="ev-chipfield" id="ev-c-cc-field"><input id="ev-c-cc" type="text" placeholder="cc@example.com"></div></div>
+      <div class="ev-c-field ev-c-cc hidden" id="ev-c-bcc-row"><label>Bcc</label><div class="ev-chipfield" id="ev-c-bcc-field"><input id="ev-c-bcc" type="text" placeholder="bcc@example.com"></div></div>
+      <div class="ev-c-toggles"><button type="button" class="text-btn" id="ev-c-cctoggle">+ Cc</button><button type="button" class="text-btn" id="ev-c-bcctoggle">+ Bcc</button></div>
+      <div class="ev-c-field"><label>Subject</label><input id="ev-c-subj" type="text" placeholder="Subject"></div>
+      <div class="ev-c-optrow">
+        <label class="ev-c-opt">Priority
+          <select id="ev-c-importance" class="ev-c-sel"><option value="normal">Normal</option><option value="high">High ⚑</option><option value="low">Low</option></select>
+        </label>
+        <label class="ev-c-opt"><input type="checkbox" id="ev-c-receipt"> Read receipt</label>
+        <span class="ev-c-spacer"></span>
+        <button type="button" class="text-btn" id="ev-c-sigbtn">✎ Signature</button>
+      </div>
+      <div id="ev-c-sigedit" class="ev-c-sigedit hidden">
+        <textarea id="ev-c-sigtext" rows="3" placeholder="Your signature — added to the bottom of new emails…"></textarea>
+        <div class="ev-c-sigactions"><button class="mini-btn" id="ev-c-sigsave">Save signature</button><span id="ev-c-sigmsg" class="muted"></span></div>
+      </div>
+      <div class="ev-c-toolbar" id="ev-c-toolbar">
+        <button type="button" data-cmd="bold" title="Bold"><b>B</b></button>
+        <button type="button" data-cmd="italic" title="Italic"><i>I</i></button>
+        <button type="button" data-cmd="underline" title="Underline"><u>U</u></button>
+        <span class="ev-tb-sep"></span>
+        <button type="button" data-cmd="insertUnorderedList" title="Bulleted list">• List</button>
+        <button type="button" data-cmd="insertOrderedList" title="Numbered list">1. List</button>
+        <span class="ev-tb-sep"></span>
+        <button type="button" id="ev-c-link" title="Insert link">🔗 Link</button>
+        <button type="button" data-cmd="removeFormat" title="Clear formatting">✕ Format</button>
+        <span class="ev-tb-sep"></span>
+        <button type="button" id="ev-c-ai" class="ev-c-aibtn" title="Reina — polish this draft">✨ Reina</button>
+      </div>
+      <div id="ev-c-body" class="ev-c-rte" contenteditable="true" data-placeholder="Write your message…"></div>
+      <div id="ev-c-attach-list" class="ev-c-attach-list"></div>
+      <input type="file" id="ev-c-file" class="hidden" multiple>
+      <div class="modal-actions ev-c-actions">
+        <button class="mini-btn" id="ev-c-attach">📎 Attach</button>
+        <button class="mini-btn" id="ev-c-tpl">📋 Templates</button>
+        <span class="ev-c-spacer"></span>
+        <button class="text-btn" id="ev-c-cancel">Discard</button>
+        <button class="primary-btn" id="ev-c-send">Send</button>
+      </div>
+      <div id="ev-c-msg" class="auth-error hidden"></div>
+    </div>
+  </div>
+
+  <!-- New calendar event modal -->
+  <div id="cal-backdrop" class="modal-backdrop hidden">
+    <div class="modal">
+      <div class="ev-c-head"><h2>New event</h2><button class="icon-btn" id="cal-c-close">✕</button></div>
+      <label>Title</label>
+      <input id="cal-c-title" type="text" placeholder="Meeting title">
+      <label>Date</label>
+      <input id="cal-c-date" type="date">
+      <div class="cal-time-row">
+        <div><label>Start</label><input id="cal-c-start" type="time" value="09:00"></div>
+        <div><label>End</label><input id="cal-c-end" type="time" value="10:00"></div>
+      </div>
+      <label>Attendees <span class="muted">(comma-separated emails, optional)</span></label>
+      <input id="cal-c-att" type="text" placeholder="jane@client.com, ...">
+      <label>Location <span class="muted">(optional)</span></label>
+      <input id="cal-c-loc" type="text" placeholder="Job site / address / Teams">
+      <label>Notes <span class="muted">(optional)</span></label>
+      <textarea id="cal-c-body" rows="3" placeholder="Agenda / details…"></textarea>
+      <div class="modal-actions"><button class="text-btn" id="cal-c-cancel">Cancel</button><button class="primary-btn" id="cal-c-save">Create event</button></div>
+      <div id="cal-c-msg" class="auth-error hidden"></div>
+    </div>
+  </div>
+
+  <!-- Emoji picker -->
+  <div id="emoji-picker" class="emoji-picker hidden"></div>
+
+  <!-- ===== HUDDLE DOCK ===== -->
+  <div id="huddle-dock" class="huddle-dock hidden">
+    <div class="hd-bar">
+      <span class="hd-live-dot"></span>
+      <div class="hd-titles">
+        <span class="hd-title" id="hd-title">HiveVideo</span>
+        <span class="hd-sub" id="hd-sub">connecting…</span>
+      </div>
+      <div class="hd-parts" id="hd-parts"></div>
+      <div class="hd-controls">
+        <button class="hd-ctl" id="hd-invite-btn" title="Invite people to this call">＋</button>
+        <button class="hd-ctl" id="hd-min" title="Minimize">—</button>
+        <button class="hd-ctl" id="hd-expand" title="Expand / shrink">⤢</button>
+        <button class="hd-leave" id="hd-leave" title="Leave HiveVideo">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M10.68 13.31a16 16 0 003.41 2.6l1.27-1.27a2 2 0 012.11-.45 12.84 12.84 0 002.81.7 2 2 0 011.72 2v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72 12.84 12.84 0 00.7 2.81 2 2 0 01-.45 2.11L8.09 9.91" transform="rotate(135 12 12)"/></svg>
+          Leave
+        </button>
+      </div>
+    </div>
+    <div id="hd-frame" class="hd-frame"></div>
+    <div id="hd-cc" class="hd-cc hidden">
+      <div class="hd-cc-head">
+        <span>Live transcript</span>
+        <button id="hd-cc-notes" class="hd-cc-notesbtn" title="Summarize with Reina">✨ AI notes</button>
+      </div>
+      <div id="hd-cc-body" class="hd-cc-body"></div>
+      <div id="hd-cc-interim" class="hd-cc-interim hidden"></div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="config.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/livekit-client@2/dist/livekit-client.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@azure/msal-browser@2.38.4/lib/msal-browser.min.js"></script>
+<script src="mail-engine.js?v=20260814"></script>
+<script src="tasks.js?v=20260814"></script>
+<script src="voip-panel.js?v=20260814"></script>
+<script src="voip-callflow.js?v=20260814"></script>
+<script src="draw.js?v=20260814"></script>
+<script src="dropzone.js?v=20260814"></script>
+<script type="module">import('https://cdn.jsdelivr.net/npm/@livekit/track-processors@0.3.2/+esm').then(function(m){window.LivekitTrackProcessors=m;}).catch(function(){});</script>
+<script src="cowork-markup.js?v=20260814"></script>
+<script src="app.js?v=20260818-auth"></script>
+  <script src="/voice-input.js?v=20260814b" defer></script>
+</body>
+</html>

@@ -1,0 +1,142 @@
+<section class="rc-shell" aria-labelledby="rc-title">
+  <header class="rc-hero">
+    <div>
+      <div class="rc-kicker">REINA, CHAIRPERSON</div>
+      <h1 id="rc-title">The Boardroom</h1>
+      <p>Bring your company's biggest decisions to Reina and your AI Board of Directors.</p>
+    </div>
+    <div class="rc-status" id="rc-status" data-state="checking"><span></span><b>CHECKING</b></div>
+  </header>
+
+  <nav class="rc-workspace" aria-label="Boardroom workspace">
+    <button type="button" id="rc-new-conversation"><span aria-hidden="true">＋</span> New conversation</button>
+    <button type="button" id="rc-show-recent" class="is-active">Recent</button>
+    <button type="button" id="rc-show-pinned">Pinned</button>
+    <label>Project
+      <select id="rc-project-filter"><option value="">All projects</option></select>
+    </label>
+    <button type="button" id="rc-add-project">＋ Project</button>
+    <button type="button" id="rc-open-settings">Settings</button>
+  </nav>
+
+  <div class="rc-grid">
+    <form class="rc-card rc-compose" id="rc-form">
+      <div class="rc-section-head"><div><span>ASK</span><h2>What do you want help with?</h2></div><small>Shared with all three AI participants</small></div>
+      <div class="rc-handoff" id="rc-handoff" hidden><span>FROM OWNER'S BRIEF</span><b id="rc-handoff-label">Decision context attached</b><button type="button" id="rc-handoff-clear">Remove context</button></div>
+      <label class="rc-field rc-question">
+        <textarea id="rc-brief" maxlength="12000" required placeholder="Ask a question or describe what you need figured out."></textarea>
+        <button class="rc-send" id="rc-start" type="submit" aria-label="Send question"><span>Send</span><b aria-hidden="true">&#8593;</b></button>
+      </label>
+
+      <button type="button" class="rc-drop" id="rc-drop">
+        <b>Drop job photos, plans, PDFs, or files anywhere in this box</b>
+        <span>or click to choose up to 30 files · photos are optimized automatically</span>
+      </button>
+      <input id="rc-files" type="file" multiple hidden accept="image/jpeg,image/png,application/pdf,text/plain,text/markdown,text/csv,application/json,.txt,.md,.csv,.json,.xml,.yaml,.yml,.js,.ts,.css">
+      <div id="rc-attachments" class="rc-attachments" aria-live="polite"></div>
+
+      <details class="rc-advanced">
+        <summary>Optional details and advanced controls</summary>
+        <div class="rc-advanced-body">
+          <section class="rc-definition-of-done" id="rc-definition-of-done" aria-labelledby="rc-dod-title">
+            <div class="rc-section-head"><div><span>PERMANENT RULE</span><h2 id="rc-dod-title">HiveLogic Definition of Done</h2></div><small>Applied to every director, debate round, and final result</small></div>
+            <p><strong>Do not claim work is done until it has been exhaustively tested for its scope and risk, every discovered issue, error, and fault has been resolved, and the final behavior has been verified with recorded evidence.</strong></p>
+            <ul>
+              <li>Define the intended behavior and acceptance criteria.</li>
+              <li>Run all relevant automated, integration, end-to-end, and production-safe checks.</li>
+              <li>Verify persistence, reload, permissions, failure handling, and recovery where relevant.</li>
+              <li>Fix every discovered defect, then rerun the affected checks and full regression suite.</li>
+              <li>Record the environment, exact checks, outcomes, and remaining known risk.</li>
+            </ul>
+            <p class="rc-dod-warning">A commit, PR, merge, deployment, green build, or AI statement is not proof of completion. If required evidence is missing, the status must be <b>in progress</b>, <b>blocked</b>, or <b>unverified</b>—never done.</p>
+          </section>
+          <div class="rc-section-head rc-guardrail-head"><div><span>LIMITS</span><h2>Spending guardrails</h2></div><small>Safe defaults are already selected</small></div>
+          <div class="rc-budget">
+            <label class="rc-field">Rounds<input id="rc-rounds" type="number" min="2" max="4" value="2" required></label>
+            <label class="rc-field">Tokens / response<input id="rc-tokens" type="number" min="100" max="8000" step="100" value="700" required></label>
+            <label class="rc-field">Maximum provider budget<input id="rc-cost" type="number" min="1" max="100000" value="10" required><em>cents ($0.10 ceiling, actual cost may be lower)</em></label>
+          </div>
+
+          <details class="rc-execution" id="rc-execution">
+            <summary><span>Optional HiveBridge request</span><small>Never runs without separate human approval</small></summary>
+            <div class="rc-warning"><b>Read-only tasks only.</b> The models cannot select commands or receive shell access. If consensus supports this request, it stops at an approval gate.</div>
+            <div class="rc-execution-grid">
+              <label class="rc-field">Automation agent ID<input id="rc-agent" maxlength="128" placeholder="Registered HiveBridge agent UUID"></label>
+              <label class="rc-field">Allowed task<select id="rc-task"><option value="repository_status">Repository status</option><option value="repository_test">Repository tests</option></select></label>
+              <label class="rc-field rc-span">Approved repository path<input id="rc-path" maxlength="500" placeholder="Exact registered repository path"></label>
+            </div>
+          </details>
+        </div>
+      </details>
+
+      <div class="rc-error" id="rc-error" role="alert" hidden></div>
+    </form>
+
+    <aside class="rc-card rc-process" aria-label="Boardroom process">
+      <div class="rc-section-head"><div><span>HOW</span><h2>What happens next</h2></div></div>
+      <ol>
+        <li><b>Company intelligence</b><span>Reina brings forward live business signals and relevant Boardroom history.</span></li>
+        <li><b>Three independent answers</b><span>Claude, ChatGPT, and Grok first think through your question separately.</span></li>
+        <li><b>Private board discussion</b><span>The directors compare conclusions and challenge weak assumptions.</span></li>
+        <li><b>Chairperson's recommendation</b><span>Reina delivers the decision and clearly labels any real disagreement.</span></li>
+        <li><b>You stay in control</b><span>Nothing can be executed unless you separately approve the exact action.</span></li>
+      </ol>
+      <div class="rc-roles">
+        <div><strong>G</strong><span><b>Grok</b>Growth &amp; Market Director</span></div>
+        <div><strong>O</strong><span><b>ChatGPT</b>Operating &amp; Financial Director</span></div>
+        <div><strong>D</strong><span><b>Claude</b>Risk &amp; Governance Director</span></div>
+      </div>
+    </aside>
+  </div>
+
+  <section id="rc-results" class="rc-results" hidden aria-live="polite">
+    <div class="rc-user-message"><span>YOU</span><p id="rc-user-message"></p></div>
+    <div class="rc-thinking" id="rc-thinking" hidden><div><i></i><i></i><i></i></div><p>Reina is meeting with the directors&hellip;</p><small>Reviewing company intelligence, risks, and opportunities</small></div>
+    <div id="rc-board-response" hidden>
+      <div class="rc-result-head"><div><div class="rc-kicker">ONE FINAL BOARD DECISION</div><h2>Reina's final recommendation</h2></div><div id="rc-run-meta"></div></div>
+      <div id="rc-answer" class="rc-answer"></div>
+      <section class="rc-time-machine" id="rc-time-machine">
+        <div class="rc-tm-intro">
+          <div><div class="rc-kicker">BUSINESS TIME MACHINE</div><h2>See this decision before you make it</h2><p>Compare three possible futures using transparent, editable assumptions.</p></div>
+          <button type="button" class="rc-tm-launch" id="rc-tm-launch"><span aria-hidden="true">&#9654;</span> Show Me the Future</button>
+        </div>
+        <div class="rc-tm-panel" id="rc-tm-panel" hidden>
+          <div class="rc-tm-trust"><b id="rc-tm-confidence">ASSUMPTIONS REQUIRED</b><span>Forecast, not a promise. Change any number below.</span></div>
+          <div class="rc-tm-inputs">
+            <label>Added monthly revenue <span>$</span><input id="rc-tm-revenue" type="number" min="-100000000" max="100000000" step="100" inputmode="decimal"></label>
+            <label>Added monthly costs <span>$</span><input id="rc-tm-cost" type="number" min="-100000000" max="100000000" step="100" inputmode="decimal"></label>
+            <label>One-time investment <span>$</span><input id="rc-tm-investment" type="number" min="0" max="100000000" step="100" inputmode="decimal"></label>
+            <label>Months to full speed <input id="rc-tm-ramp" type="number" min="0" max="120" step="0.5" inputmode="decimal"></label>
+          </div>
+          <div class="rc-tm-empty" id="rc-tm-empty" hidden>Add the missing numbers above to create your three futures.</div>
+          <div class="rc-tm-futures" id="rc-tm-futures"></div>
+          <details class="rc-tm-assumptions"><summary>What the forecast assumes</summary><ul id="rc-tm-assumptions"></ul></details>
+          <div class="rc-tm-footer"><span>Nothing is executed. Reina will bring your selected future back to the Board for review.</span><button type="button" id="rc-tm-plan">Build the 90-day plan <b aria-hidden="true">&#8594;</b></button></div>
+        </div>
+      </section>
+      <div id="rc-approval"></div>
+      <details class="rc-council-details">
+        <summary>View board reasoning, sources, costs, and audit record</summary>
+        <div id="rc-usage" class="rc-usage"></div>
+        <div id="rc-report"></div>
+        <div class="rc-section-head rc-message-head"><div><span>TRANSCRIPT</span><h2>Structured exchange</h2></div></div>
+        <div id="rc-messages" class="rc-messages"></div>
+        <details class="rc-audit"><summary>Complete audit timeline</summary><div id="rc-audit"></div></details>
+      </details>
+    </div>
+  </section>
+
+  <section class="rc-card rc-history-card" aria-labelledby="rc-history-title">
+    <div class="rc-history-head">
+      <div><div class="rc-kicker">BOARDROOM MEMORY</div><h2 id="rc-history-title">Boardroom conversations</h2></div>
+      <div class="rc-history-controls">
+        <span id="rc-history-count">0 decisions</span>
+        <button type="button" id="rc-history-prev" aria-label="Previous Boardroom decisions">&#8592;</button>
+        <button type="button" id="rc-history-next" aria-label="Next Boardroom decisions">&#8594;</button>
+        <button type="button" id="rc-history-refresh">Refresh</button>
+      </div>
+    </div>
+    <p>Every discussion, provider exchange, cost record, and final Reina recommendation is saved here.</p>
+    <div id="rc-history" class="rc-history" aria-live="polite"><div class="rc-empty">Loading past decisions&hellip;</div></div>
+  </section>
+</section>

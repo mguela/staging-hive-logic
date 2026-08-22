@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Join video call — HiveLogic</title>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; margin: 0; }
+  html, body { height: 100%; }
+  body { font-family: 'Montserrat', sans-serif; background: #0b0f16; color: #e8edf6; display: flex; flex-direction: column; }
+
+  /* -- pre-join card -- */
+  #gate { flex: 1; display: flex; align-items: center; justify-content: center; padding: 20px; }
+  .card { background: #10151f; border: 1px solid #2a3550; border-radius: 16px; padding: 30px 28px; width: 380px; max-width: 94vw; text-align: center; }
+  .logo { font-size: 26px; margin-bottom: 8px; }
+  .card h1 { font-size: 17px; font-weight: 800; margin-bottom: 6px; }
+  .card p { font-size: 12.5px; color: #8b92a8; line-height: 1.55; margin-bottom: 18px; }
+  .card input { width: 100%; background: #0e1420; border: 1px solid #2a3550; border-radius: 10px; color: #e8edf6; padding: 12px 14px; font-size: 14px; font-family: inherit; margin-bottom: 12px; outline: none; }
+  .card input:focus { border-color: #5b8def; }
+  .card button { width: 100%; background: #2f6fed; border: none; border-radius: 10px; color: #fff; padding: 13px; font-size: 14px; font-weight: 800; font-family: inherit; cursor: pointer; }
+  .card button:disabled { opacity: .5; }
+  #gate-err { color: #ff7a6b; font-size: 12px; font-weight: 700; margin-top: 12px; display: none; }
+
+  /* -- call view -- */
+  #call { flex: 1; display: none; flex-direction: column; min-height: 0; }
+  #grid { flex: 1; min-height: 0; display: grid; grid-template-columns: repeat(var(--cols, 1), 1fr); grid-auto-rows: 1fr; gap: 6px; padding: 6px; }
+  #grid.spot { display: flex; flex-wrap: wrap; align-content: stretch; }
+  #grid.spot .tile.stage { flex: 1 1 100%; width: 100%; height: calc(100% - 80px); min-height: 0; }
+  #grid.spot .tile.stage video { object-fit: contain; }
+  #grid.spot .tile:not(.stage) { flex: 0 0 auto; width: 110px; height: 70px; min-height: 70px; }
+  .tile { position: relative; background: #161e2e; border-radius: 10px; overflow: hidden; display: flex; align-items: center; justify-content: center; min-height: 60px; }
+  .tile video { width: 100%; height: 100%; object-fit: cover; background: #000; }
+  .tile .nm { position: absolute; left: 6px; bottom: 6px; padding: 2px 8px; border-radius: 6px; background: rgba(8,12,20,.66); font-size: 11px; font-weight: 700; }
+  .tile .av { width: 58px; height: 58px; border-radius: 50%; background: #2f6fed; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 20px; }
+  #bar { flex: none; display: flex; justify-content: center; gap: 10px; padding: 12px; background: #10151f; border-top: 1px solid #2a3550; padding-bottom: calc(12px + env(safe-area-inset-bottom)); }
+  #bar button { height: 46px; min-width: 46px; padding: 0 16px; border-radius: 23px; border: none; background: #222c42; color: #fff; font-size: 13px; font-weight: 800; font-family: inherit; cursor: pointer; }
+  #bar button.off { background: #3a2a2a; color: #ff9c90; }
+  #bar #leave { background: #c0392b; }
+  #status { text-align: center; font-size: 11px; font-weight: 700; color: #8b92a8; padding: 6px; }
+</style>
+</head>
+<body>
+  <div id="gate">
+    <div class="card">
+      <div class="logo">⬡</div>
+      <h1>Join the video call</h1>
+      <p>You've been invited to a HiveLogic video call. No account needed — just tell us who you are.</p>
+      <input id="g-name" placeholder="Your first name" maxlength="40" autocomplete="given-name">
+      <button id="g-join">Join call</button>
+      <div id="gate-err"></div>
+    </div>
+  </div>
+
+  <div id="call">
+    <div id="status">connecting…</div>
+    <div id="grid"></div>
+    <div id="bar">
+      <button id="b-mic">🎙 Mute</button>
+      <button id="b-cam">🎥 Camera</button>
+      <button id="b-share">🖥 Share</button>
+      <button id="leave">Leave</button>
+    </div>
+  </div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/livekit-client@2/dist/livekit-client.umd.min.js"></script>
+<script src="config.js"></script>
+<!-- Cowork layer so external guests get the full kit: annotate, point, draw,
+     files, and the (host-gated) control hand-off. draw/dropzone must load before
+     cowork-markup, which reads them at parse time. -->
+<script src="draw.js"></script>
+<script src="dropzone.js"></script>
+<script type="module">import('https://cdn.jsdelivr.net/npm/@livekit/track-processors@0.3.2/+esm').then(function(m){window.LivekitTrackProcessors=m;}).catch(function(){});</script>
+<script src="cowork-markup.js"></script>
+<script>
+(function () {
+  var LIVEKIT_URL = (window.HIVE_CONFIG && window.HIVE_CONFIG.livekitUrl) || 'wss://video.hiverorder.com';
+  var sb = window.supabase.createClient(window.HIVE_CONFIG.url, window.HIVE_CONFIG.anonKey);
+  var pass = new URLSearchParams(location.search).get('p');
+  var room = null, mic = true, cam = false, share = false;
+
+  var $ = function (id) { return document.getElementById(id); };
+  function fail(msg) { var e = $('gate-err'); e.textContent = msg; e.style.display = 'block'; $('g-join').disabled = false; $('g-join').textContent = 'Join call'; }
+
+  if (!pass) { $('g-name').style.display = 'none'; $('g-join').style.display = 'none'; fail('This link is missing its invite code — ask for a fresh link.'); }
+
+  $('g-join').onclick = join;
+  $('g-name').addEventListener('keydown', function (e) { if (e.key === 'Enter') join(); });
+
+  async function join() {
+    var name = $('g-name').value.trim();
+    if (!name) { fail('Please enter your name.'); return; }
+    $('g-join').disabled = true; $('g-join').textContent = 'Joining…';
+    var token;
+    try {
+      var res = await sb.rpc('guest_video_token', { p_pass: pass, p_name: name });
+      if (res.error || !res.data) throw new Error((res.error && res.error.message) || 'no token');
+      token = res.data;
+    } catch (e) {
+      fail((e.message || '').replace(/^.*?:\s*/, '') || 'This link is not valid anymore — ask for a fresh one.');
+      return;
+    }
+    room = new LivekitClient.Room({ adaptiveStream: false, dynacast: false });
+    var RE = LivekitClient.RoomEvent;
+    room
+      .on(RE.TrackSubscribed, function (track) {
+        if (track.kind === 'audio') { try { var el = track.attach(); el.autoplay = true; document.body.appendChild(el); el.style.display = 'none'; } catch (e) {} }
+        render();
+      })
+      .on(RE.TrackUnsubscribed, function (track) { try { track.detach().forEach(function (el) { el.remove(); }); } catch (e) {} render(); })
+      .on(RE.ParticipantConnected, render)
+      .on(RE.ParticipantDisconnected, render)
+      .on(RE.LocalTrackPublished, render)
+      .on(RE.LocalTrackUnpublished, render)
+      .on(RE.TrackMuted, render)
+      .on(RE.TrackUnmuted, render)
+      .on(RE.ConnectionStateChanged, function (st) {
+        var S = LivekitClient.ConnectionState;
+        $('status').textContent = st === S.Connected ? 'live' : (st === S.Reconnecting ? 'reconnecting…' : 'connecting…');
+      })
+      .on(RE.Disconnected, function () { $('status').textContent = 'call ended'; setTimeout(function () { location.reload(); }, 1200); });
+    try {
+      await room.connect(LIVEKIT_URL, token);
+    } catch (e) {
+      fail('Could not connect to the call: ' + (e.message || 'network error'));
+      room = null;
+      return;
+    }
+    $('gate').style.display = 'none';
+    $('call').style.display = 'flex';
+    try { await room.localParticipant.setMicrophoneEnabled(true); } catch (e) { mic = false; }
+    try { if (room.startAudio) await room.startAudio(); } catch (e) {}
+    updateBar(); render();
+    // Give the guest the same Cowork overlay everyone else has. Safe if the
+    // scripts failed to load — attach() no-ops without CoworkDraw.
+    try { if (window.CoworkMarkup) window.CoworkMarkup.attach(room, { name: name }); } catch (e) {}
+  }
+
+  var tiles = new Map();
+  function render() {
+    if (!room) return;
+    var grid = $('grid');
+    var T = LivekitClient.Track;
+    var parts = [room.localParticipant].concat(Array.from(room.remoteParticipants.values()));
+    grid.style.setProperty('--cols', Math.max(1, Math.ceil(Math.sqrt(parts.length))));
+    var stageSid = null;
+    parts.forEach(function (p) { p.trackPublications.forEach(function (pub) { if (!stageSid && pub.kind === 'video' && pub.track && !pub.isMuted && pub.source === T.Source.ScreenShare) stageSid = p.sid; }); });
+    grid.classList.toggle('spot', !!stageSid);
+    var seen = {};
+    parts.forEach(function (p) {
+      seen[p.sid] = 1;
+      var e = tiles.get(p.sid);
+      if (!e) {
+        var tile = document.createElement('div'); tile.className = 'tile';
+        var media = document.createElement('div'); media.style.cssText = 'width:100%;height:100%;display:flex;align-items:center;justify-content:center';
+        var nm = document.createElement('div'); nm.className = 'nm';
+        tile.appendChild(media); tile.appendChild(nm); grid.appendChild(tile);
+        e = { tile: tile, media: media, nm: nm, sid: null }; tiles.set(p.sid, e);
+      }
+      var isStage = p.sid === stageSid;
+      e.tile.classList.toggle('stage', isStage);
+      if (isStage && grid.firstChild !== e.tile) grid.insertBefore(e.tile, grid.firstChild);
+      var vpub = null;
+      p.trackPublications.forEach(function (pub) {
+        if (pub.kind === 'video' && pub.track && !pub.isMuted && (pub.source === T.Source.Camera || pub.source === T.Source.ScreenShare)) {
+          if (!vpub || pub.source === T.Source.ScreenShare) vpub = pub;
+        }
+      });
+      var want = vpub ? vpub.trackSid : null;
+      if (want !== e.sid) {
+        e.media.innerHTML = '';
+        if (vpub) { var v = vpub.track.attach(); if (p === room.localParticipant && vpub.source === T.Source.Camera) v.style.transform = 'scaleX(-1)'; e.media.appendChild(v); }
+        else { var av = document.createElement('div'); av.className = 'av'; av.textContent = ((p.name || 'G')[0] || 'G').toUpperCase(); e.media.appendChild(av); }
+        e.sid = want;
+      }
+      var label = (!p.isMicrophoneEnabled ? '🔇 ' : '') + (p === room.localParticipant ? 'You' : (p.name || 'Guest'));
+      if (e.nm.textContent !== label) e.nm.textContent = label;
+    });
+    tiles.forEach(function (e, sid) { if (!seen[sid]) { e.tile.remove(); tiles.delete(sid); } });
+  }
+
+  function updateBar() {
+    $('b-mic').textContent = mic ? '🎙 Mute' : '🎙 Unmute';
+    $('b-mic').classList.toggle('off', !mic);
+    $('b-cam').textContent = cam ? '🎥 Camera off' : '🎥 Camera';
+    $('b-share').textContent = share ? '🖥 Stop share' : '🖥 Share';
+  }
+  $('b-mic').onclick = async function () { if (!room) return; mic = !mic; try { await room.localParticipant.setMicrophoneEnabled(mic); } catch (e) { mic = false; } updateBar(); render(); };
+  $('b-cam').onclick = async function () { if (!room) return; cam = !cam; try { await room.localParticipant.setCameraEnabled(cam); } catch (e) { cam = false; } updateBar(); render(); };
+  $('b-share').onclick = async function () { if (!room) return; share = !share; try { await room.localParticipant.setScreenShareEnabled(share); } catch (e) { share = false; } updateBar(); render(); };
+  $('leave').onclick = function () { try { if (window.CoworkMarkup) window.CoworkMarkup.detach(); } catch (e) {} if (room) { try { room.disconnect(); } catch (e) {} } document.body.innerHTML = '<div style="height:100vh;display:flex;align-items:center;justify-content:center;font-family:Montserrat,sans-serif;color:#8b92a8;background:#0b0f16">You left the call. You can close this tab.</div>'; };
+})();
+</script>
+</body>
+</html>

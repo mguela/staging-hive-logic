@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HiveLogic — Weather Modal Mockup</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700;800&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#484f64; --ink-strong:#333a4e;
+    --canvas:#f0f1f6; --card:#ffffff; --line:#dadde8;
+    --gold-deep:#59718a; --gold-bg:#e9eff4;
+    --green:#1B7A50; --green-bg:#e6f2ec;
+    --red:#c65b4e; --red-bg:#f9ebe8;
+    --amber:#b07a1f; --amber-bg:#fdf3df;
+    --mut:#5f6578;
+    --mono:'JetBrains Mono',ui-monospace,monospace;
+    --sans:'Montserrat',-apple-system,sans-serif;
+    --card-shadow:inset 0 1px 0 rgba(255,255,255,.85), 0 10px 18px rgba(53,76,89,.13), 0 3px 6px rgba(53,76,89,.10);
+    --r:14px;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:var(--sans);font-size:13.5px;color:var(--ink);background:var(--canvas);min-height:100vh;display:flex;align-items:flex-start;justify-content:center;padding:22px 12px}
+  .modal{width:100%;max-width:520px;background:var(--card);border-radius:var(--r);box-shadow:var(--card-shadow);overflow:hidden}
+
+  /* header */
+  .hd{display:flex;align-items:center;gap:10px;padding:14px 18px;border-bottom:1px solid var(--line)}
+  .hd h1{font-size:14.5px;font-weight:800;color:var(--ink-strong)}
+  .hd .loc{font-family:var(--mono);font-size:9px;letter-spacing:.8px;color:var(--gold-deep);background:var(--gold-bg);padding:3px 8px;border-radius:99px;margin-left:auto}
+  .hd .x{border:none;background:none;font-size:16px;color:var(--mut);cursor:pointer;padding:2px 4px}
+
+  /* LEVEL 1 — NOW */
+  .now{display:flex;align-items:center;gap:16px;padding:18px}
+  .now .big{font-size:44px;font-weight:800;color:var(--ink-strong);line-height:1}
+  .now .emoji{font-size:38px}
+  .now .meta{margin-left:auto;text-align:right;font-size:11.5px;color:var(--mut);line-height:1.7}
+  .now .meta b{color:var(--ink-strong)}
+  .cond{font-size:12.5px;font-weight:700;color:var(--mut);margin-top:4px}
+
+  /* stat chips */
+  .chips{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;padding:0 18px 14px}
+  .chip{background:var(--gold-bg);border-radius:10px;padding:8px 6px;text-align:center}
+  .chip .k{font-family:var(--mono);font-size:7.5px;letter-spacing:1.2px;color:var(--gold-deep)}
+  .chip .v{font-size:13px;font-weight:800;color:var(--ink-strong);margin-top:2px}
+
+  /* LEVEL 2 — 7 DAY */
+  .sect{font-family:var(--mono);font-size:8.5px;letter-spacing:1.4px;color:var(--gold-deep);padding:12px 18px 8px;border-top:1px solid var(--line)}
+  .days{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;padding:0 18px 16px}
+  .day{border:1px solid var(--line);border-radius:10px;padding:8px 2px;text-align:center;cursor:pointer;transition:all .15s;background:var(--card)}
+  .day:hover{border-color:var(--gold-deep);transform:translateY(-2px)}
+  .day.on{border-color:var(--gold-deep);background:var(--gold-bg);box-shadow:0 3px 8px rgba(53,76,89,.12)}
+  .day .dn{font-family:var(--mono);font-size:8px;letter-spacing:.5px;color:var(--mut);font-weight:700}
+  .day .de{font-size:17px;margin:4px 0 2px}
+  .day .hi{font-size:12px;font-weight:800;color:var(--ink-strong)}
+  .day .lo{font-size:10px;color:var(--mut)}
+  .day .rp{font-family:var(--mono);font-size:8px;margin-top:3px;border-radius:99px;padding:1px 0}
+  .rp.g{color:var(--green);background:var(--green-bg)}
+  .rp.a{color:var(--amber);background:var(--amber-bg)}
+  .rp.r{color:var(--red);background:var(--red-bg)}
+
+  /* LEVEL 3 — HOURLY */
+  .hrhead{display:flex;align-items:center;padding:0 18px 8px}
+  .hrhead .t{font-size:12.5px;font-weight:800;color:var(--ink-strong)}
+  .hrhead .hint{margin-left:auto;font-family:var(--mono);font-size:8px;letter-spacing:.8px;color:var(--mut)}
+  .hours{max-height:238px;overflow-y:auto;border-top:1px solid var(--line)}
+  .hr{display:grid;grid-template-columns:52px 30px 44px 1fr 66px;align-items:center;gap:8px;padding:8px 18px;border-bottom:1px solid var(--line);font-size:12px}
+  .hr:nth-child(even){background:#fafbfd}
+  .hr .h{font-family:var(--mono);font-size:10px;color:var(--mut)}
+  .hr .e{font-size:15px;text-align:center}
+  .hr .t{font-weight:800;color:var(--ink-strong)}
+  .hr .d{font-size:10.5px;color:var(--mut)}
+  .hr .r{font-family:var(--mono);font-size:9px;text-align:right;border-radius:99px;padding:2px 7px;justify-self:end}
+
+  /* footer */
+  .ft{display:flex;gap:8px;padding:12px 18px;border-top:1px solid var(--line);background:#fafbfd}
+  .pill{font-family:var(--mono);font-size:9px;letter-spacing:.8px;font-weight:700;color:var(--gold-deep);background:var(--gold-bg);border:none;border-radius:99px;padding:7px 13px;cursor:pointer}
+  .pill.act{color:#fff;background:linear-gradient(135deg,#7F99B8,#4A6182)}
+  .src{margin-left:auto;font-family:var(--mono);font-size:7.5px;color:var(--mut);align-self:center}
+</style>
+</head>
+<body>
+<div class="modal">
+  <div class="hd">
+    <h1>🌦️ Weather</h1>
+    <span class="loc">BEDFORD NY 10506 · HQ</span>
+    <button class="x">✕</button>
+  </div>
+
+  <!-- LEVEL 1 · NOW -->
+  <div class="now">
+    <span class="emoji">🌤️</span>
+    <div>
+      <div class="big">72°</div>
+      <div class="cond">Partly cloudy · Feels 74°</div>
+    </div>
+    <div class="meta">H <b>78°</b> · L <b>61°</b><br>Updated 9:26 AM</div>
+  </div>
+  <div class="chips">
+    <div class="chip"><div class="k">RAIN</div><div class="v">10%</div></div>
+    <div class="chip"><div class="k">WIND</div><div class="v">8 mph</div></div>
+    <div class="chip"><div class="k">HUMIDITY</div><div class="v">54%</div></div>
+    <div class="chip"><div class="k">UV</div><div class="v">6</div></div>
+  </div>
+
+  <!-- LEVEL 2 · 7-DAY (tap a day) -->
+  <div class="sect">7-DAY FORECAST · TAP A DAY FOR HOURLY</div>
+  <div class="days" id="days"></div>
+
+  <!-- LEVEL 3 · HOURLY -->
+  <div class="hrhead"><span class="t" id="hrTitle">Today · Hour by hour</span><span class="hint">SCROLL ↓</span></div>
+  <div class="hours" id="hours"></div>
+
+  <div class="ft">
+    <button class="pill act">⛈️ RESHUFFLE JOBS</button>
+    <button class="pill">JOB-SITE ZIPS</button>
+    <span class="src">SRC: OPEN-METEO · 30-MIN CACHE</span>
+  </div>
+</div>
+
+<script>
+const days=[
+ {dn:'SAT',de:'🌤️',hi:78,lo:61,r:10,c:'g'},
+ {dn:'SUN',de:'☀️',hi:81,lo:63,r:0,c:'g'},
+ {dn:'MON',de:'🌦️',hi:74,lo:60,r:45,c:'a'},
+ {dn:'TUE',de:'⛈️',hi:70,lo:58,r:80,c:'r'},
+ {dn:'WED',de:'🌧️',hi:68,lo:57,r:65,c:'r'},
+ {dn:'THU',de:'⛅',hi:73,lo:59,r:20,c:'g'},
+ {dn:'FRI',de:'☀️',hi:77,lo:60,r:5,c:'g'}
+];
+const hourSets={
+ 0:[['7 AM','🌫️',62,'Fog, calm',5],['8 AM','🌤️',65,'Clearing',5],['9 AM','🌤️',68,'Partly cloudy',10],['10 AM','☀️',71,'Sunny · UV 5',10],['11 AM','☀️',74,'Sunny · UV 7',5],['12 PM','☀️',76,'Sunny',5],['1 PM','🌤️',78,'Few clouds',10],['2 PM','🌤️',78,'Wind 12 mph',10],['3 PM','⛅',77,'Clouds build',15],['4 PM','⛅',75,'Cloudy',15],['5 PM','🌤️',72,'Clearing',10],['6 PM','🌇',68,'Clear evening',5]],
+ 3:[['7 AM','🌧️',60,'Rain starts',60],['8 AM','🌧️',60,'Steady rain',70],['9 AM','⛈️',61,'T-storm · gusts 28',85],['10 AM','⛈️',62,'Heavy · gusts 32',90],['11 AM','⛈️',63,'Storm core',90],['12 PM','🌧️',64,'Rain eases',70],['1 PM','🌧️',65,'Showers',60],['2 PM','🌦️',66,'Scattered',45],['3 PM','🌦️',67,'Breaking up',35],['4 PM','⛅',68,'Drying out',20],['5 PM','🌤️',67,'Clearing',10],['6 PM','🌤️',65,'Clear',5]]
+};
+function rc(p){return p>=50?['var(--red)','var(--red-bg)']:p>=20?['var(--amber)','var(--amber-bg)']:['var(--green)','var(--green-bg)']}
+const dEl=document.getElementById('days'),hEl=document.getElementById('hours'),tEl=document.getElementById('hrTitle');
+let sel=0;
+function render(){
+ dEl.innerHTML=days.map((d,i)=>`<div class="day${i===sel?' on':''}" onclick="pick(${i})">
+   <div class="dn">${d.dn}</div><div class="de">${d.de}</div>
+   <div class="hi">${d.hi}°</div><div class="lo">${d.lo}°</div>
+   <div class="rp ${d.c}">${d.r}%</div></div>`).join('');
+ const hs=hourSets[sel]||hourSets[0];
+ tEl.textContent=(sel===0?'Today':days[sel].dn)+' · Hour by hour';
+ hEl.innerHTML=hs.map(h=>{const[c,b]=rc(h[4]);
+  return `<div class="hr"><span class="h">${h[0]}</span><span class="e">${h[1]}</span>
+   <span class="t">${h[2]}°</span><span class="d">${h[3]}</span>
+   <span class="r" style="color:${c};background:${b}">💧 ${h[4]}%</span></div>`}).join('');
+}
+function pick(i){sel=i;render();hEl.scrollTop=0}
+render();
+</script>
+</body>
+</html>

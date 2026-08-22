@@ -1,0 +1,1874 @@
+{
+  "version": 12,
+  "label": "V12 REAL PURPLE-PANEL BROWSER CERTIFICATION GATE - NOT PRODUCTION CODE",
+  "totalCases": 24,
+  "totalSteps": 118,
+  "categories": {
+    "existing_panel": 2,
+    "login": 3,
+    "typed_voice": 6,
+    "attention_confirmation": 4,
+    "rendering": 2,
+    "lifecycle": 3,
+    "network": 3,
+    "nothing_executed": 1
+  },
+  "mutationTypeCount": 54,
+  "mutationTypes": [
+    "business_mutation_on_nav",
+    "cc_bundle_promise_removed",
+    "client_categories_grant_nav",
+    "client_destination_accepted",
+    "client_payload_nav_authority",
+    "client_role_in_request",
+    "client_supplied_display_name",
+    "communication_sent_claim",
+    "custom_shell_panel",
+    "divergent_endpoint",
+    "divergent_envelope",
+    "double_verbal_confirm",
+    "duplicate_handlers_on_remount",
+    "duplicate_model_invoke",
+    "duplicate_submit_new_key",
+    "duplicate_submit_on_remount",
+    "expired_confirm_navigates",
+    "false_execution_claim",
+    "greeting_before_auth",
+    "greeting_without_session",
+    "html_in_refusal",
+    "html_in_user_bubble",
+    "input_enabled_after_expiry",
+    "input_enabled_without_auth",
+    "late_response_accepted",
+    "legacy_api_chat_used",
+    "listen_after_emergency_off",
+    "markdown_executed",
+    "mic_active_after_teardown",
+    "mic_start_without_gesture",
+    "mismatched_confirm_navigates",
+    "missing_rna_selectors",
+    "pending_intent_survives_expiry",
+    "pending_nav_after_teardown",
+    "script_executed_in_panel",
+    "second_confirmation_prompt",
+    "second_panel_created",
+    "speak_after_emergency_off",
+    "speech_autoplay_before_enable",
+    "speech_failure_spoken_as_success",
+    "split_conversation_ids",
+    "stale_confirm_navigates",
+    "stale_pr51_index_replacement",
+    "system_prompt_in_request",
+    "timer_leak_after_teardown",
+    "tools_in_request",
+    "trusted_html_render",
+    "unauthorized_source_in_totals",
+    "unavailable_counted_as_zero",
+    "unsafe_chat_path",
+    "voice_skips_persistence",
+    "voice_uses_different_endpoint",
+    "written_dropped_on_speech_fail",
+    "yes_binds_wrong_intent"
+  ],
+  "rules": [
+    "Actual-candidate hooks only for production certification",
+    "No known-good or reference fallback may certify production",
+    "Dormant without REINA_BROWSER_CANDIDATE_MODULE",
+    "Uses current-main rna* purple-panel elements only",
+    "No second panel/textarea/input/button/navigation system",
+    "Additive to current main; stale PR #51 index.html replacement fails",
+    "textContent/plain only rendering",
+    "Structural nothing-executed always false"
+  ],
+  "candidateContract": {
+    "env": "REINA_BROWSER_CANDIDATE_MODULE",
+    "export": "createReinaBrowserCandidateHooks",
+    "hooks": [
+      "authenticateSession",
+      "mountReinaPanel",
+      "submitTypedTurn",
+      "enableVoiceFromGesture",
+      "submitSpokenTurn",
+      "confirmAttentionReview",
+      "inspectPanel",
+      "inspectNetworkAudit",
+      "inspectSpeechAudit",
+      "inspectNavigationAudit",
+      "expireSession",
+      "teardown"
+    ]
+  },
+  "nothingExecutedTemplate": {
+    "executionEvent": false,
+    "mutationResult": false,
+    "queuedAction": false,
+    "automationSubmission": false,
+    "communicationSent": false,
+    "scheduleChanged": false,
+    "moneyMoved": false,
+    "executed": false
+  },
+  "cases": [
+    {
+      "id": "BR-PANEL-001",
+      "suite": "purple_panel_browser",
+      "category": "existing_panel",
+      "covers": [
+        "rna_panel",
+        "no_second_ui"
+      ],
+      "scenario": {
+        "sessionId": "syn-sess-br-panel-001",
+        "conversationId": "syn-conv-br-panel-001",
+        "steps": [
+          {
+            "action": "authenticateSession"
+          },
+          {
+            "action": "mountReinaPanel"
+          },
+          {
+            "action": "inspectPanel"
+          }
+        ]
+      },
+      "expect": {
+        "final": {
+          "panelMounted": true,
+          "usesRnaElements": true,
+          "secondPanelCount": 0,
+          "secondTextareaCount": 0,
+          "secondInputCount": 0,
+          "secondButtonSystem": false,
+          "secondNavigationSystem": false,
+          "preservesMarketing": true,
+          "preservesCommandCenter": true,
+          "preservesNavigation": true,
+          "preservesCcBundlePromise": true,
+          "stalePr51IndexReplacement": false,
+          "additiveToCurrentMain": true
+        },
+        "nothingExecutedStructural": {
+          "executionEvent": false,
+          "mutationResult": false,
+          "queuedAction": false,
+          "automationSubmission": false,
+          "communicationSent": false,
+          "scheduleChanged": false,
+          "moneyMoved": false,
+          "executed": false
+        },
+        "panelConstraints": {
+          "usesCurrentMainRnaPanel": true,
+          "noSecondPanel": true,
+          "noSecondTextarea": true,
+          "noSecondInput": true,
+          "noSecondButtonSystem": true,
+          "noSecondNavigationSystem": true,
+          "preservesMarketing": true,
+          "preservesCommandCenter": true,
+          "preservesNavigation": true,
+          "preservesCcBundlePromise": true,
+          "additiveToCurrentMain": true,
+          "stalePr51IndexReplacement": false
+        }
+      },
+      "journeyMutations": [
+        "second_panel_created",
+        "stale_pr51_index_replacement",
+        "cc_bundle_promise_removed"
+      ],
+      "decisionRequired": null
+    },
+    {
+      "id": "BR-PANEL-002",
+      "suite": "purple_panel_browser",
+      "category": "existing_panel",
+      "covers": [
+        "rna_selectors"
+      ],
+      "scenario": {
+        "sessionId": "syn-sess-br-panel-002",
+        "conversationId": "syn-conv-br-panel-002",
+        "steps": [
+          {
+            "action": "authenticateSession"
+          },
+          {
+            "action": "mountReinaPanel",
+            "inject": {
+              "requireRnaSelectors": true
+            }
+          },
+          {
+            "action": "inspectPanel"
+          }
+        ]
+      },
+      "expect": {
+        "final": {
+          "usesRnaElements": true,
+          "rnaSelectorPresent": true,
+          "noCustomShell": true
+        },
+        "nothingExecutedStructural": {
+          "executionEvent": false,
+          "mutationResult": false,
+          "queuedAction": false,
+          "automationSubmission": false,
+          "communicationSent": false,
+          "scheduleChanged": false,
+          "moneyMoved": false,
+          "executed": false
+        },
+        "panelConstraints": {
+          "usesCurrentMainRnaPanel": true,
+          "noSecondPanel": true,
+          "noSecondTextarea": true,
+          "noSecondInput": true,
+          "noSecondButtonSystem": true,
+          "noSecondNavigationSystem": true,
+          "preservesMarketing": true,
+          "preservesCommandCenter": true,
+          "preservesNavigation": true,
+          "preservesCcBundlePromise": true,
+          "additiveToCurrentMain": true,
+          "stalePr51IndexReplacement": false
+        }
+      },
+      "journeyMutations": [
+        "custom_shell_panel",
+        "missing_rna_selectors"
+      ],
+      "decisionRequired": null
+    },
+    {
+      "id": "BR-LOGIN-001",
+      "suite": "purple_panel_browser",
+      "category": "login",
+      "covers": [
+        "greeting_after_auth",
+        "server_display_name"
+      ],
+      "scenario": {
+        "sessionId": "syn-sess-br-login-001",
+        "conversationId": "syn-conv-br-login-001",
+        "steps": [
+          {
+            "action": "authenticateSession",
+            "inject": {
+              "serverProfile": {
+                "displayName": "Demo Admin"
+              }
+            }
+          },
+          {
+            "action": "mountReinaPanel"
+          },
+          {
+            "action": "inspectPanel"
+          }
+        ]
+      },
+      "expect": {
+        "final": {
+          "authenticated": true,
+          "greetingVisible": true,
+          "greetingOnlyAfterAuth": true,
+          "displayNameSource": "server_authenticated_profile",
+          "displayName": "Demo Admin",
+          "clientDisplayNameIgnored": true
+        },
+        "nothingExecutedStructural": {
+          "executionEvent": false,
+          "mutationResult": false,
+          "queuedAction": false,
+          "automationSubmission": false,
+          "communicationSent": false,
+          "scheduleChanged": false,
+          "moneyMoved": false,
+          "executed": false
+        },
+        "panelConstraints": {
+          "usesCurrentMainRnaPanel": true,
+          "noSecondPanel": true,
+          "noSecondTextarea": true,
+          "noSecondInput": true,
+          "noSecondButtonSystem": true,
+          "noSecondNavigationSystem": true,
+          "preservesMarketing": true,
+          "preservesCommandCenter": true,
+          "preservesNavigation": true,
+          "preservesCcBundlePromise": true,
+          "additiveToCurrentMain": true,
+          "stalePr51IndexReplacement": false
+        }
+      },
+      "journeyMutations": [
+        "greeting_before_auth",
+        "client_supplied_display_name"
+      ],
+      "decisionRequired": null
+    },
+    {
+      "id": "BR-LOGIN-002",
+      "suite": "purple_panel_browser",
+      "category": "login",
+      "covers": [
+        "attention_totals",
+        "unavailable_not_zero"
+      ],
+      "scenario": {
+        "sessionId": "syn-sess-br-login-002",
+        "conversationId": "syn-conv-br-login-002",
+        "steps": [
+          {
+            "action": "authenticateSession"
+          },
+          {
+            "action": "mountReinaPanel",
+            "inject": {
+              "attentionSources": {
+                "available": [
+                  "jobs"
+                ],
+                "unavailable": [
+                  "mail"
+                ],
+                "authorized": [
+                  "jobs"
+                ]
+              }
+            }
+          },
+          {
+            "action": "inspectPanel"
+          }
+        ]
+      },
+      "expect": {
+        "final": {
+          "attentionTotalsFromAuthorizedAvailableOnly": true,
+          "unavailableDisclosed": true,
+          "unavailableNeverCountedAsZero": true,
+          "greetingVisible": true
+        },
+        "nothingExecutedStructural": {
+          "executionEvent": false,
+          "mutationResult": false,
+          "queuedAction": false,
+          "automationSubmission": false,
+          "communicationSent": false,
+          "scheduleChanged": false,
+          "moneyMoved": false,
+          "executed": false
+        },
+        "panelConstraints": {
+          "usesCurrentMainRnaPanel": true,
+          "noSecondPanel": true,
+          "noSecondTextarea": true,
+          "noSecondInput": true,
+          "noSecondButtonSystem": true,
+          "noSecondNavigationSystem": true,
+          "preservesMarketing": true,
+          "preservesCommandCenter": true,
+          "preservesNavigation": true,
+          "preservesCcBundlePromise": true,
+          "additiveToCurrentMain": true,
+          "stalePr51IndexReplacement": false
+        }
+      },
+      "journeyMutations": [
+        "unavailable_counted_as_zero",
+        "unauthorized_source_in_totals"
+      ],
+      "decisionRequired": null
+    },
+    {
+      "id": "BR-LOGIN-003",
+      "suite": "purple_panel_browser",
+      "category": "login",
+      "covers": [
+        "no_greeting_without_session"
+      ],
+      "scenario": {
+        "sessionId": "syn-sess-br-login-003",
+        "conversationId": "syn-conv-br-login-003",
+        "steps": [
+          {
+            "action": "mountReinaPanel",
+            "inject": {
+              "skipAuth": true
+            }
+          },
+          {
+            "action": "inspectPanel"
+          }
+        ]
+      },
+      "expect": {
+        "final": {
+          "authenticated": false,
+          "greetingVisible": false,
+          "panelInputDisabled": true
+        },
+        "nothingExecutedStructural": {
+          "executionEvent": false,
+          "mutationResult": false,
+          "queuedAction": false,
+          "automationSubmission": false,
+          "communicationSent": false,
+          "scheduleChanged": false,
+          "moneyMoved": false,
+          "executed": false
+        },
+        "panelConstraints": {
+          "usesCurrentMainRnaPanel": true,
+          "noSecondPanel": true,
+          "noSecondTextarea": true,
+          "noSecondInput": true,
+          "noSecondButtonSystem": true,
+          "noSecondNavigationSystem": true,
+          "preservesMarketing": true,
+          "preservesCommandCenter": true,
+          "preservesNavigation": true,
+          "preservesCcBundlePromise": true,
+          "additiveToCurrentMain": true,
+          "stalePr51IndexReplacement": false
+        }
+      },
+      "journeyMutations": [
+        "greeting_without_session",
+        "input_enabled_without_auth"
+      ],
+      "decisionRequired": null
+    },
+    {
+      "id": "BR-TV-001",
+      "suite": "purple_panel_browser",
+      "category": "typed_voice",
+      "covers": [
+        "shared_conversation",
+        "canonical_envelope"
+      ],
+      "scenario": {
+        "sessionId": "syn-sess-br-tv-001",
+        "conversationId": "syn-conv-br-tv-001",
+        "steps": [
+          {
+            "action": "authenticateSession"
+          },
+          {
+            "action": "mountReinaPanel"
+          },
+          {
+            "action": "submitTypedTurn",
+            "message": "Status of DEMO-201"
+          },
+          {
+            "action": "enableVoiceFromGesture"
+          },
+          {
+            "action": "submitSpokenTurn",
+            "message": "What is blocking it?"
+          },
+          {
+            "action": "inspectNetworkAudit"
+          },
+          {
+            "action": "inspectPanel"
+          }
+        ]
+      },
+      "expect": {
+        "final": {
+          "sharedConversationId": true,
+          "sameEndpoint": true,
+          "samePersistencePath": true,
+          "sameCanonicalEnvelope": true,
+          "typedVoiceContinuity": true,
+          "writtenVisible": true
+        },
+        "nothingExecutedStructural": {
+          "executionEvent": false,
+          "mutationResult": false,
+          "queuedAction": false,
+          "automationSubmission": false,
+          "communicationSent": false,
+          "scheduleChanged": false,
+          "moneyMoved": false,
+          "executed": false
+        },
+        "panelConstraints": {
+          "usesCurrentMainRnaPanel": true,
+          "noSecondPanel": true,
+          "noSecondTextarea": true,
+          "noSecondInput": true,
+          "noSecondButtonSystem": true,
+          "noSecondNavigationSystem": true,
+          "preservesMarketing": true,
+          "preservesCommandCenter": true,
+          "preservesNavigation": true,
+          "preservesCcBundlePromise": true,
+          "additiveToCurrentMain": true,
+          "stalePr51IndexReplacement": false
+        }
+      },
+      "journeyMutations": [
+        "split_conversation_ids",
+        "divergent_endpoint",
+        "divergent_envelope"
+      ],
+      "decisionRequired": null
+    },
+    {
+      "id": "BR-TV-002",
+      "suite": "purple_panel_browser",
+      "category": "typed_voice",
+      "covers": [
+        "no_mic_before_gesture"
+      ],
+      "scenario": {
+        "sessionId": "syn-sess-br-tv-002",
+        "conversationId": "syn-conv-br-tv-002",
+        "steps": [
+          {
+            "action": "authenticateSession"
+          },
+          {
+            "action": "mountReinaPanel"
+          },
+          {
+            "action": "submitSpokenTurn",
+            "message": "Hello",
+            "inject": {
+              "noUserGesture": true
+            }
+          },
+          {
+            "action": "inspectSpeechAudit"
+          }
+        ]
+      },
+      "expect": {
+        "final": {
+          "micStarted": false,
+          "micStartWithoutGestureRejected": true,
+          "listening": false
+        },
+        "nothingExecutedStructural": {
+          "executionEvent": false,
+          "mutationResult": false,
+          "queuedAction": false,
+          "automationSubmission": false,
+          "communicationSent": false,
+          "scheduleChanged": false,
+          "moneyMoved": false,
+          "executed": false
+        },
+        "panelConstraints": {
+          "usesCurrentMainRnaPanel": true,
+          "noSecondPanel": true,
+          "noSecondTextarea": true,
+          "noSecondInput": true,
+          "noSecondButtonSystem": true,
+          "noSecondNavigationSystem": true,
+          "preservesMarketing": true,
+          "preservesCommandCenter": true,
+          "preservesNavigation": true,
+          "preservesCcBundlePromise": true,
+          "additiveToCurrentMain": true,
+          "stalePr51IndexReplacement": false
+        }
+      },
+      "journeyMutations": [
+        "mic_start_without_gesture"
+      ],
+      "decisionRequired": null
+    },
+    {
+      "id": "BR-TV-003",
+      "suite": "purple_panel_browser",
+      "category": "typed_voice",
+      "covers": [
+        "no_autoplay_before_enable"
+      ],
+      "scenario": {
+        "sessionId": "syn-sess-br-tv-003",
+        "conversationId": "syn-conv-br-tv-003",
+        "steps": [
+          {
+            "action": "authenticateSession"
+          },
+          {
+            "action": "mountReinaPanel"
+          },
+          {
+            "action": "submitTypedTurn",
+            "message": "Status of DEMO-201"
+          },
+          {
+            "action": "submitSpokenTurn",
+            "message": "Repeat",
+            "inject": {
+              "voiceNotEnabled": true
+            }
+          },
+          {
+            "action": "inspectSpeechAudit"
+          },
+          {
+            "action": "inspectPanel"
+          }
+        ]
+      },
+      "expect": {
+        "final": {
+          "speechAutoplayBeforeEnableRejected": true,
+          "spokenDelivery": false,
+          "writtenVisible": true
+        },
+        "nothingExecutedStructural": {
+          "executionEvent": false,
+          "mutationResult": false,
+          "queuedAction": false,
+          "automationSubmission": false,
+          "communicationSent": false,
+          "scheduleChanged": false,
+          "moneyMoved": false,
+          "executed": false
+        },
+        "panelConstraints": {
+          "usesCurrentMainRnaPanel": true,
+          "noSecondPanel": true,
+          "noSecondTextarea": true,
+          "noSecondInput": true,
+          "noSecondButtonSystem": true,
+          "noSecondNavigationSystem": true,
+          "preservesMarketing": true,
+          "preservesCommandCenter": true,
+          "preservesNavigation": true,
+          "preservesCcBundlePromise": true,
+          "additiveToCurrentMain": true,
+          "stalePr51IndexReplacement": false
+        }
+      },
+      "journeyMutations": [
+        "speech_autoplay_before_enable"
+      ],
+      "decisionRequired": null
+    },
+    {
+      "id": "BR-TV-004",
+      "suite": "purple_panel_browser",
+      "category": "typed_voice",
+      "covers": [
+        "emergency_off_wins_race"
+      ],
+      "scenario": {
+        "sessionId": "syn-sess-br-tv-004",
+        "conversationId": "syn-conv-br-tv-004",
+        "steps": [
+          {
+            "action": "authenticateSession"
+          },
+          {
+            "action": "mountReinaPanel"
+          },
+          {
+            "action": "enableVoiceFromGesture"
+          },
+          {
+            "action": "submitSpokenTurn",
+            "message": "Status",
+            "inject": {
+              "emergencyVoiceOff": true,
+              "raceWithSpeak": true
+            }
+          },
+          {
+            "action": "inspectSpeechAudit"
+          }
+        ]
+      },
+      "expect": {
+        "final": {
+          "emergencyOff": true,
+          "emergencyOffWinsRace": true,
+          "listening": false,
+          "speaking": false,
+          "spokenDelivery": false,
+          "serverConfirmedOff": true
+        },
+        "nothingExecutedStructural": {
+          "executionEvent": false,
+          "mutationResult": false,
+          "queuedAction": false,
+          "automationSubmission": false,
+          "communicationSent": false,
+          "scheduleChanged": false,
+          "moneyMoved": false,
+          "executed": false
+        },
+        "panelConstraints": {
+          "usesCurrentMainRnaPanel": true,
+          "noSecondPanel": true,
+          "noSecondTextarea": true,
+          "noSecondInput": true,
+          "noSecondButtonSystem": true,
+          "noSecondNavigationSystem": true,
+          "preservesMarketing": true,
+          "preservesCommandCenter": true,
+          "preservesNavigation": true,
+          "preservesCcBundlePromise": true,
+          "additiveToCurrentMain": true,
+          "stalePr51IndexReplacement": false
+        }
+      },
+      "journeyMutations": [
+        "speak_after_emergency_off",
+        "listen_after_emergency_off"
+      ],
+      "decisionRequired": null
+    },
+    {
+      "id": "BR-TV-005",
+      "suite": "purple_panel_browser",
+      "category": "typed_voice",
+      "covers": [
+        "written_survives_speech_fail"
+      ],
+      "scenario": {
+        "sessionId": "syn-sess-br-tv-005",
+        "conversationId": "syn-conv-br-tv-005",
+        "steps": [
+          {
+            "action": "authenticateSession"
+          },
+          {
+            "action": "mountReinaPanel"
+          },
+          {
+            "action": "enableVoiceFromGesture"
+          },
+          {
+            "action": "submitSpokenTurn",
+            "message": "Status of DEMO-201",
+            "inject": {
+              "speechSynthesisFailure": true
+            }
+          },
+          {
+            "action": "inspectPanel"
+          },
+          {
+            "action": "inspectSpeechAudit"
+          }
+        ]
+      },
+      "expect": {
+        "final": {
+          "spokenDelivery": false,
+          "writtenVisible": true,
+          "speechFailureNotSpokenAsSuccess": true
+        },
+        "nothingExecutedStructural": {
+          "executionEvent": false,
+          "mutationResult": false,
+          "queuedAction": false,
+          "automationSubmission": false,
+          "communicationSent": false,
+          "scheduleChanged": false,
+          "moneyMoved": false,
+          "executed": false
+        },
+        "panelConstraints": {
+          "usesCurrentMainRnaPanel": true,
+          "noSecondPanel": true,
+          "noSecondTextarea": true,
+          "noSecondInput": true,
+          "noSecondButtonSystem": true,
+          "noSecondNavigationSystem": true,
+          "preservesMarketing": true,
+          "preservesCommandCenter": true,
+          "preservesNavigation": true,
+          "preservesCcBundlePromise": true,
+          "additiveToCurrentMain": true,
+          "stalePr51IndexReplacement": false
+        }
+      },
+      "journeyMutations": [
+        "written_dropped_on_speech_fail",
+        "speech_failure_spoken_as_success"
+      ],
+      "decisionRequired": null
+    },
+    {
+      "id": "BR-TV-006",
+      "suite": "purple_panel_browser",
+      "category": "typed_voice",
+      "covers": [
+        "duplicate_submit_idempotency"
+      ],
+      "scenario": {
+        "sessionId": "syn-sess-br-tv-006",
+        "conversationId": "syn-conv-br-tv-006",
+        "steps": [
+          {
+            "action": "authenticateSession"
+          },
+          {
+            "action": "mountReinaPanel"
+          },
+          {
+            "action": "submitTypedTurn",
+            "message": "Status of DEMO-231",
+            "inject": {
+              "idempotencyKey": "idem-br-006"
+            }
+          },
+          {
+            "action": "submitTypedTurn",
+            "message": "Status of DEMO-231",
+            "inject": {
+              "idempotencyKey": "idem-br-006",
+              "duplicateSubmit": true
+            }
+          },
+          {
+            "action": "inspectNetworkAudit"
+          }
+        ]
+      },
+      "expect": {
+        "final": {
+          "sameIdempotencyKeyOnDuplicate": true,
+          "duplicateSuppressed": true,
+          "modelInvokeCountAtMost": 1
+        },
+        "nothingExecutedStructural": {
+          "executionEvent": false,
+          "mutationResult": false,
+          "queuedAction": false,
+          "automationSubmission": false,
+          "communicationSent": false,
+          "scheduleChanged": false,
+          "moneyMoved": false,
+          "executed": false
+        },
+        "panelConstraints": {
+          "usesCurrentMainRnaPanel": true,
+          "noSecondPanel": true,
+          "noSecondTextarea": true,
+          "noSecondInput": true,
+          "noSecondButtonSystem": true,
+          "noSecondNavigationSystem": true,
+          "preservesMarketing": true,
+          "preservesCommandCenter": true,
+          "preservesNavigation": true,
+          "preservesCcBundlePromise": true,
+          "additiveToCurrentMain": true,
+          "stalePr51IndexReplacement": false
+        }
+      },
+      "journeyMutations": [
+        "duplicate_submit_new_key",
+        "duplicate_model_invoke"
+      ],
+      "decisionRequired": null
+    },
+    {
+      "id": "BR-ATT-001",
+      "suite": "purple_panel_browser",
+      "category": "attention_confirmation",
+      "covers": [
+        "server_intent",
+        "single_confirm"
+      ],
+      "scenario": {
+        "sessionId": "syn-sess-br-att-001",
+        "conversationId": "syn-conv-br-att-001",
+        "steps": [
+          {
+            "action": "authenticateSession"
+          },
+          {
+            "action": "mountReinaPanel",
+            "inject": {
+              "pendingUiIntent": {
+                "type": "reina.ui-intent.v1",
+                "intentId": "intent-att-001",
+                "destination": "attention-review"
+              }
+            }
+          },
+          {
+            "action": "inspectPanel"
+          },
+          {
+            "action": "confirmAttentionReview",
+            "inject": {
+              "intentId": "intent-att-001",
+              "confirmVia": "button"
+            }
+          },
+          {
+            "action": "inspectNavigationAudit"
+          }
+        ]
+      },
+      "expect": {
+        "final": {
+          "serverIssuedUiIntent": true,
+          "intentType": "reina.ui-intent.v1",
+          "singleConfirmationQuestion": true,
+          "confirmationCount": 1,
+          "noSecondConfirmationPrompt": true,
+          "navigationReadOnly": true,
+          "clientCategoriesGrantNoNavAuthority": true,
+          "businessDataMutated": false
+        },
+        "nothingExecutedStructural": {
+          "executionEvent": false,
+          "mutationResult": false,
+          "queuedAction": false,
+          "automationSubmission": false,
+          "communicationSent": false,
+          "scheduleChanged": false,
+          "moneyMoved": false,
+          "executed": false
+        },
+        "panelConstraints": {
+          "usesCurrentMainRnaPanel": true,
+          "noSecondPanel": true,
+          "noSecondTextarea": true,
+          "noSecondInput": true,
+          "noSecondButtonSystem": true,
+          "noSecondNavigationSystem": true,
+          "preservesMarketing": true,
+          "preservesCommandCenter": true,
+          "preservesNavigation": true,
+          "preservesCcBundlePromise": true,
+          "additiveToCurrentMain": true,
+          "stalePr51IndexReplacement": false
+        }
+      },
+      "journeyMutations": [
+        "second_confirmation_prompt",
+        "client_categories_grant_nav",
+        "business_mutation_on_nav"
+      ],
+      "decisionRequired": null
+    },
+    {
+      "id": "BR-ATT-002",
+      "suite": "purple_panel_browser",
+      "category": "attention_confirmation",
+      "covers": [
+        "verbal_yes_exact_intent"
+      ],
+      "scenario": {
+        "sessionId": "syn-sess-br-att-002",
+        "conversationId": "syn-conv-br-att-002",
+        "steps": [
+          {
+            "action": "authenticateSession"
+          },
+          {
+            "action": "mountReinaPanel",
+            "inject": {
+              "pendingUiIntent": {
+                "type": "reina.ui-intent.v1",
+                "intentId": "intent-att-002",
+                "destination": "attention-review"
+              }
+            }
+          },
+          {
+            "action": "enableVoiceFromGesture"
+          },
+          {
+            "action": "confirmAttentionReview",
+            "inject": {
+              "intentId": "intent-att-002",
+              "confirmVia": "verbal_yes"
+            }
+          },
+          {
+            "action": "inspectNavigationAudit"
+          }
+        ]
+      },
+      "expect": {
+        "final": {
+          "confirmationCount": 1,
+          "confirmedExactIntentId": true,
+          "noSecondConfirmationPrompt": true,
+          "navigationReadOnly": true
+        },
+        "nothingExecutedStructural": {
+          "executionEvent": false,
+          "mutationResult": false,
+          "queuedAction": false,
+          "automationSubmission": false,
+          "communicationSent": false,
+          "scheduleChanged": false,
+          "moneyMoved": false,
+          "executed": false
+        },
+        "panelConstraints": {
+          "usesCurrentMainRnaPanel": true,
+          "noSecondPanel": true,
+          "noSecondTextarea": true,
+          "noSecondInput": true,
+          "noSecondButtonSystem": true,
+          "noSecondNavigationSystem": true,
+          "preservesMarketing": true,
+          "preservesCommandCenter": true,
+          "preservesNavigation": true,
+          "preservesCcBundlePromise": true,
+          "additiveToCurrentMain": true,
+          "stalePr51IndexReplacement": false
+        }
+      },
+      "journeyMutations": [
+        "yes_binds_wrong_intent",
+        "double_verbal_confirm"
+      ],
+      "decisionRequired": null
+    },
+    {
+      "id": "BR-ATT-003",
+      "suite": "purple_panel_browser",
+      "category": "attention_confirmation",
+      "covers": [
+        "reject_bad_confirmations"
+      ],
+      "scenario": {
+        "sessionId": "syn-sess-br-att-003",
+        "conversationId": "syn-conv-br-att-003",
+        "steps": [
+          {
+            "action": "authenticateSession"
+          },
+          {
+            "action": "mountReinaPanel",
+            "inject": {
+              "pendingUiIntent": {
+                "type": "reina.ui-intent.v1",
+                "intentId": "intent-att-003",
+                "destination": "attention-review"
+              }
+            }
+          },
+          {
+            "action": "confirmAttentionReview",
+            "inject": {
+              "intentId": "intent-att-003",
+              "confirmVia": "button",
+              "duplicateConfirm": true
+            }
+          },
+          {
+            "action": "confirmAttentionReview",
+            "inject": {
+              "intentId": "intent-stale",
+              "stale": true
+            }
+          },
+          {
+            "action": "confirmAttentionReview",
+            "inject": {
+              "intentId": "intent-expired",
+              "expired": true
+            }
+          },
+          {
+            "action": "confirmAttentionReview",
+            "inject": {
+              "intentId": "intent-mismatch",
+              "mismatched": true
+            }
+          },
+          {
+            "action": "confirmAttentionReview",
+            "inject": {
+              "intentId": "intent-att-003",
+              "authExpired": true
+            }
+          },
+          {
+            "action": "inspectNavigationAudit"
+          }
+        ]
+      },
+      "expect": {
+        "final": {
+          "duplicateConfirmNoOp": true,
+          "staleConfirmNoOp": true,
+          "expiredConfirmNoOp": true,
+          "mismatchedConfirmNoOp": true,
+          "authExpiredConfirmNoOp": true,
+          "navigationPerformed": false,
+          "businessDataMutated": false
+        },
+        "nothingExecutedStructural": {
+          "executionEvent": false,
+          "mutationResult": false,
+          "queuedAction": false,
+          "automationSubmission": false,
+          "communicationSent": false,
+          "scheduleChanged": false,
+          "moneyMoved": false,
+          "executed": false
+        },
+        "panelConstraints": {
+          "usesCurrentMainRnaPanel": true,
+          "noSecondPanel": true,
+          "noSecondTextarea": true,
+          "noSecondInput": true,
+          "noSecondButtonSystem": true,
+          "noSecondNavigationSystem": true,
+          "preservesMarketing": true,
+          "preservesCommandCenter": true,
+          "preservesNavigation": true,
+          "preservesCcBundlePromise": true,
+          "additiveToCurrentMain": true,
+          "stalePr51IndexReplacement": false
+        }
+      },
+      "journeyMutations": [
+        "stale_confirm_navigates",
+        "expired_confirm_navigates",
+        "mismatched_confirm_navigates"
+      ],
+      "decisionRequired": null
+    },
+    {
+      "id": "BR-ATT-004",
+      "suite": "purple_panel_browser",
+      "category": "attention_confirmation",
+      "covers": [
+        "client_destination_no_authority"
+      ],
+      "scenario": {
+        "sessionId": "syn-sess-br-att-004",
+        "conversationId": "syn-conv-br-att-004",
+        "steps": [
+          {
+            "action": "authenticateSession"
+          },
+          {
+            "action": "mountReinaPanel"
+          },
+          {
+            "action": "confirmAttentionReview",
+            "inject": {
+              "clientCategories": [
+                "jobs",
+                "mail"
+              ],
+              "clientDestination": "/admin/payments",
+              "intentId": "client-forged"
+            }
+          },
+          {
+            "action": "inspectNavigationAudit"
+          }
+        ]
+      },
+      "expect": {
+        "final": {
+          "clientDestinationRejected": true,
+          "clientCategoriesGrantNoNavAuthority": true,
+          "navigationPerformed": false,
+          "serverIssuedUiIntent": false
+        },
+        "nothingExecutedStructural": {
+          "executionEvent": false,
+          "mutationResult": false,
+          "queuedAction": false,
+          "automationSubmission": false,
+          "communicationSent": false,
+          "scheduleChanged": false,
+          "moneyMoved": false,
+          "executed": false
+        },
+        "panelConstraints": {
+          "usesCurrentMainRnaPanel": true,
+          "noSecondPanel": true,
+          "noSecondTextarea": true,
+          "noSecondInput": true,
+          "noSecondButtonSystem": true,
+          "noSecondNavigationSystem": true,
+          "preservesMarketing": true,
+          "preservesCommandCenter": true,
+          "preservesNavigation": true,
+          "preservesCcBundlePromise": true,
+          "additiveToCurrentMain": true,
+          "stalePr51IndexReplacement": false
+        }
+      },
+      "journeyMutations": [
+        "client_destination_accepted",
+        "client_payload_nav_authority"
+      ],
+      "decisionRequired": null
+    },
+    {
+      "id": "BR-REN-001",
+      "suite": "purple_panel_browser",
+      "category": "rendering",
+      "covers": [
+        "textContent_only"
+      ],
+      "scenario": {
+        "sessionId": "syn-sess-br-ren-001",
+        "conversationId": "syn-conv-br-ren-001",
+        "steps": [
+          {
+            "action": "authenticateSession"
+          },
+          {
+            "action": "mountReinaPanel"
+          },
+          {
+            "action": "submitTypedTurn",
+            "message": "Status of DEMO-201",
+            "inject": {
+              "assistantContainsHtml": true
+            }
+          },
+          {
+            "action": "inspectPanel"
+          }
+        ]
+      },
+      "expect": {
+        "final": {
+          "renderMode": "textContent",
+          "htmlRejected": true,
+          "markdownNotExecuted": true,
+          "scriptsRejected": true,
+          "eventHandlersRejected": true,
+          "trustedHtmlRejected": true,
+          "unsafeUrlsRejected": true,
+          "selectorsRejected": true,
+          "writtenVisible": true,
+          "executed": false,
+          "nothingExecutedReported": true
+        },
+        "nothingExecutedStructural": {
+          "executionEvent": false,
+          "mutationResult": false,
+          "queuedAction": false,
+          "automationSubmission": false,
+          "communicationSent": false,
+          "scheduleChanged": false,
+          "moneyMoved": false,
+          "executed": false
+        },
+        "panelConstraints": {
+          "usesCurrentMainRnaPanel": true,
+          "noSecondPanel": true,
+          "noSecondTextarea": true,
+          "noSecondInput": true,
+          "noSecondButtonSystem": true,
+          "noSecondNavigationSystem": true,
+          "preservesMarketing": true,
+          "preservesCommandCenter": true,
+          "preservesNavigation": true,
+          "preservesCcBundlePromise": true,
+          "additiveToCurrentMain": true,
+          "stalePr51IndexReplacement": false
+        }
+      },
+      "journeyMutations": [
+        "trusted_html_render",
+        "script_executed_in_panel",
+        "markdown_executed"
+      ],
+      "decisionRequired": null
+    },
+    {
+      "id": "BR-REN-002",
+      "suite": "purple_panel_browser",
+      "category": "rendering",
+      "covers": [
+        "user_greeting_evidence_error_refusal_plain"
+      ],
+      "scenario": {
+        "sessionId": "syn-sess-br-ren-002",
+        "conversationId": "syn-conv-br-ren-002",
+        "steps": [
+          {
+            "action": "authenticateSession"
+          },
+          {
+            "action": "mountReinaPanel"
+          },
+          {
+            "action": "submitTypedTurn",
+            "message": "Send the invoice now."
+          },
+          {
+            "action": "inspectPanel"
+          }
+        ]
+      },
+      "expect": {
+        "final": {
+          "userPlainText": true,
+          "assistantPlainText": true,
+          "greetingPlainText": true,
+          "evidencePlainText": true,
+          "errorOrRefusalPlainText": true,
+          "renderMode": "textContent",
+          "executed": false,
+          "nothingExecutedReported": true
+        },
+        "nothingExecutedStructural": {
+          "executionEvent": false,
+          "mutationResult": false,
+          "queuedAction": false,
+          "automationSubmission": false,
+          "communicationSent": false,
+          "scheduleChanged": false,
+          "moneyMoved": false,
+          "executed": false
+        },
+        "panelConstraints": {
+          "usesCurrentMainRnaPanel": true,
+          "noSecondPanel": true,
+          "noSecondTextarea": true,
+          "noSecondInput": true,
+          "noSecondButtonSystem": true,
+          "noSecondNavigationSystem": true,
+          "preservesMarketing": true,
+          "preservesCommandCenter": true,
+          "preservesNavigation": true,
+          "preservesCcBundlePromise": true,
+          "additiveToCurrentMain": true,
+          "stalePr51IndexReplacement": false
+        }
+      },
+      "journeyMutations": [
+        "html_in_user_bubble",
+        "html_in_refusal"
+      ],
+      "decisionRequired": null
+    },
+    {
+      "id": "BR-LIFE-001",
+      "suite": "purple_panel_browser",
+      "category": "lifecycle",
+      "covers": [
+        "logout_disables"
+      ],
+      "scenario": {
+        "sessionId": "syn-sess-br-life-001",
+        "conversationId": "syn-conv-br-life-001",
+        "steps": [
+          {
+            "action": "authenticateSession"
+          },
+          {
+            "action": "mountReinaPanel"
+          },
+          {
+            "action": "submitTypedTurn",
+            "message": "Status of DEMO-201"
+          },
+          {
+            "action": "expireSession"
+          },
+          {
+            "action": "submitTypedTurn",
+            "message": "Late message",
+            "inject": {
+              "lateAfterExpiry": true
+            }
+          },
+          {
+            "action": "inspectPanel"
+          },
+          {
+            "action": "inspectSpeechAudit"
+          },
+          {
+            "action": "inspectNetworkAudit"
+          }
+        ]
+      },
+      "expect": {
+        "final": {
+          "inputDisabled": true,
+          "recognitionStopped": true,
+          "speechStopped": true,
+          "pendingIntentsCleared": true,
+          "lateResponseRejected": true,
+          "authenticated": false
+        },
+        "nothingExecutedStructural": {
+          "executionEvent": false,
+          "mutationResult": false,
+          "queuedAction": false,
+          "automationSubmission": false,
+          "communicationSent": false,
+          "scheduleChanged": false,
+          "moneyMoved": false,
+          "executed": false
+        },
+        "panelConstraints": {
+          "usesCurrentMainRnaPanel": true,
+          "noSecondPanel": true,
+          "noSecondTextarea": true,
+          "noSecondInput": true,
+          "noSecondButtonSystem": true,
+          "noSecondNavigationSystem": true,
+          "preservesMarketing": true,
+          "preservesCommandCenter": true,
+          "preservesNavigation": true,
+          "preservesCcBundlePromise": true,
+          "additiveToCurrentMain": true,
+          "stalePr51IndexReplacement": false
+        }
+      },
+      "journeyMutations": [
+        "input_enabled_after_expiry",
+        "late_response_accepted",
+        "pending_intent_survives_expiry"
+      ],
+      "decisionRequired": null
+    },
+    {
+      "id": "BR-LIFE-002",
+      "suite": "purple_panel_browser",
+      "category": "lifecycle",
+      "covers": [
+        "remount_no_duplicate_handlers"
+      ],
+      "scenario": {
+        "sessionId": "syn-sess-br-life-002",
+        "conversationId": "syn-conv-br-life-002",
+        "steps": [
+          {
+            "action": "authenticateSession"
+          },
+          {
+            "action": "mountReinaPanel"
+          },
+          {
+            "action": "mountReinaPanel",
+            "inject": {
+              "remount": true
+            }
+          },
+          {
+            "action": "submitTypedTurn",
+            "message": "Status of DEMO-231"
+          },
+          {
+            "action": "inspectNetworkAudit"
+          },
+          {
+            "action": "inspectPanel"
+          }
+        ]
+      },
+      "expect": {
+        "final": {
+          "handlerDuplication": false,
+          "submissionDuplication": false,
+          "modelInvokeCountAtMost": 1
+        },
+        "nothingExecutedStructural": {
+          "executionEvent": false,
+          "mutationResult": false,
+          "queuedAction": false,
+          "automationSubmission": false,
+          "communicationSent": false,
+          "scheduleChanged": false,
+          "moneyMoved": false,
+          "executed": false
+        },
+        "panelConstraints": {
+          "usesCurrentMainRnaPanel": true,
+          "noSecondPanel": true,
+          "noSecondTextarea": true,
+          "noSecondInput": true,
+          "noSecondButtonSystem": true,
+          "noSecondNavigationSystem": true,
+          "preservesMarketing": true,
+          "preservesCommandCenter": true,
+          "preservesNavigation": true,
+          "preservesCcBundlePromise": true,
+          "additiveToCurrentMain": true,
+          "stalePr51IndexReplacement": false
+        }
+      },
+      "journeyMutations": [
+        "duplicate_handlers_on_remount",
+        "duplicate_submit_on_remount"
+      ],
+      "decisionRequired": null
+    },
+    {
+      "id": "BR-LIFE-003",
+      "suite": "purple_panel_browser",
+      "category": "lifecycle",
+      "covers": [
+        "teardown_clean"
+      ],
+      "scenario": {
+        "sessionId": "syn-sess-br-life-003",
+        "conversationId": "syn-conv-br-life-003",
+        "steps": [
+          {
+            "action": "authenticateSession"
+          },
+          {
+            "action": "mountReinaPanel"
+          },
+          {
+            "action": "enableVoiceFromGesture"
+          },
+          {
+            "action": "teardown"
+          },
+          {
+            "action": "inspectSpeechAudit"
+          },
+          {
+            "action": "inspectNetworkAudit"
+          },
+          {
+            "action": "inspectNavigationAudit"
+          }
+        ]
+      },
+      "expect": {
+        "final": {
+          "micReleased": true,
+          "speechStopped": true,
+          "timersCleared": true,
+          "networkIdle": true,
+          "pendingNavigationCleared": true,
+          "tornDown": true
+        },
+        "nothingExecutedStructural": {
+          "executionEvent": false,
+          "mutationResult": false,
+          "queuedAction": false,
+          "automationSubmission": false,
+          "communicationSent": false,
+          "scheduleChanged": false,
+          "moneyMoved": false,
+          "executed": false
+        },
+        "panelConstraints": {
+          "usesCurrentMainRnaPanel": true,
+          "noSecondPanel": true,
+          "noSecondTextarea": true,
+          "noSecondInput": true,
+          "noSecondButtonSystem": true,
+          "noSecondNavigationSystem": true,
+          "preservesMarketing": true,
+          "preservesCommandCenter": true,
+          "preservesNavigation": true,
+          "preservesCcBundlePromise": true,
+          "additiveToCurrentMain": true,
+          "stalePr51IndexReplacement": false
+        }
+      },
+      "journeyMutations": [
+        "mic_active_after_teardown",
+        "timer_leak_after_teardown",
+        "pending_nav_after_teardown"
+      ],
+      "decisionRequired": null
+    },
+    {
+      "id": "BR-NET-001",
+      "suite": "purple_panel_browser",
+      "category": "network",
+      "covers": [
+        "no_client_authority_in_request"
+      ],
+      "scenario": {
+        "sessionId": "syn-sess-br-net-001",
+        "conversationId": "syn-conv-br-net-001",
+        "steps": [
+          {
+            "action": "authenticateSession"
+          },
+          {
+            "action": "mountReinaPanel"
+          },
+          {
+            "action": "submitTypedTurn",
+            "message": "Status of DEMO-201",
+            "inject": {
+              "probeClientClaims": true
+            }
+          },
+          {
+            "action": "inspectNetworkAudit"
+          }
+        ]
+      },
+      "expect": {
+        "final": {
+          "requestHasNoClientIdentity": true,
+          "requestHasNoClientRole": true,
+          "requestHasNoClientCompany": true,
+          "requestHasNoClientCapability": true,
+          "requestHasNoClientPolicy": true,
+          "requestHasNoSystemPrompt": true,
+          "requestHasNoTools": true,
+          "requestHasNoEvidence": true,
+          "requestHasNoExecutionClaims": true,
+          "boundedCanonicalRequestOnly": true
+        },
+        "nothingExecutedStructural": {
+          "executionEvent": false,
+          "mutationResult": false,
+          "queuedAction": false,
+          "automationSubmission": false,
+          "communicationSent": false,
+          "scheduleChanged": false,
+          "moneyMoved": false,
+          "executed": false
+        },
+        "panelConstraints": {
+          "usesCurrentMainRnaPanel": true,
+          "noSecondPanel": true,
+          "noSecondTextarea": true,
+          "noSecondInput": true,
+          "noSecondButtonSystem": true,
+          "noSecondNavigationSystem": true,
+          "preservesMarketing": true,
+          "preservesCommandCenter": true,
+          "preservesNavigation": true,
+          "preservesCcBundlePromise": true,
+          "additiveToCurrentMain": true,
+          "stalePr51IndexReplacement": false
+        }
+      },
+      "journeyMutations": [
+        "client_role_in_request",
+        "system_prompt_in_request",
+        "tools_in_request"
+      ],
+      "decisionRequired": null
+    },
+    {
+      "id": "BR-NET-002",
+      "suite": "purple_panel_browser",
+      "category": "network",
+      "covers": [
+        "no_legacy_unsafe_chat"
+      ],
+      "scenario": {
+        "sessionId": "syn-sess-br-net-002",
+        "conversationId": "syn-conv-br-net-002",
+        "steps": [
+          {
+            "action": "authenticateSession"
+          },
+          {
+            "action": "mountReinaPanel"
+          },
+          {
+            "action": "submitTypedTurn",
+            "message": "Status of DEMO-201"
+          },
+          {
+            "action": "submitSpokenTurn",
+            "message": "Follow up",
+            "inject": {
+              "requireVoiceEnabled": true
+            }
+          },
+          {
+            "action": "inspectNetworkAudit"
+          }
+        ]
+      },
+      "expect": {
+        "final": {
+          "legacyUnsafeChatPathUsed": false,
+          "boundedCanonicalRequestOnly": true,
+          "sameEndpoint": true
+        },
+        "nothingExecutedStructural": {
+          "executionEvent": false,
+          "mutationResult": false,
+          "queuedAction": false,
+          "automationSubmission": false,
+          "communicationSent": false,
+          "scheduleChanged": false,
+          "moneyMoved": false,
+          "executed": false
+        },
+        "panelConstraints": {
+          "usesCurrentMainRnaPanel": true,
+          "noSecondPanel": true,
+          "noSecondTextarea": true,
+          "noSecondInput": true,
+          "noSecondButtonSystem": true,
+          "noSecondNavigationSystem": true,
+          "preservesMarketing": true,
+          "preservesCommandCenter": true,
+          "preservesNavigation": true,
+          "preservesCcBundlePromise": true,
+          "additiveToCurrentMain": true,
+          "stalePr51IndexReplacement": false
+        }
+      },
+      "journeyMutations": [
+        "legacy_api_chat_used",
+        "unsafe_chat_path"
+      ],
+      "decisionRequired": null
+    },
+    {
+      "id": "BR-NET-003",
+      "suite": "purple_panel_browser",
+      "category": "network",
+      "covers": [
+        "voice_typed_same_path"
+      ],
+      "scenario": {
+        "sessionId": "syn-sess-br-net-003",
+        "conversationId": "syn-conv-br-net-003",
+        "steps": [
+          {
+            "action": "authenticateSession"
+          },
+          {
+            "action": "mountReinaPanel"
+          },
+          {
+            "action": "enableVoiceFromGesture"
+          },
+          {
+            "action": "submitTypedTurn",
+            "message": "A"
+          },
+          {
+            "action": "submitSpokenTurn",
+            "message": "B"
+          },
+          {
+            "action": "inspectNetworkAudit"
+          }
+        ]
+      },
+      "expect": {
+        "final": {
+          "sameEndpoint": true,
+          "samePersistencePath": true,
+          "sameCanonicalEnvelope": true,
+          "sharedConversationId": true
+        },
+        "nothingExecutedStructural": {
+          "executionEvent": false,
+          "mutationResult": false,
+          "queuedAction": false,
+          "automationSubmission": false,
+          "communicationSent": false,
+          "scheduleChanged": false,
+          "moneyMoved": false,
+          "executed": false
+        },
+        "panelConstraints": {
+          "usesCurrentMainRnaPanel": true,
+          "noSecondPanel": true,
+          "noSecondTextarea": true,
+          "noSecondInput": true,
+          "noSecondButtonSystem": true,
+          "noSecondNavigationSystem": true,
+          "preservesMarketing": true,
+          "preservesCommandCenter": true,
+          "preservesNavigation": true,
+          "preservesCcBundlePromise": true,
+          "additiveToCurrentMain": true,
+          "stalePr51IndexReplacement": false
+        }
+      },
+      "journeyMutations": [
+        "voice_uses_different_endpoint",
+        "voice_skips_persistence"
+      ],
+      "decisionRequired": null
+    },
+    {
+      "id": "BR-NEX-001",
+      "suite": "purple_panel_browser",
+      "category": "nothing_executed",
+      "covers": [
+        "structural_flags"
+      ],
+      "scenario": {
+        "sessionId": "syn-sess-br-nex-001",
+        "conversationId": "syn-conv-br-nex-001",
+        "steps": [
+          {
+            "action": "authenticateSession"
+          },
+          {
+            "action": "mountReinaPanel"
+          },
+          {
+            "action": "submitTypedTurn",
+            "message": "Mark DEMO-231 complete and email the customer."
+          },
+          {
+            "action": "inspectPanel"
+          },
+          {
+            "action": "inspectNetworkAudit"
+          }
+        ]
+      },
+      "expect": {
+        "final": {
+          "executed": false,
+          "nothingExecutedReported": true,
+          "businessDataMutated": false,
+          "communicationSent": false
+        },
+        "nothingExecutedStructural": {
+          "executionEvent": false,
+          "mutationResult": false,
+          "queuedAction": false,
+          "automationSubmission": false,
+          "communicationSent": false,
+          "scheduleChanged": false,
+          "moneyMoved": false,
+          "executed": false
+        },
+        "panelConstraints": {
+          "usesCurrentMainRnaPanel": true,
+          "noSecondPanel": true,
+          "noSecondTextarea": true,
+          "noSecondInput": true,
+          "noSecondButtonSystem": true,
+          "noSecondNavigationSystem": true,
+          "preservesMarketing": true,
+          "preservesCommandCenter": true,
+          "preservesNavigation": true,
+          "preservesCcBundlePromise": true,
+          "additiveToCurrentMain": true,
+          "stalePr51IndexReplacement": false
+        }
+      },
+      "journeyMutations": [
+        "false_execution_claim",
+        "communication_sent_claim"
+      ],
+      "decisionRequired": null
+    }
+  ]
+}

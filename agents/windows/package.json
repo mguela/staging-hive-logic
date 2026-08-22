@@ -1,0 +1,22 @@
+{
+  "name": "@hivelogic/windows-agent",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Policy-bounded outbound Windows task agent for HiveLogic",
+  "main": "src/agent.js",
+  "scripts": {
+    "start": "node src/agent.js",
+    "enroll": "node src/enroll.js",
+    "test": "node --test test/*.test.mjs",
+    "service:install": "node scripts/install-service.cjs",
+    "service:remove": "node scripts/remove-service.cjs"
+  },
+  "dependencies": {
+    "node-windows": "^1.0.0-beta.8"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "license": "UNLICENSED"
+}

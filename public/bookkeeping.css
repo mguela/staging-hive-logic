@@ -1,0 +1,66 @@
+/* HiveLogic Bookkeeping — expense-entry view.
+   Reuses existing HiveLogic tokens (--mut, .card, .gbtn, .w/.wic, .lsent) so this
+   looks native, not like an imported prototype.
+   MOBILE FIX (screenshots 11/12 in docs/expense-sheet-reference): the source
+   prototype used a fixed-position submit bar that overlapped the last form
+   fields on small screens. Here the submit bar is sticky *within the scroll
+   flow* and the page reserves bottom padding equal to its height, so nothing
+   is ever hidden underneath it. */
+
+#view-bookkeeping-expense { padding-bottom: 96px; }
+
+.bkx-field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; font-size: 13px; font-weight: 600; color: var(--ink, #1b2436); }
+.bkx-field input, .bkx-field select {
+  font: inherit; font-weight: 500; padding: 10px 12px; border-radius: 8px;
+  border: 1px solid var(--line, #d8dee8); background: #fff;
+}
+.bkx-field input:read-only { background: #f4f6fa; color: var(--mut); }
+.bkx-field small { color: var(--mut); font-weight: 500; font-size: 11px; }
+.bkx-check { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; margin: 6px 0; }
+
+.bkx-grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 20px; }
+@media (max-width: 720px) { .bkx-grid2 { grid-template-columns: 1fr; } }
+
+.bkx-dropzone {
+  display: flex; align-items: center; gap: 14px; border: 2px dashed var(--line, #cfd8e6);
+  background: #f5f9ff; border-radius: 12px; padding: 16px; margin-top: 14px;
+}
+.bkx-dropzone .wic { font-size: 20px; }
+.bkx-dropzone b { display: block; }
+.bkx-dropzone span { color: var(--mut); font-size: 12px; }
+
+.bkx-line { margin-bottom: 16px; border: 1px solid var(--line, #e4e8f0); }
+.bkx-line-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+.bkx-line-head .tag { font-weight: 800; font-size: 12px; letter-spacing: .02em; color: var(--mut); }
+.bkx-remove { background: none; border: none; color: #c0392b; font-weight: 700; font-size: 12px; cursor: pointer; }
+.bkx-line-actions { display: flex; align-items: center; gap: 10px; margin-top: 8px; flex-wrap: wrap; }
+
+.bkx-reconbar {
+  position: sticky; bottom: 74px; z-index: 5;
+  display: flex; justify-content: space-between; gap: 16px;
+  background: #0d1b2e; color: #fff; border-radius: 12px; padding: 16px 20px; margin: 20px 0;
+}
+.bkx-reconbar span { display: block; font-size: 11px; color: #93a3bd; text-transform: uppercase; letter-spacing: .04em; }
+.bkx-reconbar b { display: block; font-size: 20px; margin-top: 2px; }
+.bkx-reconbar b.bad { color: #ff8a80; }
+.bkx-reconbar b.good { color: #7fe0a8; }
+
+.bkx-checklist { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; font-size: 13px; font-weight: 600; color: var(--mut); }
+.bkx-checklist li.good { color: #1c8a52; }
+
+.bkx-submitbar {
+  position: sticky; bottom: 0; z-index: 6;
+  display: flex; gap: 10px; justify-content: flex-end;
+  background: rgba(255,255,255,.96); backdrop-filter: blur(4px);
+  border-top: 1px solid var(--line, #e4e8f0); padding: 12px 16px;
+  margin: 0 -16px -16px; /* bleed to container edge, but stays in flow, never fixed/overlaying */
+}
+.bkx-submitbar button[disabled] { opacity: .45; cursor: not-allowed; }
+
+@media (max-width: 720px) {
+  /* On mobile the bar still scrolls with the page instead of floating over the
+     last field group — this is the actual fix for the 11/12 defect. */
+  .bkx-submitbar { flex-direction: column-reverse; }
+  .bkx-submitbar button { width: 100%; }
+  .bkx-reconbar { bottom: 0; position: static; margin-top: 16px; }
+}

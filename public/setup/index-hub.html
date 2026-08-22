@@ -1,0 +1,140 @@
+<!doctype html>
+<!-- Setup hub / home — one calm grid of links to every company-setup surface. Static Vercel page; no API calls beyond the sign-in gate. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HiveLogic — Company Setup</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#484f64; --canvas:#f0f1f6; --card:#ffffff; --line:#dadde8; --rail:#161e2e;
+    --gold:#748a9e; --green:#1B7A50; --red:#c65b4e; --cta:#f5793b;
+    --blue:#3d6fa5; --grey:#8a90a2;
+    --ink2:#6b7488; --ink3:#98a0b4;
+    --radius:12px;
+    --shadow:0 1px 2px rgba(22,30,46,.05), 0 6px 18px rgba(22,30,46,.05);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{font-family:'Montserrat',system-ui,-apple-system,"Segoe UI",sans-serif;background:var(--canvas);color:var(--ink);-webkit-font-smoothing:antialiased;font-size:14px;line-height:1.4}
+  .mono{font-family:'JetBrains Mono',ui-monospace,monospace;font-variant-numeric:tabular-nums}
+  a{color:var(--blue);text-decoration:none}
+  a:hover{text-decoration:underline}
+
+  header.top{background:var(--rail);color:#eef1f7;padding:14px 22px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px}
+  header.top .brand{display:flex;flex-direction:column;gap:2px}
+  header.top h1{font-size:15px;margin:0;font-weight:800;letter-spacing:.02em}
+  header.top .sub{font-size:11px;color:#9aa6bd;font-weight:500}
+  header.top nav{display:flex;gap:14px;font-size:12px;font-weight:700}
+  header.top nav a{color:#c3ccdd}
+  header.top nav a:hover{color:#fff}
+
+  main{max-width:1080px;margin:0 auto;padding:22px}
+
+  .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+  .hubcard{display:block;background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:20px 20px 22px;transition:transform .14s,box-shadow .14s,border-color .14s}
+  .hubcard:hover{text-decoration:none;transform:translateY(-4px);box-shadow:0 6px 22px rgba(22,30,46,.10);border-color:#c9d3e0}
+  .hubcard .ic{font-size:26px;line-height:1;margin-bottom:12px}
+  .hubcard .ht{font-size:16px;font-weight:800;color:var(--rail);letter-spacing:.01em}
+  .hubcard .hd{font-size:12.5px;color:var(--ink2);font-weight:600;margin-top:6px;line-height:1.45}
+
+  .btn{border:1px solid var(--line);background:#fff;color:var(--ink);border-radius:9px;padding:8px 14px;font-size:12.5px;font-weight:700;cursor:pointer;font-family:inherit}
+  .btn:hover{border-color:var(--ink3)}
+  .btn.cta{background:var(--cta);border-color:var(--cta);color:#fff}
+  .btn.cta:hover{filter:brightness(1.05)}
+
+  .gate{max-width:460px;margin:80px auto;text-align:center;padding:34px 26px}
+  .gate .h{font-size:20px;font-weight:800;color:var(--rail);margin-bottom:10px}
+  .gate p{color:var(--ink2);font-size:14px;margin:0 0 20px}
+
+  .spin{padding:60px;text-align:center;color:var(--ink3);font-size:13px}
+  .hidden{display:none !important}
+
+  @media(max-width:900px){ .grid{grid-template-columns:repeat(2,1fr)} }
+  @media(max-width:560px){ .grid{grid-template-columns:1fr} }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="brand">
+    <h1>HiveLogic — Company Setup</h1>
+    <div class="sub">Everything about your company, in one place.</div>
+  </div>
+  <nav>
+    <a href="/">Home</a>
+  </nav>
+</header>
+
+<div id="gate" class="gate card hidden">
+  <div class="h">Please sign in to the HiveLogic app first</div>
+  <p>You need an active HiveLogic session to open the company setup hub.</p>
+  <a class="btn cta" href="/">Go to HiveLogic sign-in</a>
+</div>
+
+<div id="boot" class="spin">Loading…</div>
+
+<main id="app" class="hidden">
+  <div class="grid">
+    <a class="hubcard" href="/setup/company.html">
+      <div class="ic">🏢</div>
+      <div class="ht">Company settings</div>
+      <div class="hd">Profile, divisions, integrations</div>
+    </a>
+    <a class="hubcard" href="/setup/cost-model.html">
+      <div class="ic">💵</div>
+      <div class="ht">Cost Model</div>
+      <div class="hd">Every dollar of overhead &amp; break-even</div>
+    </a>
+    <a class="hubcard" href="/setup/registries.html">
+      <div class="ic">📋</div>
+      <div class="ht">Registries</div>
+      <div class="hd">Vehicles, insurance, licenses, loans, leases, subscriptions + compliance calendar</div>
+    </a>
+    <a class="hubcard" href="/setup/team.html">
+      <div class="ic">👥</div>
+      <div class="ht">Team</div>
+      <div class="hd">Invite, edit, remove employees &amp; 1099s</div>
+    </a>
+    <a class="hubcard" href="/setup/payroll.html">
+      <div class="ic">🗂️</div>
+      <div class="ht">Payroll</div>
+      <div class="hd">Gusto connection, roster, sync</div>
+    </a>
+    <a class="hubcard" href="/setup/index.html">
+      <div class="ic">🧭</div>
+      <div class="ht">Setup wizard</div>
+      <div class="hd">Guided first-time setup</div>
+    </a>
+  </div>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+var SUPABASE_URL = 'https://sqhusuuhlmcmkeowdrga.supabase.co';
+var SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNxaHVzdXVobG1jbWtlb3dkcmdhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQxMjkyMjAsImV4cCI6MjA5OTcwNTIyMH0.PszXL0D8KJC0MEYgbTduSPEcPn2g1pGx0IMK3YGzBcI';
+var sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { auth: { persistSession: true, autoRefreshToken: true } });
+
+function $(sel){ return document.querySelector(sel); }
+
+/* ---------- boot / sign-in gate ---------- */
+(async function(){
+  try{
+    var sess = await sb.auth.getSession();
+    $('#boot').classList.add('hidden');
+    if(!sess.data.session){
+      $('#gate').classList.remove('hidden');
+      return;
+    }
+    $('#app').classList.remove('hidden');
+  }catch(e){
+    $('#boot').classList.add('hidden');
+    $('#gate').classList.remove('hidden');
+  }
+})();
+</script>
+</body>
+</html>
