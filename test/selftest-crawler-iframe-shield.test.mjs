@@ -87,38 +87,3 @@ test('the stubbed Response is constructed via the target window\'s own Response 
   // now that fetch is being installed per-window.
   assert.match(src, /new win\.Response\(stubBody\(\)/);
 });
-
-// ---- the same outer-window-only bug, found again for `error` events -------
-//
-// Found 2026-08-22: a runtime error (ReferenceError/TypeError) thrown from an
-// onclick handler fires its `error` event on the ELEMENT'S OWN window --
-// live-confirmed by injecting a real ReferenceError into an iframe and
-// watching it fire there but never on the outer window. The listener that
-// feeds THREW detection (SHIELD.errs) used to be registered exactly once,
-// hardcoded to the outer page's `window`, right after Self-Test's pre-flight
-// check -- every iframe-embedded view's own runtime errors (the vast
-// majority of the app) were invisible to it, the identical shape of bug
-// already fixed above for fetch/XHR/etc.
-test('the error listener that feeds THREW detection lives inside installShield, not as one-time top-level code', () => {
-  const fnSrc = src.slice(src.indexOf('function installShield'), src.indexOf('\n  var restoreShield ='));
-  assert.match(fnSrc, /win\.addEventListener\('error', onError\)/);
-  // The regression this guards: a standalone, hardcoded-to-`window` listener
-  // must not still exist outside installShield, or the outer window is the
-  // only thing that ever gets covered again.
-  const afterInstallShield = src.slice(src.indexOf('\n  var restoreShield ='));
-  assert.doesNotMatch(afterInstallShield, /window\.addEventListener\('error'/);
-});
-
-test('the error listener uses the outer performance.now(), not the target window\'s own clock', () => {
-  // win.performance.now() starts counting from THAT window's own navigation
-  // -- incomparable to the outer page's t0 in since(), which would silently
-  // filter every iframe error out regardless of when it actually happened.
-  const fnSrc = src.slice(src.indexOf('function installShield'), src.indexOf('\n  var restoreShield ='));
-  assert.match(fnSrc, /SHIELD\.errs\.push\(\{ t: performance\.now\(\)/);
-  assert.doesNotMatch(fnSrc, /SHIELD\.errs\.push\(\{ t: win\.performance\.now\(\)/);
-});
-
-test('installShield\'s restore() removes the error listener it added', () => {
-  const fnSrc = src.slice(src.indexOf('function installShield'), src.indexOf('\n  var restoreShield ='));
-  assert.match(fnSrc, /win\.removeEventListener\('error', onError\)/);
-});

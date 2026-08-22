@@ -41,8 +41,6 @@
 import { supabaseRequest } from './_lib/jobber.js';
 import { genToken, hashToken, checkRateLimit, deliverLoginLink } from './_lib/portal-auth.js';
 import { hasAllowedRole } from './_lib/permission-roles.js';
-import { deriveInvoiceBalance } from './_lib/invoice-balance.js';
-import { listPortalFiles } from './_lib/hivedoc-portal-files.js';
 
 // ---------------------------------------------------------------------------
 // small helpers (same shapes as api/subportal.js, duplicated on purpose so
@@ -184,25 +182,6 @@ function clientDisplayName(c) {
 // photo does not exist as far as the client is concerned. That's the
 // pre-approval rule, enforced server-side, not just in UI.
 // ---------------------------------------------------------------------------
-// The same short-lived signing the photo gallery uses, with the bucket made a
-// parameter so HiveDoc documents (private `docs` bucket) can be served the
-// same way. Returns null rather than throwing: one unreachable object should
-// not take down the whole list.
-async function signBucketUrl(bucket, storagePath, expiresInSeconds = 3600) {
-  const r = await fetch(`${process.env.SUPABASE_URL}/storage/v1/object/sign/${bucket}/${storagePath}`, {
-    method: 'POST',
-    headers: {
-      apikey: process.env.SUPABASE_SERVICE_KEY,
-      Authorization: `Bearer ${process.env.SUPABASE_SERVICE_KEY}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ expiresIn: expiresInSeconds }),
-  });
-  if (!r.ok) return null;
-  const d = await r.json();
-  return d && d.signedURL ? `${process.env.SUPABASE_URL}/storage/v1${d.signedURL}` : null;
-}
-
 async function signMediaUrl(storagePath, expiresInSeconds = 3600) {
   const res = await fetch(`${process.env.SUPABASE_URL}/storage/v1/object/sign/media/${storagePath}`, {
     method: 'POST',
@@ -578,26 +557,6 @@ export default async function handler(req, res) {
       return res.status(200).json({ ok: true, photos });
     }
 
-    // ---------------- client: HiveDoc files shared with them ----------------
-    // Before this the client portal had no route to HiveDoc documents at all.
-    // Everything about the path is closed by default: the client id comes from
-    // the verified session (never a parameter), the query asks only for rows
-    // flagged client_visible on THIS client, and canSee() re-checks every row
-    // regardless -- see api/_lib/hivedoc-portal-files.js for why the query is
-    // not trusted as the authority.
-    if (action === 'files') {
-      if (req.method !== 'GET') return res.status(405).json({ ok: false, error: 'GET required' });
-      const files = await listPortalFiles({
-        viewer: { audience: 'client', clientId: clientRef },
-        sb,
-        sign: signBucketUrl,
-      });
-      // Logged like any other client-side read of real documents, so there is
-      // an after-the-fact record of what left the company and when.
-      auditLog(clientRef, 'client', 'files_viewed', { type: 'documents' }, { count: files.length }, req).catch(() => {});
-      return res.status(200).json({ ok: true, files });
-    }
-
     if (action === 'approvals') {
       if (req.method !== 'GET') return res.status(405).json({ ok: false, error: 'GET required' });
       const rows = await sb(`client_approvals?client_ref=eq.${encodeURIComponent(clientRef)}&order=sent_at.desc&select=*`);
@@ -694,9 +653,7 @@ export function mapInvoice(i) {
   const payments = Number(i.payments) || 0;
   const deposit = Number(i.deposit) || 0;
   const discount = Number(i.discount) || 0;
-  // Customer-facing, so it must agree with api/invoices.js exactly. Shared
-  // derivation rather than a fifth hand-written copy of the same sum.
-  const balance = deriveInvoiceBalance({ total, payments, deposit, discount });
+  const balance = Math.max(0, Math.round((total - payments - deposit - discount) * 100) / 100);
   return {
     id: i.jobber_id, jobNumber: i.invoice_number, status: i.invoice_status, subject: i.subject,
     total, payments, deposit, discount, balance, dueDate: i.due_date, issuedDate: i.issued_date, jobberUrl: i.jobber_web_uri,

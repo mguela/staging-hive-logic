@@ -1316,120 +1316,7 @@ function renderHuddleUI() {
   }
 }
 
-// ---- "Start HiveVideo" with nothing open ----
-// This used to be a dead click: startHuddle() called joinHuddle(currentChannelId)
-// and joinHuddle bails on `if (!cid) return`. HiveConnect lands on Messages with
-// no channel selected, so that was the DEFAULT state -- the header HiveVideo
-// button did nothing at all, and the Huddles CTA only flashed a small toast.
-// Now, with no conversation open, every entry point asks WHERE to call.
-let hvPickerQ = '';
-function closeHvPicker() { const o = document.getElementById('hv-picker'); if (o) o.remove(); }
-function openHvPicker() {
-  closeHvPicker();
-  hvPickerQ = '';
-  const ov = document.createElement('div');
-  ov.id = 'hv-picker'; ov.className = 'modal-backdrop';
-  ov.innerHTML =
-    '<div class="modal" style="width:420px;padding:22px;display:flex;flex-direction:column;max-height:72vh">' +
-      '<h2>Start HiveVideo</h2>' +
-      '<input id="hvp-q" type="text" placeholder="Search people and channels…" autocomplete="off">' +
-      '<div id="hvp-list" style="flex:1;overflow:auto;margin-top:14px;min-height:140px"></div>' +
-      '<div class="modal-actions"><button class="text-btn" id="hvp-cancel">Cancel</button></div>' +
-    '</div>';
-  document.body.appendChild(ov);
-  ov.addEventListener('click', e => { if (e.target === ov) closeHvPicker(); });
-  ov.querySelector('#hvp-cancel').onclick = closeHvPicker;
-  const q = ov.querySelector('#hvp-q');
-  q.oninput = () => { hvPickerQ = q.value.trim().toLowerCase(); renderHvPicker(); };
-  q.onkeydown = e => {
-    if (e.key === 'Escape') { closeHvPicker(); return; }
-    if (e.key === 'Enter') { const first = ov.querySelector('.hvp-row'); if (first) first.click(); }
-  };
-  renderHvPicker();
-  q.focus();
-}
-function renderHvPicker() {
-  const list = document.getElementById('hvp-list'); if (!list) return;
-  list.innerHTML = '';
-  const hit = s => !hvPickerQ || (s || '').toLowerCase().includes(hvPickerQ);
-
-  const row = (avatar, name, sub, onPick) => {
-    const b = document.createElement('button');
-    b.className = 'hvp-row';
-    b.style.cssText = 'display:flex;align-items:center;gap:10px;width:100%;padding:8px 10px;border:none;' +
-      'background:none;border-radius:9px;cursor:pointer;text-align:left;font-family:inherit';
-    b.onmouseenter = () => { b.style.background = 'rgba(127,140,170,.14)'; };
-    b.onmouseleave = () => { b.style.background = 'none'; };
-    if (avatar) b.appendChild(avatar);
-    const t = document.createElement('span');
-    t.style.cssText = 'flex:1;min-width:0;font-size:12.5px;font-weight:700;color:var(--ink);' +
-      'white-space:nowrap;overflow:hidden;text-overflow:ellipsis';
-    t.textContent = name;
-    b.appendChild(t);
-    if (sub) {
-      const s = document.createElement('span');
-      s.style.cssText = 'font-size:10.5px;font-weight:700;color:var(--mut)';
-      s.textContent = sub;
-      b.appendChild(s);
-    }
-    b.onclick = onPick;
-    return b;
-  };
-  const head = text => {
-    const h = document.createElement('div');
-    h.style.cssText = 'font-family:var(--mono);font-size:9px;font-weight:800;letter-spacing:.1em;' +
-      'text-transform:uppercase;color:var(--mut);margin:10px 0 4px;padding:0 10px';
-    h.textContent = text;
-    return h;
-  };
-
-  // People -> a DM call (creates/opens the DM, then rings the room)
-  const people = [...profiles.values()]
-    .filter(p => p.id !== me.id && p.username !== 'slackarchive' && p.active !== false && hit(p.display_name || p.username))
-    .sort((a, b) => (a.display_name || '').localeCompare(b.display_name || ''))
-    .slice(0, 8);
-  if (people.length) {
-    list.appendChild(head('People'));
-    people.forEach(p => {
-      const av = avatarEl(p);
-      av.style.width = av.style.height = '26px'; av.style.fontSize = '10px'; av.style.borderRadius = '8px';
-      list.appendChild(row(av, p.display_name || p.username, '', async () => {
-        closeHvPicker();
-        await startDM(p.id);
-        if (currentChannelId) joinHuddle(currentChannelId);
-      }));
-    });
-  }
-
-  // Channels -> a call in that channel
-  const chans = [...channels.values()]
-    .filter(c => c.type !== 'dm' && !c.archived && hit(c.name))
-    .sort((a, b) => (a.name || '').localeCompare(b.name || ''))
-    .slice(0, 20);
-  if (chans.length) {
-    list.appendChild(head('Channels'));
-    chans.forEach(c => {
-      const n = huddleParticipants(c.id).length;
-      list.appendChild(row(null, '# ' + c.name, n ? '🎧 ' + n : '', async () => {
-        closeHvPicker();
-        if (currentChannelId !== c.id) await openChannel(c.id);
-        joinHuddle(c.id);
-      }));
-    });
-  }
-
-  if (!people.length && !chans.length) {
-    const e = document.createElement('div');
-    e.style.cssText = 'padding:24px 10px;text-align:center;font-size:12px;font-weight:600;color:var(--mut)';
-    e.textContent = 'Nothing matches “' + hvPickerQ + '”';
-    list.appendChild(e);
-  }
-}
-
-function startHuddle() {
-  if (currentChannelId) joinHuddle(currentChannelId);
-  else openHvPicker();
-}
+function startHuddle() { joinHuddle(currentChannelId); }
 
 async function joinHuddle(cid) {
   if (!cid) return;
@@ -2040,7 +1927,7 @@ function huddleDropped(reason, cid) {
 
 // dock controls
 $('huddle-btn').addEventListener('click', startHuddle);
-{ const _hv = $('hv-start-btn'); if (_hv) _hv.addEventListener('click', () => startHuddle()); }
+{ const _hv = $('hv-start-btn'); if (_hv) _hv.addEventListener('click', () => { if (currentChannelId) startHuddle(); else setNavTab('huddles'); }); }
 $('hd-leave').addEventListener('click', () => leaveHuddle());
 { const _iv = $('hd-invite-btn'); if (_iv) _iv.addEventListener('click', () => { const b = $('hd-invite'); if (b && !b.classList.contains('hidden')) closeHvInvite(); else openHvInvite(); }); }
 { const _n = $('hd-cc-notes'); if (_n) _n.addEventListener('click', () => generateAINotes()); }
@@ -2136,7 +2023,7 @@ function renderHuddlesPanel() {
   // Start HiveVideo CTA
   const cta = document.createElement('button'); cta.className = 'hv-cta';
   cta.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg> Start HiveVideo';
-  cta.onclick = () => startHuddle();
+  cta.onclick = () => { if (currentChannelId) startHuddle(); else railToast('Pick a channel below to start'); };
   el.appendChild(cta);
   // Active now
   const active = [...huddleState.entries()].filter(([cid, parts]) => (parts || []).length && channels.get(cid));
@@ -5741,14 +5628,6 @@ function evToast(text) {
 const TASK_STATUSES = ['draft', 'unassigned', 'not_started', 'in_progress', 'waiting', 'blocked', 'submitted_for_review', 'revision_required', 'approved', 'completed', 'cancelled'];
 const TASK_STATUS_LABEL = { draft: 'Draft', unassigned: 'Unassigned', not_started: 'Not Started', in_progress: 'In Progress', waiting: 'Waiting', blocked: 'Blocked', submitted_for_review: 'Submitted for Review', revision_required: 'Revision Required', approved: 'Approved', completed: 'Completed', cancelled: 'Cancelled' };
 const TASK_WAITING_REASONS = ['client', 'vendor', 'material', 'payment', 'permit', 'inspection', 'internal_approval', 'information', 'schedule'];
-// Mirrored onto window for the same reason `me` is (see line 8): tasks.js is
-// a classic script written against "app.js's top-level consts are global",
-// which breaks once hiveconnect-mount.js loads this file as a module. These
-// three are read-once-at-declaration, so unlike `me` they need no reassignment
-// tracking -- one mirror line here covers every future reference.
-window.TASK_STATUSES = TASK_STATUSES;
-window.TASK_STATUS_LABEL = TASK_STATUS_LABEL;
-window.TASK_WAITING_REASONS = TASK_WAITING_REASONS;
 
 /* ==================================================================
    TASKS (Microsoft To-Do) + CALENDAR (Outlook) — via Graph, per mailbox.

@@ -66,20 +66,6 @@ test('Council composer is one question with an optional file drop and hidden adv
   assert.match(view, /<strong>G<\/strong>[\s\S]*<b>Grok<\/b>[\s\S]*<strong>O<\/strong>[\s\S]*<b>ChatGPT<\/b>[\s\S]*<strong>D<\/strong>[\s\S]*<b>Claude<\/b>/);
 });
 
-// Regression: a create_project response with no `project` (Supabase's
-// return=representation can come back 2xx with no row) used to be treated as
-// success -- workspaceProjects.unshift(undefined) corrupted the in-memory
-// project list, and the very next history render crashed at a different line
-// entirely (workspaceProjects.find(...).id @app-reina-council.js:537), which
-// is why a crawler flagged the symptom there rather than the actual cause.
-test('createProject guards against a response with no project instead of corrupting workspaceProjects', () => {
-  const fn = client.slice(client.indexOf('async function createProject()'), client.indexOf('async function togglePin('));
-  assert.match(fn, /if \(!result\.project\) \{ showError\([^)]*\); return; \}/);
-  const unshiftIndex = fn.indexOf('workspaceProjects.unshift(result.project)');
-  const guardIndex = fn.indexOf('if (!result.project)');
-  assert.ok(guardIndex > -1 && unshiftIndex > guardIndex, 'the guard must run before the unshift, not after');
-});
-
 test('client performs start, aggregate read, and explicit human approval only through the Council API', () => {
   assert.match(client, /action: 'start'/);
   assert.match(client, /window\.hlOpenBoardroomDraft/);

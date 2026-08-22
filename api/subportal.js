@@ -38,7 +38,6 @@
 import { supabaseRequest } from './_lib/jobber.js';
 import { genToken, hashToken, checkRateLimit, deliverLoginLink } from './_lib/portal-auth.js';
 import { hasAllowedRole } from './_lib/permission-roles.js';
-import { listPortalFiles, subJobIds } from './_lib/hivedoc-portal-files.js';
 
 // ---------------------------------------------------------------------------
 // small helpers
@@ -170,23 +169,6 @@ async function requireSub(req, res) {
 // dashboard before this goes live; that's a one-time manual step, same as
 // every other piece of infra in this repo that isn't SQL.
 // ---------------------------------------------------------------------------
-// Short-lived signed URL for a private bucket object. Returns null rather than
-// throwing so one unreachable file cannot take down a whole list.
-async function signBucketUrl(bucket, storagePath, expiresInSeconds = 3600) {
-  const r = await fetch(`${process.env.SUPABASE_URL}/storage/v1/object/sign/${bucket}/${storagePath}`, {
-    method: 'POST',
-    headers: {
-      apikey: process.env.SUPABASE_SERVICE_KEY,
-      Authorization: `Bearer ${process.env.SUPABASE_SERVICE_KEY}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ expiresIn: expiresInSeconds }),
-  });
-  if (!r.ok) return null;
-  const d = await r.json();
-  return d && d.signedURL ? `${process.env.SUPABASE_URL}/storage/v1${d.signedURL}` : null;
-}
-
 async function uploadDataUrl(bucket, path, dataUrl) {
   const match = /^data:([^;]+);base64,(.+)$/.exec(dataUrl || '');
   if (!match) throw new Error('Expected a base64 data URL (e.g. from a camera capture).');
@@ -809,24 +791,6 @@ export default async function handler(req, res) {
         body: JSON.stringify({ read_at: new Date().toISOString() }),
       });
       return res.status(200).json({ ok: true });
-    }
-
-    // ---------------- sub: HiveDoc files shared onto their jobs ----------------
-    // Distinct from 'documents' above, which is the sub's OWN compliance
-    // paperwork. These are company documents (plans, permits, scopes) that
-    // somebody deliberately flagged sub_visible on a job this sub is actually
-    // booked to. The job list is derived from real assignment rows, never from
-    // anything the sub sends, and canSee() re-checks every row after the query.
-    if (action === 'job_files') {
-      if (req.method !== 'GET') return res.status(405).json({ ok: false, error: 'GET required' });
-      const jobIds = await subJobIds(sub, sb);
-      const files = await listPortalFiles({
-        viewer: { audience: 'subcontractor', jobIds },
-        sb,
-        sign: signBucketUrl,
-      });
-      auditLog(sub.id, 'sub', 'job_files_viewed', { type: 'documents' }, { count: files.length }, req).catch(() => {});
-      return res.status(200).json({ ok: true, files });
     }
 
     if (action === 'documents') {

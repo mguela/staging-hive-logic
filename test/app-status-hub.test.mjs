@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { findingsFromSelftest, findingsFromHealthChecks, createManualFinding, withResolverNames, setFindingStatus, addFindingAttachment, listFindingAttachments, observeFindings } from '../api/_lib/status-hub.js';
+import { findingsFromSelftest, findingsFromHealthChecks, createManualFinding, withResolverNames, setFindingStatus, addFindingAttachment, listFindingAttachments } from '../api/_lib/status-hub.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const read = (...parts) => fs.readFileSync(path.join(root, ...parts), 'utf8');
@@ -220,58 +220,6 @@ test('a genuine update failure is still an error, not silently retried away', as
   try {
     await assert.rejects(() => setFindingStatus('f-1', 'resolved', null, 'user-9'), /Could not update finding/);
     assert.equal(patchOf(stub.seen).length, 1);
-  } finally { stub.restore(); }
-});
-
-// ---- Recurrence reopens resolved findings (jomell, 2026-08-22) -----------
-// A self-test run kept re-reporting the exact same NO_OUTCOME findings jomell
-// had already marked resolved, but they never came back into the Open tab --
-// observeFinding() refreshed evidence/timestamps on the existing row without
-// ever touching `status`, so a recurring-but-"fixed" problem stayed invisible.
-
-test('a finding recurring after being marked resolved reopens automatically', async () => {
-  const stub = stubSupabase((call) => {
-    if (call.method === 'GET') return { ok: true, status: 200, json: async () => ([{ id: 'f-1', status: 'resolved' }]) };
-    return null;
-  });
-  try {
-    await observeFindings([{ source: 'selftest', fingerprint: 'abc123', title: 'NO OUTCOME — Save', detail: 'x', severity: 'low', evidence: {} }]);
-    const patch = patchOf(stub.seen)[0];
-    assert.equal(patch.body.status, 'open');
-    assert.equal(patch.body.resolved_at, null);
-    assert.equal(patch.body.resolved_by, null);
-    assert.match(patch.body.status_note, /Recurred/);
-    const event = stub.seen.find((c) => c.url.includes('app_status_events'));
-    assert.ok(event, 'expected a status_changed event logging the reopen');
-    assert.equal(event.body.event_type, 'status_changed');
-    assert.match(event.body.detail, /^open: recurred via selftest/);
-  } finally { stub.restore(); }
-});
-
-test('a finding the human is ignoring does not reopen when it recurs', async () => {
-  const stub = stubSupabase((call) => {
-    if (call.method === 'GET') return { ok: true, status: 200, json: async () => ([{ id: 'f-2', status: 'ignored' }]) };
-    return null;
-  });
-  try {
-    await observeFindings([{ source: 'selftest', fingerprint: 'def456', title: 'NO OUTCOME — Save', detail: 'x', severity: 'low', evidence: {} }]);
-    const patch = patchOf(stub.seen)[0];
-    assert.equal('status' in patch.body, false, 'an ignored finding must not have its status touched on recurrence');
-    assert.ok(!stub.seen.some((c) => c.url.includes('app_status_events')), 'ignoring a finding must not log a reopen event');
-  } finally { stub.restore(); }
-});
-
-test('a finding that is already open just gets its evidence refreshed on recurrence', async () => {
-  const stub = stubSupabase((call) => {
-    if (call.method === 'GET') return { ok: true, status: 200, json: async () => ([{ id: 'f-3', status: 'open' }]) };
-    return null;
-  });
-  try {
-    await observeFindings([{ source: 'selftest', fingerprint: 'ghi789', title: 'NO OUTCOME — Save', detail: 'x', severity: 'low', evidence: {} }]);
-    const patch = patchOf(stub.seen)[0];
-    assert.equal('status' in patch.body, false);
-    assert.equal('resolved_at' in patch.body, false);
-    assert.ok(!stub.seen.some((c) => c.url.includes('app_status_events')));
   } finally { stub.restore(); }
 });
 

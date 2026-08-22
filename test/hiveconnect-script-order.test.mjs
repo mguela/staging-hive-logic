@@ -120,27 +120,6 @@ test('me is reachable from tasks.js even when app.js loads as a module (mounted 
   assert.match(app, /profiles\.set\(data\.id, data\); me = data; window\.me = me;/);
 });
 
-// ---- a fourth instance of the same module-boundary bug --------------------
-//
-// Self-test, recurring since 2026-08-19: "Uncaught ReferenceError:
-// TASK_STATUSES is not defined @tasks.js:230". Same root cause as `me`
-// above, just missed for these three -- openTaskDetail() (also body-only, so
-// the top-level scan above cannot see it) references bare TASK_STATUSES,
-// TASK_STATUS_LABEL, and TASK_WAITING_REASONS, all declared `const` in
-// app.js and invisible to tasks.js once app.js loads as a module in the
-// mounted context.
-test('TASK_STATUSES, TASK_STATUS_LABEL, and TASK_WAITING_REASONS are reachable from tasks.js in the mounted context too', () => {
-  const app = readFileSync(new URL('app.js', dir), 'utf-8');
-  const start = app.indexOf('const TASK_STATUSES = ');
-  assert.ok(start > -1, 'sanity: the task-status constants still live in app.js');
-  const block = app.slice(start, app.indexOf('/* ====', start + 1));
-  for (const name of ['TASK_STATUSES', 'TASK_STATUS_LABEL', 'TASK_WAITING_REASONS']) {
-    assert.match(block, new RegExp(`const ${name} = `), `sanity: ${name} still declared here`);
-    assert.match(block, new RegExp(`window\\.${name} = ${name};`),
-      `${name} must be mirrored onto window, the same fix already applied to \`me\``);
-  }
-});
-
 test('all three controls are actually bound, not just the one that threw first', () => {
   const tasks = readFileSync(new URL('tasks.js', dir), 'utf-8');
   // bindTasksControls sits after openTasksTabNative in the file, so the slice

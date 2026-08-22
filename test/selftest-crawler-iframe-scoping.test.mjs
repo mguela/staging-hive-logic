@@ -49,13 +49,11 @@ test('no detection helper still reads the bare global document internally (the e
   }
 });
 
-test('toastText still tries id="hlToast" / class*="toast" first, before falling back to the structural match', () => {
-  // Found 2026-08-22: neither selector was ever actually reachable except by
-  // one lone view -- every real hlToast() implementation in public/index.html
-  // (main page and ~24 embedded views) creates a bare, id-less, class-less
-  // div. Kept as the first-checked path (cheap, and correct on the one view
-  // that does use them) with the structural fallback in
-  // selftest-crawler-toast-fingerprint.test.mjs covering everything else.
+test('toastText also recognizes a toast element that is not literally id="hlToast"', () => {
+  // Every hlToast() implementation found in public/index.html (main page and
+  // each embedded view) targets id="hlToast", but this keeps the crawler
+  // from being silently blind again if a future view names its toast
+  // element differently.
   assert.match(src, /d\.getElementById\('hlToast'\) \|\| d\.querySelector\('\[class\*="toast"\]'\)/);
 });
 

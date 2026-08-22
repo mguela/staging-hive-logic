@@ -19,7 +19,7 @@
  * monitor_my_status poll, so "is this person running current code" is a
  * question the database can answer. Do not hand-edit it -- run
  * `node scripts/stamp-page-build.mjs`. */
-var HL_PAGE_BUILD = 'add2fe4f8e08e740';
+var HL_PAGE_BUILD = '797b779d0b28a808';
 </script>
 <script>
 (function () { // HL_FETCH_DEDUPE_V1 — single wrapper: GET /api/ dedupe + 60s cache + write-invalidate
@@ -393,22 +393,7 @@ var HL_PAGE_BUILD = 'add2fe4f8e08e740';
   .map-expand.spinning{animation:mapRefreshSpin .8s linear infinite}
   @keyframes mapRefreshSpin{to{transform:rotate(360deg)}}
   @media (prefers-reduced-motion:reduce){.map-expand.spinning{animation:none;opacity:.55}}
-  /* width/height:auto so the inset offsets above are what size the box. The
-     grid rule further down ("#cc-main-gridstack .card.map-card{height:100%
-     !important;width:100%}") otherwise wins on specificity and makes the
-     expanded card a full 100vw x 100vh box shifted 16px down-and-right --
-     i.e. hanging 16px off the right and bottom of the screen, which parked
-     the header-anchored close button in the last 2-3px beside the scrollbar
-     where there was nothing left to click (Chris, 2026-08-21). */
-  .map-card.mapfull{position:fixed;inset:16px;width:auto;height:auto;z-index:9999;box-shadow:0 24px 70px rgba(22,30,46,.4);border-radius:14px}
-  /* Dimmed backdrop behind the expanded map -- also a second way out: clicking
-     anywhere outside the card closes it, so the small corner button is no longer
-     the only exit (Esc is the third). */
-  #mapfull-backdrop{position:fixed;inset:0;background:rgba(22,30,46,.45);z-index:9998}
-  /* Bigger, filled close button while expanded -- a 26px white square against a
-     white header edge read as "there is no way out" at a glance. */
-  .map-card.mapfull #cc-map-expand{width:34px;height:34px;font-size:16px;background:var(--rail);border-color:var(--rail);color:var(--gold)}
-  .map-card.mapfull #cc-map-expand:hover{background:#c65b4e;border-color:#c65b4e;color:#fff}
+  .map-card.mapfull{position:fixed;inset:16px;z-index:9999;box-shadow:0 24px 70px rgba(22,30,46,.4);border-radius:14px}
   .map-card.mapfull .map{height:calc(100vh - 210px)}
   .map{position:relative;height:240px;background:
     radial-gradient(circle at 30% 40%,#eef2ec 0,transparent 45%),
@@ -2527,8 +2512,6 @@ body.hl-dark .iconbtn{color:#c9d3e4}
      one rule that always wins, regardless of what else targets these cards. */
   #cc-main-gridstack .card.map-card,
   #cc-main-gridstack .card.brief{height:100% !important;width:100%;margin:0}
-  /* ...except while the map card is expanded -- then inset:16px owns the geometry. */
-  #cc-main-gridstack .card.map-card.mapfull{height:auto !important;width:auto !important}
   /* min-height was 100px, which stopped the map yielding when the card got
      short. At a narrow widget the map header wraps onto two lines, and
      header + 100px floor + the weather/legend bar then added up to more than
@@ -3068,7 +3051,7 @@ button,.dowork,.startday,.back,.cdb-new,.nc-create,.fm-save,.gbtn,.iconbtn,.dw-a
           <div class="grid-stack-item" gs-id="cc-map" gs-x="0" gs-y="0" gs-w="4" gs-h="13" gs-min-w="3" gs-min-h="6" id="cc-map-gsitem">
             <div class="grid-stack-item-content">
           <div class="card map-card">
-            <div class="map-head" style="flex-direction:column;align-items:stretch;justify-content:flex-start;gap:8px"><h3>Service Area Map <span class="cc-drag-hint" style="font-family:'JetBrains Mono',monospace;font-size:8px;font-weight:800;letter-spacing:.06em;color:#6a3fb5;background:#f3edfb;border-radius:99px;padding:3px 9px;text-transform:uppercase;vertical-align:middle;margin-left:6px" title="Drag the header to move it, drag the bottom-right corner to resize it">⠿ drag / resize</span></h3><div style="display:flex;align-items:center;justify-content:flex-end;gap:8px"><div class="toggle"><span class="on" id="tg-jobs" onclick="mapView('jobs')">Active Jobs</span><span id="tg-techs" onclick="mapView('techs')">Tech Locations</span><span id="tg-all" onclick="mapView('all')">All</span><span id="tg-list" onclick="mapView('list')" style="display:none">List</span></div><button class="map-expand" id="cc-map-refresh" onclick="ccMapRefreshTechs(this)" title="Re-read truck positions now. Trucks report on their own schedule, so this picks up anything that has arrived since the last check — it cannot make a stale fix newer." aria-label="Refresh truck positions">↻</button><button class="map-expand" id="cc-map-expand" onclick="toggleMapFullscreen()" title="Expand map to full screen">⛶</button></div></div>
+            <div class="map-head" style="flex-direction:column;align-items:stretch;justify-content:flex-start;gap:8px"><h3>Service Area Map <span class="cc-drag-hint" style="font-family:'JetBrains Mono',monospace;font-size:8px;font-weight:800;letter-spacing:.06em;color:#6a3fb5;background:#f3edfb;border-radius:99px;padding:3px 9px;text-transform:uppercase;vertical-align:middle;margin-left:6px" title="Drag the header to move it, drag the bottom-right corner to resize it">⠿ drag / resize</span></h3><div style="display:flex;align-items:center;justify-content:flex-end;gap:8px"><div class="toggle"><span class="on" id="tg-jobs" onclick="mapView('jobs')">Active Jobs</span><span id="tg-techs" onclick="mapView('techs')">Tech Locations</span><span id="tg-all" onclick="mapView('all')">All</span><span id="tg-list" onclick="mapView('list')" style="display:none">List</span></div><button class="map-expand" id="cc-map-refresh" onclick="ccMapRefreshTechs(this)" title="Re-read truck positions now. Trucks report on their own schedule, so this picks up anything that has arrived since the last check — it cannot make a stale fix newer." aria-label="Refresh truck positions">↻</button><button class="map-expand" onclick="toggleMapFullscreen()" title="Expand map to full screen">⛶</button></div></div>
             <div class="map">
               <div id="cc-leaflet-map" style="position:absolute;inset:0;isolation:isolate;z-index:1"></div>
               <div id="cc-jobs-list" style="display:none;position:absolute;inset:0;z-index:2;background:#fff;overflow:auto;border-radius:inherit"></div>
@@ -9784,7 +9767,7 @@ document.addEventListener('click',function(e){
               <div class=&quot;img2&quot; style=&quot;background:linear-gradient(140deg,#dfe3ea,#c3ccd9)&quot;>🪨</div>
               <div class=&quot;nm2&quot;>Quartz — Calacatta Gold, waterfall island</div>
               <div class=&quot;pr2&quot;>$4,280 · 44.6 SF</div>
-              <div class=&quot;act2&quot;><span class=&quot;ap&quot; onclick=&quot;hlToast('✓ Approved — budget bar updates live, fabricator gets the green light at deposit')&quot;>✓ Approve</span><span class=&quot;cm&quot; onclick=&quot;hlToast('💬 Ask anything — \'does this stain?\' gets a real answer, on the record')&quot;>💬</span></div>
+              <div class=&quot;act2&quot;><span class=&quot;ap&quot; onclick=&quot;hlToast('✓ Approved — budget bar updates live, fabricator gets the green light at deposit')&quot;>✓ Approve</span><span class=&quot;cm&quot; onclick=&quot;hlToast('💬 Ask anything — \\'does this stain?\\' gets a real answer, on the record')&quot;>💬</span></div>
             </div>
             <div class=&quot;sel&quot;>
               <span class=&quot;stamp ok&quot;>✓ APPROVED</span>
@@ -14743,7 +14726,7 @@ document.addEventListener('click',function(e){
       <!-- VENDOR ADAPTERS -->
       <div class=&quot;box&quot;>
         <div class=&quot;bl&quot;>🔌 Vendor adapters — one pattern, every supplier</div>
-        <div class=&quot;vend&quot; onclick=&quot;document.getElementById('vcQ').focus();hlToast('✅ Home Depot Pro search is live — cart, PO and order status are still Phase 1 (not built yet).')&quot; style=&quot;cursor:pointer&quot; aria-label=&quot;Search Home Depot Pro&quot;><span class=&quot;lg&quot; style=&quot;background:#f96302&quot;>HD</span><span>Home Depot Pro<small>search: LIVE · pro pricing/cart/order status: not built yet</small></span><span class=&quot;vst live&quot;>SEARCH LIVE</span></div>
+        <div class=&quot;vend&quot; onclick=&quot;document.getElementById('vcQ').focus();hlToast('✅ Home Depot Pro search is live — cart, PO and order status are still Phase 1 (not built yet).')&quot; style=&quot;cursor:pointer&quot;><span class=&quot;lg&quot; style=&quot;background:#f96302&quot;>HD</span><span>Home Depot Pro<small>search: LIVE · pro pricing/cart/order status: not built yet</small></span><span class=&quot;vst live&quot;>SEARCH LIVE</span></div>
         <div class=&quot;vend&quot;><span class=&quot;lg&quot; style=&quot;background:#00529b&quot;>FG</span><span>Ferguson<small>account pricing via statement import + order email parsing</small></span><span class=&quot;vst adapt&quot;>ADAPTER</span></div>
         <div class=&quot;vend&quot;><span class=&quot;lg&quot; style=&quot;background:#004990&quot;>LW</span><span>Lowe's Pro<small>same adapter pattern as HD — switch on when account opens</small></span><span class=&quot;vst adapt&quot;>ADAPTER</span></div>
         <div class=&quot;vend&quot;><span class=&quot;lg&quot; style=&quot;background:#59718a&quot;>SH</span><span>Local supply houses<small>Torrco, Bender · link import + receipt import (no dependable API)</small></span><span class=&quot;vst trans&quot;>TRANSITIONAL</span></div>
@@ -24255,24 +24238,9 @@ function toggleMapFullscreen(){
   var card = document.querySelector('.map-card');
   if(!card) return;
   card.classList.toggle('mapfull');
-  // By id, not by class: the refresh button (#cc-map-refresh) shares the
-  // .map-expand class and sits FIRST in the header, so querySelector('.map-expand')
-  // returned it -- expanding turned the refresh button into the ✕ and left the real
-  // expand button showing ⛶. Clicking that ✕ re-read truck positions instead of
-  // closing, so there was no way back to the Command Center (Chris, 2026-08-21).
-  var btn = document.getElementById('cc-map-expand') || card.querySelector('.map-expand:not(#cc-map-refresh)');
+  var btn = card.querySelector('.map-expand');
   var isFull = card.classList.contains('mapfull');
-  if(btn){ btn.innerHTML = isFull ? '✕' : '⛶'; btn.title = isFull ? 'Exit full screen (Esc)' : 'Expand map to full screen'; }
-  // Backdrop: dims the Command Center behind the expanded map and doubles as a
-  // click-anywhere-outside exit, so getting back out never depends on landing a
-  // click on the one small corner button.
-  var bd = document.getElementById('mapfull-backdrop');
-  if(isFull){
-    if(!bd){ bd = document.createElement('div'); bd.id = 'mapfull-backdrop';
-      bd.title = 'Click to exit full screen';
-      bd.addEventListener('click', function(){ toggleMapFullscreen(); });
-      document.body.appendChild(bd); }
-  } else if(bd){ bd.remove(); }
+  if(btn){ btn.innerHTML = isFull ? '✕' : '⛶'; btn.title = isFull ? 'Exit full screen' : 'Expand map to full screen'; }
   // List view only makes sense with room to breathe - offer it in fullscreen only.
   var tl = document.getElementById('tg-list');
   if(tl) tl.style.display = isFull ? '' : 'none';
@@ -28690,7 +28658,7 @@ function hlDocModalClose(){
 function hlDocNewFolder(parentId){
   hlDocModalOpen('New folder', '<input id="hldoc-input-name" placeholder="e.g. Kitchen Remodel" style="width:100%;border:1px solid var(--line);border-radius:8px;padding:9px 12px;font-size:13px">', async function(){
     var name = document.getElementById('hldoc-input-name').value.trim();
-    if(!name){ chirpToast('⚠ Enter a folder name.'); return; }
+    if(!name) return;
     var { error } = await sb.from('folders').insert({ name: name, parent_id: parentId, created_by: window.HL_PROFILE ? window.HL_PROFILE.id : null });
     if(error){ chirpToast('⚠ ' + error.message); return; }
     hlDocModalClose();
@@ -28703,7 +28671,7 @@ function hlDocRename(id){
   if(!f) return;
   hlDocModalOpen('Rename folder', '<input id="hldoc-input-name" value="' + hlEsc(f.name) + '" style="width:100%;border:1px solid var(--line);border-radius:8px;padding:9px 12px;font-size:13px">', async function(){
     var name = document.getElementById('hldoc-input-name').value.trim();
-    if(!name){ chirpToast('⚠ Enter a folder name.'); return; }
+    if(!name) return;
     var { error } = await sb.from('folders').update({ name: name }).eq('id', id);
     if(error){ chirpToast('⚠ ' + error.message); return; }
     hlDocModalClose();
@@ -28740,7 +28708,7 @@ async function hlDocCopy(id){
   if(!src) return;
   hlDocModalOpen('Copy folder', '<input id="hldoc-input-name" value="' + hlEsc(src.name) + ' (copy)" style="width:100%;border:1px solid var(--line);border-radius:8px;padding:9px 12px;font-size:13px">', async function(){
     var name = document.getElementById('hldoc-input-name').value.trim();
-    if(!name){ chirpToast('⚠ Enter a folder name.'); return; }
+    if(!name) return;
     hlDocModalClose();
     await hlDocCopyRecursive(src, null, name);
     await hlDocLoadFolders();

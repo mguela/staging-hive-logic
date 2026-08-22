@@ -101,24 +101,12 @@ async function observeFinding(finding) {
   const prior = (await priorRes.json())[0];
   const now = new Date().toISOString();
   if (prior) {
-    // A finding a human marked "resolved" that the same source observes again
-    // is, by definition, not actually fixed -- reopen it instead of silently
-    // refreshing evidence under a closed status where nobody will see it.
-    // "ignored" is a standing decision (e.g. a known mock screen), not a claim
-    // the underlying problem is gone, so recurrence there is left alone.
-    const reopening = prior.status === 'resolved';
-    const patch = { title: finding.title, detail: finding.detail || null, severity: finding.severity, evidence: finding.evidence, last_seen_at: now, updated_at: now };
-    if (reopening) Object.assign(patch, { status: 'open', resolved_at: null, resolved_by: null, status_note: `Recurred -- seen again by ${finding.source} after being marked resolved.` });
     const patchRes = await supabaseRequest(`app_status_findings?id=eq.${encodeURIComponent(prior.id)}`, {
       method: 'PATCH', headers: { Prefer: 'return=representation' },
-      body: JSON.stringify(patch),
+      body: JSON.stringify({ title: finding.title, detail: finding.detail || null, severity: finding.severity, evidence: finding.evidence, last_seen_at: now, updated_at: now }),
     });
     if (!patchRes.ok) throw new Error(`Could not refresh status finding: ${await patchRes.text()}`);
-    const updated = (await patchRes.json())[0];
-    if (reopening) {
-      await supabaseRequest('app_status_events', { method: 'POST', body: JSON.stringify({ finding_id: prior.id, event_type: 'status_changed', detail: `open: recurred via ${finding.source} after being marked resolved.` }) });
-    }
-    return { finding: updated, created: false };
+    return { finding: (await patchRes.json())[0], created: false };
   }
   const createRes = await supabaseRequest('app_status_findings', {
     method: 'POST', headers: { Prefer: 'return=representation' },

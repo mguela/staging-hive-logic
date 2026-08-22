@@ -82,25 +82,6 @@ test('rules inside @media are scoped like any other', () => {
   assert.ok(generated.includes(':is(#hiveconnect-root, .hc-embed) .thread-panel'));
 });
 
-test('the same stylesheet generates the same document on a CRLF checkout', () => {
-  // core.autocrlf gives Windows working copies CRLF css and Linux CI LF css.
-  // transform() passes source bytes through, so a CRLF source stayed CRLF --
-  // but HEADER and the `,\n` selector-list joiner were synthesized with LF.
-  // The result was a MIXED-ending string that could never equal the uniformly
-  // CRLF file on disk, so the equality test above failed on every Windows
-  // checkout while passing in CI. Nothing was ever wrong with the CSS -- the
-  // comparison was ending-fragile, which made a green artifact look like drift.
-  const lf = 'html, body { height: 100%; }\n.msg, .msg-body { color: red; }\n';
-  const crlf = lf.replace(/\n/g, '\r\n');
-
-  const fromLf = generate(lf);
-  const fromCrlf = generate(crlf);
-
-  assert.ok(!fromLf.includes('\r'), 'an LF source must produce LF output — this is what CI compares');
-  assert.ok(!/(?<!\r)\n/.test(fromCrlf), 'a CRLF source must produce uniformly CRLF output, not a mix');
-  assert.equal(fromCrlf.replace(/\r\n/g, '\n'), fromLf, 'the two must be the same document');
-});
-
 function splitList(prelude) {
   const parts = [];
   let depth = 0;

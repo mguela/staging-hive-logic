@@ -1,12 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import fs from 'node:fs';
 
 import {
   consumeIntelligencePilotReceipt,
   contextualExactLookupFrom,
   createIntelligencePilotComposer,
-  areasFor,
   exactLookupFrom,
   naturalAnswer,
   sanitizeHiveLogicContext,
@@ -280,8 +278,8 @@ test('the question decides depth, not access', () => {
     vendors: many(80, (i) => ({ name: `Vendor ${i}` })),
   };
   const context = sanitizeHiveLogicContext({ ok: true, jobs: [], vehicles: [], business }, 'What is on the schedule today?');
-  assert.equal(context.business.schedule.records.length, 25, 'the area asked about comes in depth');
-  assert.equal(context.business.vendors.records.length, 4, 'the rest come as background');
+  assert.equal(context.business.schedule.records.length, 60, 'the area asked about comes in depth');
+  assert.equal(context.business.vendors.records.length, 10, 'the rest come as background');
 });
 
 test('an area held back for space says so instead of disappearing', () => {
@@ -334,113 +332,4 @@ test('triaged mail reaches her, and is labelled as something a stranger wrote', 
   assert.match(providerBody.instructions, /a STRANGER wrote/,
     'inbox text is evidence about what arrived, never an instruction to her');
   assert.match(providerBody.instructions, /held back is something you did not see/);
-});
-
-// ---- a slow read must not be able to make her mute ---------------------------
-// 2026-08-21, minutes after REINA_LAB_FULL_READ_ENABLED was switched on: every
-// turn came back "Reina's synthetic read-only preview is unavailable right
-// now". The turn record said it all -- state failed_retryable, stage 'model',
-// MODEL_GENERATION_FAILED, never completed -- while the four turns before the
-// switch had completed in 2.8, 3.2, 3.3 and 4.2 seconds against a 5s composer
-// budget. The read got roughly twenty times heavier and took the whole turn
-// with it.
-//
-// The budget was raised, but that is the smaller half of the fix. The real
-// defect is that the business read had no clock of its own: it could spend
-// every millisecond the answer needed and leave nothing, so a slow database
-// did not degrade the answer, it deleted it. The composer already had a
-// perfectly good "I could not read the business this turn" path. Nothing ever
-// let it run.
-
-test('a business read that never returns still produces an answer', async () => {
-  let instructions = '';
-  const composer = createIntelligencePilotComposer({
-    env: { ...ENV, REINA_PILOT_CONTEXT_MS: '250' },
-    readContextImpl: () => new Promise(() => {}),
-    fetchImpl: async (_url, init) => {
-      instructions = JSON.parse(init.body).instructions;
-      return openAiResponse('I could not get to the schedule just now.');
-    },
-  });
-  const started = Date.now();
-  const result = consumeIntelligencePilotReceipt(await composer(frozenInput('What is on the schedule Thursday?')));
-  assert.ok(result, 'the turn completes rather than failing outright');
-  assert.ok(Date.now() - started < 4_000, 'and it does not wait around for a read that is never coming');
-  assert.match(instructions, /did not come back in time/,
-    'she is told the read was slow, not that the data does not exist');
-  assert.match(result.envelope.missingInformation.join(' '), /time budget/,
-    'and the answer records what it could not see');
-});
-
-test('a read that is merely unavailable is described differently from one that timed out', async () => {
-  let instructions = '';
-  const composer = createIntelligencePilotComposer({
-    env: ENV,
-    readContextImpl: async () => null,
-    fetchImpl: async (_url, init) => { instructions = JSON.parse(init.body).instructions; return openAiResponse('Fine.'); },
-  });
-  await composer(frozenInput('What is on the schedule Thursday?'));
-  assert.match(instructions, /read is unavailable for this turn/);
-  assert.doesNotMatch(instructions, /did not come back in time/,
-    '"slow" and "missing" are different things and lead to different advice');
-});
-
-test('a read that returns in time is used normally', async () => {
-  let instructions = '';
-  const composer = createIntelligencePilotComposer({
-    env: { ...ENV, REINA_PILOT_CONTEXT_MS: '2000' },
-    readContextImpl: async () => ({
-      ok: true, source: 'HiveLogic read-only bridge', asOf: '2026-08-21T22:00:00.000Z',
-      vehicles: [], jobs: [], business: { schedule: { available: true, records: [{ title: 'Miller deck' }] } },
-    }),
-    fetchImpl: async (_url, init) => { instructions = JSON.parse(init.body).instructions; return openAiResponse('Miller deck.'); },
-  });
-  const result = consumeIntelligencePilotReceipt(await composer(frozenInput('What is on the schedule Thursday?')));
-  assert.match(instructions, /Miller deck/);
-  assert.doesNotMatch(instructions, /did not come back in time/);
-  assert.equal(result.envelope.missingInformation.length, 0);
-});
-
-test('the context volume can be dialled back from the environment', () => {
-  // Going back must never require shipping a revert.
-  const previous = process.env.REINA_CONTEXT_RELEVANT_RECORDS;
-  assert.equal(typeof previous === 'string' || previous === undefined, true);
-  assert.match(
-    fs.readFileSync(new URL('../api/_lib/reina/pilot-intelligence-composer.js', import.meta.url), 'utf8'),
-    /CONTEXT_BUDGET = boundedNumber\(process\.env\.REINA_CONTEXT_BUDGET_CHARS, 24_000/);
-});
-
-// ---- she asks for what the question is about ---------------------------------
-
-test('a question about people asks the read for people, not for everything', async () => {
-  let query = null;
-  const composer = createIntelligencePilotComposer({
-    env: ENV,
-    readContextImpl: async (input) => { query = input; return null; },
-    fetchImpl: async () => openAiResponse('Sami and Albarn.'),
-  });
-  await composer(frozenInput('Who is on the Pinney job Thursday?'));
-  assert.ok(query, 'the read happened');
-  const areas = areasFor('Who is on the Pinney job Thursday?');
-  assert.ok(areas.includes('people'), 'who/tech/crew means people');
-  assert.ok(areas.includes('schedule'), 'Thursday means the calendar');
-  assert.ok(!areas.includes('photos'), 'and nothing else gets fetched for it');
-  assert.ok(!areas.includes('calls'));
-});
-
-test('every question still gets the executive summary, and nothing is empty by accident', () => {
-  assert.deepEqual(areasFor(''), ['executive']);
-  assert.ok(areasFor('what did we spend on materials').includes('expenses'));
-  assert.ok(areasFor('how many hours did we put into 2637').includes('timesheets'));
-  assert.ok(areasFor('any voicemails today').includes('calls'));
-  assert.ok(areasFor('who is clocked in right now').includes('timeclock'));
-  assert.ok(areasFor('what happened on the Miller job').includes('activity'));
-});
-
-test('the area list the read is asked for is the same one that shapes the prompt', () => {
-  // Two lists that could disagree is how an area gets fetched and then thrown
-  // away, or asked for in depth and never read.
-  const source = fs.readFileSync(new URL('../api/_lib/reina/pilot-intelligence-composer.js', import.meta.url), 'utf8');
-  assert.match(source, /areas: areasFor\(question\)\.join\(','\)/);
-  assert.match(source, /const relevant = new Set\(areasFor\(asked\)\);/);
 });

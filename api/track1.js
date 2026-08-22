@@ -32,7 +32,6 @@ import { listFindings, setFindingStatus, createManualFinding, listFindingAttachm
 import { companySlugForUser } from './_lib/tenant.js';
 import { createNativeJob } from './_lib/native-job.js';
 import { jobRef } from './_lib/project-numbers.js';
-import { invoiceAmountDue } from './_lib/invoice-balance.js';
 import { twilioRequest } from './_lib/voice.js';
 import crypto from 'crypto';
 import { provisionHiveConnectAccount, getMapping, postBotMessage } from './hiveconnect-bridge.js';
@@ -3225,16 +3224,6 @@ export async function handleReinaLabRead(req, res) {
     || !/^[\p{L}\p{N} '#&.\-]+$/u.test(requestedLookupTerm))) {
     return res.status(400).json({ ok: false, error: 'Invalid lookup term.' });
   }
-  // visits.assigned_users is [{ id, name }] straight from Jobber.
-  const assignedNames = (value) => {
-    const rows = Array.isArray(value) ? value : [];
-    const names = [];
-    for (const entry of rows.slice(0, 12)) {
-      const name = entry && typeof entry === 'object' ? text(entry.name, 160) : null;
-      if (name && !names.includes(name)) names.push(name);
-    }
-    return names;
-  };
   const jobProjection = (j) => ({
     jobNumber: j.job_number,
     title: j.title,
@@ -3272,178 +3261,6 @@ export async function handleReinaLabRead(req, res) {
       return { available: false, reason: 'Executive snapshot temporarily unavailable.' };
     }
   };
-  // What is actually owed.
-  //
-  // This used to filter on `balance > 0`, which returned NOTHING -- Jobber's
-  // sync has never written that column, and all 2,852 invoices carry
-  // balance = NULL. So Reina, asked who owed money, said nobody, while 27
-  // invoices sat past due. A filter on a column nobody populates does not
-  // fail; it quietly answers "none", which is the worst possible way for this
-  // to be wrong.
-  //
-  // Status is what the sync does maintain, so status is what selects an
-  // unpaid invoice, and the amount owed is derived from figures that are
-  // actually there. Derived is stated as derived: `amountDueIsExact` is false
-  // when it came from arithmetic rather than from Jobber's own balance, so an
-  // invoice paid down in a way this cannot see is never reported as certain.
-  // Estimates, with the LIVE ones first.
-  //
-  // Ordering the whole table by last-updated buried them: 730 archived and 666
-  // converted quotes crowd out the ten still awaiting an answer, which are the
-  // only ones anybody asks about. Reina had "access to estimates" and could
-  // not have told you which were outstanding. Open ones are read on their own
-  // and come first; recent activity follows as context.
-  const OPEN_QUOTE_STATUSES = ['awaiting_response', 'draft', 'approved'];
-  const QUOTE_COLUMNS = 'quote_number,title,quote_status,total,client_name,jobber_created_at,jobber_updated_at';
-  const readEstimates = async () => {
-    const project = (row) => ({
-      quoteNumber: text(row.quote_number, 80), title: text(row.title, 240), status: text(row.quote_status, 40),
-      total: number(row.total), clientName: text(row.client_name, 160),
-      createdAt: row.jobber_created_at || null, updatedAt: row.jobber_updated_at || null,
-    });
-    try {
-      const [openResponse, recentResponse] = await Promise.all([
-        supabaseRequest(`quotes?select=${QUOTE_COLUMNS}&quote_status=in.(${OPEN_QUOTE_STATUSES.join(',')})&order=jobber_updated_at.desc.nullslast&limit=60`),
-        supabaseRequest(`quotes?select=${QUOTE_COLUMNS}&quote_status=not.in.(${OPEN_QUOTE_STATUSES.join(',')})&order=jobber_updated_at.desc.nullslast&limit=60`),
-      ]);
-      if (!openResponse.ok && !recentResponse.ok) return { available: false, reason: 'Source temporarily unavailable.', records: [] };
-      const openRows = openResponse.ok ? await openResponse.json() : [];
-      const recentRows = recentResponse.ok ? await recentResponse.json() : [];
-      const open = (Array.isArray(openRows) ? openRows : []).map(project);
-      const recent = (Array.isArray(recentRows) ? recentRows : []).map(project);
-      return { available: true, recordLimit: 120, openCount: open.length, records: [...open, ...recent] };
-    } catch (_) {
-      return { available: false, reason: 'Source temporarily unavailable.', records: [] };
-    }
-  };
-
-  const RECEIVABLE_STATUSES = ['past_due', 'awaiting_payment', 'bad_debt', 'draft'];
-  const readReceivables = async () => {
-    try {
-      const response = await supabaseRequest(`invoices?select=invoice_number,invoice_status,subject,total,balance,payments,deposit,discount,due_date,issued_date,job_id,client_id,jobber_updated_at&invoice_status=in.(${RECEIVABLE_STATUSES.join(',')})&order=due_date.asc.nullslast&limit=150`);
-      if (!response.ok) return { available: false, reason: 'Source temporarily unavailable.', records: [] };
-      const rows = await response.json();
-      if (!Array.isArray(rows)) return { available: false, reason: 'Source returned an invalid shape.', records: [] };
-      // "Who owes me money" is a question about PEOPLE. An invoice number
-      // without a name attached cannot answer it.
-      const clientIds = [...new Set(rows.map((row) => row.client_id).filter(Boolean))].slice(0, 150);
-      const names = new Map();
-      if (clientIds.length) {
-        const list = clientIds.map((id) => `"${String(id).replace(/"/g, '')}"`).join(',');
-        const clientResponse = await supabaseRequest(`clients?select=jobber_id,name,company_name&jobber_id=in.(${encodeURIComponent(list)})&limit=150`);
-        if (clientResponse.ok) {
-          const clientRows = await clientResponse.json();
-          for (const row of Array.isArray(clientRows) ? clientRows : []) {
-            names.set(String(row.jobber_id), row.name || row.company_name || null);
-          }
-        }
-      }
-      const records = rows.slice(0, 150).map((row) => {
-        // The same arithmetic the invoices screen and the client portal use,
-        // from the same helper. Reina quoting a different number than the
-        // screen shows would be worse than her not knowing.
-        const owed = invoiceAmountDue(row);
-        return {
-          invoiceNumber: text(row.invoice_number, 80),
-          status: text(row.invoice_status, 40),
-          subject: text(row.subject, 240),
-          clientName: text(names.get(String(row.client_id)), 160),
-          total: number(row.total),
-          amountDue: owed.amountDue,
-          amountDueIsExact: owed.isExact,
-          paid: number(row.payments),
-          dueDate: row.due_date || null,
-          issuedDate: row.issued_date || null,
-          jobRef: text(row.job_id, 100),
-          updatedAt: row.jobber_updated_at || null,
-        };
-      }).filter((record) => record.amountDue == null || record.amountDue > 0);
-      return { available: true, recordLimit: 150, basis: 'unpaid_status', records };
-    } catch (_) {
-      return { available: false, reason: 'Source temporarily unavailable.', records: [] };
-    }
-  };
-
-  // ---- the rest of the business ------------------------------------------
-  // Added 2026-08-21 after Reina, reading the right calendar, had to say
-  // "technician assignments aren't included". The pattern held everywhere: the
-  // data existed and the bridge simply never asked. These are the remaining
-  // tables with real rows in them that a person actually asks about. Tables
-  // that are empty today are deliberately NOT here -- a query per turn for a
-  // table with nothing in it is latency spent to learn nothing, and the turn
-  // budget is the thing that broke tonight.
-  const readPeople = async () => {
-    const [rolesResult, tradesResult] = await Promise.all([
-      readRows('employee_roles?select=jobber_id,lens,division,crew_label,is_lead,permission_role,updated_at&order=sort_order.asc&limit=80', (row) => ({
-        personRef: text(row.jobber_id, 100), area: text(row.lens, 80), division: text(row.division, 120),
-        crew: text(row.crew_label, 120), isLead: row.is_lead === true, role: text(row.permission_role, 60),
-        updatedAt: row.updated_at || null,
-      }), 80),
-      readRows('trades?select=name,category,description,active,sort_order&active=is.true&order=sort_order.asc&limit=80', (row) => ({
-        name: text(row.name, 120), category: text(row.category, 120), description: text(row.description, 300),
-      }), 80),
-    ]);
-    return { available: rolesResult.available || tradesResult.available, crewRoles: rolesResult, trades: tradesResult };
-  };
-
-  const readTimeclock = async () => readRows(
-    'workforce_time_sessions?select=employee_id,clock_in,clock_out,status,status_flag,on_break,total_break_seconds,close_reason&order=clock_in.desc&limit=80',
-    (row) => ({
-      personRef: text(row.employee_id, 100), clockIn: row.clock_in || null, clockOut: row.clock_out || null,
-      status: text(row.status, 40), flag: text(row.status_flag, 60), onBreak: row.on_break === true,
-      breakSeconds: number(row.total_break_seconds), closeReason: text(row.close_reason, 120),
-    }), 80);
-
-  const readTimesheets = async () => readRows(
-    'time_sheet_entries?select=start_at,end_at,final_duration,user_id,job_id,jobber_updated_at&order=start_at.desc&limit=120',
-    (row) => ({
-      startAt: row.start_at || null, endAt: row.end_at || null, durationSeconds: number(row.final_duration),
-      personRef: text(row.user_id, 100), jobRef: text(row.job_id, 100), updatedAt: row.jobber_updated_at || null,
-    }), 120);
-
-  const readActivity = async () => readRows(
-    'timeline_events?select=job_id,label,source,occurred_at&order=occurred_at.desc&limit=120',
-    (row) => ({
-      jobRef: text(row.job_id, 100), label: text(row.label, 300), source: text(row.source, 80),
-      occurredAt: row.occurred_at || null,
-    }), 120);
-
-  // Photo metadata only, and never gps_lat/gps_lng -- the same rule the
-  // vehicle read follows. Where a photo was taken is a coordinate.
-  const readPhotos = async () => readRows(
-    'media?select=job_id,media_type,captured_at,uploaded_by,created_at&order=created_at.desc&limit=120',
-    (row) => ({
-      jobRef: text(row.job_id, 100), kind: text(row.media_type, 40),
-      capturedAt: row.captured_at || null, addedAt: row.created_at || null,
-    }), 120);
-
-  const readCosting = async () => readRows(
-    'cost_lines?select=section,name,amount,frequency,cost_type,source,confidence,archived,updated_at&archived=is.false&order=sort_order.asc&limit=150',
-    (row) => ({
-      section: text(row.section, 120), name: text(row.name, 200), amount: number(row.amount),
-      frequency: text(row.frequency, 24), costType: text(row.cost_type, 40), source: text(row.source, 80),
-      confidence: text(row.confidence, 40), updatedAt: row.updated_at || null,
-    }), 150);
-
-  // Summaries, never numbers and never the raw transcript. Who called is
-  // contact data; what a call was about is a business fact, and only the
-  // second one belongs in an answer.
-  const readCalls = async () => {
-    const [callsResult, voicemailResult] = await Promise.all([
-      readRows('voice_calls?select=direction,status,client_id,job_id,started_at,ended_at,duration_seconds,ai_summary,escalation_requested&order=started_at.desc&limit=60', (row) => ({
-        direction: text(row.direction, 24), status: text(row.status, 40), clientRef: text(row.client_id, 100),
-        jobRef: text(row.job_id, 100), startedAt: row.started_at || null, endedAt: row.ended_at || null,
-        seconds: number(row.duration_seconds), summary: text(row.ai_summary, 600),
-        escalationRequested: row.escalation_requested === true,
-      }), 60),
-      readRows('voice_voicemails?select=duration_seconds,ai_summary,read,created_at&deleted_at=is.null&order=created_at.desc&limit=40', (row) => ({
-        seconds: number(row.duration_seconds), summary: text(row.ai_summary, 600),
-        heard: row.read === true, receivedAt: row.created_at || null,
-      }), 40),
-    ]);
-    return { available: callsResult.available || voicemailResult.available, calls: callsResult, voicemail: voicemailResult };
-  };
-
   const exactLookup = async () => {
     if (!requestedLookupKind || !requestedLookupTerm) return null;
     const pattern = encodeURIComponent(`*${requestedLookupTerm}*`);
@@ -3563,28 +3380,9 @@ export async function handleReinaLabRead(req, res) {
     return result([]);
   };
 
-  // WHICH AREAS THIS TURN NEEDS.
-  //
-  // Every area used to be read on every turn. That was survivable with six of
-  // them and it is not with twenty: the full read is what pushed the composer
-  // past its budget tonight and made Reina answer "unavailable" to everything.
-  // The caller says what the question is about, and only those are fetched.
-  //
-  // No `areas` parameter means all of them, so every existing caller behaves
-  // exactly as before. An unknown name is ignored rather than rejected -- a
-  // stale caller asking for something that no longer exists should get a
-  // smaller answer, not an error.
-  const requestedAreas = String((req.query && req.query.areas) || '').split(',')
-    .map((name) => name.trim()).filter(Boolean);
-  const wants = (name) => requestedAreas.length === 0 || requestedAreas.includes(name);
-  const skipped = { available: false, reason: 'Not read for this turn. Ask about it directly.', records: [] };
-  const when = (name, read) => wants(name) ? read() : Promise.resolve(skipped);
-
   const [vehiclesRes, jobsRes, jobLookupRes, briefResult, clients, executive, receivables, estimates, workflow,
     schedule, leads, requests, expenses, vendors, subscriptions, subcontractors,
-    purchaseOrders, internalEstimates, syncHealth, mail,
-    people, timeclock, timesheets, activity, photos, costing, calls,
-    exactLookupResult] = await Promise.all([
+    purchaseOrders, internalEstimates, syncHealth, mail, exactLookupResult] = await Promise.all([
     supabaseRequest(`vehicles?select=name,${VEHICLE_GPS_COLUMNS}&order=name.asc`),
     supabaseRequest('jobs_enriched?select=job_number,title,job_status,job_type,total,start_at,end_at,completed_at,jobber_updated_at,client_name,loc_city,loc_province&job_status=neq.archived&order=jobber_updated_at.desc&limit=150'),
     requestedJobNumber
@@ -3601,80 +3399,80 @@ export async function handleReinaLabRead(req, res) {
       if (statusCode !== 200 || !payload || payload.ok !== true) return null;
       return payload;
     })().catch(() => null),
-    when('clients', () => readRows('clients?select=jobber_id,name,company_name,is_lead,is_archived,jobber_created_at,jobber_updated_at&order=jobber_updated_at.desc&limit=200', (row) => ({
+    readRows('clients?select=jobber_id,name,company_name,is_lead,is_archived,jobber_created_at,jobber_updated_at&order=jobber_updated_at.desc&limit=200', (row) => ({
       clientRef: text(row.jobber_id, 100), name: text(row.name, 160), companyName: text(row.company_name, 160),
       isLead: row.is_lead === true, isArchived: row.is_archived === true,
       createdAt: row.jobber_created_at || null, updatedAt: row.jobber_updated_at || null,
-    }), 200)),
-    when('executive', readExecutiveSnapshot),
-    when('receivables', () => readReceivables()),
-    when('estimates', () => readEstimates()),
-    when('workflow', () => readRows('job_workflow?select=job_ref,deposit_required,deposit_paid_at,deposit_amount,setup_complete_at,materials_status,materials_eta,on_hold_at,on_hold_reason,readiness_items,readiness_override_at,is_tm,tm_service_type,tm_rate_hourly,updated_at&order=updated_at.desc&limit=150', (row) => ({
+    }), 200),
+    readExecutiveSnapshot(),
+    readRows('invoices?select=invoice_number,invoice_status,subject,total,balance,due_date,issued_date,job_id,jobber_updated_at&balance=gt.0&order=due_date.asc&limit=100', (row) => ({
+      invoiceNumber: text(row.invoice_number, 80), status: text(row.invoice_status, 40), subject: text(row.subject, 240),
+      total: number(row.total), balance: number(row.balance), dueDate: row.due_date || null, issuedDate: row.issued_date || null,
+      jobRef: text(row.job_id, 100), updatedAt: row.jobber_updated_at || null,
+    }), 100),
+    readRows('quotes?select=quote_number,title,quote_status,total,client_name,jobber_created_at,jobber_updated_at&order=jobber_updated_at.desc&limit=100', (row) => ({
+      quoteNumber: text(row.quote_number, 80), title: text(row.title, 240), status: text(row.quote_status, 40),
+      total: number(row.total), clientName: text(row.client_name, 160), createdAt: row.jobber_created_at || null, updatedAt: row.jobber_updated_at || null,
+    }), 100),
+    readRows('job_workflow?select=job_ref,deposit_required,deposit_paid_at,deposit_amount,setup_complete_at,materials_status,materials_eta,on_hold_at,on_hold_reason,readiness_items,readiness_override_at,is_tm,tm_service_type,tm_rate_hourly,updated_at&order=updated_at.desc&limit=150', (row) => ({
       jobRef: text(row.job_ref, 100), depositRequired: number(row.deposit_required), depositPaidAt: row.deposit_paid_at || null,
       depositAmount: number(row.deposit_amount), setupCompleteAt: row.setup_complete_at || null, materialsStatus: text(row.materials_status, 40),
       materialsEta: row.materials_eta || null, onHoldAt: row.on_hold_at || null, onHoldReason: text(row.on_hold_reason, 300),
       readiness: row.readiness_items && typeof row.readiness_items === 'object' ? row.readiness_items : {},
       readinessOverrideAt: row.readiness_override_at || null, isTimeAndMaterials: row.is_tm === true,
       serviceType: text(row.tm_service_type, 120), hourlyRate: number(row.tm_rate_hourly), updatedAt: row.updated_at || null,
-    }), 150)),
-    // assigned_users is why she had to say "technician assignments aren't
-    // included, so I can't confirm coverage" while reading the right calendar.
-    // The column was there and synced; the projection just never selected it.
-    when('schedule', () => readRows('visits?select=title,start_at,end_at,completed_at,is_all_day,job_id,arrival_window_start,arrival_window_end,visit_status,assigned_users,jobber_updated_at&order=start_at.desc&limit=150', (row) => ({
+    }), 150),
+    readRows('visits?select=title,start_at,end_at,completed_at,is_all_day,job_id,arrival_window_start,arrival_window_end,visit_status,jobber_updated_at&order=start_at.desc&limit=150', (row) => ({
       title: text(row.title, 240), startAt: row.start_at || null, endAt: row.end_at || null, completedAt: row.completed_at || null,
       isAllDay: row.is_all_day === true, jobRef: text(row.job_id, 100), arrivalWindowStart: row.arrival_window_start || null,
-      arrivalWindowEnd: row.arrival_window_end || null, status: text(row.visit_status, 60),
-      // Names only. The Jobber user id behind each one is an identifier for
-      // systems, not an answer to "who is on this job".
-      assignedTo: assignedNames(row.assigned_users),
-      updatedAt: row.jobber_updated_at || null,
-    }), 150)),
-    when('leads', () => readRows('lead_pipeline?select=id,stage,estimated_value,lead_source,division,need,urgency,lost_reason,first_contacted_at,last_contacted_at,created_at,updated_at&order=updated_at.desc&limit=100', (row) => ({
+      arrivalWindowEnd: row.arrival_window_end || null, status: text(row.visit_status, 60), updatedAt: row.jobber_updated_at || null,
+    }), 150),
+    readRows('lead_pipeline?select=id,stage,estimated_value,lead_source,division,need,urgency,lost_reason,first_contacted_at,last_contacted_at,created_at,updated_at&order=updated_at.desc&limit=100', (row) => ({
       leadRef: text(row.id, 80), stage: text(row.stage, 40), estimatedValue: number(row.estimated_value), source: text(row.lead_source, 120),
       division: text(row.division, 120), need: text(row.need, 300), urgency: text(row.urgency, 80), lostReason: text(row.lost_reason, 240),
       firstContactedAt: row.first_contacted_at || null, lastContactedAt: row.last_contacted_at || null,
       createdAt: row.created_at || null, updatedAt: row.updated_at || null,
-    }), 100)),
-    when('requests', () => readRows('requests?select=title,request_status,jobber_created_at,jobber_updated_at&order=jobber_updated_at.desc&limit=100', (row) => ({
+    }), 100),
+    readRows('requests?select=title,request_status,jobber_created_at,jobber_updated_at&order=jobber_updated_at.desc&limit=100', (row) => ({
       title: text(row.title, 240), status: text(row.request_status, 60), createdAt: row.jobber_created_at || null, updatedAt: row.jobber_updated_at || null,
-    }), 100)),
-    when('expenses', () => readRows('expenses?select=title,total,expense_date,reimbursable_to_user,job_id,jobber_updated_at&order=expense_date.desc&limit=100', (row) => ({
+    }), 100),
+    readRows('expenses?select=title,total,expense_date,reimbursable_to_user,job_id,jobber_updated_at&order=expense_date.desc&limit=100', (row) => ({
       title: text(row.title, 240), total: number(row.total), date: row.expense_date || null,
       reimbursable: row.reimbursable_to_user === true, jobRef: text(row.job_id, 100), updatedAt: row.jobber_updated_at || null,
-    }), 100)),
-    when('vendors', () => readRows('vendors?select=name,category,subcategory,what_they_provide,relationship_owner,status,updated_at&order=name.asc&limit=150', (row) => ({
+    }), 100),
+    readRows('vendors?select=name,category,subcategory,what_they_provide,relationship_owner,status,updated_at&order=name.asc&limit=150', (row) => ({
       name: text(row.name, 160), category: text(row.category, 80), subcategory: text(row.subcategory, 120),
       provides: text(row.what_they_provide, 300), owner: text(row.relationship_owner, 160), status: text(row.status, 40), updatedAt: row.updated_at || null,
-    }), 150)),
-    when('subscriptions', () => readRows('subscriptions?select=name,category,what_it_does,relationship_owner,monthly_cost,cost_source,billing_cycle,renewal_date,status,updated_at&order=name.asc&limit=150', (row) => ({
+    }), 150),
+    readRows('subscriptions?select=name,category,what_it_does,relationship_owner,monthly_cost,cost_source,billing_cycle,renewal_date,status,updated_at&order=name.asc&limit=150', (row) => ({
       name: text(row.name, 160), category: text(row.category, 80), purpose: text(row.what_it_does, 300), owner: text(row.relationship_owner, 160),
       monthlyCost: number(row.monthly_cost), costSource: text(row.cost_source, 40), billingCycle: text(row.billing_cycle, 40),
       renewalDate: row.renewal_date || null, status: text(row.status, 40), updatedAt: row.updated_at || null,
-    }), 150)),
-    when('subcontractors', () => readRows('subcontractors?select=name,trade,status,track_1099,w9_on_file,updated_at&order=name.asc&limit=150', (row) => ({
+    }), 150),
+    readRows('subcontractors?select=name,trade,status,track_1099,w9_on_file,updated_at&order=name.asc&limit=150', (row) => ({
       name: text(row.name, 160), trade: text(row.trade, 120), status: text(row.status, 40),
       tracks1099: row.track_1099 === true, w9OnFile: row.w9_on_file === true, updatedAt: row.updated_at || null,
-    }), 150)),
-    when('purchaseOrders', () => readRows('purchase_orders?select=po_number,job_id,overhead_category,order_type,lifecycle_status,not_preapproved,version,created_at,updated_at&order=updated_at.desc&limit=100', (row) => ({
+    }), 150),
+    readRows('purchase_orders?select=po_number,job_id,overhead_category,order_type,lifecycle_status,not_preapproved,version,created_at,updated_at&order=updated_at.desc&limit=100', (row) => ({
       poNumber: text(row.po_number, 80), jobRef: text(row.job_id, 100), overheadCategory: text(row.overhead_category, 120),
       orderType: text(row.order_type, 60), status: text(row.lifecycle_status, 60), notPreapproved: row.not_preapproved === true,
       version: number(row.version), createdAt: row.created_at || null, updatedAt: row.updated_at || null,
-    }), 100)),
-    when('internalEstimates', () => readRows('estimates?select=estimate_number,client_id,lifecycle_status,version,created_at,updated_at&order=updated_at.desc&limit=100', (row) => ({
+    }), 100),
+    readRows('estimates?select=estimate_number,client_id,lifecycle_status,version,created_at,updated_at&order=updated_at.desc&limit=100', (row) => ({
       estimateNumber: text(row.estimate_number, 80), clientRef: text(row.client_id, 100), status: text(row.lifecycle_status, 60),
       version: number(row.version), createdAt: row.created_at || null, updatedAt: row.updated_at || null,
-    }), 100)),
-    when('syncHealth', () => readRows('sync_log?select=ran_at,status,clients_synced,jobs_synced,invoices_synced&order=ran_at.desc&limit=20', (row) => ({
+    }), 100),
+    readRows('sync_log?select=ran_at,status,clients_synced,jobs_synced,invoices_synced&order=ran_at.desc&limit=20', (row) => ({
       ranAt: row.ran_at || null, status: text(row.status, 40), clientsSynced: number(row.clients_synced),
       jobsSynced: number(row.jobs_synced), invoicesSynced: number(row.invoices_synced),
-    }), 20)),
+    }), 20),
     // Mail Reina has already triaged: who it was from, what it was about, and
     // what she thought should happen. Deliberately NOT the message body -- the
     // triage summary is what makes an inbox answerable out loud, and a raw
     // inbox in a prompt is a different decision than this one. The sender's
     // address is reduced to its domain: enough to tell a supplier from a
     // customer, without putting private contact details in a model prompt.
-    when('mail', () => readRows('reina_mail_triage?select=subject,from_name,from_address,received_at,label,corrected_label,confidence,summary_text,action_text,acted_action,acted_at&order=received_at.desc&limit=120', (row) => ({
+    readRows('reina_mail_triage?select=subject,from_name,from_address,received_at,label,corrected_label,confidence,summary_text,action_text,acted_action,acted_at&order=received_at.desc&limit=120', (row) => ({
       subject: text(row.subject, 240),
       fromName: text(row.from_name, 160),
       fromDomain: text(String(row.from_address || '').split('@')[1] || null, 120),
@@ -3685,14 +3483,7 @@ export async function handleReinaLabRead(req, res) {
       suggestedAction: text(row.action_text, 400),
       actedAction: text(row.acted_action, 60),
       actedAt: row.acted_at || null,
-    }), 120)),
-    when('people', readPeople),
-    when('timeclock', readTimeclock),
-    when('timesheets', readTimesheets),
-    when('activity', readActivity),
-    when('photos', readPhotos),
-    when('costing', readCosting),
-    when('calls', readCalls),
+    }), 120),
     exactLookup(),
   ]);
   if (!vehiclesRes.ok || !jobsRes.ok) return res.status(503).json({ ok: false, error: 'Verified HiveLogic source unavailable.' });
@@ -3740,8 +3531,7 @@ export async function handleReinaLabRead(req, res) {
     access: {
       mode: 'full_business_read',
       readOnly: true,
-      businessAreas: ['executive', 'clients', 'jobs', 'schedule', 'receivables', 'estimates', 'sales', 'requests', 'expenses', 'vendors', 'subscriptions', 'subcontractors', 'purchasing', 'fleet', 'mail', 'people', 'timeclock', 'timesheets', 'activity', 'photos', 'costing', 'calls', 'today_decisions', 'sync_health'],
-      areasReadThisTurn: requestedAreas.length ? requestedAreas : 'all',
+      businessAreas: ['executive', 'clients', 'jobs', 'schedule', 'receivables', 'estimates', 'sales', 'requests', 'expenses', 'vendors', 'subscriptions', 'subcontractors', 'purchasing', 'fleet', 'mail', 'today_decisions', 'sync_health'],
       excluded: ['credentials', 'tokens', 'bank accounts', 'payment card data', 'payroll', 'tax identifiers', 'private contact details', 'mail message bodies', 'raw notes', 'write operations'],
     },
     vehicles,
@@ -3749,11 +3539,7 @@ export async function handleReinaLabRead(req, res) {
     jobLookup,
     exactLookup: exactLookupResult,
     todayDecisions,
-    business: {
-      clients, executive, receivables, estimates, workflow, schedule, leads, requests, expenses,
-      vendors, subscriptions, subcontractors, purchaseOrders, internalEstimates, syncHealth, mail,
-      people, timeclock, timesheets, activity, photos, costing, calls,
-    },
+    business: { clients, executive, receivables, estimates, workflow, schedule, leads, requests, expenses, vendors, subscriptions, subcontractors, purchaseOrders, internalEstimates, syncHealth, mail },
   });
 }
 
