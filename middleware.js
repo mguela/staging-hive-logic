@@ -2,7 +2,11 @@
 //
 // Vercel Edge Middleware runs before every matched request reaches its
 // serverless function. This is the ONE place company data is gated: no
+<<<<<<< HEAD
 // per-endpoint patching, no reliance on the frontend hiding a URL. The
+=======
+// per-endpoint patching, no celiance on the frontend hiding a URL. The
+>>>>>>> 9c035212c8c0febbff4f679ba20984f9ffd3cbff
 // decision logic lives in api/_lib/guard.js (unit-tested); this file just
 // wires it to the incoming request.
 //
