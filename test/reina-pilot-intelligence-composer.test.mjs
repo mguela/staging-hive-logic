@@ -6,6 +6,7 @@ import {
   consumeIntelligencePilotReceipt,
   contextualExactLookupFrom,
   createIntelligencePilotComposer,
+  areasFor,
   exactLookupFrom,
   naturalAnswer,
   sanitizeHiveLogicContext,
@@ -407,4 +408,39 @@ test('the context volume can be dialled back from the environment', () => {
   assert.match(
     fs.readFileSync(new URL('../api/_lib/reina/pilot-intelligence-composer.js', import.meta.url), 'utf8'),
     /CONTEXT_BUDGET = boundedNumber\(process\.env\.REINA_CONTEXT_BUDGET_CHARS, 24_000/);
+});
+
+// ---- she asks for what the question is about ---------------------------------
+
+test('a question about people asks the read for people, not for everything', async () => {
+  let query = null;
+  const composer = createIntelligencePilotComposer({
+    env: ENV,
+    readContextImpl: async (input) => { query = input; return null; },
+    fetchImpl: async () => openAiResponse('Sami and Albarn.'),
+  });
+  await composer(frozenInput('Who is on the Pinney job Thursday?'));
+  assert.ok(query, 'the read happened');
+  const areas = areasFor('Who is on the Pinney job Thursday?');
+  assert.ok(areas.includes('people'), 'who/tech/crew means people');
+  assert.ok(areas.includes('schedule'), 'Thursday means the calendar');
+  assert.ok(!areas.includes('photos'), 'and nothing else gets fetched for it');
+  assert.ok(!areas.includes('calls'));
+});
+
+test('every question still gets the executive summary, and nothing is empty by accident', () => {
+  assert.deepEqual(areasFor(''), ['executive']);
+  assert.ok(areasFor('what did we spend on materials').includes('expenses'));
+  assert.ok(areasFor('how many hours did we put into 2637').includes('timesheets'));
+  assert.ok(areasFor('any voicemails today').includes('calls'));
+  assert.ok(areasFor('who is clocked in right now').includes('timeclock'));
+  assert.ok(areasFor('what happened on the Miller job').includes('activity'));
+});
+
+test('the area list the read is asked for is the same one that shapes the prompt', () => {
+  // Two lists that could disagree is how an area gets fetched and then thrown
+  // away, or asked for in depth and never read.
+  const source = fs.readFileSync(new URL('../api/_lib/reina/pilot-intelligence-composer.js', import.meta.url), 'utf8');
+  assert.match(source, /areas: areasFor\(question\)\.join\(','\)/);
+  assert.match(source, /const relevant = new Set\(areasFor\(asked\)\);/);
 });

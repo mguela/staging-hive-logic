@@ -135,7 +135,7 @@ function safeScalarRecord(value, depth = 0) {
 // silently blind to one, but the areas the question is actually about are the
 // ones she gets in detail.
 const AREA_TERMS = Object.freeze([
-  ['clients', /\b(client|customer|homeowner|who(?:'s| is) )\b/iu],
+  ['clients', /\b(client|clients|customer|customers|homeowner|homeowners|account|accounts)\b/iu],
   ['leads', /\b(lead|leads|pipeline|sales|prospect|opportunit)\b/iu],
   ['requests', /\b(request|inquiry|enquiry|called in|reached out)\b/iu],
   ['executive', /\b(cash|margin|finance|financial|revenue|profit|sales|month|quarter|year|doing|performance|numbers)\b/iu],
@@ -151,15 +151,32 @@ const AREA_TERMS = Object.freeze([
   ['purchaseOrders', /\b(purchase order|purchase orders|\bpo\b|\bpos\b|purchasing|ordered)\b/iu],
   ['mail', /\b(e-?mail|e-?mails|inbox|mailbox|message|messages|wrote|writing|replied|reply|sent me|hear from|flagged)\b/iu],
   ['syncHealth', /\b(sync|synced|stale|out of date|outage|up to date|jobber)\b/iu],
+  // Added once she could read the calendar and still had to say "technician
+  // assignments aren't included". The rest of the business, same pattern: the
+  // rows were there and nothing asked for them.
+  ['people', /\b(who|crew|crews|tech|techs|technician|technicians|guys|team|staff|employee|employees|lead|foreman|trade|trades)\b/iu],
+  ['timeclock', /\b(clocked|clock|on the clock|working|shift|break|punched|attendance|here today)\b/iu],
+  ['timesheets', /\b(hours|labou?r|timesheet|time sheet|time on|how long|man.?hours|overtime)\b/iu],
+  ['activity', /\b(happened|history|activity|timeline|update|updates|progress|latest on|status of)\b/iu],
+  ['photos', /\b(photo|photos|picture|pictures|image|images|documented|before and after)\b/iu],
+  ['costing', /\b(cost|costs|costing|overhead|burden|rate|rates|markup|margin|break.?even|pricing)\b/iu],
+  ['calls', /\b(call|calls|called|calling|phone|voicemails?|rang|missed|dialed|left a message)\b/iu],
 ]);
+
+// The areas a question is about, for the read to fetch. Everything else is a
+// query nobody needed, and the turn budget is the thing that breaks first.
+export function areasFor(question) {
+  const asked = typeof question === 'string' ? question : '';
+  const wanted = AREA_TERMS.filter(([, pattern]) => pattern.test(asked)).map(([key]) => key);
+  // Small, always useful, and the implicit answer to "how are we doing".
+  if (!wanted.includes('executive')) wanted.push('executive');
+  return [...new Set(wanted)];
+}
 
 function selectedBusiness(business, question) {
   const source = business && typeof business === 'object' ? business : {};
   const asked = typeof question === 'string' ? question : '';
-  const relevant = new Set(AREA_TERMS.filter(([, pattern]) => pattern.test(asked)).map(([key]) => key));
-  // The executive summary is small and answers "how are we doing" implicitly,
-  // so it is always worth its space.
-  relevant.add('executive');
+  const relevant = new Set(areasFor(asked));
   const keys = Object.keys(source).filter((key) => source[key] != null);
   keys.sort((a, b) => (relevant.has(b) ? 1 : 0) - (relevant.has(a) ? 1 : 0));
   const out = Object.create(null);
@@ -279,7 +296,14 @@ async function defaultReadContext({ env, question, history = [] }) {
   await handleReinaLabRead({
     method: 'GET',
     headers: { authorization: `Bearer ${token}` },
-    query: { job_number: jobNumberFrom(question), lookup_kind: lookup.kind, lookup_term: lookup.term },
+    query: {
+      job_number: jobNumberFrom(question),
+      lookup_kind: lookup.kind,
+      lookup_term: lookup.term,
+      // Only what this question is about. Reading all twenty-odd areas every
+      // turn is what put the composer over its budget.
+      areas: areasFor(question).join(','),
+    },
   }, response);
   return statusCode === 200 ? payload : null;
 }

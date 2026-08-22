@@ -181,3 +181,70 @@ test('open estimates are read on their own so archived ones cannot bury them', (
   assert.match(section, /records: \[\.\.\.open, \.\.\.recent\]/, 'the live ones come first');
   assert.match(section, /openCount: open\.length/, 'and how many are live is stated, not inferred');
 });
+
+// ---- the rest of the business ------------------------------------------------
+// Reina, reading the right Thursday calendar: "Technician assignments aren't
+// included, so I can't confirm coverage for every technician." The column was
+// there and synced -- visits.assigned_users, which the dispatch board has used
+// all along -- and the projection simply never selected it. That turned out to
+// be the shape of the whole gap: the rows existed and nothing asked for them.
+
+test('a scheduled visit says who is on it', () => {
+  const section = source.slice(source.indexOf('async function handleReinaLabRead'), source.indexOf('// ---------- Live tech-header status'));
+  assert.match(section, /visits\?select=[^'`\n]*\bassigned_users\b/);
+  assert.match(section, /assignedTo: assignedNames\(row\.assigned_users\)/);
+  assert.match(section, /const assignedNames = \(value\) =>/);
+  assert.doesNotMatch(section, /assignedTo:[^\n]*entry\.id/,
+    'a Jobber user id is an identifier for systems, not an answer to "who is on this job"');
+});
+
+test('the areas with real rows in them are all reachable', () => {
+  const section = source.slice(source.indexOf('async function handleReinaLabRead'), source.indexOf('// ---------- Live tech-header status'));
+  for (const [area, table] of [
+    ['people', 'employee_roles'],
+    ['timeclock', 'workforce_time_sessions'],
+    ['timesheets', 'time_sheet_entries'],
+    ['activity', 'timeline_events'],
+    ['photos', 'media'],
+    ['costing', 'cost_lines'],
+    ['calls', 'voice_calls'],
+  ]) {
+    assert.match(section, new RegExp(`when\\('${area}'`), `${area} is wired into the read`);
+    assert.match(section, new RegExp(`${table}\\?select=`), `${area} reads ${table}`);
+  }
+});
+
+test('the new areas keep the same exclusions as the old ones', () => {
+  const section = source.slice(source.indexOf('async function handleReinaLabRead'), source.indexOf('// ---------- Live tech-header status'));
+  // media rows carry gps_lat/gps_lng. Where a photo was taken is a coordinate,
+  // and coordinates never leave this function -- the same rule the vehicle
+  // read follows.
+  assert.doesNotMatch(section, /media\?select=[^'`\n]*gps_/i);
+  // voice_calls carries from_number/to_number and a full transcript. What a
+  // call was about is a business fact; who called and what was said word for
+  // word is not this bridge's to hand over.
+  assert.doesNotMatch(section, /voice_calls\?select=[^'`\n]*(from_number|to_number)/i);
+  assert.doesNotMatch(section, /voice_calls\?select=[^'`\n]*\btranscript\b/i);
+  assert.match(section, /voice_calls\?select=[^'`\n]*ai_summary/i);
+});
+
+// ---- coverage must not cost a turn -------------------------------------------
+// Reading every area on every turn is exactly what pushed the composer past
+// its budget and made her answer "unavailable" to everything. Twenty-three
+// areas cannot each be a query on a question about one of them.
+
+test('only the areas a question is about are read', () => {
+  const section = source.slice(source.indexOf('async function handleReinaLabRead'), source.indexOf('// ---------- Live tech-header status'));
+  assert.match(section, /const wants = \(name\) => requestedAreas\.length === 0 \|\| requestedAreas\.includes\(name\)/);
+  assert.match(section, /const when = \(name, read\) => wants\(name\) \? read\(\) : Promise\.resolve\(skipped\)/);
+  assert.match(section, /reason: 'Not read for this turn\. Ask about it directly\.'/,
+    'an area that was skipped says so rather than looking empty');
+});
+
+test('a caller that names no areas still gets everything, as it always did', () => {
+  const section = source.slice(source.indexOf('async function handleReinaLabRead'), source.indexOf('// ---------- Live tech-header status'));
+  assert.match(section, /requestedAreas\.length === 0 \|\|/,
+    'no areas parameter means all of them, so existing callers are untouched');
+  assert.match(section, /areasReadThisTurn: requestedAreas\.length \? requestedAreas : 'all'/,
+    'and the answer states which it was');
+});

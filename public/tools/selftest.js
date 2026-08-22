@@ -592,6 +592,16 @@
     // reporting NO_OUTCOME mischaracterized working, intentional guards as
     // broken controls.
     if (el.disabled) { results.push({ view: CUR, depth: depth, label: lab, kind: kind, verdict: 'SKIPPED_DISABLED', note: 'element is disabled — not clicked' }); return; }
+    // Found 2026-08-22: the Boardroom's "Send question" is a
+    // type="submit" button whose <textarea> is required and starts empty.
+    // Live-confirmed: clicking it fires the textarea's `invalid` event, and
+    // the browser's own constraint validation blocks the `submit` event from
+    // ever dispatching -- no navigation, no fetch, no DOM mutation this
+    // crawler's own click causes (the mutations observed in one live test
+    // turned out to be unrelated background UI, not caused by the click at
+    // all). Exactly the same shape as the disabled-button case just above:
+    // a control correctly refusing to act by design, not a broken one.
+    if (el.type === 'submit' && el.form && typeof el.form.checkValidity === 'function' && !el.form.checkValidity()) { results.push({ view: CUR, depth: depth, label: lab, kind: kind, verdict: 'SKIPPED_INVALID_FORM', note: 'a required field is empty — the browser blocks submit before it can fire, not clicked' }); return; }
     // Found 2026-08-19: a capacity-planning day-range tab ("30 days") that
     // is already the default-selected tab produces no change when clicked
     // again -- correctly, since it's already in the state the click would

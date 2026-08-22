@@ -19,7 +19,7 @@
  * monitor_my_status poll, so "is this person running current code" is a
  * question the database can answer. Do not hand-edit it -- run
  * `node scripts/stamp-page-build.mjs`. */
-var HL_PAGE_BUILD = 'e6184e9bd35d32e6';
+var HL_PAGE_BUILD = 'add2fe4f8e08e740';
 </script>
 <script>
 (function () { // HL_FETCH_DEDUPE_V1 — single wrapper: GET /api/ dedupe + 60s cache + write-invalidate
@@ -28690,7 +28690,7 @@ function hlDocModalClose(){
 function hlDocNewFolder(parentId){
   hlDocModalOpen('New folder', '<input id="hldoc-input-name" placeholder="e.g. Kitchen Remodel" style="width:100%;border:1px solid var(--line);border-radius:8px;padding:9px 12px;font-size:13px">', async function(){
     var name = document.getElementById('hldoc-input-name').value.trim();
-    if(!name) return;
+    if(!name){ chirpToast('⚠ Enter a folder name.'); return; }
     var { error } = await sb.from('folders').insert({ name: name, parent_id: parentId, created_by: window.HL_PROFILE ? window.HL_PROFILE.id : null });
     if(error){ chirpToast('⚠ ' + error.message); return; }
     hlDocModalClose();
@@ -28703,7 +28703,7 @@ function hlDocRename(id){
   if(!f) return;
   hlDocModalOpen('Rename folder', '<input id="hldoc-input-name" value="' + hlEsc(f.name) + '" style="width:100%;border:1px solid var(--line);border-radius:8px;padding:9px 12px;font-size:13px">', async function(){
     var name = document.getElementById('hldoc-input-name').value.trim();
-    if(!name) return;
+    if(!name){ chirpToast('⚠ Enter a folder name.'); return; }
     var { error } = await sb.from('folders').update({ name: name }).eq('id', id);
     if(error){ chirpToast('⚠ ' + error.message); return; }
     hlDocModalClose();
@@ -28740,7 +28740,7 @@ async function hlDocCopy(id){
   if(!src) return;
   hlDocModalOpen('Copy folder', '<input id="hldoc-input-name" value="' + hlEsc(src.name) + ' (copy)" style="width:100%;border:1px solid var(--line);border-radius:8px;padding:9px 12px;font-size:13px">', async function(){
     var name = document.getElementById('hldoc-input-name').value.trim();
-    if(!name) return;
+    if(!name){ chirpToast('⚠ Enter a folder name.'); return; }
     hlDocModalClose();
     await hlDocCopyRecursive(src, null, name);
     await hlDocLoadFolders();
