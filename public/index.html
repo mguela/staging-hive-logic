@@ -313,22 +313,77 @@ var HL_PAGE_BUILD = '797b779d0b28a808';
     .phgrid{grid-template-columns:repeat(10,minmax(0,1fr))}
   }
 
-  .topbar{display:flex;align-items:center;gap:14px;padding:15px 0 13px;border-bottom:1px solid var(--line);margin-bottom:18px}
-  @media(max-width:1150px){
-    .topbar{flex-wrap:wrap}
-    .topbar .ask{min-width:0;flex:1 1 220px}
-  }
-  @media(min-width:1151px) and (max-width:1399px){
-    body.cc-open .topbar{flex-wrap:wrap}
-    body.cc-open .topbar .ask{min-width:0;flex:1 1 220px}
-  }
-  .greet{display:flex;align-items:flex-start;gap:20px}
-  .greet-main b{font-size:21px;display:block;font-weight:800;letter-spacing:-.01em;line-height:1.15}
-  .greet-main span{display:block;color:var(--mut);font-size:11.5px;font-weight:600;margin-top:4px}
-  .greet-status{display:flex;flex-direction:column;align-items:flex-end;gap:7px;flex:none}
+  /* ═══ Top bar — rebuilt as explicit flex groups (nav / greet, chips, search,
+     actions) so every breakpoint reflows on purpose instead of relying on one
+     generic flex-wrap. Modernized 2026-08-22: consistent pill language across
+     chips + icon buttons, graceful truncation instead of overlap, and a
+     priority order (search + identity + primary actions survive first;
+     weather/sync/secondary icons fold away on small screens) so the bar never
+     breaks layout from phone widths up through ultra-wide monitors. */
+  .topbar{display:flex;align-items:center;flex-wrap:wrap;gap:10px 14px;padding:14px 0 13px;border-bottom:1px solid var(--line);margin-bottom:18px}
+  .topbar-nav{display:flex;align-items:center;gap:10px;min-width:0}
+  .topbar-nav .iconbtn{flex:none}
+  .greet{display:flex;align-items:center;gap:16px;min-width:0}
+  .greet-main{min-width:0}
+  .greet-main b{font-size:20px;display:block;font-weight:800;letter-spacing:-.01em;line-height:1.15;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:46vw}
+  .greet-main span{display:block;color:var(--mut);font-size:11.5px;font-weight:600;margin-top:4px;white-space:nowrap}
+  .greet-status{display:flex;flex-direction:row;align-items:center;gap:7px;flex-wrap:wrap;flex:none}
   .greet-status .cstat{vertical-align:baseline}
+  .topbar-chips{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .tb-chipwrap{position:relative}
+  .tb-chip{display:flex;align-items:center;gap:7px;font-size:11px;font-weight:800;color:#484f64;background:var(--card);border:1px solid var(--line);border-radius:99px;padding:9px 15px;cursor:pointer;white-space:nowrap;max-width:220px;transition:border-color .15s,box-shadow .15s,transform .15s}
+  .tb-chip:hover{border-color:var(--rail,#b9c0d2);box-shadow:0 4px 14px rgba(22,30,46,.14);transform:translateY(-1px)}
+  .tb-chip-ic{font-size:13px;flex:none}
+  .tb-chip-label{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+  .tb-chip-arrow{font-size:9px;color:#8b92a8;flex:none}
+  .tb-chip-dot{width:8px;height:8px;border-radius:99px;background:#8b92a8;flex:none}
+  .tb-dropdown{position:absolute;top:calc(100% + 8px);left:0;z-index:9000;background:#fff;border:1px solid var(--line);border-radius:13px;box-shadow:0 18px 50px rgba(22,30,46,.22);width:320px;max-width:90vw;padding:8px}
+  .tb-dropdown-r{left:auto;right:0;width:270px;padding:16px}
+  /* Compound selector (.ask.topbar-ask) deliberately outranks the plain
+     .ask{flex:0 1 520px} rule declared further down for the unrelated
+     search-input styling — otherwise equal-specificity + later-in-file would
+     let that rule silently win over these flex/order overrides. */
+  .ask.topbar-ask{order:3;flex:1 1 320px;min-width:200px;max-width:560px}
+  .topbar-actions{display:flex;align-items:center;gap:8px;flex:none;order:4;margin-left:auto}
+  .tb-sync{font-family:'JetBrains Mono',monospace;font-size:7.5px;letter-spacing:.08em;font-weight:700;color:#b3b9ca;cursor:pointer}
   .cc-wx-chip{font-family:var(--mono);font-size:9.5px;font-weight:700;letter-spacing:.5px;color:#59718a;background:#e9eff4;border-radius:99px;padding:5px 12px;cursor:pointer;display:inline-flex;align-items:center;gap:6px;white-space:nowrap;transition:transform .15s}
   .cc-wx-chip:hover{transform:translateY(-1px)}
+  /* ≤1300px: everything still fits one row, just tighten up */
+  @media(max-width:1300px){
+    .tb-chip{max-width:170px;padding:8px 12px}
+    .ask.topbar-ask{flex-basis:240px}
+  }
+  /* ≤1100px: search drops to its own full-width row; nav/greet/chips/actions
+     share row one and wrap naturally if that row itself runs out of room. */
+  @media(max-width:1100px){
+    .ask.topbar-ask{order:5;flex:1 1 100%;max-width:none}
+    .topbar-actions{order:4;margin-left:auto}
+    .greet-main b{font-size:18px;max-width:38vw}
+  }
+  /* ≤860px: matches the mobile nav-drawer breakpoint. Reclaim space by
+     folding secondary/decorative chrome (weather, sync clock, and the
+     lowest-priority icon buttons) — identity, status, clock-in, search,
+     notifications, phone and the avatar stay. */
+  @media(max-width:860px){
+    .topbar{gap:8px 10px}
+    .tb-secondary{display:none}
+    .tb-chip{max-width:150px;padding:7px 11px}
+    .greet{gap:10px}
+    .greet-main b{max-width:50vw}
+  }
+  /* ≤560px: phone. Everything shrinks to touch-friendly compact chips and the
+     identity block truncates rather than wrapping into a third row. */
+  @media(max-width:560px){
+    .topbar{padding:10px 0 11px}
+    .topbar-nav{gap:6px}
+    .greet{gap:8px}
+    .greet-main b{font-size:16px;max-width:34vw}
+    .greet-main span{font-size:10.5px}
+    .topbar-chips{gap:6px}
+    .tb-chip{max-width:118px;padding:7px 10px;font-size:10px}
+    .topbar .iconbtn,.topbar .avatar{width:34px;height:34px}
+    .topbar-actions{gap:6px}
+  }
   .cstat{font-size:10px;font-weight:800;border-radius:99px;padding:3px 11px;vertical-align:2px;letter-spacing:.06em;font-family:var(--mono);cursor:pointer;transition:filter .15s,box-shadow .15s}
   .cstat:hover{filter:brightness(.97);box-shadow:0 2px 9px rgba(22,30,46,.20)}
   .cstat.steady{color:#127A4E;background:#E2F1EA;border:1px solid rgba(23,178,106,.55);text-shadow:0 0 8px rgba(23,178,106,.35);box-shadow:0 0 7px 1px rgba(23,178,106,.5),0 0 18px 4px rgba(23,178,106,.25);animation:hlGlowGreen 2.6s ease-in-out infinite}
@@ -1257,9 +1312,11 @@ var HL_PAGE_BUILD = '797b779d0b28a808';
   .st.fail{background:var(--red-bg);color:var(--red)}
   .st.retry{background:#f6ead8;color:#a06010}
   .ae.failrow{border-color:#e5c8c2;background:#fdf7f5}
-  .ask{position:relative}
+  .ask{position:relative;transition:border-color .15s,box-shadow .15s}
+  .ask:focus-within{border-color:var(--rail,#59718a);box-shadow:0 0 0 3px rgba(89,113,138,.16)}
   .ask input{flex:1;border:none;outline:none;background:transparent;font-family:var(--sans);font-size:12.5px;color:var(--ink);font-weight:600;min-width:0}
   .ask input::placeholder{color:var(--mut);font-weight:500}
+  .iconbtn:focus-visible,.tb-chip:focus-visible,.avatar:focus-visible{outline:2px solid var(--rail,#59718a);outline-offset:2px}
   .askdrop{position:absolute;top:calc(100% + 6px);left:0;right:0;background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:0 14px 40px rgba(22,30,46,.18);z-index:45;overflow:hidden;display:none}
   .askdrop.open{display:block}
   .askdrop .hd{font-size:9px;font-weight:800;letter-spacing:.08em;color:var(--mut);padding:9px 14px 4px}
@@ -2617,7 +2674,7 @@ body.hl-dark .iconbtn{color:#c9d3e4}
 .nav.nav-dowork:hover{filter:brightness(1.06)}
 .card,.photos,.map,.jcm,.dw,.fm,.cdb-table{box-shadow:0 1px 0 rgba(255,255,255,.85) inset,0 10px 18px rgba(53,76,89,.26),0 3px 6px rgba(53,76,89,.22)}
 .fin .f,#watching-panel .w,#team-todo-panel .w,.lv,.kpi,.bottleneck,.conf,.tcalrow,.rowline,.rb-p{box-shadow:0 1px 0 rgba(255,255,255,.85) inset,0 6px 10px rgba(53,76,89,.22),0 2px 4px rgba(53,76,89,.18)}
-button,.dowork,.startday,.back,.cdb-new,.nc-create,.fm-save,.gbtn,.iconbtn,.dw-a,.chip2,.tsk-nav-item{box-shadow:0 1px 0 rgba(255,255,255,.6) inset,0 5px 10px rgba(53,76,89,.26),0 2px 4px rgba(53,76,89,.20)}
+button,.dowork,.startday,.back,.cdb-new,.nc-create,.fm-save,.gbtn,.iconbtn,.dw-a,.chip2,.tsk-nav-item,.tb-chip{box-shadow:0 1px 0 rgba(255,255,255,.6) inset,0 5px 10px rgba(53,76,89,.26),0 2px 4px rgba(53,76,89,.20)}
 /* Map view toggle: each option is its own distinct pill button */
 .toggle{background:transparent !important;border:none !important;display:inline-flex;gap:6px}
 .toggle span{border:1px solid #b7c6d2 !important;background:#fff !important;color:#3d5568 !important;border-radius:9px !important;padding:5px 12px !important;font-weight:800;cursor:pointer;box-shadow:0 1px 0 rgba(255,255,255,.7) inset,0 3px 7px rgba(53,76,89,.26)}
@@ -2969,32 +3026,48 @@ button,.dowork,.startday,.back,.cdb-new,.nc-create,.fm-save,.gbtn,.iconbtn,.dw-a
   <main class="main">
 
     <div class="topbar">
-      <div class="iconbtn" id="hl-mnav-btn" title="Menu" onclick="hlMobNavToggle()" style="margin-right:2px;font-size:18px">&#9776;</div>
-      <div class="iconbtn" id="hl-back-btn" title="Back" onclick="if(window.hlGoBack){hlGoBack()}else{showView('');go('snapshot')}" style="margin-right:2px;font-size:16px;font-weight:900">&#8592;</div>
-      <div class="greet"><div class="greet-main"><b id="cc-greet-name">Hello</b><span id="cc-greet-datetime">Friday, May 16 · 7:32 AM</span></div><div class="greet-status"><span class="cstat steady" onclick="openDetail('health')" title="Company health — click for a quick view">● STEADY</span><span class="cc-wx-chip" id="cc-greet-weather" onclick="openDetail('weather')" title="Weather — tap for the 7-day forecast + hourly">☀️ 68° CLEAR</span><span id="cc-sync-status" style="font-family:'JetBrains Mono',monospace;font-size:7.5px;letter-spacing:.08em;font-weight:700;color:#b3b9ca;cursor:pointer" title="How recently the Command Center widgets last refreshed — click to refresh now">SYNCED 6:53 AM</span></div></div>
-      <div style="position:relative;margin:0 4px">
-        <div id="hlcochip" onclick="hlCoDrop()" title="Switch company / location" style="display:flex;align-items:center;gap:7px;font-size:11px;font-weight:800;color:#484f64;background:#fff;border:1px solid #dadde8;border-radius:99px;padding:9px 15px;cursor:pointer;white-space:nowrap"><span style="font-size:13px">🏢</span><b id="hlconame">Greenwich Handyman</b><span id="hlcoarr" style="font-size:9px;color:#8b92a8">▾</span></div>
-        <div id="hlcodrop" style="display:none;position:absolute;top:44px;left:0;z-index:9000;background:#fff;border:1px solid #dadde8;border-radius:13px;box-shadow:0 18px 50px rgba(22,30,46,.22);width:320px;padding:8px"></div>
-      </div>
-      <div id="hltopclock" style="position:relative;margin:0 4px">
-        <div onclick="hlTopClockToggle()" style="display:flex;align-items:center;gap:7px;font-size:11px;font-weight:800;color:#484f64;background:#fff;border:1px solid #dadde8;border-radius:99px;padding:9px 15px;cursor:pointer;white-space:nowrap">
-          <span id="hltopclock-dot" style="width:8px;height:8px;border-radius:99px;background:#8b92a8;flex:none"></span>
-          <span id="hltopclock-label">Loading&hellip;</span>
-          <span style="font-size:9px;color:#8b92a8">&#9662;</span>
+      <div class="topbar-nav">
+        <div class="iconbtn" id="hl-mnav-btn" title="Menu" onclick="hlMobNavToggle()" style="font-size:18px">&#9776;</div>
+        <div class="iconbtn" id="hl-back-btn" title="Back" onclick="if(window.hlGoBack){hlGoBack()}else{showView('');go('snapshot')}" style="font-size:16px;font-weight:900">&#8592;</div>
+        <div class="greet">
+          <div class="greet-main"><b id="cc-greet-name">Hello</b><span id="cc-greet-datetime">Friday, May 16 · 7:32 AM</span></div>
+          <div class="greet-status">
+            <span class="cstat steady" onclick="openDetail('health')" title="Company health — click for a quick view">● STEADY</span>
+            <span class="cc-wx-chip tb-secondary" id="cc-greet-weather" onclick="openDetail('weather')" title="Weather — tap for the 7-day forecast + hourly">☀️ 68° CLEAR</span>
+            <span id="cc-sync-status" class="tb-sync tb-secondary" title="How recently the Command Center widgets last refreshed — click to refresh now">SYNCED 6:53 AM</span>
+          </div>
         </div>
-        <div id="hltopclock-drop" style="display:none;position:absolute;top:44px;right:0;z-index:9000;background:#fff;border:1px solid #dadde8;border-radius:13px;box-shadow:0 18px 50px rgba(22,30,46,.22);width:270px;padding:16px"></div>
       </div>
-      <div class="ask" style="margin-left:auto"><input id="askin" placeholder="Find or ask anything..." oninput="askSearch(this.value)" onfocus="askSearch(this.value)"><kbd>⌘K</kbd>
+
+      <div class="topbar-chips">
+        <div class="tb-chipwrap tb-secondary">
+          <div id="hlcochip" class="tb-chip" onclick="hlCoDrop()" title="Switch company / location"><span class="tb-chip-ic">🏢</span><b id="hlconame" class="tb-chip-label">Greenwich Handyman</b><span id="hlcoarr" class="tb-chip-arrow">▾</span></div>
+          <div id="hlcodrop" class="tb-dropdown" style="display:none"></div>
+        </div>
+        <div id="hltopclock" class="tb-chipwrap">
+          <div onclick="hlTopClockToggle()" class="tb-chip">
+            <span id="hltopclock-dot" class="tb-chip-dot"></span>
+            <span id="hltopclock-label" class="tb-chip-label">Loading&hellip;</span>
+            <span class="tb-chip-arrow">&#9662;</span>
+          </div>
+          <div id="hltopclock-drop" class="tb-dropdown tb-dropdown-r" style="display:none"></div>
+        </div>
+      </div>
+
+      <div class="ask topbar-ask"><input id="askin" placeholder="Find or ask anything..." oninput="askSearch(this.value)" onfocus="askSearch(this.value)"><kbd>⌘K</kbd>
         <div class="askdrop" id="askdrop"><div id="askres"></div></div>
       </div>
       <script src="/reina-global-search.js"></script>
-      <div class="iconbtn" title="Open HiveLogic in another window — run two areas side by side" onclick="hlNewWin()">⧉</div>
-      <div class="iconbtn" id="hltheme" title="Dark / light mode" onclick="hlTheme()">🌙</div>
-      <div class="iconbtn" id="hlbell" title="Notifications" onclick="hlBellToggle()" style="position:relative">🔔<span class="dot" id="hlbadge" style="display:none">0</span></div>
-      <div class="iconbtn" id="hlphoneicon" title="Phone" onclick="if(window.hlPhonePopupToggle)hlPhonePopupToggle()" style="position:relative">📞<span class="dot" id="hlphonebadge" style="display:none">0</span></div>
-      <div class="iconbtn" title="Settings" onclick="hlSettings()">⚙</div>
-      <div class="iconbtn" title="Help" onclick="hlHelp()">?</div>
-      <div class="avatar" id="hlavatar" onclick="hlProfile()" style="cursor:pointer" title="Your profile — click to edit">CK</div>
+
+      <div class="topbar-actions">
+        <div class="iconbtn tb-secondary" title="Open HiveLogic in another window — run two areas side by side" onclick="hlNewWin()">⧉</div>
+        <div class="iconbtn" id="hltheme" title="Dark / light mode" onclick="hlTheme()">🌙</div>
+        <div class="iconbtn" id="hlbell" title="Notifications" onclick="hlBellToggle()" style="position:relative">🔔<span class="dot" id="hlbadge" style="display:none">0</span></div>
+        <div class="iconbtn" id="hlphoneicon" title="Phone" onclick="if(window.hlPhonePopupToggle)hlPhonePopupToggle()" style="position:relative">📞<span class="dot" id="hlphonebadge" style="display:none">0</span></div>
+        <div class="iconbtn tb-secondary" title="Settings" onclick="hlSettings()">⚙</div>
+        <div class="iconbtn tb-secondary" title="Help" onclick="hlHelp()">?</div>
+        <div class="avatar" id="hlavatar" onclick="hlProfile()" style="cursor:pointer" title="Your profile — click to edit">CK</div>
+      </div>
     </div>
 
     <!-- ═══ Feature 3: Command Center card character system (scoped to #snapshot so it

@@ -1,0 +1,160 @@
+/*
+ * HiveSight visual refresh (2026-08-22).
+ *
+ * HiveSight's real source (main.tsx etc.) is NOT in this repo — only the
+ * compiled Vite bundle is (public/vi-app/assets/index-*.js / .css, see
+ * claude/_patch_viapp_hivesight_auth.cjs for the same caveat re: the JS side).
+ * Rather than hand-edit that minified, hashed-filename build artifact — which
+ * a future real rebuild would silently drop — this is a plain override
+ * stylesheet, a real source file, loaded after the compiled CSS in
+ * public/vi-app/index.html. It layers refined spacing/elevation/typography
+ * and full-width-down-to-phone responsiveness onto the existing Tailwind
+ * classes the compiled app already renders, without touching the bundle.
+ * Selectors intentionally chain 2-4 of the app's own utility/component
+ * classes (e.g. .rounded-xl.border-red-200.bg-red-50) rather than adding new
+ * hooks, since there are no stable ids/data-attributes to target and any
+ * markup this file can't find is simply left unstyled, not broken.
+ *
+ * Brand: this reuses HiveSight's own existing tokens (bg-brand-blue #4A6182,
+ * the .card / .input / .btn-primary component classes, orange btn-primary
+ * gradient inherited from the parent HiveLogic app) rather than introducing
+ * new colors — a refresh, not a re-brand.
+ */
+
+:root{
+  --hs-shadow-sm: 0 1px 2px rgba(15,23,42,.06), 0 1px 8px rgba(15,23,42,.04);
+  --hs-shadow-md: 0 2px 6px rgba(22,30,46,.10), 0 12px 24px rgba(22,30,46,.10);
+  --hs-line: rgb(226 232 240);
+  --hs-brand: #4A6182;
+}
+
+/* Give the page body more breathing room and a touch more max-width so the
+   toolbar doesn't feel cramped on laptop-sized screens, while staying
+   readable at ultra-wide. */
+main.max-w-6xl{max-width:78rem;padding-top:1.75rem;padding-bottom:2.5rem}
+
+/* ── Header row (title + Take a photo / New job) ─────────────────────── */
+h1.text-2xl.font-bold.text-slate-900{font-size:1.6rem;letter-spacing:-.01em}
+
+/* the header's two action buttons: consistent height, no shrinking below
+   their label, and — on narrow screens — the labels tuck away so the icons
+   stay usable instead of the buttons colliding with the title. */
+.btn-secondary,.btn-primary{white-space:nowrap}
+
+/* ── Search + toolbar card ────────────────────────────────────────────
+   Wrap the previously "bare" search row + tabs row in a unifying elevated
+   surface so the whole control cluster reads as one panel, matching the
+   parent app's card language (border + soft two-layer shadow) instead of
+   floating directly on the page background. */
+.relative.max-w-md.flex-1{max-width:26rem}
+.relative.max-w-md.flex-1 > input.input.pl-10{
+  border-radius:.85rem;
+  transition:border-color .15s,box-shadow .15s;
+}
+.relative.max-w-md.flex-1 > input.input.pl-10:focus{
+  outline:none;
+  border-color:var(--hs-brand);
+  box-shadow:0 0 0 3px rgba(74,97,130,.16);
+}
+
+/* View toggle (grid/list) + sort/tags/reports/settings cluster: give the
+   whole group a consistent pill height and a bit more separation so it
+   doesn't read as a wall of undifferentiated buttons. */
+.flex.rounded-lg.border.border-slate-200.bg-white.p-1{box-shadow:var(--hs-shadow-sm)}
+.flex.rounded-lg.border.border-slate-200.bg-white.p-1 button{border-radius:.55rem}
+
+/* ── Filter tabs (All / Active / Action Required / Late / …) ─────────── */
+.flex.items-center.gap-3.overflow-x-auto.pb-1{
+  padding:10px 12px;
+  margin:4px 0 14px;
+  background:#fff;
+  border:1px solid var(--hs-line);
+  border-radius:14px;
+  box-shadow:var(--hs-shadow-sm);
+  flex-wrap:wrap;
+  row-gap:8px;
+}
+.flex.shrink-0.rounded-lg.border.border-slate-200.bg-white.p-1.text-sm{
+  border:none;
+  background:rgb(241 245 249 / .6);
+  padding:4px;
+  gap:2px;
+  border-radius:11px;
+}
+.flex.shrink-0.rounded-lg.border.border-slate-200.bg-white.p-1.text-sm button{
+  transition:background-color .15s,color .15s,box-shadow .15s;
+}
+.flex.shrink-0.rounded-lg.border.border-slate-200.bg-white.p-1.text-sm button.bg-brand-blue{
+  box-shadow:var(--hs-shadow-sm);
+}
+
+/* ── Error banner ("Couldn't load jobs…") ─────────────────────────────
+   A touch more presence (icon + shadow) instead of a flat inline strip, and
+   a proper hover state on Retry so it doesn't read as plain underlined text
+   floating in a colored box. */
+.flex.items-center.justify-between.rounded-xl.border-red-200.bg-red-50{
+  box-shadow:var(--hs-shadow-sm);
+  padding:14px 16px;
+  border-radius:12px;
+}
+.flex.items-center.justify-between.rounded-xl.border-red-200.bg-red-50 button.font-semibold.underline{
+  text-decoration:none;
+  padding:5px 12px;
+  border-radius:8px;
+  background:rgba(220,38,38,.08);
+  transition:background-color .15s;
+}
+.flex.items-center.justify-between.rounded-xl.border-red-200.bg-red-50 button.font-semibold.underline:hover{
+  background:rgba(220,38,38,.16);
+}
+
+/* ── Job cards ─────────────────────────────────────────────────────────
+   Slightly stronger elevation + lift-on-hover, matching the parent app's
+   card interaction language (.cchar:hover translateY there; same idea). */
+.card{transition:transform .15s,box-shadow .15s;box-shadow:var(--hs-shadow-sm)}
+a .card:hover,.card:hover{box-shadow:var(--hs-shadow-md);transform:translateY(-2px)}
+
+/* ══════════════════════ Responsive ══════════════════════
+   The compiled app already ships component-level responsive classes
+   (flex-col/sm:flex-row, flex-wrap, overflow-x-auto). These rules extend
+   that down to real phone widths and tidy the header row, which the
+   compiled bundle leaves as a plain flex row with no breakpoint of its own. */
+
+/* Tablet: tighten the outer padding a little */
+@media (max-width:900px){
+  main.max-w-6xl{padding-left:1rem;padding-right:1rem}
+}
+
+/* Header (title + action buttons) wraps instead of squeezing */
+@media (max-width:640px){
+  main.max-w-6xl > div:first-child{
+    display:flex;flex-wrap:wrap;gap:12px;align-items:flex-start;
+  }
+  h1.text-2xl.font-bold.text-slate-900{font-size:1.35rem}
+  .btn-secondary,.btn-primary{padding:.6rem .85rem;font-size:.8rem}
+}
+
+/* Search bar goes full width above the toolbar controls (the bundle's own
+   sm:flex-row already does this at 640px — reinforced here so it also
+   applies to the tab row, which isn't part of that same flex container). */
+@media (max-width:640px){
+  .relative.max-w-md.flex-1{max-width:none;width:100%}
+  .flex.items-center.gap-3.overflow-x-auto.pb-1{
+    padding:8px;
+    -webkit-overflow-scrolling:touch;
+  }
+  .flex.shrink-0.rounded-lg.border.border-slate-200.bg-white.p-1.text-sm button{
+    padding:.4rem .6rem;font-size:.75rem;
+  }
+}
+
+/* Small phones: compact the job-card grid to a single column with tighter
+   gaps (the bundle's grid-cols-1 already applies; this only trims spacing). */
+@media (max-width:420px){
+  main.max-w-6xl{padding-top:1.1rem}
+  .grid.grid-cols-1.gap-4{gap:.75rem}
+}
+
+@media (prefers-reduced-motion: reduce){
+  .card,.card:hover,a .card:hover{transition:none;transform:none}
+}
