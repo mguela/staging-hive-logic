@@ -19,7 +19,7 @@
  * monitor_my_status poll, so "is this person running current code" is a
  * question the database can answer. Do not hand-edit it -- run
  * `node scripts/stamp-page-build.mjs`. */
-var HL_PAGE_BUILD = '8b4b6494d1507187';
+var HL_PAGE_BUILD = '3f8efd46b0691e67';
 </script>
 <script>
 (function () { // HL_FETCH_DEDUPE_V1 — single wrapper: GET /api/ dedupe + 60s cache + write-invalidate
@@ -6218,6 +6218,57 @@ function ninvSave(){ var amt = parseFloat(document.getElementById('ninv-amt').va
 
   <script>
   (function(){
+    // ---------------------------------------------------------------------
+    // Monitor design tokens (2026-08-25). One source of truth for the
+    // Monitor module's own color values -- the ones that don't already
+    // have a semantic var(--x) in the app's global theme (badges, chips,
+    // category colors). This mirrors the VOIP_UI pattern already proven in
+    // this codebase (public/hiveconnect/voip-panel.js) -- Monitor gets its
+    // own copy scoped to this module, not a site-wide framework swap.
+    //
+    // Style guide for anyone extending Monitor:
+    //   - Text/border colors that should respect light/dark theme
+    //     (green/red/amber/mut/line/ink) stay on the app's global
+    //     var(--green) etc. -- do NOT hardcode a hex for those, it would
+    //     silently break dark mode.
+    //   - MON_UI is for values with no existing semantic var: stat-card
+    //     icon chips, whitelist category colors, agent-version badges,
+    //     pairing/installation-status badges.
+    //   - Card shell: <div class="card"> is the app-wide container: white
+    //     bg, rounded corners, border, shadow -- reuse it, don't
+    //     reinvent a card style per component.
+    //   - Icon chips: 32x32px, 9px radius, colored bg + colored icon,
+    //     see any dashboard stat card for the exact pattern.
+    // ---------------------------------------------------------------------
+    window.MON_UI = window.MON_UI || {
+      chipBlue: '#3b6fd6', chipBlueBg: '#eaf0fd',
+      chipPurple: '#7a5bc9', chipPurpleBg: '#efe9fb',
+      chipOrange: '#c9862e', chipOrangeBg: '#fbeee0',
+      // App whitelist categories (Phase 5) -- one definition shared by the
+      // Whitelist modal and anywhere else a category needs a color.
+      category: {
+        productive: { color: '#1B7A50', bg: '#e6f2ec' },
+        neutral: { color: '#5d657b', bg: '#f0f1f6' },
+        unproductive: { color: '#c65b4e', bg: '#faeeec' },
+      },
+      // Desktop agent build-version badge (roster tables).
+      version: {
+        current: { color: '#1B7A50', bg: '#e6f2ec' },
+        stale: { color: '#9a5b12', bg: '#fdf0e3' },
+        unknown: { color: '#59718a', bg: '#e9eff4' },
+      },
+      // Pairing / installation status (Settings roster).
+      pairing: {
+        paired: { color: '#1B7A50', bg: '#e6f2ec' },
+        not_installed: { color: '#8b92a8', bg: '#f0f1f6' },
+        not_paired: { color: '#b8791f', bg: '#fdf3e2' },
+      },
+      // Activity-level bucket (dashboard roster + real-time bar).
+      activity: {
+        high: '#1B7A50', medium: '#b8791f', low: '#c65b4e', none: '#c7cfdb',
+      },
+    };
+
     var monTimerInterval = null;
     var monLastSession = null;
     var MON_EOD_DRAFT_KEY = 'hl_mon_eod_draft';
@@ -6689,7 +6740,7 @@ function devTodoLoad(){
             : (vState === 'current' ? 'Running the current build.' : '');
         var actLevel = p.activityLevel;
         var actLabel = actLevel == null ? '—' : (actLevel >= 66 ? 'High' : actLevel >= 26 ? 'Medium' : actLevel > 0 ? 'Low' : 'None');
-        var actColor = actLevel == null ? '#c7cfdb' : (actLevel >= 66 ? 'var(--green)' : actLevel >= 26 ? 'var(--amber)' : '#c65b4e');
+        var actColor = actLevel == null ? MON_UI.activity.none : (actLevel >= 66 ? MON_UI.activity.high : actLevel >= 26 ? MON_UI.activity.medium : MON_UI.activity.low);
         var segs = 5, filled = actLevel == null ? 0 : Math.max(0, Math.min(segs, Math.round((actLevel/100)*segs)));
         var bar = '<span style="display:inline-flex;gap:2px;vertical-align:middle;margin-right:6px">' + Array.from({length:segs}).map(function(_, i){
           return '<span style="width:8px;height:8px;border-radius:2px;background:' + (i < filled ? actColor : '#e3e5ec') + '"></span>';
@@ -26179,9 +26230,9 @@ window.hlMonitorSettingsOpen = function(){
     var rosterTh = function(label){ return '<th style="padding:6px 8px;font-size:9px;color:#8b92a8;font-weight:800;letter-spacing:.05em;text-transform:uppercase;text-align:left;white-space:nowrap">'+label+'</th>'; };
     var rosterRows = roster.length ? roster.map(function(p){
       var on = !!p.monitoringEnabled;
-      var pairLabel = p.status==='active' ? 'Paired' : (p.status==='not_installed' ? 'Not installed yet' : 'Not paired');
-      var pairColor = p.status==='active' ? '#1B7A50' : (p.status==='not_installed' ? '#8b92a8' : '#b8791f');
-      var pairBg = p.status==='active' ? '#e6f2ec' : (p.status==='not_installed' ? '#f0f1f6' : '#fdf3e2');
+      var pairKey = p.status==='active' ? 'paired' : (p.status==='not_installed' ? 'not_installed' : 'not_paired');
+      var pairLabel = pairKey==='paired' ? 'Paired' : (pairKey==='not_installed' ? 'Not installed yet' : 'Not paired');
+      var pairColor = MON_UI.pairing[pairKey].color, pairBg = MON_UI.pairing[pairKey].bg;
       return '<tr class="hlmon-roster-row" data-name="'+(p.name||'').toLowerCase().replace(/"/g,'&quot;')+'" style="border-top:1px solid #e3e5ec">'
         + '<td style="padding:8px;font-weight:800;font-size:11.5px;white-space:nowrap">'+p.name+'</td>'
         + '<td style="padding:8px;white-space:nowrap"><span style="display:inline-flex;align-items:center;gap:5px;font-size:10px;font-weight:700;color:'+(p.online?'#1B7A50':'#8b92a8')+'"><span style="width:6px;height:6px;border-radius:50%;background:'+(p.online?'#1B7A50':'#c7cfdb')+'"></span>'+(p.online?'Online':'Offline')+'</span></td>'
@@ -26212,11 +26263,8 @@ window.hlMonitorRosterFilter = function(q){
 // sort (Unproductive first -- the rows someone is most likely checking)
 // + a capped-height scrolling list, same pattern as the roster above.
 var MON_CATEGORY_ORDER = { unproductive: 0, neutral: 1, productive: 2 };
-var MON_CAT_COLORS = {
-  productive: { color: '#1B7A50', bg: '#e6f2ec' },
-  neutral: { color: '#5d657b', bg: '#f0f1f6' },
-  unproductive: { color: '#c65b4e', bg: '#faeeec' },
-};
+// Colors come from MON_UI.category (public/index.html's Monitor dashboard
+// script) -- one definition shared by the dashboard and this modal.
 window.__hlMonWhitelistCategory = 'all';
 window.hlMonitorWhitelistOpen = function(){
   return hlRequireSession(async function(sess){
@@ -26253,7 +26301,7 @@ function hlMonitorWhitelistRenderTabs(){
   var active = window.__hlMonWhitelistCategory || 'all';
   el.innerHTML = cats.map(function(pair){
     var isOn = pair[0] === active;
-    return '<button onclick="hlMonitorWhitelistSetCategory(\''+pair[0]+'\')" style="border:none;border-radius:7px;padding:6px 12px;font-size:10px;font-weight:800;cursor:pointer;font-family:Montserrat;background:'+(isOn?'#eaf0fd':'transparent')+';color:'+(isOn?'#3b6fd6':'#5d657b')+'">'+pair[1]+'</button>';
+    return '<button onclick="hlMonitorWhitelistSetCategory(\''+pair[0]+'\')" style="border:none;border-radius:7px;padding:6px 12px;font-size:10px;font-weight:800;cursor:pointer;font-family:Montserrat;background:'+(isOn?MON_UI.chipBlueBg:'transparent')+';color:'+(isOn?MON_UI.chipBlue:'#5d657b')+'">'+pair[1]+'</button>';
   }).join('');
 }
 window.hlMonitorWhitelistSetCategory = function(cat){
@@ -26285,7 +26333,7 @@ function hlMonitorWhitelistRender(rules){
   var rows = rules.map(function(rule){
     return '<tr style="border-top:1px solid #e3e5ec">'
       + '<td style="padding:8px;white-space:nowrap"><span style="display:flex;align-items:center;gap:9px;font-weight:700;font-size:12px">'+hlMonAppAvatar(rule.appName)+(window.esc?esc(rule.appName):rule.appName)+'</span></td>'
-      + '<td style="padding:8px"><select onchange="hlMonitorAppRuleSet(\''+rule.appName.replace(/'/g,"\\'")+'\', this.value)" style="'+_inp+';width:auto;padding:5px 9px;font-size:10px;background:'+(MON_CAT_COLORS[rule.category]||MON_CAT_COLORS.neutral).bg+';color:'+(MON_CAT_COLORS[rule.category]||MON_CAT_COLORS.neutral).color+';border:none;font-weight:800">'+catOpts(rule.category)+'</select></td>'
+      + '<td style="padding:8px"><select onchange="hlMonitorAppRuleSet(\''+rule.appName.replace(/'/g,"\\'")+'\', this.value)" style="'+_inp+';width:auto;padding:5px 9px;font-size:10px;background:'+(MON_UI.category[rule.category]||MON_UI.category.neutral).bg+';color:'+(MON_UI.category[rule.category]||MON_UI.category.neutral).color+';border:none;font-weight:800">'+catOpts(rule.category)+'</select></td>'
       + '<td style="padding:8px;text-align:right"><button onclick="hlMonitorAppRuleDelete(\''+rule.id+'\')" title="Remove rule" style="border:1px solid #f0cec7;background:#faeeec;color:#c65b4e;font-weight:900;cursor:pointer;font-size:12px;width:26px;height:26px;border-radius:7px">🗑</button></td>'
       + '</tr>';
   }).join('');
