@@ -19,7 +19,11 @@
  * monitor_my_status poll, so "is this person running current code" is a
  * question the database can answer. Do not hand-edit it -- run
  * `node scripts/stamp-page-build.mjs`. */
+<<<<<<< HEAD
 var HL_PAGE_BUILD = 'cb05082762041abc';
+=======
+var HL_PAGE_BUILD = '92af97d88765eb17';
+>>>>>>> main
 </script>
 <script>
 (function () { // HL_FETCH_DEDUPE_V1 — single wrapper: GET /api/ dedupe + 60s cache + write-invalidate
@@ -1121,6 +1125,8 @@ var HL_PAGE_BUILD = 'cb05082762041abc';
   .ef-int-t b{color:#59718a;font-family:var(--mono)}
   .ef-depbox{border:1px solid var(--line);border-radius:11px;padding:12px;margin-top:10px;background:var(--canvas)}
   .ef-depbox h5{font-size:10.5px;font-weight:800;margin-bottom:8px}
+  @keyframes efFlash{0%,100%{box-shadow:none}30%,70%{box-shadow:0 0 0 4px rgba(198,91,78,.35)}}
+  .ef-flash{animation:efFlash 1.6s ease-in-out}
   .ef-tgl{display:flex;justify-content:space-between;align-items:center;font-size:10.5px;font-weight:700;color:var(--slate);padding:4px 0}
   .ef-rev{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;padding:6px 20px 20px}
   @media(max-width:900px){.ef-rev{grid-template-columns:1fr}}
@@ -1456,6 +1462,14 @@ var HL_PAGE_BUILD = 'cb05082762041abc';
   .nl-body{padding:18px 22px 6px;max-height:70vh;overflow-y:auto;overflow-x:hidden}
   .nl-body,.nl-body *{min-width:0}
   .fwrap{display:grid;grid-template-columns:1fr 340px;gap:14px;align-items:start}
+  /* jovie folloso's lead card (2026-08-24): the Real Lead modal (#rlv-lead-modal)
+     reuses .nl/.nl-body/.fwrap from the New Lead modal above but only ever
+     renders ONE .sec into .fwrap -- it has no 340px sidebar content. Grid still
+     reserved that second column at every width, so the visible fields got
+     squeezed into a narrow strip with a large empty gap beside them. This modal
+     is single-column by design, not just on narrow screens, so it needs its own
+     override rather than relying on the max-width:900px rule below. */
+  #rlv-lead-modal .fwrap{grid-template-columns:1fr}
   @media (max-width:900px){ .nlv{padding:14px 8px} .fwrap{grid-template-columns:1fr} }
   .nl-foot{display:flex;justify-content:space-between;align-items:center;padding:13px 24px;background:#fff;border-top:1px solid var(--line)}
   .nl-foot .d{font-size:11px;color:var(--mut);font-weight:700}
@@ -3723,7 +3737,23 @@ function efPaymentScheduleForApi(){
 }
 function efRemoteCreate(silent){
   var sched = efPaymentScheduleForApi();
-  if (!sched){ if (!silent) chirpToast('⚠ Add a deposit or a payment schedule before this can become a real estimate — approval requires exactly one deposit row.'); return Promise.resolve(null); }
+  if (!sched){
+    if (!silent) {
+      chirpToast('⚠ Add a deposit or a payment schedule before this can become a real estimate — approval requires exactly one deposit row.');
+      // 2026-08-24: the toast named the fix but never pointed at it -- "Add a
+      // deposit" told nobody WHERE, and the actual control (efPayBlock's
+      // payMode==='none' case) is two small text links at the bottom of a
+      // long totals sidebar, easy to miss entirely. Scroll to and flash it so
+      // the warning and the fix are connected instead of two unrelated facts.
+      var gate=document.getElementById('ef-paygate');
+      if (gate) {
+        gate.scrollIntoView({behavior:'smooth',block:'center'});
+        gate.classList.add('ef-flash');
+        setTimeout(function(){ gate.classList.remove('ef-flash'); }, 1600);
+      }
+    }
+    return Promise.resolve(null);
+  }
   var cl = null; CLIENTDB.forEach(function(c){ if (c.id === EST.client) cl = c; });
   // sourceLeadId is set when the builder was opened from a lead card, so the
   // estimate records which lead produced it and the card can follow along.
@@ -23464,6 +23494,23 @@ var ESTLIST=[
  {num:'#1395',title:'Deck Repair',client:'Spilka, Ed',cid:null,prop:'309 Webbs Hill Road, Stamford, CT 06903',created:'Jun 25, 2026',cd:20260625,st:'aw',stl:'Awaiting response',amt:5689.73},
  {num:'#1390',title:'Kitchen remodel',client:'Okafor, David',cid:'c2',prop:'41 Guard Hill Rd, Bedford, NY 10506',created:'Jun 20, 2026',cd:20260620,st:'ap',stl:'Approved',amt:64200}
 ];
+// 2026-08-24: restore any local-only estimate saves across a refresh -- see
+// efSave()'s header comment. ESTLIST itself is never persisted (it's reset to
+// the hardcoded seed above on every load), so without this a locally-saved
+// estimate looked saved right up until the next reload, then quietly
+// disappeared. efLocalDraftsLoad() is defined further down with the rest of
+// the local-draft machinery, but functions in this script are hoisted, so
+// it's safe to call here before that point in the file.
+(function(){
+  try{
+    var drafts=efLocalDraftsLoad();
+    var already={};ESTLIST.forEach(function(e){if(e.local)already[e.num]=true;});
+    Object.keys(drafts).forEach(function(key){
+      if(already[key])return;
+      if(drafts[key]&&drafts[key].summary)ESTLIST.unshift(drafts[key].summary);
+    });
+  }catch(e){}
+})();
 var RFQS=[
  {type:'RFQ',to:'Marco Plumbing',kind:'sub',scope:'Plumbing &#8212; basement bath',est:'EST-2475',status:'quoted',note:'quoted $3,400 in 26h &#183; 4% under budget',when:'2d'},
  {type:'RFQ',to:'Elite Tile',kind:'sub',scope:'Tile & waterproofing',est:'EST-2475',status:'viewed',note:'viewed, no reply day 2 &#8594; nudge auto-sent 9:02a',when:'2d'},
@@ -23720,23 +23767,100 @@ function efMenu(id){var it=eBy(id);var was=it.menu;EST.items.forEach(function(x)
 function efInt(id){var it=eBy(id);it.intOpen=!it.intOpen;efRender();}
 function efAcc2(id,k){var it=eBy(id);it.acc=(it.acc===k?null:k);efRender();}
 function efSchedule(){egRender();document.getElementById('egv').classList.add('open');}
-function efSave(){
-  var cl=null;CLIENTDB.forEach(function(c){if(c.id===EST.client)cl=c;});
+// 2026-08-10: created label was hardcoded to 'Jul 13, 2026'/20260713
+// regardless of when the estimate was actually saved -- found while building
+// CSV Import, which needed a real "today" stamp and would have inherited the
+// same bug if copied verbatim.
+function efSaveSummary(isReal){
   var t=efTotals();
   var cl2=null;CLIENTDB.forEach(function(c){if(c.id===EST.client)cl2=c;});
-  // 2026-08-10: was hardcoded to 'Jul 13, 2026'/20260713 regardless of when
-  // the estimate was actually saved -- found while building CSV Import,
-  // which needed a real "today" stamp and would have inherited the same bug
-  // if copied verbatim.
   var _efToday=efTodayParts();
-  ESTLIST.unshift({num:'#'+EST.num.replace('EST-',''),title:EST.title||'Untitled estimate',client:cl2?cl2.n:'&#8212;',cid:EST.client,prop:cl2?(cl2.a+', '+cl2.t):'&#8212;',created:_efToday.label,cd:_efToday.cd,st:EST.status==='sent'?'aw':'dr',stl:EST.status==='sent'?'Awaiting response':'Draft',amt:Math.round(t.total),local:true});
+  return {num:'#'+EST.num.replace('EST-',''),title:EST.title||'Untitled estimate',client:cl2?cl2.n:'&#8212;',cid:EST.client,prop:cl2?(cl2.a+', '+cl2.t):'&#8212;',created:_efToday.label,cd:_efToday.cd,st:EST.status==='sent'?'aw':'dr',stl:EST.status==='sent'?'Awaiting response':'Draft',amt:Math.round(t.total),local:!isReal};
+}
+function efSaveListUpdate(summary){
+  // 2026-08-24: re-saving the SAME estimate (e.g. Save -> reopen a local
+  // draft -> edit -> Save again) used to always unshift a fresh row, leaving
+  // the old one still sitting in the list -- a visible duplicate of the same
+  // #2483. Drop any existing row for this estimate number first, so a
+  // re-save replaces it in place instead of piling up alongside it.
+  ESTLIST=ESTLIST.filter(function(e){return e.num!==summary.num;});
+  ESTLIST.unshift(summary);
   try{localStorage.removeItem('hl_est_draft');}catch(e){}
-  /* Reina live wiring: this deployment doesn't sync Jobber Quotes into Supabase yet (only
-     Clients/Jobs/Invoices are), so there's no real backend to save this estimate to here --
-     the old toast falsely claimed "synced to QuickBooks", which was never true either. Being
-     upfront that this save is local-only for now instead of faking a round-trip (Law 1). */
-  chirpToast('&#10003; '+EST.num+' saved locally &#8212; Jobber Quotes sync isn’t wired in this deployment yet, so this isn’t saved to a real backend.');
-  showView('estimates');efListRender();}
+  showView('estimates');efListRender();
+}
+/* 2026-08-24: jovie folloso's #2483 -- a local-only estimate could not be
+   reopened (clicking it always built a blank new one via estFormNew(null))
+   and vanished on refresh (ESTLIST is a plain in-memory array, reset to its
+   hardcoded seed on every page load). Local drafts now persist their full
+   EST snapshot -- not just the ESTLIST summary row -- keyed by the same
+   '#1234' key the list already uses, in localStorage under
+   hl_est_local_drafts. Rehydrated back into ESTLIST right after it's
+   declared (see below), and reopened for real by efOpenLocalDraft() instead
+   of the old blank-slate fallback. Editing an already-real (synced) estimate
+   is unchanged and stays out of scope -- there is no update-in-place route
+   to the server for any resource yet, not just estimates. */
+function efLocalDraftsLoad(){
+  try{ return JSON.parse(localStorage.getItem('hl_est_local_drafts')||'{}'); }catch(e){ return {}; }
+}
+function efLocalDraftsSave(map){
+  try{ localStorage.setItem('hl_est_local_drafts',JSON.stringify(map)); }catch(e){}
+}
+function efLocalDraftKey(estNum){ return '#'+String(estNum||'').replace('EST-',''); }
+function efOpenLocalDraft(key){
+  var rec=efLocalDraftsLoad()[key];
+  if(!rec||!rec.est){ chirpToast('&#9888; That local draft could not be found — it may have been cleared.'); return; }
+  EST=rec.est;
+  efEnsureRealClient(EST.client);
+  eChain();showView('estform');efRender();window.scrollTo(0,0);
+}
+/* 2026-08-24: this used to be local-only always, with a toast admitting
+   "Jobber Quotes sync isn't wired" -- that framing was backwards. The team's
+   direction is to ditch Jobber write-back entirely, not build it; the real
+   backend this estimate belongs in is HiveLogic's own native Estimates engine
+   (efRemoteCreate/hlEstApi, same one "Save & send to client" already uses for
+   real). So Save now calls that same path instead of staying fake. Guards
+   against EST.remoteId the same way efSendReal() does -- there is no
+   update-in-place route yet, so a second Save on an already-real estimate
+   must not POST another create and produce a duplicate record. */
+function efSave(){
+  if (EST.remoteId){
+    chirpToast('&#10003; '+EST.num+' — already a real record; edits since then aren’t re-synced yet.');
+    efSaveListUpdate(efSaveSummary(true));
+    return;
+  }
+  // Captured before efRemoteCreate() runs -- on success it overwrites
+  // EST.num with the server's own estimate number, which would otherwise
+  // make the local-draft cleanup below look for the wrong key.
+  var priorLocalKey=efLocalDraftKey(EST.num);
+  efRemoteCreate().then(function(est){
+    var drafts=efLocalDraftsLoad();
+    if (est){
+      // efRemoteCreate() already toasts the specific reason when it returns
+      // null (missing payment schedule, server error, network error) -- don't
+      // stack a second, vaguer message on top of that honest one.
+      chirpToast('&#10003; '+EST.num+' saved — a real record now, not a local-only draft.');
+      delete drafts[priorLocalKey];
+      efLocalDraftsSave(drafts);
+      efSaveListUpdate(efSaveSummary(true));
+      return;
+    }
+    var summary=efSaveSummary(false);
+    // 2026-08-24: jovie folloso's name turned into the "-" placeholder on
+    // re-save after reopening the draft -- CLIENTDB hadn't finished loading
+    // this client yet at that exact moment (efOpenLocalDraft() renders the
+    // builder synchronously; the client list can still be loading in the
+    // background). Rather than overwrite a name we already knew was real
+    // with a blank placeholder, keep the prior save's name when the fresh
+    // lookup comes back empty.
+    var prior=drafts[priorLocalKey];
+    if(summary.client==='&#8212;'&&prior&&prior.summary&&prior.summary.client&&prior.summary.client!=='&#8212;'){
+      summary.client=prior.summary.client;
+    }
+    drafts[priorLocalKey]={est:JSON.parse(JSON.stringify(EST)),summary:summary};
+    efLocalDraftsSave(drafts);
+    efSaveListUpdate(summary);
+  });
+}
 /* ---- form render ---- */
 function efPaySched(){
   efVersionGuard();
@@ -23809,7 +23933,13 @@ function efPayBlock(t){
       +'</div>'+setBox;
     return h;
   }
-  return '<div class="ef-trow"><span class="lnk2" onclick="efVersionGuard();EST.payMode=\'deposit\';efRender()">Add deposit</span><span class="lnk2" onclick="efPaySched()">Add payment schedule</span></div>';
+  // 2026-08-24: this used to be two plain text links with no visual weight,
+  // easy to miss at the bottom of a long totals sidebar. Save silently
+  // refuses to create a real record without one of these -- give it the
+  // same prominence as the warning it triggers.
+  return '<div class="ef-depbox" id="ef-paygate" style="border:2px dashed #C65B4E;background:#fdf1ef"><h5 style="color:#c65b4e">&#9888; No deposit or payment schedule yet</h5>'
+    +'<div style="font-size:10.5px;color:var(--slate);font-weight:600;margin-bottom:8px">Required before this estimate can be saved as a real, durable record.</div>'
+    +'<div class="ef-trow"><span class="lnk2" onclick="efVersionGuard();EST.payMode=\'deposit\';efRender()">+ Add deposit</span><span class="lnk2" onclick="efPaySched()">+ Add payment schedule</span></div></div>';
 }
 function efAddAddr(cid){var v=(document.getElementById('ef-newaddr').value||'').trim();if(!v){chirpToast('&#9888; Type the address first');return;}
   var c=null;CLIENTDB.forEach(function(x){if(x.id===cid)c=x;});if(!c)return;
@@ -24171,7 +24301,7 @@ function efListTable(){
    +'<th style="text-align:right">TOTAL</th></tr></thead><tbody>';
   rows.forEach(function(e){
     var meta=EQ_STATUS_META[e.status]||{label:String(e.status||'unknown').toUpperCase(),cls:'dr'};
-    h+='<tr class="er">'
+    h+='<tr class="er" data-key="'+esc(e.key)+'">'
      +'<td onclick="event.stopPropagation()"><input type="checkbox" class="efl-cb-real" '+(EQ_SELECTED[e.key]?'checked':'')+' onclick="event.stopPropagation();efRowToggle(\''+e.key+'\',this.checked)"></td>'
      +'<td style="font-weight:800">'+esc(e.client)+(e.isLocal?' <span class="ef-vchip edit">local draft</span>':'')+'</td>'
      +'<td><div class="efl-num">'+esc(e.num)+'</div><div class="efl-ttl">'+esc(e.title)+'</div></td>'
@@ -25908,15 +26038,47 @@ window.addEventListener('hl:signed-in', function(){ setTimeout(hlLoadRealNotifs,
 document.addEventListener('click',function(e){
   var tr=e.target.closest('#efl-tb tr.er'); if(!tr) return;
   e.stopPropagation(); e.preventDefault();
+  // 2026-08-24: pre-existing since this repo's first commit -- td[6] does
+  // not exist (the row has 6 cells, indices 0-5: checkbox/client/estimate/
+  // created/status/total) and there is no property-address column anymore,
+  // so td[6].innerText threw a TypeError on every single row click, local or
+  // real, aborting this whole handler before it ever reached hlModal(). That
+  // is the actual reason nothing appeared to open at all.
   var td=tr.querySelectorAll('td');
   var client=td[1].innerText.trim(), num=(tr.querySelector('.efl-num')||{}).innerText||'', ttl=(tr.querySelector('.efl-ttl')||{}).innerText||'';
-  var prop=td[3].innerText.trim(), created=td[4].innerText.trim(), st=td[5].innerText.trim(), amt=td[6].innerText.trim();
+  var created=td[3].innerText.trim(), st=td[4].innerText.trim(), amt=td[5].innerText.trim();
   var orig=tr.getAttribute('onclick')||'';
   var cidm=orig.match(/openClient\('([^']+)'\)/)||orig.match(/estFormNew\('([^']+)'/);
   var cid=cidm?cidm[1]:null;
-  window._hlEstEdit=function(){ document.getElementById('hlmodal').remove(); try{ if(orig.indexOf('estFormNew')>-1){ (new Function(orig))(); } else { estFormNew(cid); } }catch(x){ try{estFormNew(null);}catch(y){} } };
+  // 2026-08-24: a local-only draft (jovie folloso's #2483) has real, richer
+  // data sitting in hl_est_local_drafts (see efSave()) -- reopen THAT instead
+  // of falling through to estFormNew(null), which always built a blank
+  // estimate and threw the original one away. Real (already-synced) rows
+  // still have no update-in-place route on the server, so they keep the
+  // existing behaviour below unchanged -- that is a separate, bigger fix.
+  var rowKey=tr.getAttribute('data-key')||'';
+  var isLocalRow=rowKey.indexOf('local:')===0;
+  window._hlEstEdit=isLocalRow
+    ? function(){ document.getElementById('hlmodal').remove(); efOpenLocalDraft(rowKey.slice(6)); }
+    : function(){ document.getElementById('hlmodal').remove(); try{ if(orig.indexOf('estFormNew')>-1){ (new Function(orig))(); } else { estFormNew(cid); } }catch(x){ try{estFormNew(null);}catch(y){} } };
   window._hlEstClient=function(){ document.getElementById('hlmodal').remove(); if(cid&&window.openClient){openClient(cid)}else{hlSay('👤 Client record')} };
   window._hlEstPbk=function(){ document.getElementById('hlmodal').remove(); showView('pbkx'); };
+  // 2026-08-24: no way to get rid of a local-only draft that's never going
+  // anywhere -- only ever offered "Edit" or "Client record". Scoped to local
+  // rows specifically: a real (synced) estimate is a server record, and
+  // deleting one is a materially different, bigger operation than clearing a
+  // draft that only ever existed in this browser's localStorage.
+  var deleteBtn=isLocalRow
+    ? '<button onclick="_hlEstDelete()" style="padding:11px 16px;border:1px solid #c65b4e;border-radius:8px;background:#fff;color:#c65b4e;font-weight:900;font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;cursor:pointer;font-family:\'Montserrat\',sans-serif">&#128465; Delete draft</button>'
+    : '';
+  window._hlEstDelete=function(){
+    if(!window.confirm((ttl?ttl+' ':'')+num+' will be permanently deleted. This cannot be undone.')) return;
+    var drafts=efLocalDraftsLoad(); delete drafts[rowKey.slice(6)]; efLocalDraftsSave(drafts);
+    ESTLIST=ESTLIST.filter(function(e){return e.num!==rowKey.slice(6);});
+    document.getElementById('hlmodal').remove();
+    chirpToast('&#10003; '+num+' deleted.');
+    showView('estimates');efListRender();
+  };
   var val=parseFloat(String(amt).replace(/[^0-9.]/g,''))||0;
   var _f=function(n){return '$'+Math.round(n).toLocaleString()};
   var _tr=function(tag,pct,amount,who){return '<div style="padding:8px 0;border-bottom:1px solid #26324a"><div style="display:flex;align-items:baseline;gap:8px"><span style="font-family:\'JetBrains Mono\',monospace;font-size:8px;font-weight:800;color:#f0c987;letter-spacing:.08em">'+tag+'</span><span style="font-size:11px;font-weight:800;color:#fff">'+pct+'</span><span style="margin-left:auto;font-family:\'JetBrains Mono\',monospace;font-size:12px;font-weight:900;color:#7fd4a8">'+amount+'</span></div><div style="font-size:9.5px;font-weight:600;color:#9fb0c8;line-height:1.5;margin-top:3px">'+who+'</div></div>'};
@@ -25928,7 +26090,7 @@ document.addEventListener('click',function(e){
    +'<div style="font-size:9px;font-weight:600;color:#9fb0c8;line-height:1.55;margin-top:9px">Locks with the Proposal Baseline at signature and becomes the job\'s <b style=\'color:#fff\'>live Payment Breakdown</b> — every actual is checked against this plan; any deviation flags a DISCREPANCY the moment it posts. In the coded build the tranches and payout mapping are editable per-activity right here in the builder.</div>'
    +'<button onclick="_hlEstPbk()" style="width:100%;margin-top:10px;padding:9px;border:1px solid #59718a;border-radius:8px;background:transparent;color:#8ba4c4;font-weight:800;font-size:9.5px;letter-spacing:.06em;text-transform:uppercase;cursor:pointer;font-family:\'Montserrat\',sans-serif">💵 See a live job breakdown — Payment Breakdowns →</button></div>';
   hlModal('📄 '+num+' — '+(ttl||'Estimate'),
-   '<div style="display:flex;gap:10px;align-items:center;margin-bottom:4px"><b style="font-size:16px;color:#161e2e">'+client+'</b><span style="margin-left:auto;font-family:\'JetBrains Mono\',monospace;font-size:16px;font-weight:900;color:#59718a">'+amt+'</span></div><div style="font-size:11px;color:#5d657b;font-weight:600;margin-bottom:12px">'+prop+'</div><div style="'+_row+'">Status<b style="margin-left:auto">'+st+'</b></div><div style="'+_row+'">Created<b style="margin-left:auto">'+created+'</b></div><div style="'+_row+';border-bottom:none">Version<b style="margin-left:auto">V1 · locked on send</b></div>'+pbBlock+'<div style="display:flex;gap:9px;margin-top:14px"><button onclick="_hlEstEdit()" style="flex:1;padding:11px;border:none;border-radius:8px;background:#59718a;color:#fff;font-weight:900;font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;cursor:pointer;font-family:\'Montserrat\',sans-serif">✏️ Edit in builder</button><button onclick="_hlEstClient()" style="flex:1;padding:11px;border:1px solid #59718a;border-radius:8px;background:#fff;color:#59718a;font-weight:900;font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;cursor:pointer;font-family:\'Montserrat\',sans-serif">👤 Client record</button></div>');
+   '<div style="display:flex;gap:10px;align-items:center;margin-bottom:4px"><b style="font-size:16px;color:#161e2e">'+client+'</b><span style="margin-left:auto;font-family:\'JetBrains Mono\',monospace;font-size:16px;font-weight:900;color:#59718a">'+amt+'</span></div><div style="'+_row+'">Status<b style="margin-left:auto">'+st+'</b></div><div style="'+_row+'">Created<b style="margin-left:auto">'+created+'</b></div><div style="'+_row+';border-bottom:none">Version<b style="margin-left:auto">V1 · locked on send</b></div>'+pbBlock+'<div style="display:flex;gap:9px;margin-top:14px"><button onclick="_hlEstEdit()" style="flex:1;padding:11px;border:none;border-radius:8px;background:#59718a;color:#fff;font-weight:900;font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;cursor:pointer;font-family:\'Montserrat\',sans-serif">✏️ Edit in builder</button><button onclick="_hlEstClient()" style="flex:1;padding:11px;border:1px solid #59718a;border-radius:8px;background:#fff;color:#59718a;font-weight:900;font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;cursor:pointer;font-family:\'Montserrat\',sans-serif">👤 Client record</button>'+deleteBtn+'</div>');
 },true);
 function hl63Wire(view,target,label){
   var v=document.getElementById('view-'+view);if(!v)return;
