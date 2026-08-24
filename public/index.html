@@ -19,7 +19,7 @@
  * monitor_my_status poll, so "is this person running current code" is a
  * question the database can answer. Do not hand-edit it -- run
  * `node scripts/stamp-page-build.mjs`. */
-var HL_PAGE_BUILD = '0598a3a264cc8829';
+var HL_PAGE_BUILD = '850139d91d034d2f';
 </script>
 <script>
 (function () { // HL_FETCH_DEDUPE_V1 — single wrapper: GET /api/ dedupe + 60s cache + write-invalidate
@@ -23472,6 +23472,23 @@ var ESTLIST=[
  {num:'#1395',title:'Deck Repair',client:'Spilka, Ed',cid:null,prop:'309 Webbs Hill Road, Stamford, CT 06903',created:'Jun 25, 2026',cd:20260625,st:'aw',stl:'Awaiting response',amt:5689.73},
  {num:'#1390',title:'Kitchen remodel',client:'Okafor, David',cid:'c2',prop:'41 Guard Hill Rd, Bedford, NY 10506',created:'Jun 20, 2026',cd:20260620,st:'ap',stl:'Approved',amt:64200}
 ];
+// 2026-08-24: restore any local-only estimate saves across a refresh -- see
+// efSave()'s header comment. ESTLIST itself is never persisted (it's reset to
+// the hardcoded seed above on every load), so without this a locally-saved
+// estimate looked saved right up until the next reload, then quietly
+// disappeared. efLocalDraftsLoad() is defined further down with the rest of
+// the local-draft machinery, but functions in this script are hoisted, so
+// it's safe to call here before that point in the file.
+(function(){
+  try{
+    var drafts=efLocalDraftsLoad();
+    var already={};ESTLIST.forEach(function(e){if(e.local)already[e.num]=true;});
+    Object.keys(drafts).forEach(function(key){
+      if(already[key])return;
+      if(drafts[key]&&drafts[key].summary)ESTLIST.unshift(drafts[key].summary);
+    });
+  }catch(e){}
+})();
 var RFQS=[
  {type:'RFQ',to:'Marco Plumbing',kind:'sub',scope:'Plumbing &#8212; basement bath',est:'EST-2475',status:'quoted',note:'quoted $3,400 in 26h &#183; 4% under budget',when:'2d'},
  {type:'RFQ',to:'Elite Tile',kind:'sub',scope:'Tile & waterproofing',est:'EST-2475',status:'viewed',note:'viewed, no reply day 2 &#8594; nudge auto-sent 9:02a',when:'2d'},
@@ -23728,17 +23745,45 @@ function efMenu(id){var it=eBy(id);var was=it.menu;EST.items.forEach(function(x)
 function efInt(id){var it=eBy(id);it.intOpen=!it.intOpen;efRender();}
 function efAcc2(id,k){var it=eBy(id);it.acc=(it.acc===k?null:k);efRender();}
 function efSchedule(){egRender();document.getElementById('egv').classList.add('open');}
-function efSaveListUpdate(isReal){
+// 2026-08-10: created label was hardcoded to 'Jul 13, 2026'/20260713
+// regardless of when the estimate was actually saved -- found while building
+// CSV Import, which needed a real "today" stamp and would have inherited the
+// same bug if copied verbatim.
+function efSaveSummary(isReal){
   var t=efTotals();
   var cl2=null;CLIENTDB.forEach(function(c){if(c.id===EST.client)cl2=c;});
-  // 2026-08-10: was hardcoded to 'Jul 13, 2026'/20260713 regardless of when
-  // the estimate was actually saved -- found while building CSV Import,
-  // which needed a real "today" stamp and would have inherited the same bug
-  // if copied verbatim.
   var _efToday=efTodayParts();
-  ESTLIST.unshift({num:'#'+EST.num.replace('EST-',''),title:EST.title||'Untitled estimate',client:cl2?cl2.n:'&#8212;',cid:EST.client,prop:cl2?(cl2.a+', '+cl2.t):'&#8212;',created:_efToday.label,cd:_efToday.cd,st:EST.status==='sent'?'aw':'dr',stl:EST.status==='sent'?'Awaiting response':'Draft',amt:Math.round(t.total),local:!isReal});
+  return {num:'#'+EST.num.replace('EST-',''),title:EST.title||'Untitled estimate',client:cl2?cl2.n:'&#8212;',cid:EST.client,prop:cl2?(cl2.a+', '+cl2.t):'&#8212;',created:_efToday.label,cd:_efToday.cd,st:EST.status==='sent'?'aw':'dr',stl:EST.status==='sent'?'Awaiting response':'Draft',amt:Math.round(t.total),local:!isReal};
+}
+function efSaveListUpdate(isReal){
+  ESTLIST.unshift(efSaveSummary(isReal));
   try{localStorage.removeItem('hl_est_draft');}catch(e){}
   showView('estimates');efListRender();
+}
+/* 2026-08-24: jovie folloso's #2483 -- a local-only estimate could not be
+   reopened (clicking it always built a blank new one via estFormNew(null))
+   and vanished on refresh (ESTLIST is a plain in-memory array, reset to its
+   hardcoded seed on every page load). Local drafts now persist their full
+   EST snapshot -- not just the ESTLIST summary row -- keyed by the same
+   '#1234' key the list already uses, in localStorage under
+   hl_est_local_drafts. Rehydrated back into ESTLIST right after it's
+   declared (see below), and reopened for real by efOpenLocalDraft() instead
+   of the old blank-slate fallback. Editing an already-real (synced) estimate
+   is unchanged and stays out of scope -- there is no update-in-place route
+   to the server for any resource yet, not just estimates. */
+function efLocalDraftsLoad(){
+  try{ return JSON.parse(localStorage.getItem('hl_est_local_drafts')||'{}'); }catch(e){ return {}; }
+}
+function efLocalDraftsSave(map){
+  try{ localStorage.setItem('hl_est_local_drafts',JSON.stringify(map)); }catch(e){}
+}
+function efLocalDraftKey(estNum){ return '#'+String(estNum||'').replace('EST-',''); }
+function efOpenLocalDraft(key){
+  var rec=efLocalDraftsLoad()[key];
+  if(!rec||!rec.est){ chirpToast('&#9888; That local draft could not be found — it may have been cleared.'); return; }
+  EST=rec.est;
+  efEnsureRealClient(EST.client);
+  eChain();showView('estform');efRender();window.scrollTo(0,0);
 }
 /* 2026-08-24: this used to be local-only always, with a toast admitting
    "Jobber Quotes sync isn't wired" -- that framing was backwards. The team's
@@ -23755,11 +23800,22 @@ function efSave(){
     efSaveListUpdate(true);
     return;
   }
+  // Captured before efRemoteCreate() runs -- on success it overwrites
+  // EST.num with the server's own estimate number, which would otherwise
+  // make the local-draft cleanup below look for the wrong key.
+  var priorLocalKey=efLocalDraftKey(EST.num);
   efRemoteCreate().then(function(est){
-    // efRemoteCreate() already toasts the specific reason when it returns
-    // null (missing payment schedule, server error, network error) -- don't
-    // stack a second, vaguer message on top of that honest one.
-    if (est) chirpToast('&#10003; '+EST.num+' saved — a real record now, not a local-only draft.');
+    var drafts=efLocalDraftsLoad();
+    if (est){
+      // efRemoteCreate() already toasts the specific reason when it returns
+      // null (missing payment schedule, server error, network error) -- don't
+      // stack a second, vaguer message on top of that honest one.
+      chirpToast('&#10003; '+EST.num+' saved — a real record now, not a local-only draft.');
+      delete drafts[priorLocalKey];
+    } else {
+      drafts[priorLocalKey]={est:JSON.parse(JSON.stringify(EST)),summary:efSaveSummary(false)};
+    }
+    efLocalDraftsSave(drafts);
     efSaveListUpdate(!!est);
   });
 }
@@ -24197,7 +24253,7 @@ function efListTable(){
    +'<th style="text-align:right">TOTAL</th></tr></thead><tbody>';
   rows.forEach(function(e){
     var meta=EQ_STATUS_META[e.status]||{label:String(e.status||'unknown').toUpperCase(),cls:'dr'};
-    h+='<tr class="er">'
+    h+='<tr class="er" data-key="'+esc(e.key)+'">'
      +'<td onclick="event.stopPropagation()"><input type="checkbox" class="efl-cb-real" '+(EQ_SELECTED[e.key]?'checked':'')+' onclick="event.stopPropagation();efRowToggle(\''+e.key+'\',this.checked)"></td>'
      +'<td style="font-weight:800">'+esc(e.client)+(e.isLocal?' <span class="ef-vchip edit">local draft</span>':'')+'</td>'
      +'<td><div class="efl-num">'+esc(e.num)+'</div><div class="efl-ttl">'+esc(e.title)+'</div></td>'
@@ -25940,7 +25996,17 @@ document.addEventListener('click',function(e){
   var orig=tr.getAttribute('onclick')||'';
   var cidm=orig.match(/openClient\('([^']+)'\)/)||orig.match(/estFormNew\('([^']+)'/);
   var cid=cidm?cidm[1]:null;
-  window._hlEstEdit=function(){ document.getElementById('hlmodal').remove(); try{ if(orig.indexOf('estFormNew')>-1){ (new Function(orig))(); } else { estFormNew(cid); } }catch(x){ try{estFormNew(null);}catch(y){} } };
+  // 2026-08-24: a local-only draft (jovie folloso's #2483) has real, richer
+  // data sitting in hl_est_local_drafts (see efSave()) -- reopen THAT instead
+  // of falling through to estFormNew(null), which always built a blank
+  // estimate and threw the original one away. Real (already-synced) rows
+  // still have no update-in-place route on the server, so they keep the
+  // existing behaviour below unchanged -- that is a separate, bigger fix.
+  var rowKey=tr.getAttribute('data-key')||'';
+  var isLocalRow=rowKey.indexOf('local:')===0;
+  window._hlEstEdit=isLocalRow
+    ? function(){ document.getElementById('hlmodal').remove(); efOpenLocalDraft(rowKey.slice(6)); }
+    : function(){ document.getElementById('hlmodal').remove(); try{ if(orig.indexOf('estFormNew')>-1){ (new Function(orig))(); } else { estFormNew(cid); } }catch(x){ try{estFormNew(null);}catch(y){} } };
   window._hlEstClient=function(){ document.getElementById('hlmodal').remove(); if(cid&&window.openClient){openClient(cid)}else{hlSay('👤 Client record')} };
   window._hlEstPbk=function(){ document.getElementById('hlmodal').remove(); showView('pbkx'); };
   var val=parseFloat(String(amt).replace(/[^0-9.]/g,''))||0;
