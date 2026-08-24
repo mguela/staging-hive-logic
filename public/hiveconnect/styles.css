@@ -1366,6 +1366,7 @@ html[data-theme="dark"] .huddle-banner {
 .ev-body { flex: 1; display: flex; min-height: 0; }
 .ev-list { width: 380px; min-width: 320px; border-right: 1px solid var(--line); overflow-y: auto; background: var(--card); }
 .ev-loading, .ev-read-empty { padding: 40px 24px; text-align: center; color: var(--mut); font-size: 13px; }
+.ev-read-empty { flex: 1; display: flex; align-items: center; justify-content: center; background: var(--card); }
 .ev-item { display: flex; gap: 6px; padding: 12px 14px; border-bottom: 1px solid var(--line); cursor: pointer; }
 .ev-item:hover { background: var(--steel-bg); }
 .ev-item.open { background: var(--gold-soft); }

@@ -2006,6 +2006,8 @@ html[data-theme="dark"] :is(#hiveconnect-root, .hc-embed).huddle-banner {
 :is(#hiveconnect-root, .hc-embed).ev-loading,
 :is(#hiveconnect-root, .hc-embed) .ev-read-empty,
 :is(#hiveconnect-root, .hc-embed).ev-read-empty { padding: 40px 24px; text-align: center; color: var(--mut); font-size: 13px; }
+:is(#hiveconnect-root, .hc-embed) .ev-read-empty,
+:is(#hiveconnect-root, .hc-embed).ev-read-empty { flex: 1; display: flex; align-items: center; justify-content: center; background: var(--card); }
 :is(#hiveconnect-root, .hc-embed) .ev-item,
 :is(#hiveconnect-root, .hc-embed).ev-item { display: flex; gap: 6px; padding: 12px 14px; border-bottom: 1px solid var(--line); cursor: pointer; }
 :is(#hiveconnect-root, .hc-embed) .ev-item:hover,
