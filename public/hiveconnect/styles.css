@@ -1354,7 +1354,7 @@ html[data-theme="dark"] .huddle-banner {
 .ev-folder-ct:empty { display: none; }
 
 /* main: full email view overlays the message pane */
-.email-view { position: absolute; inset: 0; z-index: 24; background: var(--canvas); display: flex; flex-direction: column; margin: 12px 12px 12px 0; border-radius: 15px; overflow: hidden; }
+.email-view { position: absolute; top: 12px; right: 12px; bottom: 12px; left: 0; z-index: 24; background: var(--canvas); display: flex; flex-direction: column; border-radius: 15px; overflow: hidden; }
 .ev-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 13px 18px;
   border-bottom: 1px solid var(--line); background: var(--card); }
 .ev-folder-name { font-weight: 800; font-size: 17px; color: var(--ink); letter-spacing: .2px; }
@@ -1622,7 +1622,7 @@ html[data-theme="dark"] .huddle-banner {
    tab) switches to the light canvas card language the reading pane already
    uses, since the reference treats Email as its own light workspace rather
    than an extension of the dark nav rail. */
-.sidebar.sidebar-email-theme { background: var(--card); border-radius: 15px; overflow: hidden; margin: 12px 14px 12px 0; }
+.sidebar.sidebar-email-theme { background: var(--card); border-radius: 15px; overflow: hidden; margin: 12px 12px 12px 0; }
 .sidebar.sidebar-email-theme .sidebar-header { background: var(--card); border-bottom: 1px solid var(--line); }
 .sidebar.sidebar-email-theme #panel-email { padding: 19px 19px 19px 32px; }
 .sidebar.sidebar-email-theme .sidebar-title { color: var(--ink); }

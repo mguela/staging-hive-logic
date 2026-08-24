@@ -1984,7 +1984,7 @@ html[data-theme="dark"] :is(#hiveconnect-root, .hc-embed).huddle-banner {
 
 /* main: full email view overlays the message pane */
 :is(#hiveconnect-root, .hc-embed) .email-view,
-:is(#hiveconnect-root, .hc-embed).email-view { position: absolute; inset: 0; z-index: 24; background: var(--canvas); display: flex; flex-direction: column; margin: 12px 12px 12px 0; border-radius: 15px; overflow: hidden; }
+:is(#hiveconnect-root, .hc-embed).email-view { position: absolute; top: 12px; right: 12px; bottom: 12px; left: 0; z-index: 24; background: var(--canvas); display: flex; flex-direction: column; border-radius: 15px; overflow: hidden; }
 :is(#hiveconnect-root, .hc-embed) .ev-toolbar,
 :is(#hiveconnect-root, .hc-embed).ev-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 13px 18px;
   border-bottom: 1px solid var(--line); background: var(--card); }
@@ -2456,7 +2456,7 @@ html[data-theme="dark"] :is(#hiveconnect-root, .hc-embed).huddle-banner {
    uses, since the reference treats Email as its own light workspace rather
    than an extension of the dark nav rail. */
 :is(#hiveconnect-root, .hc-embed) .sidebar.sidebar-email-theme,
-:is(#hiveconnect-root, .hc-embed).sidebar.sidebar-email-theme { background: var(--card); border-radius: 15px; overflow: hidden; margin: 12px 14px 12px 0; }
+:is(#hiveconnect-root, .hc-embed).sidebar.sidebar-email-theme { background: var(--card); border-radius: 15px; overflow: hidden; margin: 12px 12px 12px 0; }
 :is(#hiveconnect-root, .hc-embed) .sidebar.sidebar-email-theme .sidebar-header,
 :is(#hiveconnect-root, .hc-embed).sidebar.sidebar-email-theme .sidebar-header { background: var(--card); border-bottom: 1px solid var(--line); }
 :is(#hiveconnect-root, .hc-embed) .sidebar.sidebar-email-theme #panel-email,
