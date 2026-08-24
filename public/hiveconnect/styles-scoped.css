@@ -2332,9 +2332,14 @@ html[data-theme="dark"] :is(#hiveconnect-root, .hc-embed).huddle-banner {
 :is(#hiveconnect-root, .hc-embed).ev-avatar.acct-2 { background: #f59e0b; } :is(#hiveconnect-root, .hc-embed) .ev-avatar.acct-3,
 :is(#hiveconnect-root, .hc-embed).ev-avatar.acct-3 { background: #a855f7; }
 :is(#hiveconnect-root, .hc-embed) .ev-item-star,
-:is(#hiveconnect-root, .hc-embed).ev-item-star { border: none; background: none; cursor: pointer; font-size: 13px; line-height: 1; padding: 0; color: var(--mut); flex: none; }
+:is(#hiveconnect-root, .hc-embed).ev-item-star { appearance: none; -webkit-appearance: none; border: none; background: none; box-shadow: none; cursor: pointer; font-size: 13px; line-height: 1; padding: 0; color: var(--mut); flex: none; }
 :is(#hiveconnect-root, .hc-embed) .ev-item-star.on,
 :is(#hiveconnect-root, .hc-embed).ev-item-star.on { color: var(--gold); }
+/* Safety net: some browsers render a native button chip (background + drop
+   shadow) unless appearance is explicitly reset -- caught the star toggle
+   here, same class of bug as the sidebar's default-bordered buttons. */
+:is(#hiveconnect-root, .hc-embed) #ev-list button,
+:is(#hiveconnect-root, .hc-embed)#ev-list button { appearance: none; -webkit-appearance: none; box-shadow: none; }
 
 /* skeleton loading rows */
 :is(#hiveconnect-root, .hc-embed) .ev-skeleton-row,

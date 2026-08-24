@@ -1549,8 +1549,12 @@ html[data-theme="dark"] .huddle-banner {
 .ev-item > .ev-avatar { margin-top: 1px; }
 .ev-avatar.acct-0 { background: #3b82f6; } .ev-avatar.acct-1 { background: #22c55e; }
 .ev-avatar.acct-2 { background: #f59e0b; } .ev-avatar.acct-3 { background: #a855f7; }
-.ev-item-star { border: none; background: none; cursor: pointer; font-size: 13px; line-height: 1; padding: 0; color: var(--mut); flex: none; }
+.ev-item-star { appearance: none; -webkit-appearance: none; border: none; background: none; box-shadow: none; cursor: pointer; font-size: 13px; line-height: 1; padding: 0; color: var(--mut); flex: none; }
 .ev-item-star.on { color: var(--gold); }
+/* Safety net: some browsers render a native button chip (background + drop
+   shadow) unless appearance is explicitly reset -- caught the star toggle
+   here, same class of bug as the sidebar's default-bordered buttons. */
+#ev-list button { appearance: none; -webkit-appearance: none; box-shadow: none; }
 
 /* skeleton loading rows */
 .ev-skeleton-row { display: flex; gap: 10px; padding: 12px 14px; border-bottom: 1px solid var(--line); }
