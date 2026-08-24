@@ -19,7 +19,7 @@
  * monitor_my_status poll, so "is this person running current code" is a
  * question the database can answer. Do not hand-edit it -- run
  * `node scripts/stamp-page-build.mjs`. */
-var HL_PAGE_BUILD = '3f84d0f21fe4687e';
+var HL_PAGE_BUILD = '0acf93cfaf1f299b';
 </script>
 <script>
 (function () { // HL_FETCH_DEDUPE_V1 — single wrapper: GET /api/ dedupe + 60s cache + write-invalidate
@@ -6141,7 +6141,7 @@ function ninvSave(){ var amt = parseFloat(document.getElementById('ninv-amt').va
   <div class="card" id="mon-appusage-card" style="margin-bottom:16px">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
       <h3 style="margin:0;font-family:Montserrat;font-size:13px;font-weight:800">App Usage — Today</h3>
-      <button id="mon-appusage-manage" onclick="hlMonitorSettingsOpen()" style="border:none;background:none;color:var(--green,#1B7A50);font-weight:800;font-size:11px;cursor:pointer">Manage whitelist</button>
+      <button id="mon-appusage-manage" onclick="hlMonitorWhitelistOpen()" style="border:none;background:none;color:var(--green,#1B7A50);font-weight:800;font-size:11px;cursor:pointer">Manage whitelist</button>
     </div>
     <div style="font-size:10.5px;color:var(--mut);font-weight:600;margin-bottom:10px">Approximate — one sample per heartbeat (default every 60s) while clocked in and monitored.</div>
     <div id="mon-appusage-list">Loading…</div>
@@ -25963,14 +25963,6 @@ window.hlMonitorSettingsOpen = function(){
     var r = await fetch('/api/track1?resource=monitor_settings', { headers:{ Authorization:'Bearer '+sess.access_token } });
     var data = await r.json().catch(function(){return null;});
     if(!data || data.ok===false){ var m0=document.getElementById('hlmodal'); if(m0) m0.remove(); if(window.chirpToast) chirpToast('⚠️ ' + ((data&&data.error)||'Could not load Monitor settings.')); return; }
-    // Phase 5 (2026-08-25): app whitelist / productivity rules, appended
-    // below the existing settings. Best-effort -- Monitor Settings still
-    // opens fine if this fetch fails, just without the whitelist section.
-    var rulesData = null;
-    try {
-      var rr = await fetch('/api/track1?resource=monitor_app_rules', { headers:{ Authorization:'Bearer '+sess.access_token } });
-      rulesData = await rr.json().catch(function(){ return null; });
-    } catch(e) {}
     var mins=[1,2,3,5,10,15,20,30];
     var opts = mins.map(function(m){ return '<option value="'+m+'"'+(m===data.screenshotIntervalMinutes?' selected':'')+'>Every '+m+' minute'+(m===1?'':'s')+'</option>'; }).join('');
     var roster = data.roster || [];
@@ -25981,37 +25973,85 @@ window.hlMonitorSettingsOpen = function(){
        Chris out three times on 2026-08-18 while he was working. Monitored now
        means agreeing is a condition of being on the clock; the exempt case is
        simply not monitored. */
+    // Scales past a handful of people (2026-08-25): each row carries a
+    // data-name for hlMonitorRosterFilter, and the list itself scrolls
+    // instead of growing the whole modal -- a roster of 50 no longer
+    // pushes Save Settings off the bottom of the screen.
     var rosterHtml = roster.length ? roster.map(function(p){
       var on = !!p.monitoringEnabled;
-      return '<div style="'+_row+'">'+p.name
+      return '<div class="hlmon-roster-row" data-name="'+(p.name||'').toLowerCase().replace(/"/g,'&quot;')+'" style="'+_row+'">'+p.name
         + '<span style="font-size:9px;color:#8b92a8;font-weight:700;margin-left:6px">'+(p.status==='active'?'paired':'not paired')+'</span>'
         + '<span style="margin-left:auto;display:flex;align-items:center;gap:14px">'
         +   '<label style="display:flex;align-items:center;gap:5px;font-size:9px;font-weight:800;color:#8b92a8;text-transform:uppercase" title="Monitored people must approve the prompt to stay clocked in. Turn this off and they are not monitored at all -- and the idle timeout does not apply to them, because nothing is watching their machine.">Monitor'
         +     '<input type="checkbox" '+(on?'checked':'')+' onchange="hlMonitorUserToggle(\''+p.employeeId+'\', {monitoringEnabled:this.checked}, this)" style="'+_sw+'"></label>'
         + '</span></div>';
     }).join('') : '<div style="font-size:11px;color:#8b92a8;font-weight:600;padding:6px 0">No one has paired HiveLogic Monitor yet.</div>';
-    // Phase 5 (2026-08-25): app whitelist -- one row per rule, category
-    // select + delete; a small add-rule form underneath.
-    var rules = (rulesData && rulesData.ok !== false) ? (rulesData.rules || []) : [];
+    var rosterSearch = roster.length > 6
+      ? '<input id="hlmon-roster-search" type="text" placeholder="Search '+roster.length+' people…" oninput="hlMonitorRosterFilter(this.value)" style="'+_inp+';margin-bottom:6px"/>'
+      : '';
+    hlModal('🖥️ Monitor Settings', '<span style="'+_lbl+'">Screenshot frequency</span><select id="hlmon-interval" style="'+_inp+'">'+opts+'</select><span style="'+_lbl+'">Privacy</span><div style="'+_row+'">Blur screenshots<input type="checkbox" id="hlmon-blur" '+(data.blurScreenshots?'checked':'')+' style="'+_sw+'"></div><span style="'+_lbl+'">Monitoring per person</span><div style="font-size:9px;color:#8b92a8;font-weight:600;line-height:1.5;margin:2px 0 6px"><b>Monitor</b> — on means this person is recorded while clocked in, and must approve the prompt to stay clocked in. Off means they are not monitored at all, and the idle timeout does not apply to them. Nothing is ever recorded without their yes, and nothing is recorded while they are clocked out.</div>'+rosterSearch+'<div id="hlmon-roster-list" style="max-height:260px;overflow-y:auto">'+rosterHtml+'</div><span style="'+_lbl+'">App whitelist (productivity)</span><div style="'+_row+';border-bottom:none">Classify apps as Productive / Neutral / Unproductive<button onclick="hlMonitorWhitelistOpen()" style="margin-left:auto;padding:7px 14px;border:1px solid #59718a;background:#fff;color:#59718a;border-radius:7px;font-size:9px;font-weight:800;text-transform:uppercase;cursor:pointer;font-family:Montserrat;white-space:nowrap">Manage Whitelist</button></div><button onclick="hlMonitorSettingsSave()" style="width:100%;margin-top:14px;padding:12px;border:none;border-radius:9px;background:#59718a;color:#fff;font-family:\'Montserrat\',sans-serif;font-weight:900;font-size:11px;letter-spacing:.06em;text-transform:uppercase;cursor:pointer">Save settings</button>');
+  }, function(){ if(window.chirpToast) chirpToast('Sign in to view this.'); });
+};
+window.hlMonitorRosterFilter = function(q){
+  var needle = (q||'').trim().toLowerCase();
+  document.querySelectorAll('.hlmon-roster-row').forEach(function(row){
+    row.style.display = (!needle || (row.dataset.name||'').indexOf(needle) !== -1) ? '' : 'none';
+  });
+};
+
+// Phase 5 (2026-08-25): App whitelist -- split into its own modal (2026-08-25
+// scaling pass) rather than living inline in Monitor Settings, so a roster
+// of 50 people and a whitelist of 200 apps can each grow without turning
+// one modal into a mile-long scroll. Search box + a category-then-name
+// sort (Unproductive first -- the rows someone is most likely checking)
+// + a capped-height scrolling list, same pattern as the roster above.
+var MON_CATEGORY_ORDER = { unproductive: 0, neutral: 1, productive: 2 };
+window.hlMonitorWhitelistOpen = function(){
+  return hlRequireSession(async function(sess){
+    hlModal('🗂️ App Whitelist', '<div style="font-size:11px;color:#8b92a8;font-weight:600;padding:6px 0">Loading…</div>');
+    var r = await fetch('/api/track1?resource=monitor_app_rules', { headers:{ Authorization:'Bearer '+sess.access_token } });
+    var d = await r.json().catch(function(){return null;});
+    if(!d || d.ok===false){ var m0=document.getElementById('hlmodal'); if(m0) m0.remove(); if(window.chirpToast) chirpToast('⚠️ ' + ((d&&d.error)||'Could not load the whitelist.')); return; }
+    window.__hlMonRules = (d.rules || []).slice().sort(function(a, b){
+      return (MON_CATEGORY_ORDER[a.category] - MON_CATEGORY_ORDER[b.category]) || a.appName.localeCompare(b.appName);
+    });
     var catOpts = function(current){
       return ['productive','neutral','unproductive'].map(function(c){
         return '<option value="'+c+'"'+(c===current?' selected':'')+'>'+c.charAt(0).toUpperCase()+c.slice(1)+'</option>';
       }).join('');
     };
-    var rulesHtml = rules.length ? rules.map(function(rule){
-      return '<div style="'+_row+'">'+rule.appName
-        + '<span style="margin-left:auto;display:flex;align-items:center;gap:8px">'
-        +   '<select onchange="hlMonitorAppRuleSet(\''+rule.appName.replace(/'/g,"\\'")+'\', this.value)" style="'+_inp+';width:auto;padding:4px 8px;font-size:9px">'+catOpts(rule.category)+'</select>'
-        +   '<button onclick="hlMonitorAppRuleDelete(\''+rule.id+'\')" title="Remove rule" style="border:none;background:none;color:#c65b4e;font-weight:900;cursor:pointer;font-size:13px;padding:0">&times;</button>'
-        + '</span></div>';
-    }).join('') : '<div style="font-size:11px;color:#8b92a8;font-weight:600;padding:6px 0">No app rules yet. Add one below.</div>';
-    var addRuleHtml = '<div style="display:flex;gap:6px;margin-top:8px">'
+    var searchHtml = window.__hlMonRules.length > 8
+      ? '<input id="hlmon-whitelist-search" type="text" placeholder="Search '+window.__hlMonRules.length+' apps…" oninput="hlMonitorWhitelistFilter(this.value)" style="'+_inp+';margin-bottom:8px"/>'
+      : '';
+    var addRuleHtml = '<div style="display:flex;gap:6px;margin-bottom:10px">'
       + '<input id="hlmon-newapp-name" type="text" placeholder="App name (e.g. Google Chrome)" style="'+_inp+';flex:1"/>'
       + '<select id="hlmon-newapp-category" style="'+_inp+';width:auto">'+catOpts('neutral')+'</select>'
       + '<button onclick="hlMonitorAppRuleAdd()" style="padding:0 14px;border:none;border-radius:7px;background:#59718a;color:#fff;font-weight:800;font-size:10.5px;cursor:pointer;font-family:Montserrat">Add</button>'
       + '</div>';
-    hlModal('🖥️ Monitor Settings', '<span style="'+_lbl+'">Screenshot frequency</span><select id="hlmon-interval" style="'+_inp+'">'+opts+'</select><span style="'+_lbl+'">Privacy</span><div style="'+_row+'">Blur screenshots<input type="checkbox" id="hlmon-blur" '+(data.blurScreenshots?'checked':'')+' style="'+_sw+'"></div><span style="'+_lbl+'">Monitoring per person</span><div style="font-size:9px;color:#8b92a8;font-weight:600;line-height:1.5;margin:2px 0 6px"><b>Monitor</b> — on means this person is recorded while clocked in, and must approve the prompt to stay clocked in. Off means they are not monitored at all, and the idle timeout does not apply to them. Nothing is ever recorded without their yes, and nothing is recorded while they are clocked out.</div>'+rosterHtml+'<span style="'+_lbl+'">App whitelist (productivity)</span><div style="font-size:9px;color:#8b92a8;font-weight:600;line-height:1.5;margin:2px 0 6px">Classifies apps as Productive / Neutral / Unproductive. Powers the Monitor dashboard\'s Productivity % and the desktop agent\'s "not productive" notification. An app with no rule here is shown as Unclassified, never guessed.</div>'+rulesHtml+addRuleHtml+'<button onclick="hlMonitorSettingsSave()" style="width:100%;margin-top:14px;padding:12px;border:none;border-radius:9px;background:#59718a;color:#fff;font-family:\'Montserrat\',sans-serif;font-weight:900;font-size:11px;letter-spacing:.06em;text-transform:uppercase;cursor:pointer">Save settings</button>');
+    hlModal('🗂️ App Whitelist', '<div style="font-size:9px;color:#8b92a8;font-weight:600;line-height:1.5;margin-bottom:8px">Classifies apps as Productive / Neutral / Unproductive. Powers the Monitor dashboard\'s Productivity % and the desktop agent\'s "not productive" notification. An app with no rule here shows as Unclassified, never guessed.</div>'+addRuleHtml+searchHtml+'<div id="hlmon-whitelist-list" style="max-height:340px;overflow-y:auto"></div>');
+    hlMonitorWhitelistRender(window.__hlMonRules);
   }, function(){ if(window.chirpToast) chirpToast('Sign in to view this.'); });
+};
+function hlMonitorWhitelistRender(rules){
+  var el = document.getElementById('hlmon-whitelist-list');
+  if (!el) return;
+  var catOpts = function(current){
+    return ['productive','neutral','unproductive'].map(function(c){
+      return '<option value="'+c+'"'+(c===current?' selected':'')+'>'+c.charAt(0).toUpperCase()+c.slice(1)+'</option>';
+    }).join('');
+  };
+  el.innerHTML = rules.length ? rules.map(function(rule){
+    return '<div style="'+_row+'">'+rule.appName
+      + '<span style="margin-left:auto;display:flex;align-items:center;gap:8px">'
+      +   '<select onchange="hlMonitorAppRuleSet(\''+rule.appName.replace(/'/g,"\\'")+'\', this.value)" style="'+_inp+';width:auto;padding:4px 8px;font-size:9px">'+catOpts(rule.category)+'</select>'
+      +   '<button onclick="hlMonitorAppRuleDelete(\''+rule.id+'\')" title="Remove rule" style="border:none;background:none;color:#c65b4e;font-weight:900;cursor:pointer;font-size:13px;padding:0">&times;</button>'
+      + '</span></div>';
+  }).join('') : '<div style="font-size:11px;color:#8b92a8;font-weight:600;padding:6px 0">No app rules match. Add one above.</div>';
+}
+window.hlMonitorWhitelistFilter = function(q){
+  var needle = (q||'').trim().toLowerCase();
+  var all = window.__hlMonRules || [];
+  hlMonitorWhitelistRender(needle ? all.filter(function(r){ return r.appName.toLowerCase().indexOf(needle) !== -1; }) : all);
 };
 window.hlMonitorAppRuleAdd = function(){
   return hlRequireSession(async function(sess){
@@ -26023,7 +26063,7 @@ window.hlMonitorAppRuleAdd = function(){
     var d = await r.json().catch(function(){return null;});
     if(!d || d.ok===false){ if(window.chirpToast) chirpToast('⚠️ ' + ((d&&d.error)||'Could not add the rule.')); return; }
     if(window.chirpToast) chirpToast('✅ Rule saved.');
-    window.hlMonitorSettingsOpen();
+    window.hlMonitorWhitelistOpen();
   });
 };
 window.hlMonitorAppRuleSet = function(appName, category){
@@ -26040,7 +26080,7 @@ window.hlMonitorAppRuleDelete = function(id){
     var d = await r.json().catch(function(){return null;});
     if(!d || d.ok===false){ if(window.chirpToast) chirpToast('⚠️ ' + ((d&&d.error)||'Could not remove the rule.')); return; }
     if(window.chirpToast) chirpToast('🗑️ Rule removed.');
-    window.hlMonitorSettingsOpen();
+    window.hlMonitorWhitelistOpen();
   });
 };
 window.hlMonitorSettingsSave = function(){
