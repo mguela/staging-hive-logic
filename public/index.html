@@ -19,7 +19,7 @@
  * monitor_my_status poll, so "is this person running current code" is a
  * question the database can answer. Do not hand-edit it -- run
  * `node scripts/stamp-page-build.mjs`. */
-var HL_PAGE_BUILD = '0acf93cfaf1f299b';
+var HL_PAGE_BUILD = 'f6b1fec0e9e6560c';
 </script>
 <script>
 (function () { // HL_FETCH_DEDUPE_V1 — single wrapper: GET /api/ dedupe + 60s cache + write-invalidate
@@ -25980,7 +25980,7 @@ window.hlMonitorSettingsOpen = function(){
     var rosterHtml = roster.length ? roster.map(function(p){
       var on = !!p.monitoringEnabled;
       return '<div class="hlmon-roster-row" data-name="'+(p.name||'').toLowerCase().replace(/"/g,'&quot;')+'" style="'+_row+'">'+p.name
-        + '<span style="font-size:9px;color:#8b92a8;font-weight:700;margin-left:6px">'+(p.status==='active'?'paired':'not paired')+'</span>'
+        + '<span style="font-size:9px;color:#8b92a8;font-weight:700;margin-left:6px">'+(p.status==='active'?'paired':(p.status==='not_installed'?'not installed yet':'not paired'))+'</span>'
         + '<span style="margin-left:auto;display:flex;align-items:center;gap:14px">'
         +   '<label style="display:flex;align-items:center;gap:5px;font-size:9px;font-weight:800;color:#8b92a8;text-transform:uppercase" title="Monitored people must approve the prompt to stay clocked in. Turn this off and they are not monitored at all -- and the idle timeout does not apply to them, because nothing is watching their machine.">Monitor'
         +     '<input type="checkbox" '+(on?'checked':'')+' onchange="hlMonitorUserToggle(\''+p.employeeId+'\', {monitoringEnabled:this.checked}, this)" style="'+_sw+'"></label>'

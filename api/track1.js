@@ -6100,26 +6100,49 @@ async function handleMonitorSettings(req, res) {
   const settingsRows = settingsRes.ok ? await settingsRes.json() : [];
   const row = (settingsRows && settingsRows[0]) || {};
 
-  const agentsRes = await supabaseRequest('monitor_agents?select=id,employee_id,device_name,platform,status,last_seen_at,agent_version&order=last_seen_at.desc');
+  // Roster source (2026-08-25): every employee, not only ones who have
+  // already paired a device. The toggle itself (handleMonitorUserToggle)
+  // only ever PATCHes profiles.monitoring_enabled -- it never required a
+  // monitor_agents row to exist -- so the old agents-first roster could
+  // show the setting but never let anyone turn it on for a person before
+  // they'd installed the app. Now every profile gets a row; someone with
+  // no paired device shows status 'not_installed' instead of being
+  // omitted, and the toggle still works immediately -- the moment they
+  // install and clock in, monitoring_enabled is already what was set here.
+  const [agentsRes, profilesRes] = await Promise.all([
+    supabaseRequest('monitor_agents?select=id,employee_id,device_name,platform,status,last_seen_at,agent_version&order=last_seen_at.desc'),
+    supabaseRequest('profiles?select=id,full_name,email,monitoring_enabled&order=full_name.asc'),
+  ]);
   const agents = agentsRes.ok ? await agentsRes.json() : [];
-  const empIds = [...new Set((agents || []).map((a) => a.employee_id))];
-  let profiles = [];
-  if (empIds.length) {
-    const profRes = await supabaseRequest(`profiles?id=in.(${empIds.join(',')})&select=id,full_name,email,monitoring_enabled`);
-    profiles = profRes.ok ? await profRes.json() : [];
+  const profiles = profilesRes.ok ? await profilesRes.json() : [];
+  const agentsByEmployee = {};
+  for (const a of agents || []) {
+    (agentsByEmployee[a.employee_id] = agentsByEmployee[a.employee_id] || []).push(a);
   }
-  const byId = Object.fromEntries((profiles || []).map((p) => [p.id, p]));
-  const roster = (agents || []).map((a) => ({
-    employeeId: a.employee_id,
-    name: (byId[a.employee_id] && byId[a.employee_id].full_name) || (byId[a.employee_id] && byId[a.employee_id].email) || 'Unknown',
-    deviceName: a.device_name,
-    platform: a.platform,
-    status: a.status,
-    lastSeenAt: a.last_seen_at,
-    agentVersion: a.agent_version || null,
-    agentVersionState: agentVersionState(a.agent_version),
-    monitoringEnabled: !byId[a.employee_id] || byId[a.employee_id].monitoring_enabled !== false,
-  }));
+  const roster = [];
+  for (const p of profiles || []) {
+    const name = p.full_name || p.email || 'Unknown';
+    const monitoringEnabled = p.monitoring_enabled !== false;
+    const theirAgents = agentsByEmployee[p.id];
+    if (theirAgents && theirAgents.length) {
+      for (const a of theirAgents) {
+        roster.push({
+          employeeId: p.id, name,
+          deviceName: a.device_name, platform: a.platform, status: a.status,
+          lastSeenAt: a.last_seen_at, agentVersion: a.agent_version || null,
+          agentVersionState: agentVersionState(a.agent_version),
+          monitoringEnabled,
+        });
+      }
+    } else {
+      roster.push({
+        employeeId: p.id, name,
+        deviceName: null, platform: null, status: 'not_installed',
+        lastSeenAt: null, agentVersion: null, agentVersionState: null,
+        monitoringEnabled,
+      });
+    }
+  }
 
   return res.status(200).json({
     ok: true,
