@@ -19,7 +19,7 @@
  * monitor_my_status poll, so "is this person running current code" is a
  * question the database can answer. Do not hand-edit it -- run
  * `node scripts/stamp-page-build.mjs`. */
-var HL_PAGE_BUILD = '92af97d88765eb17';
+var HL_PAGE_BUILD = '9d41f747782e691f';
 </script>
 <script>
 (function () { // HL_FETCH_DEDUPE_V1 — single wrapper: GET /api/ dedupe + 60s cache + write-invalidate
@@ -3755,7 +3755,19 @@ function efRemoteCreate(silent){
   // estimate records which lead produced it and the card can follow along.
   var body = { clientId: EST.client, clientName: cl ? cl.n : null, title: EST.title || null, lines: efLines(), paymentSchedule: sched, sourceLeadId: EST.sourceLeadId || null };
   return hlEstApi('create', body).then(function(d){
-    if (d && d.ok){
+    // 2026-08-25: /api/bookkeeping/estimates/create responds 200 with
+    // {ok:true, enabled:false} (no `estimate` field at all) when
+    // BOOKKEEPING_ENABLED isn't exactly "true" on this deployment -- a real,
+    // documented response shape, not a malformed one. This used to read
+    // d.estimate.id unconditionally the moment d.ok was true, which crashed
+    // with a "Cannot read properties of undefined (reading 'id')" that named
+    // the wrong problem entirely instead of the actual one (a disabled
+    // feature flag).
+    if (d && d.ok && d.enabled === false){
+      chirpToast('⚠ The real Estimates backend isn\'t enabled on this deployment (BOOKKEEPING_ENABLED) -- staying local-only for now.');
+      return null;
+    }
+    if (d && d.ok && d.estimate){
       EST.remoteId = d.estimate.id; EST.remoteEstimate = d.estimate; EST.num = d.estimate.estimateNumber;
       return d.estimate;
     }
