@@ -1354,7 +1354,7 @@ html[data-theme="dark"] .huddle-banner {
 .ev-folder-ct:empty { display: none; }
 
 /* main: full email view overlays the message pane */
-.email-view { position: absolute; inset: 0; z-index: 24; background: var(--canvas); display: flex; flex-direction: column; }
+.email-view { position: absolute; inset: 0; z-index: 24; background: var(--canvas); display: flex; flex-direction: column; margin: 12px 12px 12px 0; border-radius: 15px; overflow: hidden; }
 .ev-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 13px 18px;
   border-bottom: 1px solid var(--line); background: var(--card); }
 .ev-folder-name { font-weight: 800; font-size: 17px; color: var(--ink); letter-spacing: .2px; }
