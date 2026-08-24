@@ -2517,6 +2517,21 @@ html[data-theme="dark"] :is(#hiveconnect-root, .hc-embed).huddle-banner {
 :is(#hiveconnect-root, .hc-embed).ev-group-ic { width: 22px; height: 22px; border-radius: 50%; background: var(--steel-bg); color: var(--steel-deep); font-size: 10px; font-weight: 800; display: flex; align-items: center; justify-content: center; flex: none; }
 :is(#hiveconnect-root, .hc-embed) .ev-group-count,
 :is(#hiveconnect-root, .hc-embed).ev-group-count { margin-left: auto; font-size: 10.5px; color: var(--mut); }
+:is(#hiveconnect-root, .hc-embed) .ev-new-group,
+:is(#hiveconnect-root, .hc-embed).ev-new-group { display: block; width: 100%; background: none; border: none; cursor: pointer; text-align: left; color: #8ba4c4; font-size: 12px; font-weight: 700; padding: 6px 9px; border-radius: 9px; }
+:is(#hiveconnect-root, .hc-embed) .ev-new-group:hover,
+:is(#hiveconnect-root, .hc-embed).ev-new-group:hover { color: #fff; background: rgba(116,138,158,.16); }
+
+/* Safety net: every button in the Email sidebar is a plain row/link, never
+   the browser's default bordered button chrome (2026-08-25 fix — several
+   rows were showing a UA-default border despite their own rule setting
+   border:none, e.g. .ev-new-group had no base rule defining one at all).
+   Border only — background/box-shadow are left alone so .active/.selected
+   highlight states (set by more specific class rules) still show through;
+   an ID-scoped selector like this one would out-specificity them otherwise.
+   .ev-acct-add keeps its own intentional dashed "add new" border. */
+:is(#hiveconnect-root, .hc-embed) #panel-email button:not(.ev-acct-add),
+:is(#hiveconnect-root, .hc-embed)#panel-email button:not(.ev-acct-add) { border: none; }
 
 /* ==================== TASKS + CALENDAR ==================== */
 :is(#hiveconnect-root, .hc-embed) .tc-view,
