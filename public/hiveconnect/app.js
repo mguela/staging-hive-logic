@@ -4458,6 +4458,17 @@ let evAllInboxes = false;     // unified 'All Inboxes' view across every signed-
 let evUserPickedMailbox = false; // user chose a specific mailbox this visit (resets on tab entry)
 let evAcctMenuOpen = false;   // mailbox dropdown open? (collapsed by default so the sidebar stays clean)
 let evGroup = true;           // group the list by conversation (thread view)
+
+// ---- Outlook-style command bar / list interactions (2026-08-24) ----
+let evSelected = new Set();      // ids of checked messages, for bulk actions
+let evLastUndo = null;           // { kind, ids, fromFolder } snapshot backing the Undo button
+let evUndoTimer = null;          // clears evLastUndo ~10s after a bulk action
+let evSortBy = 'date', evSortDir = 'desc';   // 'date' | 'from' | 'subject'
+let evFocusedTab = 'focused';    // 'focused' | 'other' -- purely a render-time filter, see renderMessageList
+let evCategoryFilter = null;     // Set<string>|null -- sidebar category quick-filter
+function evFavFolders() { return hcPrefJson('hcEmailFavFolders', 'hcEmailFavs', []) || []; }
+function evSaveFavFolders(f) { hcPrefSet('hcEmailFavFolders', 'hcEmailFavs', f); }
+
 // Outlook default preset categories (name → color). Applying these "just works" in most mailboxes.
 const EV_CATS = [
   { name: 'Red category', color: '#e0483b' },
@@ -4878,18 +4889,82 @@ function renderEmailSidebar() {
     add.onclick = hcAddImapMailbox; accWrap.appendChild(add);
   }
   el.appendChild(accWrap);
+
+  // Favourites — pinned folders (standard or custom), for one-click access at
+  // the top of the sidebar. Empty until the user pins something via the ☆ on
+  // a folder row below; a real cross-device preference (hcPrefJson), not a
+  // per-device setting.
+  const favIds = evFavFolders();
+  if (favIds.length) {
+    const favWrap = document.createElement('div'); favWrap.className = 'ev-favs';
+    const flbl = document.createElement('div'); flbl.className = 'ev-accts-lbl'; flbl.textContent = 'FAVOURITES'; favWrap.appendChild(flbl);
+    favIds.forEach(fid => {
+      const f = EV_FOLDERS.find(x => x.id === fid) || evCustomFolders.find(x => x.id === fid);
+      if (!f) return;
+      const row = document.createElement('button'); row.type = 'button'; row.className = 'ev-fav-row';
+      const ic = document.createElement('span'); ic.className = 'ev-fav-ic'; ic.textContent = '★'; row.appendChild(ic);
+      const nm = document.createElement('span'); nm.textContent = f.name; row.appendChild(nm);
+      row.onclick = () => { if (!evActive) { const c = $('ev-connect'); if (c) c.classList.remove('hidden'); return; } selectFolder(f.id, f.name); };
+      favWrap.appendChild(row);
+    });
+    el.appendChild(favWrap);
+  }
+
   // folders (always shown; inert until a mailbox is connected)
   const fWrap = document.createElement('div'); fWrap.className = 'ev-folders' + (connected ? '' : ' ev-folders-off');
   EV_FOLDERS.forEach(f => {
-    const row = document.createElement('button'); row.className = 'ev-folder' + (connected && f.id === evFolderId ? ' active' : ''); row.dataset.id = f.id;
-    const ic = document.createElement('span'); ic.className = 'ev-folder-ic'; ic.textContent = f.icon; row.appendChild(ic);
-    const nm = document.createElement('span'); nm.className = 'ev-folder-nm'; nm.textContent = f.name; row.appendChild(nm);
-    const ct = document.createElement('span'); ct.className = 'ev-folder-ct'; ct.id = 'evfc-' + f.id; row.appendChild(ct);
-    row.onclick = () => { if (!evActive) { const c = $('ev-connect'); if (c) c.classList.remove('hidden'); return; } selectFolder(f.id, f.name); };
+    const row = evBuildFolderRow(f, f.icon, connected && f.id === evFolderId, false);
     fWrap.appendChild(row);
   });
   el.appendChild(fWrap);
+
+  // Categories — quick sidebar filter over the already-open folder's messages
+  // (client-side only, same list the Outlook-style category dots on each row
+  // already carry; no shared-mailbox/Groups backend exists to fill that slot
+  // honestly, so this is what maps to the reference design's third section).
+  const catWrap = document.createElement('div'); catWrap.className = 'ev-cats-sec';
+  const clbl = document.createElement('div'); clbl.className = 'ev-accts-lbl'; clbl.textContent = 'CATEGORIES'; catWrap.appendChild(clbl);
+  EV_CATS.forEach(c => {
+    const active = !!(evCategoryFilter && evCategoryFilter.has(c.name));
+    const row = document.createElement('button'); row.type = 'button'; row.className = 'ev-cat-row' + (active ? ' active' : '');
+    const dot = document.createElement('span'); dot.className = 'ev-cat-dot-lg'; dot.style.background = c.color; row.appendChild(dot);
+    const nm = document.createElement('span'); nm.textContent = c.name.replace(' category', ''); row.appendChild(nm);
+    row.onclick = () => {
+      evCategoryFilter = evCategoryFilter || new Set();
+      if (evCategoryFilter.has(c.name)) evCategoryFilter.delete(c.name); else evCategoryFilter.add(c.name);
+      if (!evCategoryFilter.size) evCategoryFilter = null;
+      renderEmailSidebar(); renderMessageList();
+    };
+    catWrap.appendChild(row);
+  });
+  el.appendChild(catWrap);
+
   if (connected) refreshFolderCounts();
+}
+// one folder row: icon, name, unread count, favourite-pin toggle, and a
+// drag-and-drop target so a message row can be dropped onto it to move.
+function evBuildFolderRow(f, icon, active, isCustom) {
+  const row = document.createElement('button'); row.className = 'ev-folder' + (isCustom ? ' custom' : '') + (active ? ' active' : ''); row.dataset.id = f.id;
+  const ic = document.createElement('span'); ic.className = 'ev-folder-ic'; ic.textContent = icon; row.appendChild(ic);
+  const nm = document.createElement('span'); nm.className = 'ev-folder-nm'; nm.textContent = f.name; row.appendChild(nm);
+  const favs = evFavFolders(); const pinned = favs.includes(f.id);
+  const pin = document.createElement('span'); pin.textContent = pinned ? '★' : '☆';
+  pin.style.cssText = 'margin-left:4px;cursor:pointer;opacity:' + (pinned ? '1' : '.35') + ';color:#ffc94b;font-size:11px;flex:none';
+  pin.title = pinned ? 'Remove from favourites' : 'Add to favourites';
+  pin.onclick = (e) => { e.stopPropagation(); const cur = evFavFolders(); const next = pinned ? cur.filter(x => x !== f.id) : cur.concat([f.id]); evSaveFavFolders(next); renderEmailSidebar(); };
+  row.appendChild(pin);
+  const ct = document.createElement('span'); ct.className = 'ev-folder-ct';
+  if (!isCustom) ct.id = 'evfc-' + f.id;
+  ct.textContent = f.unread || ''; row.appendChild(ct);
+  row.onclick = () => { if (!evActive) { const c = $('ev-connect'); if (c) c.classList.remove('hidden'); return; } selectFolder(f.id, f.name); };
+  row.ondragover = (e) => { e.preventDefault(); row.classList.add('dragover'); };
+  row.ondragleave = () => row.classList.remove('dragover');
+  row.ondrop = (e) => {
+    e.preventDefault(); row.classList.remove('dragover');
+    const id = e.dataTransfer.getData('text/hc-msg-id'); if (!id) return;
+    evMove(id, f.id, 'Moved to ' + f.name);
+  };
+  return row;
 }
 async function refreshFolderCounts() {
   try {
@@ -4926,17 +5001,13 @@ function renderCustomFolders() {
   if (!evCustomFolders.length) return;
   const sep = document.createElement('div'); sep.className = 'ev-cf-sep'; sep.textContent = 'YOUR FOLDERS'; wrap.appendChild(sep);
   evCustomFolders.forEach(f => {
-    const row = document.createElement('button'); row.className = 'ev-folder custom' + (f.id === evFolderId ? ' active' : ''); row.dataset.id = f.id;
-    const ic = document.createElement('span'); ic.className = 'ev-folder-ic'; ic.textContent = '📁'; row.appendChild(ic);
-    const nm = document.createElement('span'); nm.className = 'ev-folder-nm'; nm.textContent = f.name; row.appendChild(nm);
-    const ct = document.createElement('span'); ct.className = 'ev-folder-ct'; ct.textContent = f.unread || ''; row.appendChild(ct);
-    row.onclick = () => selectFolder(f.id, f.name);
+    const row = evBuildFolderRow(f, '📁', f.id === evFolderId, true);
     wrap.appendChild(row);
   });
 }
 
 async function selectFolder(id, name) {
-  evFolderId = id; evFolderName = name; evOpenId = null;
+  evFolderId = id; evFolderName = name; evOpenId = null; evSelected.clear();
   document.querySelectorAll('#panel-email .ev-folder').forEach(b => b.classList.toggle('active', b.dataset.id === id));
   const fn = $('ev-folder-name'); if (fn) fn.textContent = name + (!evAllInboxes && evActive && evActive.username ? ' — ' + evActive.username : '');
   const read = $('ev-read'); if (read) read.innerHTML = '<div class="ev-read-empty">Select a message to read it here.</div>';
@@ -5784,20 +5855,89 @@ function evVisibleMessages() {
   return evMessages.filter((m) => !evJunkIds.has(m.id));
 }
 
+// Focused/Other is a pure render-time filter over already-fetched messages --
+// it must never touch the Graph query in selectFolder (2026-08-17 lesson: a
+// stuck server-side filter left the Inbox unable to show its own mail).
+function evMsgIsOther(m) { return (m.inferenceClassification || 'focused') === 'other'; }
+function evFilterFocusedAndCategory(rows) {
+  let out = evFocusedTab === 'other' ? rows.filter(evMsgIsOther) : rows.filter(m => !evMsgIsOther(m));
+  if (evCategoryFilter && evCategoryFilter.size) out = out.filter(m => (m.categories || []).some(c => evCategoryFilter.has(c)));
+  return out;
+}
+function evSenderLabel(m) { const f = (m.from && m.from.emailAddress) || {}; return f.name || f.address || ''; }
+function evSortRows(rows) {
+  const dir = evSortDir === 'asc' ? 1 : -1;
+  const arr = rows.slice();
+  if (evSortBy === 'from') arr.sort((a, b) => dir * evSenderLabel(a).localeCompare(evSenderLabel(b)));
+  else if (evSortBy === 'subject') arr.sort((a, b) => dir * (a.subject || '').localeCompare(b.subject || ''));
+  else arr.sort((a, b) => dir * (new Date(a.receivedDateTime || 0) - new Date(b.receivedDateTime || 0)));
+  return arr;
+}
+function evAvatarClass(m) {
+  if (evAllInboxes && m._acct) return 'acct-' + (Math.max(0, evAccounts.findIndex(x => x.homeAccountId === m._acct)) % 4);
+  const addr = (m.from && m.from.emailAddress && (m.from.emailAddress.address || m.from.emailAddress.name)) || '';
+  let h = 0; for (let i = 0; i < addr.length; i++) h = (h * 31 + addr.charCodeAt(i)) >>> 0;
+  return 'acct-' + (h % 4);
+}
+function evInitials(name) {
+  const parts = (name || '').trim().split(/\s+/).filter(Boolean);
+  if (!parts.length) return '?';
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+function evToggleSelect(id, checked) {
+  if (checked) evSelected.add(id); else evSelected.delete(id);
+  const row = document.querySelector('.ev-item[data-id="' + CSS.escape(id) + '"]');
+  if (row) row.classList.toggle('selected', checked);
+  evUpdateCmdbarState();
+  const listEl = $('ev-list'); if (listEl) listEl.classList.toggle('has-selection', evSelected.size > 0);
+  const selAll = $('ev-select-all');
+  if (selAll) { const ids = [...document.querySelectorAll('.ev-item')].map(r => r.dataset.id); const selCount = ids.filter(x => evSelected.has(x)).length; selAll.checked = ids.length > 0 && selCount === ids.length; selAll.indeterminate = selCount > 0 && selCount < ids.length; }
+}
+function evUpdateCmdbarState() {
+  const hasSel = evSelected.size > 0, hasOpen = !!evOpenId, active = hasSel || hasOpen;
+  ['ev-cmd-delete', 'ev-cmd-archive', 'ev-cmd-report', 'ev-cmd-move', 'ev-cmd-flag'].forEach(id => { const b = $(id); if (b) b.disabled = !active; });
+  const canReply = hasOpen && !hasSel; // reply/forward/categorize/print/etc. only make sense against one open message
+  const replyBtn = $('ev-cmd-reply'); if (replyBtn) replyBtn.disabled = !canReply;
+  const replyCaret = $('ev-cmd-reply-caret'); if (replyCaret) replyCaret.disabled = !canReply;
+  const moreBtn = $('ev-cmd-more'); if (moreBtn) moreBtn.disabled = !canReply;
+  const undoBtn = $('ev-cmd-undo'); if (undoBtn) undoBtn.disabled = !evLastUndo;
+}
+function evUpdateListHeadUI(shownRows, counts) {
+  counts = counts || { focusedCount: 0, otherCount: 0 };
+  const otherBadge = $('ev-fo-other-count');
+  if (otherBadge) { if (counts.otherCount > 0) { otherBadge.textContent = String(counts.otherCount); otherBadge.classList.remove('hidden'); } else otherBadge.classList.add('hidden'); }
+  const tabFocused = $('ev-tab-focused'), tabOther = $('ev-tab-other');
+  if (tabFocused) tabFocused.classList.toggle('active', evFocusedTab === 'focused');
+  if (tabOther) tabOther.classList.toggle('active', evFocusedTab === 'other');
+  const ids = (shownRows || []).map(m => m.id);
+  const selCount = ids.filter(id => evSelected.has(id)).length;
+  const selAll = $('ev-select-all');
+  if (selAll) { selAll.checked = ids.length > 0 && selCount === ids.length; selAll.indeterminate = selCount > 0 && selCount < ids.length; }
+  const sortLabels = { date: 'Received', from: 'Sender', subject: 'Subject' };
+  const sortBtn = $('ev-sort-btn'); if (sortBtn) sortBtn.textContent = (sortLabels[evSortBy] || 'Received') + (evSortDir === 'asc' ? ' ↑' : ' ↓');
+  const listEl = $('ev-list'); if (listEl) listEl.classList.toggle('has-selection', evSelected.size > 0);
+  evUpdateCmdbarState();
+}
 function renderMessageList() {
   const list = $('ev-list'); if (!list) return; list.innerHTML = '';
-  if (!evMessages.length) { list.innerHTML = '<div class="ev-loading">No messages here.</div>'; return; }
-  const shown = evVisibleMessages();
-  const hidden = evMessages.length - shown.length;
-  // conversation grouping: one row per thread (latest message), with a count
-  let rows = shown;
+  if (!evMessages.length) { list.innerHTML = '<div class="ev-loading">No messages here.</div>'; evUpdateListHeadUI([], null); return; }
+  const junkVisible = evVisibleMessages();
+  const hidden = evMessages.length - junkVisible.length;
+  // conversation grouping: one row per thread (latest message), with a count --
+  // computed over junkVisible so a junk-hidden message can never surface as a
+  // thread's representative row (it used to iterate evMessages unfiltered).
+  let rows = junkVisible;
   const threadCount = {};
   if (evGroup) {
     const seen = new Set(); const grouped = [];
-    evMessages.forEach(m => { const c = m.conversationId || m.id; threadCount[c] = (threadCount[c] || 0) + 1; });
-    evMessages.forEach(m => { const c = m.conversationId || m.id; if (seen.has(c)) return; seen.add(c); grouped.push(m); });
+    junkVisible.forEach(m => { const c = m.conversationId || m.id; threadCount[c] = (threadCount[c] || 0) + 1; });
+    junkVisible.forEach(m => { const c = m.conversationId || m.id; if (seen.has(c)) return; seen.add(c); grouped.push(m); });
     rows = grouped;
   }
+  const otherCount = rows.filter(evMsgIsOther).length;
+  const shown = evSortRows(evFilterFocusedAndCategory(rows));
+  evUpdateListHeadUI(shown, { focusedCount: rows.length - otherCount, otherCount });
   if (hidden > 0) {
     // Said out loud, with the way back. Silently swallowing mail is how a
     // filter stops being trusted the first time it is wrong.
@@ -5824,11 +5964,30 @@ function renderMessageList() {
     list.appendChild(note);
   }
 
-  rows.forEach(m => {
+  if (!shown.length && rows.length) {
+    const empty = document.createElement('div'); empty.className = 'ev-loading';
+    empty.textContent = evFocusedTab === 'other' ? 'Nothing in Other.' : 'Nothing in Focused — check Other.';
+    list.appendChild(empty);
+  }
+
+  shown.forEach(m => {
     const from = (m.from && m.from.emailAddress) ? (m.from.emailAddress.name || m.from.emailAddress.address) : '(no sender)';
-    const row = document.createElement('div'); row.className = 'ev-item' + (m.isRead ? '' : ' unread') + (m.id === evOpenId ? ' open' : '');
+    const flagged = !!(m.flag && m.flag.flagStatus === 'flagged');
+    const row = document.createElement('div'); row.className = 'ev-item' + (m.isRead ? '' : ' unread') + (m.id === evOpenId ? ' open' : '') + (evSelected.has(m.id) ? ' selected' : '');
+    row.dataset.id = m.id;
+    row.draggable = true;
+    row.ondragstart = (e) => { e.dataTransfer.setData('text/hc-msg-id', m.id); e.dataTransfer.effectAllowed = 'move'; };
+    row.oncontextmenu = (e) => { e.preventDefault(); evCtxMenu(e, m); };
     const l = document.createElement('div'); l.className = 'ev-item-l';
+    const chk = document.createElement('input'); chk.type = 'checkbox'; chk.className = 'ev-item-check'; chk.checked = evSelected.has(m.id);
+    chk.onclick = (e) => e.stopPropagation();
+    chk.onchange = () => evToggleSelect(m.id, chk.checked);
+    l.appendChild(chk);
+    const av = document.createElement('span'); av.className = 'ev-avatar ' + evAvatarClass(m); av.textContent = evInitials(from); l.appendChild(av);
     if (!m.isRead) { const d = document.createElement('span'); d.className = 'ev-item-dot'; l.appendChild(d); }
+    const star = document.createElement('button'); star.type = 'button'; star.className = 'ev-item-star' + (flagged ? ' on' : ''); star.title = flagged ? 'Unflag' : 'Flag'; star.textContent = flagged ? '★' : '☆';
+    star.onclick = (e) => { e.stopPropagation(); evFlag(m.id, !flagged); };
+    l.appendChild(star);
     row.appendChild(l);
     const mid = document.createElement('div'); mid.className = 'ev-item-mid';
     const top = document.createElement('div'); top.className = 'ev-item-top';
@@ -5853,7 +6012,6 @@ function renderMessageList() {
       mid.appendChild(cats);
     }
     row.appendChild(mid);
-    if (m.flag && m.flag.flagStatus === 'flagged') { const fl = document.createElement('span'); fl.className = 'ev-item-flag'; fl.textContent = '🚩'; row.appendChild(fl); }
     // hover quick-actions
     const qa = document.createElement('div'); qa.className = 'ev-item-qa';
     const qab = (label, title, fn) => { const b = document.createElement('button'); b.textContent = label; b.title = title; b.onclick = (e) => { e.stopPropagation(); fn(); }; qa.appendChild(b); };
@@ -6030,27 +6188,59 @@ async function evDownloadAttachment(msgId, a, chip) {
     evToast('Could not download "' + (a.name || 'attachment') + '" -- try again.');
   }
 }
-async function evFlag(id, on) {
-  try { await evGraph(`/me/messages/${id}`, { method: 'PATCH', body: { flag: { flagStatus: on ? 'flagged' : 'notFlagged' } } }); openEmailMessage(id); } catch (e) { evToast('Flag failed.'); }
-}
-async function evMarkUnread(id) {
-  try { await evGraph(`/me/messages/${id}`, { method: 'PATCH', body: { isRead: false } }); const it = evMessages.find(x => x.id === id); if (it) it.isRead = false; renderMessageList(); refreshFolderCounts(); evToast('Marked unread'); } catch (e) { evToast('Failed.'); }
-}
-async function evDelete(id) {
+async function evFlag(id, on, opts = {}) {
   try {
-    await evGraph(`/me/messages/${id}/move`, { method: 'POST', body: { destinationId: 'deleteditems' } });
-    evMessages = evMessages.filter(x => x.id !== id); if (evOpenId === id) evOpenId = null; renderMessageList();
+    await evGraph(`/me/messages/${id}`, { method: 'PATCH', body: { flag: { flagStatus: on ? 'flagged' : 'notFlagged' } }, account: opts.account });
+    const it = evMessages.find(x => x.id === id); if (it) { it.flag = it.flag || {}; it.flag.flagStatus = on ? 'flagged' : 'notFlagged'; }
+    if (opts.silent) return;
+    openEmailMessage(id);
+  } catch (e) { if (opts.silent) throw e; evToast('Flag failed.'); }
+}
+async function evMarkUnread(id, opts = {}) {
+  try {
+    await evGraph(`/me/messages/${id}`, { method: 'PATCH', body: { isRead: false }, account: opts.account });
+    const it = evMessages.find(x => x.id === id); if (it) it.isRead = false;
+    if (opts.silent) return;
+    renderMessageList(); refreshFolderCounts(); evToast('Marked unread');
+  } catch (e) { if (opts.silent) throw e; evToast('Failed.'); }
+}
+async function evMarkRead(id, opts = {}) {
+  try {
+    await evGraph(`/me/messages/${id}`, { method: 'PATCH', body: { isRead: true }, account: opts.account });
+    const it = evMessages.find(x => x.id === id); if (it) it.isRead = true;
+    if (opts.silent) return;
+    renderMessageList(); refreshFolderCounts();
+  } catch (e) { if (opts.silent) throw e; evToast('Failed.'); }
+}
+async function evMarkAllRead() {
+  const ids = evVisibleMessages().filter(m => !m.isRead).map(m => m.id);
+  if (!ids.length) { evToast('Nothing to mark.'); return; }
+  const acctFor = (id) => { const m = evMessages.find(x => x.id === id); return (m && m._acct) ? evAccounts.find(a => a.homeAccountId === m._acct) : undefined; };
+  await Promise.allSettled(ids.map(id => evMarkRead(id, { silent: true, account: acctFor(id) })));
+  renderMessageList(); refreshFolderCounts();
+  evToast('Marked ' + ids.length + ' as read');
+}
+async function evDelete(id, opts = {}) {
+  try {
+    // Graph/IMAP both mint a NEW id for the moved message -- callers that need
+    // to act on it again afterward (bulk Undo) must use the returned id, not `id`.
+    const moved = await evGraph(`/me/messages/${id}/move`, { method: 'POST', body: { destinationId: 'deleteditems' }, account: opts.account });
+    evMessages = evMessages.filter(x => x.id !== id); if (evOpenId === id) evOpenId = null;
+    if (opts.silent) return { id: (moved && moved.id) || id };
+    renderMessageList();
     const read = $('ev-read'); if (read && evOpenId === null) read.innerHTML = '<div class="ev-read-empty">Message moved to Deleted.</div>';
     refreshFolderCounts();
-  } catch (e) { evToast('Delete failed.'); }
+  } catch (e) { if (opts.silent) throw e; evToast('Delete failed.'); }
 }
-async function evMove(id, dest, note) {
+async function evMove(id, dest, note, opts = {}) {
   try {
-    await evGraph(`/me/messages/${id}/move`, { method: 'POST', body: { destinationId: dest } });
-    evMessages = evMessages.filter(x => x.id !== id); if (evOpenId === id) evOpenId = null; renderMessageList();
+    const moved = await evGraph(`/me/messages/${id}/move`, { method: 'POST', body: { destinationId: dest }, account: opts.account });
+    evMessages = evMessages.filter(x => x.id !== id); if (evOpenId === id) evOpenId = null;
+    if (opts.silent) return { id: (moved && moved.id) || id };
+    renderMessageList();
     const read = $('ev-read'); if (read && evOpenId === null) read.innerHTML = '<div class="ev-read-empty">' + esc(note || 'Moved.') + '</div>';
     refreshFolderCounts(); evToast(note || 'Moved');
-  } catch (e) { evToast('Move failed.'); }
+  } catch (e) { if (opts.silent) throw e; evToast('Move failed.'); }
 }
 // small popup menu of folders to move a message into
 function evMoveMenu(e, id) {
@@ -6068,6 +6258,132 @@ function evMoveMenu(e, id) {
   menu.style.left = Math.min(r.left, window.innerWidth - 220) + 'px';
   menu.style.top = (r.bottom + 4) + 'px';
   setTimeout(() => document.addEventListener('click', function h() { menu.remove(); document.removeEventListener('click', h); }), 0);
+}
+
+// ---- command bar: bulk + single-message actions (2026-08-24) ----
+function evGetOpenMessage() { return evOpenId ? evMessages.find(x => x.id === evOpenId) : null; }
+// Static confirmation modal (reused for any destructive bulk/single action) --
+// falls back to a native confirm() only if the markup somehow isn't present.
+function evConfirm(opts) {
+  opts = opts || {};
+  return new Promise((resolve) => {
+    const bd = $('ev-confirm-backdrop');
+    if (!bd) { resolve(window.confirm(opts.body || opts.title || 'Are you sure?')); return; }
+    $('ev-confirm-title').textContent = opts.title || 'Are you sure?';
+    $('ev-confirm-body').textContent = opts.body || '';
+    const okBtn = $('ev-confirm-ok'); okBtn.textContent = opts.okLabel || 'Delete';
+    const cancelBtn = $('ev-confirm-cancel');
+    const cleanup = (result) => { bd.classList.add('hidden'); okBtn.onclick = null; cancelBtn.onclick = null; resolve(result); };
+    okBtn.onclick = () => cleanup(true);
+    cancelBtn.onclick = () => cleanup(false);
+    bd.classList.remove('hidden');
+  });
+}
+// One path for every bulk (or "acts on the open message when nothing is
+// selected") action. Batches the existing single-message functions with
+// {silent:true} so a failure doesn't get swallowed, splices evMessages and
+// re-renders ONCE afterward (never relies on a background count refresh --
+// 2026-08-18: that's exactly how "move to junk didn't work" happened), and
+// resolves each id's own mailbox via m._acct so All-Inboxes selections don't
+// silently act against whichever mailbox evActive happens to be.
+async function evBulkAction(kind, opts) {
+  opts = opts || {};
+  const openMsg = evGetOpenMessage();
+  const ids = evSelected.size ? [...evSelected] : (openMsg ? [openMsg.id] : []);
+  if (!ids.length) return;
+  if (kind === 'delete' || kind === 'report') {
+    const label = kind === 'delete' ? 'Delete' : 'Report as junk';
+    const ok = await evConfirm({
+      title: label + ' ' + ids.length + (ids.length === 1 ? ' message?' : ' messages?'),
+      body: kind === 'delete' ? 'This moves the message(s) to Deleted.' : 'This moves the message(s) to Junk.',
+      okLabel: label,
+    });
+    if (!ok) return;
+  }
+  const fromFolder = evFolderId;
+  const acctFor = (id) => { const m = evMessages.find(x => x.id === id); return (m && m._acct) ? evAccounts.find(a => a.homeAccountId === m._acct) : undefined; };
+  // Captured BEFORE the action runs -- once a message moves it drops out of
+  // evMessages, so its _acct (and thus which mailbox Undo must target) would
+  // otherwise be unrecoverable.
+  const accts = ids.map(acctFor);
+  let results;
+  if (kind === 'delete') results = await Promise.allSettled(ids.map((id, i) => evDelete(id, { silent: true, account: accts[i] })));
+  else if (kind === 'flag') results = await Promise.allSettled(ids.map((id, i) => evFlag(id, true, { silent: true, account: accts[i] })));
+  else if (kind === 'unread') results = await Promise.allSettled(ids.map((id, i) => evMarkUnread(id, { silent: true, account: accts[i] })));
+  else {
+    const dest = kind === 'archive' ? 'archive' : (kind === 'report' ? 'junkemail' : opts.destId);
+    if (!dest) return;
+    results = await Promise.allSettled(ids.map((id, i) => evMove(id, dest, null, { silent: true, account: accts[i] })));
+  }
+  // Undo targets AFTER the move -- Graph/IMAP mint a new id on move, the old one is gone.
+  const undoItems = [];
+  ids.forEach((id, i) => { if (results[i].status === 'fulfilled') undoItems.push({ id: (results[i].value && results[i].value.id) || id, account: accts[i] }); });
+  const okCount = undoItems.length, failCount = ids.length - okCount;
+  evSelected.clear();
+  renderMessageList(); refreshFolderCounts();
+  if (['delete', 'archive', 'report', 'move'].includes(kind) && okCount) {
+    evLastUndo = { kind, items: undoItems, fromFolder };
+    clearTimeout(evUndoTimer); evUndoTimer = setTimeout(() => { evLastUndo = null; evUpdateCmdbarState(); }, 10000);
+  }
+  evUpdateCmdbarState();
+  const verbs = { delete: 'Deleted', archive: 'Archived', report: 'Reported as junk', flag: 'Flagged', unread: 'Marked unread', move: 'Moved to ' + (opts.destName || 'folder') };
+  evToast((verbs[kind] || 'Updated') + ' ' + okCount + (failCount ? (' · ' + failCount + ' failed') : ''));
+}
+async function evUndoBulk() {
+  if (!evLastUndo) return;
+  const { items, fromFolder } = evLastUndo;
+  clearTimeout(evUndoTimer); evLastUndo = null; evUpdateCmdbarState();
+  await Promise.allSettled(items.map(it => evMove(it.id, fromFolder, null, { silent: true, account: it.account })));
+  selectFolder(evFolderId, evFolderName);
+  evToast('Undone');
+}
+// folder-picker for the toolbar's "Move to" — same target list as evMoveMenu,
+// but resolves against the current selection (or the open message) via evBulkAction.
+function evBulkMoveMenu(e) {
+  const openMsg = evGetOpenMessage();
+  const ids = evSelected.size ? [...evSelected] : (openMsg ? [openMsg.id] : []);
+  if (!ids.length) return;
+  e.stopPropagation();
+  const old = document.getElementById('ev-move-menu'); if (old) old.remove();
+  const menu = document.createElement('div'); menu.id = 'ev-move-menu'; menu.className = 'ev-move-menu';
+  const targets = EV_FOLDERS.filter(f => f.id !== evFolderId).concat(evCustomFolders.filter(f => f.id !== evFolderId).map(f => ({ id: f.id, name: f.name, icon: '📁' })));
+  targets.forEach(f => {
+    const row = document.createElement('div'); row.className = 'ev-move-item'; row.textContent = (f.icon || '📁') + ' ' + f.name;
+    row.onclick = () => { menu.remove(); evBulkAction('move', { destId: f.id, destName: f.name }); };
+    menu.appendChild(row);
+  });
+  document.body.appendChild(menu);
+  const btn = (e.currentTarget || e.target).closest('button') || e.target;
+  const r = btn.getBoundingClientRect();
+  menu.style.left = Math.min(r.left, window.innerWidth - 220) + 'px'; menu.style.top = (r.bottom + 4) + 'px';
+  setTimeout(() => document.addEventListener('click', function h() { menu.remove(); document.removeEventListener('click', h); }), 0);
+}
+// right-click context menu on a list row — reuses the same shared dropdown
+// builder (evMenu, defined below) the reading pane's Reina/More menus use.
+function evCtxMenu(e, m) {
+  const flagged = !!(m.flag && m.flag.flagStatus === 'flagged');
+  evMenu(e, [
+    ['👁 Open', () => openEmailMessage(m.id)],
+    ['↩ Reply', () => openEmailCompose('reply', m)],
+    ['↩ Reply all', () => openEmailCompose('replyAll', m)],
+    ['↪ Forward', () => openEmailCompose('forward', m)],
+    '---',
+    [flagged ? '☆ Unflag' : '★ Flag', () => evFlag(m.id, !flagged)],
+    ['● Mark unread', () => evMarkUnread(m.id)],
+    '---',
+    ['🗄 Archive', () => evMove(m.id, 'archive', 'Archived')],
+    ['📁 Move to…', (ev) => evMoveMenu(ev, m.id)],
+    ['🗑 Delete', async () => { const ok = await evConfirm({ title: 'Delete this message?', body: 'This moves it to Deleted.', okLabel: 'Delete' }); if (ok) evDelete(m.id); }],
+  ]);
+}
+// sort control in the list head
+function evSortMenu(e) {
+  const opt = (label, by, dir) => [label + (evSortBy === by && evSortDir === dir ? ' ✓' : ''), () => { evSortBy = by; evSortDir = dir; renderMessageList(); }];
+  evMenu(e, [
+    opt('Received (newest first)', 'date', 'desc'), opt('Received (oldest first)', 'date', 'asc'), '---',
+    opt('Sender (A–Z)', 'from', 'asc'), opt('Sender (Z–A)', 'from', 'desc'), '---',
+    opt('Subject (A–Z)', 'subject', 'asc'), opt('Subject (Z–A)', 'subject', 'desc'),
+  ]);
 }
 
 // ---- categories ----
@@ -6338,8 +6654,48 @@ function openEmailCompose(mode, src) {
   const msg = $('ev-c-msg'); if (msg) msg.classList.add('hidden');
   $('ev-compose-backdrop').classList.remove('hidden');
   (to ? $('ev-c-body') : $('ev-c-to')).focus();
+  evCheckDraftRecovery();
 }
 function evSplitAddrs(s) { return (s || '').split(/[,;]+/).map(x => x.trim()).filter(Boolean); }
+
+// ---- draft autosave (in-flight, unsent draft only — raw localStorage, never
+// hcPref/hlUserSettings: this is the one narrow exception to "settings follow
+// the user," not a synced preference. Keyed by account+mode+source so a reply
+// to message A never clobbers a reply to message B.) ----
+function evDraftKey() {
+  const acct = (evActive && evActive.homeAccountId) || 'default';
+  const src = (evComposeSource && (evComposeSource.id || evComposeSource.internetMessageId)) || 'new';
+  return 'hcEmailDraft:' + acct + ':' + evComposeMode + ':' + src;
+}
+let evDraftSaveTimer = null;
+function evSaveDraftNow() {
+  try {
+    const bd = $('ev-compose-backdrop'); if (!bd || bd.classList.contains('hidden')) return;
+    const to = evChipFieldAddresses('ev-c-to'), cc = evChipFieldAddresses('ev-c-cc'), bcc = evChipFieldAddresses('ev-c-bcc');
+    const subj = ($('ev-c-subj') || {}).value || '';
+    const bodyHtml = ($('ev-c-body') || {}).innerHTML || '';
+    if (!to.length && !cc.length && !bcc.length && !subj && !bodyHtml.replace(/<[^>]+>/g, '').trim()) { evClearDraft(); return; }
+    localStorage.setItem(evDraftKey(), JSON.stringify({ to, cc, bcc, subj, bodyHtml, ts: Date.now() }));
+  } catch (e) {}
+}
+function evScheduleDraftSave() { clearTimeout(evDraftSaveTimer); evDraftSaveTimer = setTimeout(evSaveDraftNow, 800); }
+function evClearDraft() { try { localStorage.removeItem(evDraftKey()); } catch (e) {} }
+function evCheckDraftRecovery() {
+  const banner = $('ev-c-draft-banner'); if (!banner) return;
+  banner.classList.add('hidden');
+  let saved;
+  try { saved = JSON.parse(localStorage.getItem(evDraftKey()) || 'null'); } catch (e) { saved = null; }
+  if (!saved) return;
+  const t = $('ev-c-draft-time'); if (t) t.textContent = new Date(saved.ts).toLocaleString();
+  banner.classList.remove('hidden');
+  $('ev-c-draft-restore').onclick = () => {
+    evSetChips('ev-c-to', saved.to || []); evSetChips('ev-c-cc', saved.cc || []); evSetChips('ev-c-bcc', saved.bcc || []);
+    $('ev-c-cc-row').classList.toggle('hidden', !(saved.cc || []).length); $('ev-c-bcc-row').classList.toggle('hidden', !(saved.bcc || []).length);
+    $('ev-c-subj').value = saved.subj || ''; $('ev-c-body').innerHTML = saved.bodyHtml || '';
+    banner.classList.add('hidden');
+  };
+  $('ev-c-draft-discard').onclick = () => { evClearDraft(); banner.classList.add('hidden'); };
+}
 
 // ---- Gmail-style recipient chips (To/Cc/Bcc) ----
 // Each field's committed addresses live here; the <input> itself only ever
@@ -6420,6 +6776,7 @@ async function evSendCompose() {
   try {
     await evGraph('/me/sendMail', { method: 'POST', body: { message, saveToSentItems: true } });
     $('ev-compose-backdrop').classList.add('hidden');
+    evClearDraft();
     evToast('Sent ✓');
     if (evFolderId === 'sentitems') selectFolder('sentitems', 'Sent');
   } catch (e) { msg.textContent = 'Send failed — ' + e.message; msg.classList.remove('hidden'); }
@@ -6439,7 +6796,10 @@ function evToast(text) {
 { const b = $('ev-refresh'); if (b) b.addEventListener('click', () => selectFolder(evFolderId, evFolderName)); }
 { const b = $('ev-signin'); if (b) b.addEventListener('click', emailSignIn); }
 { const b = $('ev-c-close'); if (b) b.addEventListener('click', () => $('ev-compose-backdrop').classList.add('hidden')); }
-{ const b = $('ev-c-cancel'); if (b) b.addEventListener('click', () => $('ev-compose-backdrop').classList.add('hidden')); }
+{ const b = $('ev-c-cancel'); if (b) b.addEventListener('click', () => { evClearDraft(); $('ev-compose-backdrop').classList.add('hidden'); }); }
+{ const s = $('ev-c-subj'); if (s) s.addEventListener('input', evScheduleDraftSave); }
+{ const bd2 = $('ev-c-body'); if (bd2) bd2.addEventListener('input', evScheduleDraftSave); }
+['ev-c-to', 'ev-c-cc', 'ev-c-bcc'].forEach(id => { const el = $(id); if (el) el.addEventListener('blur', evScheduleDraftSave); });
 { const b = $('ev-c-send'); if (b) b.addEventListener('click', evSendCompose); }
 { const b = $('ev-c-cctoggle'); if (b) b.addEventListener('click', () => { $('ev-c-cc-row').classList.remove('hidden'); b.classList.add('hidden'); $('ev-c-cc').focus(); }); }
 { const b = $('ev-c-bcctoggle'); if (b) b.addEventListener('click', () => { $('ev-c-bcc-row').classList.remove('hidden'); b.classList.add('hidden'); $('ev-c-bcc').focus(); }); }
@@ -6469,6 +6829,63 @@ function evToast(text) {
     }
     e.target.value = ''; renderComposeAttachments();
   }); }
+
+// ---- command bar + list head wiring ----
+{ const b = $('ev-compose-caret'); if (b) b.addEventListener('click', (e) => evMenu(e, [
+    ['✎ New email', () => openEmailCompose('new', null)],
+    ['📅 New meeting <span class="rail-soon" style="position:static;margin-left:6px">SOON</span>', () => evToast('Meeting invites from Email are coming soon.')],
+  ])); }
+{ const b = $('ev-select-all'); if (b) b.addEventListener('change', () => {
+    const rows = [...document.querySelectorAll('#ev-list .ev-item[data-id]')];
+    if (b.checked) rows.forEach(r => evSelected.add(r.dataset.id));
+    else rows.forEach(r => evSelected.delete(r.dataset.id));
+    renderMessageList();
+  }); }
+{ const b = $('ev-tab-focused'); if (b) b.addEventListener('click', () => { evFocusedTab = 'focused'; renderMessageList(); }); }
+{ const b = $('ev-tab-other'); if (b) b.addEventListener('click', () => { evFocusedTab = 'other'; renderMessageList(); }); }
+{ const b = $('ev-sort-btn'); if (b) b.addEventListener('click', evSortMenu); }
+{ const b = $('ev-cmd-delete'); if (b) b.addEventListener('click', () => evBulkAction('delete')); }
+{ const b = $('ev-cmd-archive'); if (b) b.addEventListener('click', () => evBulkAction('archive')); }
+{ const b = $('ev-cmd-report'); if (b) b.addEventListener('click', () => evBulkAction('report')); }
+{ const b = $('ev-cmd-move'); if (b) b.addEventListener('click', evBulkMoveMenu); }
+{ const b = $('ev-cmd-reply'); if (b) b.addEventListener('click', () => { const m = evGetOpenMessage(); if (m) openEmailCompose('reply', m); }); }
+{ const b = $('ev-cmd-reply-caret'); if (b) b.addEventListener('click', (e) => {
+    const m = evGetOpenMessage(); if (!m) return;
+    evMenu(e, [
+      ['↩ Reply', () => openEmailCompose('reply', m)],
+      ['↩ Reply all', () => openEmailCompose('replyAll', m)],
+      ['↪ Forward', () => openEmailCompose('forward', m)],
+    ]);
+  }); }
+{ const b = $('ev-cmd-readall'); if (b) b.addEventListener('click', evMarkAllRead); }
+{ const b = $('ev-cmd-flag'); if (b) b.addEventListener('click', () => evBulkAction('flag')); }
+{ const b = $('ev-cmd-snooze'); if (b) b.addEventListener('click', () => evToast('Snooze is coming soon.')); }
+{ const b = $('ev-cmd-undo'); if (b) b.addEventListener('click', evUndoBulk); }
+{ const b = $('ev-cmd-more'); if (b) b.addEventListener('click', (e) => { const m = evGetOpenMessage(); if (m) evMoreMenu(e, m); }); }
+
+// ---- keyboard shortcuts (only while the Email tab is visible and focus isn't
+// in a text field — mirrors the guard the Chirp push-to-talk listener uses) ----
+document.addEventListener('keydown', (e) => {
+  const ev = $('email-view'); if (!ev || ev.classList.contains('hidden')) return;
+  const cb = $('ev-compose-backdrop'), cf = $('ev-confirm-backdrop');
+  if ((cb && !cb.classList.contains('hidden')) || (cf && !cf.classList.contains('hidden'))) return;
+  const a = document.activeElement;
+  if (a && (a.tagName === 'INPUT' || a.tagName === 'TEXTAREA' || a.isContentEditable)) {
+    // focus is already in a field -- let it handle its own keys
+  } else {
+    if (e.key === '/') { e.preventDefault(); const s = $('ev-search'); if (s) s.focus(); return; }
+    if (e.key === 'Escape') { if (evSelected.size) { evSelected.clear(); renderMessageList(); } return; }
+    const m = evGetOpenMessage();
+    if (e.key === 'x' && m) { evToggleSelect(m.id, !evSelected.has(m.id)); return; }
+    if ((e.key === 'Delete' || e.key === '#') && (evSelected.size || m)) { e.preventDefault(); evBulkAction('delete'); return; }
+    if (e.key === 'e' && (evSelected.size || m)) { evBulkAction('archive'); return; }
+    if (e.key === 'u' && m) { evMarkUnread(m.id); return; }
+    if (e.key === 'r' && m) { openEmailCompose('reply', m); return; }
+    if (e.key === 'a' && m) { openEmailCompose('replyAll', m); return; }
+    if (e.key === 'f' && m) { openEmailCompose('forward', m); return; }
+  }
+});
+
 // ---- search ----
 // Search has to answer for whatever mailbox is open, not just Microsoft ones:
 //  * Microsoft mailboxes use Graph $search -- server-side, whole mailbox.
@@ -6524,6 +6941,7 @@ async function evSearchAccount(acct, q) {
     } catch (err) { if (list) list.innerHTML = '<div class="ev-loading">Search failed — ' + esc(err.message) + '</div>'; }
   }); }
 { const bd = $('ev-compose-backdrop'); if (bd) bd.addEventListener('click', e => { /* clicking away must NOT discard the draft — keep the compose open; use ✕ or Discard to close */ }); }
+{ const bd = $('ev-confirm-backdrop'); if (bd) bd.addEventListener('click', e => { if (e.target === bd) { const c = $('ev-confirm-cancel'); if (c) c.click(); else bd.classList.add('hidden'); } }); }
 
 /* ==================================================================
    TASKS (Native) — HiveLogic's own action-management system.

@@ -222,12 +222,46 @@
           <button class="icon-btn" id="ev-refresh" title="Refresh">
             <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
           </button>
-          <button class="primary-btn" id="ev-compose">✎ Compose</button>
+          <div class="ev-compose-split">
+            <button class="primary-btn" id="ev-compose">✎ Compose</button>
+            <button class="primary-btn ev-icon-caret" id="ev-compose-caret" title="More new-message options">▾</button>
+          </div>
         </div>
       </div>
+
+      <!-- command bar: bulk + single-message actions, enable state driven by selection -->
+      <div class="ev-cmdbar" id="ev-cmdbar">
+        <button class="ev-cmd" id="ev-cmd-delete" title="Delete" disabled>🗑 Delete</button>
+        <button class="ev-cmd" id="ev-cmd-archive" title="Archive" disabled>🗄 Archive</button>
+        <button class="ev-cmd" id="ev-cmd-report" title="Report as junk" disabled>⚠ Report</button>
+        <button class="ev-cmd" id="ev-cmd-move" title="Move to folder" disabled>📁 Move to</button>
+        <span class="ev-cmd-sep"></span>
+        <div class="ev-cmd-split">
+          <button class="ev-cmd" id="ev-cmd-reply" title="Reply" disabled>↩ Reply</button>
+          <button class="ev-cmd ev-icon-caret" id="ev-cmd-reply-caret" title="Reply options" disabled>▾</button>
+        </div>
+        <button class="ev-cmd" id="ev-cmd-readall" title="Mark all as read">✓ Mark all as read</button>
+        <button class="ev-cmd" id="ev-cmd-flag" title="Flag / unflag" disabled>🚩 Flag</button>
+        <button class="ev-cmd ev-cmd-soon" id="ev-cmd-snooze" title="Coming soon">⏰ Snooze<span class="rail-soon">SOON</span></button>
+        <button class="ev-cmd ev-cmd-undo" id="ev-cmd-undo" title="Undo last action" disabled>↶ Undo</button>
+        <span class="ev-cmd-spacer"></span>
+        <button class="ev-cmd" id="ev-cmd-more" title="More actions" disabled>⋯ More</button>
+      </div>
+
       <!-- body: message list | reading pane -->
-      <div class="ev-body">
-        <div class="ev-list" id="ev-list"></div>
+      <div class="ev-body" id="ev-body">
+        <div class="ev-list-pane">
+          <div class="ev-list-head" id="ev-list-head">
+            <input type="checkbox" id="ev-select-all" class="ev-select-all" title="Select all">
+            <div class="ev-fo-tabs">
+              <button class="ev-fo-tab active" id="ev-tab-focused" data-tab="focused">Focused</button>
+              <button class="ev-fo-tab" id="ev-tab-other" data-tab="other">Other <span class="ev-fo-count hidden" id="ev-fo-other-count"></span></button>
+            </div>
+            <span class="ev-list-head-spacer"></span>
+            <button class="ev-sort-btn" id="ev-sort-btn" title="Sort messages">Received ↓</button>
+          </div>
+          <div class="ev-list" id="ev-list"></div>
+        </div>
         <div class="ev-read" id="ev-read"><div class="ev-read-empty">Select a message to read it here.</div></div>
       </div>
 
@@ -239,6 +273,18 @@
           <p>Sign in with your Microsoft 365 account to read and send email right inside HiveConnect. You can add more than one mailbox.</p>
           <button class="primary-btn" id="ev-signin">Sign in with Microsoft</button>
           <div id="ev-setup-note" class="ev-setup-note hidden"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Destructive-action confirmation (delete / report) -->
+    <div id="ev-confirm-backdrop" class="modal-backdrop hidden">
+      <div class="modal ev-confirm-modal">
+        <h2 id="ev-confirm-title">Delete message?</h2>
+        <p id="ev-confirm-body" class="ev-confirm-body"></p>
+        <div class="modal-actions">
+          <button class="text-btn" id="ev-confirm-cancel">Cancel</button>
+          <button class="primary-btn ev-confirm-danger" id="ev-confirm-ok">Delete</button>
         </div>
       </div>
     </div>
@@ -684,6 +730,12 @@
   <div id="ev-compose-backdrop" class="modal-backdrop hidden">
     <div class="modal ev-compose-modal">
       <div class="ev-c-head"><h2 id="ev-c-title">New email</h2><button class="icon-btn" id="ev-c-close">✕</button></div>
+      <div class="ev-c-draft-banner hidden" id="ev-c-draft-banner">
+        <span>Unsent draft from <span id="ev-c-draft-time"></span></span>
+        <span class="ev-c-draft-spacer"></span>
+        <button type="button" id="ev-c-draft-restore">Restore</button>
+        <button type="button" id="ev-c-draft-discard">Discard</button>
+      </div>
       <div class="ev-c-from-row"><label>From</label><select id="ev-c-from" class="modal-select"></select></div>
       <div class="ev-c-field"><label>To</label><div class="ev-chipfield" id="ev-c-to-field"><input id="ev-c-to" type="text" placeholder="name@example.com"></div></div>
       <div class="ev-c-field ev-c-cc hidden" id="ev-c-cc-row"><label>Cc</label><div class="ev-chipfield" id="ev-c-cc-field"><input id="ev-c-cc" type="text" placeholder="cc@example.com"></div></div>
