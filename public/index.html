@@ -19,7 +19,7 @@
  * monitor_my_status poll, so "is this person running current code" is a
  * question the database can answer. Do not hand-edit it -- run
  * `node scripts/stamp-page-build.mjs`. */
-var HL_PAGE_BUILD = 'd4639e6f3cc7a1d1';
+var HL_PAGE_BUILD = '63280f1cfd80f5a3';
 </script>
 <script>
 (function () { // HL_FETCH_DEDUPE_V1 — single wrapper: GET /api/ dedupe + 60s cache + write-invalidate
@@ -24284,7 +24284,9 @@ function nativeEstimateToRow(e){
     lifecycleStatus:e.lifecycleStatus||'draft',
     depositSatisfied:!!e.depositSatisfied,
     depositRequired:e.depositRequired||0,
+    depositRequiredCash:e.depositRequiredCash||0,
     depositPaidTotal:e.depositPaidTotal||0,
+    depositCreditedTotal:e.depositCreditedTotal||0,
     // 2026-08-25: the summary modal used to show a hardcoded 35/35/30
     // "Payment schedule & payouts" preview regardless of what the estimate
     // actually specified -- confusing for a real estimate drafted as a
@@ -24311,23 +24313,46 @@ function loadNativeEstimatesLive(){
 // purpose, and this preserves that human sign-off step).
 function efOpenRecordDepositModal(nid,num){
   var row=EQ_NATIVE.filter(function(e){return e.nativeId===nid;})[0];
-  var remaining=row?(row.depositRequired-row.depositPaidTotal):0;
+  // The posted deposit target (depositRequired) is the CARD price; paying by
+  // cash/check/ACH earns the same cash discount the estimate was priced
+  // with, so it takes fewer real dollars to satisfy it (server-side math in
+  // creditedAmount(), server/bookkeeping/src/card-pricing.js). Defaulting
+  // the input to the card-priced figure regardless of the selected method
+  // used to make a same-amount check payment "overshoot" and get rejected
+  // -- this recomputes the real amount owed per method instead.
+  var credRemaining=row?(row.depositRequired-(row.depositCreditedTotal||0)):0;
+  var cashRatio=(row&&row.depositRequiredCash>0&&row.depositRequiredCash!==row.depositRequired)?(row.depositRequired/row.depositRequiredCash):1;
+  var RDP_DISCOUNT_METHODS=['cash','check','ach'];
+  function rdpAmountFor(method){
+    var amt=RDP_DISCOUNT_METHODS.indexOf(method)>-1?(credRemaining/cashRatio):credRemaining;
+    return Math.max(0,Math.round(amt*100)/100);
+  }
+  var initial=rdpAmountFor('check');
   var body='<div id="rdp-body">'
-    +'<div style="font-size:12px;font-weight:700;color:#484f64;margin-bottom:14px">Remaining to satisfy the deposit on '+esc(num)+': <b style="color:#1B7A50">'+fmC(remaining)+'</b></div>'
+    +'<div style="font-size:12px;font-weight:700;color:#484f64;margin-bottom:14px">Remaining to satisfy the deposit on '+esc(num)+': <b style="color:#1B7A50">'+fmC(rdpAmountFor('check'))+'</b> by cash/check/ACH, or <b style="color:#1B7A50">'+fmC(rdpAmountFor('card'))+'</b> by card</div>'
     +'<label style="'+_lbl+'">Amount received</label>'
-    +'<input id="rdp-amt" type="number" step="0.01" min="0.01" max="'+remaining.toFixed(2)+'" value="'+remaining.toFixed(2)+'" style="'+_inp+';margin-bottom:12px">'
+    +'<input id="rdp-amt" type="number" step="0.01" min="0.01" max="'+initial.toFixed(2)+'" value="'+initial.toFixed(2)+'" style="'+_inp+';margin-bottom:12px">'
     +'<label style="'+_lbl+'">Payment method</label>'
-    +'<select id="rdp-method" style="'+_inp+';margin-bottom:14px"><option value="check">Check</option><option value="card">Card</option><option value="ach">ACH</option><option value="cash">Cash</option><option value="other">Other</option></select>'
+    +'<select id="rdp-method" onchange="_hlRdpMethodChange()" style="'+_inp+';margin-bottom:14px"><option value="check">Check</option><option value="card">Card</option><option value="ach">ACH</option><option value="cash">Cash</option><option value="other">Other</option></select>'
     +'<div id="rdp-err" style="display:none;color:#c65b4e;font-size:11px;font-weight:700;margin-bottom:10px"></div>'
     +'<div style="display:flex;gap:9px"><button onclick="_hlRdpSubmit()" style="flex:1;padding:11px;border:none;border-radius:8px;background:#1B7A50;color:#fff;font-weight:900;font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;cursor:pointer;font-family:\'Montserrat\',sans-serif">Record payment</button><button onclick="document.getElementById(\'hlmodal\').remove()" style="flex:1;padding:11px;border:1px solid #dadde8;border-radius:8px;background:#fff;color:#5d657b;font-weight:900;font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;cursor:pointer;font-family:\'Montserrat\',sans-serif">Cancel</button></div>'
     +'</div>';
   hlModal('&#128176; Record deposit payment',body);
+  window._hlRdpMethodChange=function(){
+    var method=(document.getElementById('rdp-method')||{}).value||'other';
+    var amt=rdpAmountFor(method);
+    var input=document.getElementById('rdp-amt');
+    if(input){ input.max=amt.toFixed(2); input.value=amt.toFixed(2); }
+    var err=document.getElementById('rdp-err');
+    if(err) err.style.display='none';
+  };
   window._hlRdpSubmit=function(){
     var amt2=+((document.getElementById('rdp-amt')||{}).value)||0;
     var method=(document.getElementById('rdp-method')||{}).value||'other';
+    var remaining=rdpAmountFor(method);
     var err=document.getElementById('rdp-err');
     if(amt2<=0){ err.textContent='Enter an amount greater than zero.'; err.style.display='block'; return; }
-    if(amt2>remaining+0.01){ err.textContent='That would exceed the '+fmC(remaining)+' still required — enter '+fmC(remaining)+' or less.'; err.style.display='block'; return; }
+    if(amt2>remaining+0.01){ err.textContent='That would exceed the '+fmC(remaining)+' still required by '+method+' — enter '+fmC(remaining)+' or less.'; err.style.display='block'; return; }
     err.style.display='none';
     hlEstApi('record-deposit-payment',{id:nid,amount:amt2,method:method}).then(function(d){
       if(!d||!d.ok){ err.textContent=(d&&d.error)||'Could not record this payment.'; err.style.display='block'; return; }
