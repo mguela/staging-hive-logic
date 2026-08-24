@@ -2466,7 +2466,9 @@ html[data-theme="dark"] :is(#hiveconnect-root, .hc-embed).huddle-banner {
 :is(#hiveconnect-root, .hc-embed) .sidebar.sidebar-email-theme .icon-btn:hover,
 :is(#hiveconnect-root, .hc-embed).sidebar.sidebar-email-theme .icon-btn:hover { background: var(--steel-bg); color: var(--ink); }
 :is(#hiveconnect-root, .hc-embed) .sidebar.sidebar-email-theme #bell-btn,
-:is(#hiveconnect-root, .hc-embed).sidebar.sidebar-email-theme #bell-btn { border-color: var(--line); background: var(--steel-bg); color: var(--ink); }
+:is(#hiveconnect-root, .hc-embed).sidebar.sidebar-email-theme #bell-btn { color: var(--mut); }
+:is(#hiveconnect-root, .hc-embed) .sidebar.sidebar-email-theme #bell-btn:hover,
+:is(#hiveconnect-root, .hc-embed).sidebar.sidebar-email-theme #bell-btn:hover { background: var(--steel-bg); color: var(--ink); }
 :is(#hiveconnect-root, .hc-embed) .sidebar.sidebar-email-theme .ev-accts-lbl,
 :is(#hiveconnect-root, .hc-embed).sidebar.sidebar-email-theme .ev-accts-lbl { color: var(--mut); }
 :is(#hiveconnect-root, .hc-embed) .sidebar.sidebar-email-theme .ev-acct,
@@ -2956,13 +2958,17 @@ html[data-theme="dark"] :is(#hiveconnect-root, .hc-embed).chirp-folderhead { bac
 :is(#hiveconnect-root, .hc-embed) .ev-loadmore:disabled,
 :is(#hiveconnect-root, .hc-embed).ev-loadmore:disabled { opacity: .6; cursor: default; }
 :is(#hiveconnect-root, .hc-embed) #hc-back-btn,
-:is(#hiveconnect-root, .hc-embed)#hc-back-btn { width: 34px; height: 34px; min-width: 34px; border-radius: 9px; border: none; background: linear-gradient(135deg,#ffc94b 0%,#ff9d3c 60%,#f5793b 100%); color: #161e2e; font-size: 18px; font-weight: 900; display: flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: 0 3px 10px rgba(245,121,59,.4); }
+:is(#hiveconnect-root, .hc-embed)#hc-back-btn { appearance: none; -webkit-appearance: none; width: 34px; height: 34px; min-width: 34px; border-radius: 9px; border: none; background: none; box-shadow: none; color: var(--gold); font-size: 18px; font-weight: 900; display: flex; align-items: center; justify-content: center; cursor: pointer; }
 :is(#hiveconnect-root, .hc-embed) #hc-back-btn:hover,
-:is(#hiveconnect-root, .hc-embed)#hc-back-btn:hover { transform: scale(1.06); }
+:is(#hiveconnect-root, .hc-embed)#hc-back-btn:hover { background: rgba(255,201,75,.16); }
+:is(#hiveconnect-root, .hc-embed) .sidebar.sidebar-email-theme #hc-back-btn,
+:is(#hiveconnect-root, .hc-embed).sidebar.sidebar-email-theme #hc-back-btn { color: var(--steel-deep); }
+:is(#hiveconnect-root, .hc-embed) .sidebar.sidebar-email-theme #hc-back-btn:hover,
+:is(#hiveconnect-root, .hc-embed).sidebar.sidebar-email-theme #hc-back-btn:hover { background: var(--steel-bg); }
 :is(#hiveconnect-root, .hc-embed) #bell-btn,
-:is(#hiveconnect-root, .hc-embed)#bell-btn { width: 34px; height: 34px; min-width: 34px; border-radius: 9px; border: 1.5px solid rgba(255,255,255,.35); background: rgba(255,255,255,.10); color: #fff; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+:is(#hiveconnect-root, .hc-embed)#bell-btn { appearance: none; -webkit-appearance: none; width: 34px; height: 34px; min-width: 34px; border-radius: 9px; border: none; background: none; box-shadow: none; color: rgba(255,255,255,.85); display: flex; align-items: center; justify-content: center; cursor: pointer; }
 :is(#hiveconnect-root, .hc-embed) #bell-btn:hover,
-:is(#hiveconnect-root, .hc-embed)#bell-btn:hover { transform: scale(1.06); border-color: #ffc94b; background: rgba(255,255,255,.16); }
+:is(#hiveconnect-root, .hc-embed)#bell-btn:hover { background: rgba(255,255,255,.16); color: #fff; }
 :is(#hiveconnect-root, .hc-embed) #bell-btn svg,
 :is(#hiveconnect-root, .hc-embed)#bell-btn svg { width: 17px; height: 17px; }
 
