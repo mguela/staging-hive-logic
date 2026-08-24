@@ -19,7 +19,7 @@
  * monitor_my_status poll, so "is this person running current code" is a
  * question the database can answer. Do not hand-edit it -- run
  * `node scripts/stamp-page-build.mjs`. */
-var HL_PAGE_BUILD = '3ab1e6ad5e495ed0';
+var HL_PAGE_BUILD = '0d3d2bab1f0cfb64';
 </script>
 <script>
 (function () { // HL_FETCH_DEDUPE_V1 — single wrapper: GET /api/ dedupe + 60s cache + write-invalidate
@@ -5788,14 +5788,19 @@ function ninvSave(){ var amt = parseFloat(document.getElementById('ninv-amt').va
       if (window.hlTopClockClose) hlTopClockClose();
       return hlRequireSession(async function(sess){
       var btn = document.getElementById('wf-clockin-btn');
-      btn.disabled = true;
+      // The Monitor dashboard (public/index.html #view-mon) calls this same
+      // function from its own mon-clockin-btn -- disable both, or a
+      // double-click there fires a duplicate clock-in POST before the first
+      // response lands.
+      var monBtn = document.getElementById('mon-clockin-btn');
+      btn.disabled = true; if (monBtn) monBtn.disabled = true;
       var res = await fetch('/api/track1?resource=workforce_clock', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + sess.access_token },
         body: JSON.stringify({ action: 'in' })
       });
       var data = await res.json().catch(function(){ return null; });
-      btn.disabled = false;
+      btn.disabled = false; if (monBtn) monBtn.disabled = false;
       if (!data || data.ok === false) {
         var msgEl = document.getElementById('wf-clock-msg');
         msgEl.textContent = (data && data.error) || 'Could not clock in.';
@@ -5848,7 +5853,10 @@ function ninvSave(){ var amt = parseFloat(document.getElementById('ninv-amt').va
       }
       return hlRequireSession(async function(sess){
       var btn = document.getElementById('wf-clockout-btn');
-      btn.disabled = true;
+      // See the matching comment in workforceClockIn -- the Monitor
+      // dashboard's mon-clockout-btn calls this same function.
+      var monBtn = document.getElementById('mon-clockout-btn');
+      btn.disabled = true; if (monBtn) monBtn.disabled = true;
       var res = await fetch('/api/track1?resource=workforce_clock', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + sess.access_token },
@@ -5859,7 +5867,7 @@ function ninvSave(){ var amt = parseFloat(document.getElementById('ninv-amt').va
         msgEl.textContent = (data && data.error) || 'Could not clock out.';
         msgEl.style.color = 'var(--red)';
         if (window.chirpToast) chirpToast('⚠️ ' + ((data && data.error) || 'Could not clock out.'));
-        btn.disabled = false;
+        btn.disabled = false; if (monBtn) monBtn.disabled = false;
         // If the server refused because the EOD report is missing, show the
         // form -- don't just report the requirement and leave them stranded.
         // needsEodReport is the server's explicit flag; the text match is a
@@ -5882,14 +5890,17 @@ function ninvSave(){ var amt = parseFloat(document.getElementById('ninv-amt').va
       return hlRequireSession(async function(sess){
       var action = (currentSession && currentSession.on_break) ? 'end' : 'start';
       var btn = document.getElementById('wf-break-btn');
-      btn.disabled = true;
+      // See the matching comment in workforceClockIn -- the Monitor
+      // dashboard's mon-break-btn calls this same function.
+      var monBtn = document.getElementById('mon-break-btn');
+      btn.disabled = true; if (monBtn) monBtn.disabled = true;
       var res = await fetch('/api/track1?resource=workforce_break', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + sess.access_token },
         body: JSON.stringify({ action: action })
       });
       var data = await res.json().catch(function(){ return null; });
-      btn.disabled = false;
+      btn.disabled = false; if (monBtn) monBtn.disabled = false;
       if (!data || data.ok === false) {
         var msgEl = document.getElementById('wf-clock-msg');
         msgEl.textContent = (data && data.error) || 'Could not update break status.';

@@ -6420,6 +6420,20 @@ function weekStartISOET() {
 // writes to) rather than the free-text hours_worked EOD field. Powers the
 // Monitor dashboard's summary cards -- see handleWorkforceStatus for the
 // companion "what's my session doing right now" call.
+// Calendar date (YYYY-MM-DD) a UTC timestamp falls on in the business
+// timezone. clock_in is stored as new Date().toISOString() (UTC); comparing
+// its raw slice(0,10) against todayStr()'s ET date misclassifies any
+// clock-in from the last ~4-5 hours of the ET business day (it's already
+// "tomorrow" in UTC), dropping a real evening shift off "Today's Hours".
+function etDateStr(isoOrDate) {
+  const d = isoOrDate instanceof Date ? isoOrDate : new Date(isoOrDate);
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit',
+  }).formatToParts(d);
+  const get = (t) => (parts.find((p) => p.type === t) || {}).value;
+  return `${get('year')}-${get('month')}-${get('day')}`;
+}
+
 async function handleWorkforceWeekSummary(req, res) {
   const requester = await getRequestingProfile(req);
   if (!requester) return res.status(401).json({ ok: false, error: 'Not signed in -- log into HiveLogic first.' });
@@ -6427,7 +6441,7 @@ async function handleWorkforceWeekSummary(req, res) {
   const weekStart = weekStartISOET();
   const sessRes = await supabaseRequest(
     `workforce_time_sessions?employee_id=eq.${requester.id}&clock_in=gte.${encodeURIComponent(weekStart)}`
-    + `&order=clock_in.asc&select=clock_in,clock_out,total_break_seconds,status`
+    + `&order=clock_in.asc&select=clock_in,clock_out,total_break_seconds,on_break,break_started_at,status`
   );
   if (!sessRes.ok) return res.status(200).json({ ok: true, tablesReady: false, todaySeconds: 0, weekSeconds: 0 });
   const sessions = await sessRes.json();
@@ -6436,9 +6450,15 @@ async function handleWorkforceWeekSummary(req, res) {
   for (const s of sessions || []) {
     const startMs = new Date(s.clock_in).getTime();
     const endMs = s.clock_out ? new Date(s.clock_out).getTime() : nowMs;
-    const worked = Math.max(0, Math.round((endMs - startMs) / 1000) - (s.total_break_seconds || 0));
+    // total_break_seconds only finalizes when a break ENDS -- an in-progress
+    // break's elapsed time isn't in it yet, so subtract it separately (same
+    // "freeze at break start" accounting the frontend timer uses).
+    const liveBreakSeconds = (s.on_break && s.break_started_at && !s.clock_out)
+      ? Math.max(0, Math.round((nowMs - new Date(s.break_started_at).getTime()) / 1000))
+      : 0;
+    const worked = Math.max(0, Math.round((endMs - startMs) / 1000) - (s.total_break_seconds || 0) - liveBreakSeconds);
     weekSeconds += worked;
-    if (s.clock_in.slice(0, 10) === today) todaySeconds += worked;
+    if (etDateStr(s.clock_in) === today) todaySeconds += worked;
   }
   return res.status(200).json({ ok: true, tablesReady: true, todaySeconds, weekSeconds, weekStart });
 }
