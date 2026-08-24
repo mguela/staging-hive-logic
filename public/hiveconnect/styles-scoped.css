@@ -2558,6 +2558,26 @@ html[data-theme="dark"] :is(#hiveconnect-root, .hc-embed).huddle-banner {
 :is(#hiveconnect-root, .hc-embed) #panel-email button:not(.ev-acct-add),
 :is(#hiveconnect-root, .hc-embed)#panel-email button:not(.ev-acct-add) { border: none; appearance: none; -webkit-appearance: none; box-shadow: none; }
 
+/* ===== EMAIL Phase 6: compose modal labels + flattened toolbar buttons
+   (2026-08-25) ===== */
+/* FROM/TO/CC/BCC/SUBJECT/Priority/Read receipt labels: .modal's own label
+   rule imposes mono/uppercase/letter-spacing app-wide; override it here with
+   equal-or-higher specificity (doubled class) rather than relying on source
+   order, which the next edit anywhere in this file could quietly break. */
+:is(#hiveconnect-root, .hc-embed) .modal.ev-compose-modal label,
+:is(#hiveconnect-root, .hc-embed).modal.ev-compose-modal label { font-family: var(--sans); font-weight: 400; text-transform: none; letter-spacing: normal; }
+/* Every compose-modal button goes flat (no fill/border/shadow, hover only)
+   except Send (the primary CTA) and the Reina button (its gold-soft tint is
+   a deliberate AI accent, not the bug this is fixing). */
+:is(#hiveconnect-root, .hc-embed) .ev-compose-modal button:not(#ev-c-send):not(.ev-c-aibtn),
+:is(#hiveconnect-root, .hc-embed).ev-compose-modal button:not(#ev-c-send):not(.ev-c-aibtn) { appearance: none; -webkit-appearance: none; background: none; border: none; box-shadow: none; }
+:is(#hiveconnect-root, .hc-embed) .ev-compose-modal button:not(#ev-c-send):not(.ev-c-aibtn):hover,
+:is(#hiveconnect-root, .hc-embed).ev-compose-modal button:not(#ev-c-send):not(.ev-c-aibtn):hover { background: var(--steel-bg); }
+/* the rich-text toolbar itself sits on a --steel-bg tint, so a same-color
+   hover would be invisible there -- keep its own lighter (--card) hover. */
+:is(#hiveconnect-root, .hc-embed) .ev-compose-modal .ev-c-toolbar button:not(#ev-c-send):not(.ev-c-aibtn):hover,
+:is(#hiveconnect-root, .hc-embed).ev-compose-modal .ev-c-toolbar button:not(#ev-c-send):not(.ev-c-aibtn):hover { background: var(--card); }
+
 /* ==================== TASKS + CALENDAR ==================== */
 :is(#hiveconnect-root, .hc-embed) .tc-view,
 :is(#hiveconnect-root, .hc-embed).tc-view { position: absolute; inset: 0; z-index: 24; background: var(--canvas); display: flex; flex-direction: column; }
