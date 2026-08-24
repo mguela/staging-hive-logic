@@ -19,7 +19,7 @@
  * monitor_my_status poll, so "is this person running current code" is a
  * question the database can answer. Do not hand-edit it -- run
  * `node scripts/stamp-page-build.mjs`. */
-var HL_PAGE_BUILD = '489fb51c5dd85109';
+var HL_PAGE_BUILD = 'd4639e6f3cc7a1d1';
 </script>
 <script>
 (function () { // HL_FETCH_DEDUPE_V1 — single wrapper: GET /api/ dedupe + 60s cache + write-invalidate
@@ -626,13 +626,13 @@ var HL_PAGE_BUILD = '489fb51c5dd85109';
   .dw-a .i{width:44px;height:44px;border-radius:12px;display:flex;align-items:center;justify-content:center}
   .dw-a .i svg{width:22px;height:22px;stroke-width:2;fill:none;stroke-linecap:round;stroke-linejoin:round}
   /* QUICK ACTION FORMS */
-  .fm{background:#fff;border-radius:16px;width:560px;max-width:94vw;box-shadow:0 20px 60px rgba(22,30,46,.35);overflow:hidden;display:none}
-  .fm.open{display:block}
-  .fm-head{display:flex;align-items:center;gap:11px;padding:16px 20px;border-bottom:1px solid var(--line)}
+  .fm{background:#fff;border-radius:16px;width:560px;max-width:94vw;max-height:calc(100vh - 130px);box-shadow:0 20px 60px rgba(22,30,46,.35);overflow:hidden;display:none;flex-direction:column}
+  .fm.open{display:flex}
+  .fm-head{display:flex;align-items:center;gap:11px;padding:16px 20px;border-bottom:1px solid var(--line);flex-shrink:0}
   .fm-head .i{width:34px;height:34px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:15px;color:#fff}
   .fm-head b{font-size:15px;font-weight:800}
   .fm-head .x{margin-left:auto;cursor:pointer;color:var(--mut);font-size:18px;font-weight:700}
-  .fm-body{padding:18px 20px;display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .fm-body{padding:18px 20px;display:grid;grid-template-columns:1fr 1fr;gap:12px;overflow-y:auto;flex:1;min-height:0}
   .fld{display:flex;flex-direction:column;gap:5px}
   .fld.full{grid-column:1/-1}
   .fld label{font-size:10px;font-weight:800;letter-spacing:.06em;color:var(--mut)}
@@ -697,7 +697,7 @@ var HL_PAGE_BUILD = '489fb51c5dd85109';
   .ajv-btn.ghost{background:#fff;border:1.5px solid var(--line);color:#5d657b}
   .ajv-btn:disabled{opacity:.5;cursor:default}
   .ajv-note{font-size:10.5px;color:var(--mut);font-weight:700}
-  .fm-foot{display:flex;justify-content:space-between;align-items:center;padding:14px 20px;border-top:1px solid var(--line)}
+  .fm-foot{display:flex;justify-content:space-between;align-items:center;padding:14px 20px;border-top:1px solid var(--line);flex-shrink:0}
   .fm-foot .draft{font-size:10.5px;color:var(--mut);font-weight:600}
   .fm-save{background:linear-gradient(135deg,#ffc94b 0%,#ff9d3c 55%,#f5793b 100%);color:#3a2410;border:none;border-radius:9px;padding:11px 22px;font-weight:800;font-size:13px;cursor:pointer;font-family:var(--sans);box-shadow:0 3px 12px rgba(255,150,60,.4)}
   /* The hidden position must be HEIGHT-RELATIVE. It used to be a flat
