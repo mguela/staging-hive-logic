@@ -19,7 +19,7 @@
  * monitor_my_status poll, so "is this person running current code" is a
  * question the database can answer. Do not hand-edit it -- run
  * `node scripts/stamp-page-build.mjs`. */
-var HL_PAGE_BUILD = '79d0c3dc5042b980';
+var HL_PAGE_BUILD = '8b4b6494d1507187';
 </script>
 <script>
 (function () { // HL_FETCH_DEDUPE_V1 — single wrapper: GET /api/ dedupe + 60s cache + write-invalidate
@@ -626,13 +626,13 @@ var HL_PAGE_BUILD = '79d0c3dc5042b980';
   .dw-a .i{width:44px;height:44px;border-radius:12px;display:flex;align-items:center;justify-content:center}
   .dw-a .i svg{width:22px;height:22px;stroke-width:2;fill:none;stroke-linecap:round;stroke-linejoin:round}
   /* QUICK ACTION FORMS */
-  .fm{background:#fff;border-radius:16px;width:560px;max-width:94vw;box-shadow:0 20px 60px rgba(22,30,46,.35);overflow:hidden;display:none}
-  .fm.open{display:block}
-  .fm-head{display:flex;align-items:center;gap:11px;padding:16px 20px;border-bottom:1px solid var(--line)}
+  .fm{background:#fff;border-radius:16px;width:560px;max-width:94vw;max-height:calc(100vh - 130px);box-shadow:0 20px 60px rgba(22,30,46,.35);overflow:hidden;display:none;flex-direction:column}
+  .fm.open{display:flex}
+  .fm-head{display:flex;align-items:center;gap:11px;padding:16px 20px;border-bottom:1px solid var(--line);flex-shrink:0}
   .fm-head .i{width:34px;height:34px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:15px;color:#fff}
   .fm-head b{font-size:15px;font-weight:800}
   .fm-head .x{margin-left:auto;cursor:pointer;color:var(--mut);font-size:18px;font-weight:700}
-  .fm-body{padding:18px 20px;display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .fm-body{padding:18px 20px;display:grid;grid-template-columns:1fr 1fr;gap:12px;overflow-y:auto;flex:1;min-height:0}
   .fld{display:flex;flex-direction:column;gap:5px}
   .fld.full{grid-column:1/-1}
   .fld label{font-size:10px;font-weight:800;letter-spacing:.06em;color:var(--mut)}
@@ -697,7 +697,7 @@ var HL_PAGE_BUILD = '79d0c3dc5042b980';
   .ajv-btn.ghost{background:#fff;border:1.5px solid var(--line);color:#5d657b}
   .ajv-btn:disabled{opacity:.5;cursor:default}
   .ajv-note{font-size:10.5px;color:var(--mut);font-weight:700}
-  .fm-foot{display:flex;justify-content:space-between;align-items:center;padding:14px 20px;border-top:1px solid var(--line)}
+  .fm-foot{display:flex;justify-content:space-between;align-items:center;padding:14px 20px;border-top:1px solid var(--line);flex-shrink:0}
   .fm-foot .draft{font-size:10.5px;color:var(--mut);font-weight:600}
   .fm-save{background:linear-gradient(135deg,#ffc94b 0%,#ff9d3c 55%,#f5793b 100%);color:#3a2410;border:none;border-radius:9px;padding:11px 22px;font-weight:800;font-size:13px;cursor:pointer;font-family:var(--sans);box-shadow:0 3px 12px rgba(255,150,60,.4)}
   /* The hidden position must be HEIGHT-RELATIVE. It used to be a flat
@@ -24680,7 +24680,20 @@ function nativeEstimateToRow(e){
     createdLabel:null,
     isLocal:false,
     jobberUrl:null,
-    nativeId:e.id
+    nativeId:e.id,
+    lifecycleStatus:e.lifecycleStatus||'draft',
+    depositSatisfied:!!e.depositSatisfied,
+    depositRequired:e.depositRequired||0,
+    depositRequiredCash:e.depositRequiredCash||0,
+    depositPaidTotal:e.depositPaidTotal||0,
+    depositCreditedTotal:e.depositCreditedTotal||0,
+    // 2026-08-25: the summary modal used to show a hardcoded 35/35/30
+    // "Payment schedule & payouts" preview regardless of what the estimate
+    // actually specified -- confusing for a real estimate drafted as a
+    // genuine 50/50 split. Carrying the real schedule + total through lets
+    // the modal render the estimate's own numbers instead of invented ones.
+    paymentSchedule:e.paymentSchedule||[],
+    totalPrice:(e.totals&&e.totals.price)||0
   };
 }
 function loadNativeEstimatesLive(){
@@ -24688,6 +24701,134 @@ function loadNativeEstimatesLive(){
     EQ_NATIVE=(d&&d.ok&&d.estimates)?d.estimates.map(nativeEstimateToRow):[];
     eqRender();
   }).catch(function(){ EQ_NATIVE=[]; });
+}
+// 2026-08-25: "instead of the popup by chrome, there should be our own
+// popup" -- window.prompt() twice (amount, then method) was also the reason
+// a $40 payment silently overshot the deposit: nothing showed the actual
+// remaining balance before typing a number blind. This shows it, caps the
+// input to it, and validates before ever calling the server. On success, if
+// the deposit is now satisfied, it replaces its own content with an inline
+// "Approve" button (one-click reveal per jomell -- paying does NOT
+// auto-approve; approve.js gates that on the controller/admin role on
+// purpose, and this preserves that human sign-off step).
+function efOpenRecordDepositModal(nid,num){
+  var row=EQ_NATIVE.filter(function(e){return e.nativeId===nid;})[0];
+  // The posted deposit target (depositRequired) is the CARD price; paying by
+  // cash/check/ACH earns the same cash discount the estimate was priced
+  // with, so it takes fewer real dollars to satisfy it (server-side math in
+  // creditedAmount(), server/bookkeeping/src/card-pricing.js). Defaulting
+  // the input to the card-priced figure regardless of the selected method
+  // used to make a same-amount check payment "overshoot" and get rejected
+  // -- this recomputes the real amount owed per method instead.
+  var credRemaining=row?(row.depositRequired-(row.depositCreditedTotal||0)):0;
+  var cashRatio=(row&&row.depositRequiredCash>0&&row.depositRequiredCash!==row.depositRequired)?(row.depositRequired/row.depositRequiredCash):1;
+  var RDP_DISCOUNT_METHODS=['cash','check','ach'];
+  function rdpAmountFor(method){
+    var amt=RDP_DISCOUNT_METHODS.indexOf(method)>-1?(credRemaining/cashRatio):credRemaining;
+    return Math.max(0,Math.round(amt*100)/100);
+  }
+  var initial=rdpAmountFor('check');
+  var body='<div id="rdp-body">'
+    +'<div style="font-size:12px;font-weight:700;color:#484f64;margin-bottom:14px">Remaining to satisfy the deposit on '+esc(num)+': <b style="color:#1B7A50">'+fmC(rdpAmountFor('check'))+'</b> by cash/check/ACH, or <b style="color:#1B7A50">'+fmC(rdpAmountFor('card'))+'</b> by card</div>'
+    +'<label style="'+_lbl+'">Amount received</label>'
+    +'<input id="rdp-amt" type="number" step="0.01" min="0.01" max="'+initial.toFixed(2)+'" value="'+initial.toFixed(2)+'" style="'+_inp+';margin-bottom:12px">'
+    +'<label style="'+_lbl+'">Payment method</label>'
+    +'<select id="rdp-method" onchange="_hlRdpMethodChange()" style="'+_inp+';margin-bottom:14px"><option value="check">Check</option><option value="card">Card</option><option value="ach">ACH</option><option value="cash">Cash</option><option value="other">Other</option></select>'
+    +'<div id="rdp-err" style="display:none;color:#c65b4e;font-size:11px;font-weight:700;margin-bottom:10px"></div>'
+    +'<div style="display:flex;gap:9px"><button onclick="_hlRdpSubmit()" style="flex:1;padding:11px;border:none;border-radius:8px;background:#1B7A50;color:#fff;font-weight:900;font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;cursor:pointer;font-family:\'Montserrat\',sans-serif">Record payment</button><button onclick="document.getElementById(\'hlmodal\').remove()" style="flex:1;padding:11px;border:1px solid #dadde8;border-radius:8px;background:#fff;color:#5d657b;font-weight:900;font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;cursor:pointer;font-family:\'Montserrat\',sans-serif">Cancel</button></div>'
+    +'</div>';
+  hlModal('&#128176; Record deposit payment',body);
+  window._hlRdpMethodChange=function(){
+    var method=(document.getElementById('rdp-method')||{}).value||'other';
+    var amt=rdpAmountFor(method);
+    var input=document.getElementById('rdp-amt');
+    if(input){ input.max=amt.toFixed(2); input.value=amt.toFixed(2); }
+    var err=document.getElementById('rdp-err');
+    if(err) err.style.display='none';
+  };
+  window._hlRdpSubmit=function(){
+    var amt2=+((document.getElementById('rdp-amt')||{}).value)||0;
+    var method=(document.getElementById('rdp-method')||{}).value||'other';
+    var remaining=rdpAmountFor(method);
+    var err=document.getElementById('rdp-err');
+    if(amt2<=0){ err.textContent='Enter an amount greater than zero.'; err.style.display='block'; return; }
+    if(amt2>remaining+0.01){ err.textContent='That would exceed the '+fmC(remaining)+' still required by '+method+' — enter '+fmC(remaining)+' or less.'; err.style.display='block'; return; }
+    err.style.display='none';
+    hlEstApi('record-deposit-payment',{id:nid,amount:amt2,method:method}).then(function(d){
+      if(!d||!d.ok){ err.textContent=(d&&d.error)||'Could not record this payment.'; err.style.display='block'; return; }
+      loadNativeEstimatesLive();
+      if(d.estimate&&d.estimate.depositSatisfied){
+        document.getElementById('rdp-body').innerHTML='<div style="font-size:13px;font-weight:800;color:#1B7A50;margin-bottom:12px">&#10003; '+fmC(amt2)+' recorded — the deposit is now fully paid.</div>'
+          +'<button onclick="_hlRdpApproveNow()" style="width:100%;padding:11px;border:none;border-radius:8px;background:#1B7A50;color:#fff;font-weight:900;font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;cursor:pointer;font-family:\'Montserrat\',sans-serif">&#10003; Approve now</button>';
+        window._hlRdpApproveNow=function(){
+          hlEstApi('approve',{id:nid}).then(function(d2){
+            if(d2&&d2.ok){ document.getElementById('hlmodal').remove(); chirpToast('&#10003; '+num+' approved.'); loadNativeEstimatesLive(); }
+            else chirpToast('&#9888; Could not approve: '+((d2&&d2.error)||'unknown error'));
+          }).catch(function(e){ chirpToast('&#9888; Network error: '+e.message); });
+        };
+      } else {
+        document.getElementById('hlmodal').remove();
+        chirpToast('&#10003; '+fmC(amt2)+' recorded. '+(d.note||''));
+      }
+    }).catch(function(e){ err.textContent='Network error: '+e.message; err.style.display='block'; });
+  };
+}
+// 2026-08-25: "since im done testing out the feature in estimates, i should
+// be able to delete the records... in approved tab" -- uses the real cancel
+// endpoint (moves to Archived, reason kept on the record) rather than a hard
+// delete, matching cancel.js's own "never a silent delete" design and the
+// fact that staging shares the live production Supabase database. Own modal,
+// not window.prompt/confirm, matching the rest of this flow.
+function efOpenCancelEstimateModal(nid,num){
+  var body='<div id="cnl-body">'
+    +'<div style="font-size:12px;font-weight:700;color:#484f64;margin-bottom:14px">This moves '+esc(num)+' to Archived. The reason below stays on its record — nothing is erased.</div>'
+    +'<label style="'+_lbl+'">Reason</label>'
+    +'<textarea id="cnl-reason" placeholder="e.g. test data, duplicate, client declined" style="'+_inp+';margin-bottom:12px;min-height:64px;resize:vertical"></textarea>'
+    +'<div id="cnl-err" style="display:none;color:#c65b4e;font-size:11px;font-weight:700;margin-bottom:10px"></div>'
+    +'<div style="display:flex;gap:9px"><button onclick="_hlCnlSubmit()" style="flex:1;padding:11px;border:none;border-radius:8px;background:#c65b4e;color:#fff;font-weight:900;font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;cursor:pointer;font-family:\'Montserrat\',sans-serif">Cancel estimate</button><button onclick="document.getElementById(\'hlmodal\').remove()" style="flex:1;padding:11px;border:1px solid #dadde8;border-radius:8px;background:#fff;color:#5d657b;font-weight:900;font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;cursor:pointer;font-family:\'Montserrat\',sans-serif">Back</button></div>'
+    +'</div>';
+  hlModal('&#10005; Cancel estimate',body);
+  window._hlCnlSubmit=function(){
+    var reason=((document.getElementById('cnl-reason')||{}).value||'').trim();
+    var err=document.getElementById('cnl-err');
+    if(!reason){ err.textContent='Enter a reason — it stays on the record.'; err.style.display='block'; return; }
+    err.style.display='none';
+    hlEstApi('cancel',{id:nid,reason:reason}).then(function(d){
+      if(!d||!d.ok){ err.textContent=(d&&d.error)||'Could not cancel this estimate.'; err.style.display='block'; return; }
+      document.getElementById('hlmodal').remove();
+      chirpToast('&#10003; '+num+' cancelled.');
+      loadNativeEstimatesLive();
+    }).catch(function(e){ err.textContent='Network error: '+e.message; err.style.display='block'; });
+  };
+}
+// 2026-08-25: "i want to delete the ones in the converted tab" -- a real,
+// permanent delete of a converted estimate AND its job (api/bookkeeping/
+// estimates/delete.js), chosen after being told plainly there is no undo and
+// it hits the live production database. Type-to-confirm (the estimate's own
+// number, not a generic "yes") is the one extra guard against a misclick on
+// an action this codebase otherwise never allows -- own modal, not
+// window.confirm, matching every other action in this flow.
+function efOpenHardDeleteEstimateModal(nid,num){
+  var body='<div id="hde-body">'
+    +'<div style="font-size:12px;font-weight:700;color:#484f64;margin-bottom:14px">This <b style="color:#c65b4e">permanently deletes</b> '+esc(num)+' and the job it created. This cannot be undone.</div>'
+    +'<label style="'+_lbl+'">Type '+esc(num)+' to confirm</label>'
+    +'<input id="hde-confirm" type="text" autocomplete="off" style="'+_inp+';margin-bottom:12px">'
+    +'<div id="hde-err" style="display:none;color:#c65b4e;font-size:11px;font-weight:700;margin-bottom:10px"></div>'
+    +'<div style="display:flex;gap:9px"><button onclick="_hlHdeSubmit()" style="flex:1;padding:11px;border:none;border-radius:8px;background:#c65b4e;color:#fff;font-weight:900;font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;cursor:pointer;font-family:\'Montserrat\',sans-serif">Delete permanently</button><button onclick="document.getElementById(\'hlmodal\').remove()" style="flex:1;padding:11px;border:1px solid #dadde8;border-radius:8px;background:#fff;color:#5d657b;font-weight:900;font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;cursor:pointer;font-family:\'Montserrat\',sans-serif">Back</button></div>'
+    +'</div>';
+  hlModal('&#128465; Delete estimate & job',body);
+  window._hlHdeSubmit=function(){
+    var typed=((document.getElementById('hde-confirm')||{}).value||'').trim();
+    var err=document.getElementById('hde-err');
+    if(typed!==num){ err.textContent='That doesn\'t match '+num+' — type it exactly to confirm.'; err.style.display='block'; return; }
+    err.style.display='none';
+    hlEstApi('delete',{id:nid}).then(function(d){
+      if(!d||!d.ok){ err.textContent=(d&&d.error)||'Could not delete this estimate.'; err.style.display='block'; return; }
+      document.getElementById('hlmodal').remove();
+      chirpToast('&#10003; '+(d.note||num+' deleted.'));
+      loadNativeEstimatesLive();
+    }).catch(function(e){ err.textContent='Network error: '+e.message; err.style.display='block'; });
+  };
 }
 function fmC(n){return '$'+n.toLocaleString('en-US',{minimumFractionDigits:(n%1?2:0),maximumFractionDigits:2});}
 var EQ_STATUS_META={
@@ -26665,6 +26806,74 @@ document.addEventListener('click',function(e){
   // existing behaviour below unchanged -- that is a separate, bigger fix.
   var rowKey=tr.getAttribute('data-key')||'';
   var isLocalRow=rowKey.indexOf('local:')===0;
+  // 2026-08-25: a real, saved estimate (E-10002) had no way to move through
+  // its own lifecycle from the list -- only "Edit in builder" (still broken
+  // for real rows, see below) and "Client record" were offered. The actual
+  // draft -> sent -> approved -> converted flow, and the buttons to drive it
+  // (Send / Record deposit / Approve / Convert), already exist and work --
+  // efRemoteSend()/efRemoteRecordDeposit()/efRemoteApprove()/efRemoteConvert()
+  // in the estimate builder's live-status box. This wires the SAME endpoints
+  // directly from the summary modal, since reopening a real estimate in the
+  // full line-item builder needs a lines<->items format bridge that doesn't
+  // exist yet -- a separate, bigger fix.
+  var isNativeRow=rowKey.indexOf('native:')===0;
+  var nativeRow=isNativeRow?(EQ_NATIVE.filter(function(e){return e.key===rowKey;})[0]||null):null;
+  var lifecycleBtn='';
+  if(nativeRow){
+    var nid=nativeRow.nativeId;
+    if(nativeRow.lifecycleStatus==='draft'){
+      lifecycleBtn='<button onclick="_hlEstSend()" style="flex:1;padding:11px;border:none;border-radius:8px;background:#1B7A50;color:#fff;font-weight:900;font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;cursor:pointer;font-family:\'Montserrat\',sans-serif">&#9993; Send to client</button>';
+      window._hlEstSend=function(){
+        hlEstApi('send',{id:nid}).then(function(d){
+          if(d&&d.ok){ chirpToast('&#10003; '+num+' sent — awaiting the deposit.'); document.getElementById('hlmodal').remove(); loadNativeEstimatesLive(); }
+          else chirpToast('&#9888; Could not send: '+((d&&d.error)||'unknown error'));
+        }).catch(function(e){ chirpToast('&#9888; Network error: '+e.message); });
+      };
+    } else if(nativeRow.lifecycleStatus==='sent'&&!nativeRow.depositSatisfied){
+      lifecycleBtn='<button onclick="_hlEstRecordDeposit()" style="flex:1;padding:11px;border:none;border-radius:8px;background:#1B7A50;color:#fff;font-weight:900;font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;cursor:pointer;font-family:\'Montserrat\',sans-serif">&#128176; Record deposit payment</button>';
+      window._hlEstRecordDeposit=function(){ efOpenRecordDepositModal(nid,num); };
+    } else if(nativeRow.lifecycleStatus==='sent'&&nativeRow.depositSatisfied){
+      lifecycleBtn='<button onclick="_hlEstApprove()" style="flex:1;padding:11px;border:none;border-radius:8px;background:#1B7A50;color:#fff;font-weight:900;font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;cursor:pointer;font-family:\'Montserrat\',sans-serif">&#10003; Approve</button>';
+      window._hlEstApprove=function(){
+        hlEstApi('approve',{id:nid}).then(function(d){
+          if(d&&d.ok){ chirpToast('&#10003; '+num+' approved.'); document.getElementById('hlmodal').remove(); loadNativeEstimatesLive(); }
+          else chirpToast('&#9888; Could not approve: '+((d&&d.error)||'unknown error'));
+        }).catch(function(e){ chirpToast('&#9888; Network error: '+e.message); });
+      };
+    } else if(nativeRow.lifecycleStatus==='approved'){
+      lifecycleBtn='<button onclick="_hlEstConvertJob()" style="flex:1;padding:11px;border:none;border-radius:8px;background:#1B7A50;color:#fff;font-weight:900;font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;cursor:pointer;font-family:\'Montserrat\',sans-serif">&#128736; Convert to job</button>';
+      window._hlEstConvertJob=function(){
+        hlEstApi('convert',{id:nid}).then(function(d){
+          if(d&&d.ok){ chirpToast(d.note||'Converted to job.'); document.getElementById('hlmodal').remove(); loadNativeEstimatesLive(); }
+          else chirpToast('&#9888; Could not convert: '+((d&&d.error)||'unknown error'));
+        }).catch(function(e){ chirpToast('&#9888; Network error: '+e.message); });
+      };
+    }
+  }
+  // 2026-08-25: "since im done testing out the feature in estimates, i
+  // should be able to delete the records... in approved tab" -- there was no
+  // way to get a real, approved estimate out of the active tabs. A hard
+  // delete is deliberately NOT what cancel.js offers ("Always reasoned and
+  // kept in history — never a silent delete") and staging shares the live
+  // production Supabase database, so this uses the real cancel endpoint
+  // (-> Archived tab, reason kept on the record) instead of destroying rows.
+  // Scoped to 'approved' only: cancelEstimate() itself doesn't accept
+  // 'converted' (it already became a real job by then).
+  var cancelBtn=(nativeRow&&nativeRow.lifecycleStatus==='approved')
+    ? '<button onclick="_hlEstCancel()" style="padding:11px 16px;border:1px solid #c65b4e;border-radius:8px;background:#fff;color:#c65b4e;font-weight:900;font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;cursor:pointer;font-family:\'Montserrat\',sans-serif">&#10005; Cancel estimate</button>'
+    : '';
+  window._hlEstCancel=function(){ document.getElementById('hlmodal').remove(); efOpenCancelEstimateModal(nid,num); };
+  // 2026-08-25: "i want to delete the ones in the converted tab" -- told
+  // explicitly first that converting created a real row in the `jobs` table
+  // (the same one the crew board/scheduling reads) and that staging shares
+  // the live production Supabase database, with no existing code anywhere
+  // that deletes a job. Asked real hard delete vs. a reversible archive;
+  // chose real hard delete. api/bookkeeping/estimates/delete.js is scoped to
+  // 'converted' only and removes both the job and the estimate — no undo.
+  var hardDeleteBtn=(nativeRow&&nativeRow.lifecycleStatus==='converted')
+    ? '<button onclick="_hlEstHardDelete()" style="padding:11px 16px;border:1px solid #c65b4e;border-radius:8px;background:#fff;color:#c65b4e;font-weight:900;font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;cursor:pointer;font-family:\'Montserrat\',sans-serif">&#128465; Delete estimate &amp; job</button>'
+    : '';
+  window._hlEstHardDelete=function(){ document.getElementById('hlmodal').remove(); efOpenHardDeleteEstimateModal(nid,num); };
   window._hlEstEdit=isLocalRow
     ? function(){ document.getElementById('hlmodal').remove(); efOpenLocalDraft(rowKey.slice(6)); }
     : function(){ document.getElementById('hlmodal').remove(); try{ if(orig.indexOf('estFormNew')>-1){ (new Function(orig))(); } else { estFormNew(cid); } }catch(x){ try{estFormNew(null);}catch(y){} } };
@@ -26689,15 +26898,37 @@ document.addEventListener('click',function(e){
   var val=parseFloat(String(amt).replace(/[^0-9.]/g,''))||0;
   var _f=function(n){return '$'+Math.round(n).toLocaleString()};
   var _tr=function(tag,pct,amount,who){return '<div style="padding:8px 0;border-bottom:1px solid #26324a"><div style="display:flex;align-items:baseline;gap:8px"><span style="font-family:\'JetBrains Mono\',monospace;font-size:8px;font-weight:800;color:#f0c987;letter-spacing:.08em">'+tag+'</span><span style="font-size:11px;font-weight:800;color:#fff">'+pct+'</span><span style="margin-left:auto;font-family:\'JetBrains Mono\',monospace;font-size:12px;font-weight:900;color:#7fd4a8">'+amount+'</span></div><div style="font-size:9.5px;font-weight:600;color:#9fb0c8;line-height:1.5;margin-top:3px">'+who+'</div></div>'};
-  var pbBlock='<div style="margin-top:14px;background:#161e2e;border-radius:12px;padding:13px 16px">'
-   +'<div style="font-family:\'JetBrains Mono\',monospace;font-size:8px;font-weight:800;letter-spacing:.16em;color:#8ba4c4;text-transform:uppercase;margin-bottom:4px">💵 Payment schedule & payouts — born in the estimate</div>'
-   +_tr('T1 · DEPOSIT','35% on signature',_f(val*.35),'→ releases material POs (readiness gate) · permit fees · mobilization. <b style=\'color:#f0c987\'>Deposit stays a liability until earned.</b>')
-   +_tr('T2 · MIDPOINT','35% at rough-in pass',_f(val*.35),'→ sub payouts (on-clear +3 days) · payroll weeks 2–3 · material restock')
-   +_tr('T3 · COMPLETION','30% at final walk',_f(val*.30),'→ final sub retainage · punch labor · overhead + profit release')
-   +'<div style="font-size:9px;font-weight:600;color:#9fb0c8;line-height:1.55;margin-top:9px">Locks with the Proposal Baseline at signature and becomes the job\'s <b style=\'color:#fff\'>live Payment Breakdown</b> — every actual is checked against this plan; any deviation flags a DISCREPANCY the moment it posts. In the coded build the tranches and payout mapping are editable per-activity right here in the builder.</div>'
-   +'<button onclick="_hlEstPbk()" style="width:100%;margin-top:10px;padding:9px;border:1px solid #59718a;border-radius:8px;background:transparent;color:#8ba4c4;font-weight:800;font-size:9.5px;letter-spacing:.06em;text-transform:uppercase;cursor:pointer;font-family:\'Montserrat\',sans-serif">💵 See a live job breakdown — Payment Breakdowns →</button></div>';
+  var pbBlock;
+  if(nativeRow&&nativeRow.paymentSchedule&&nativeRow.paymentSchedule.length){
+    // 2026-08-25: "this was drafted by 50% payment upfront and then 50% upon
+    // completion. however its making it pay the whole amount" -- traced to
+    // the block below, which used to show a hardcoded 35/35/30 split for
+    // every estimate no matter what it actually specified. Renders the
+    // estimate's OWN real rows instead.
+    var tp=nativeRow.totalPrice||0;
+    var schedRows='';
+    nativeRow.paymentSchedule.forEach(function(r,ri){
+      var rowAmt=tp*(+r.pct||0)/100;
+      var tag=r.isDeposit?'DEPOSIT':'PAYMENT '+(ri+1);
+      var who=r.isDeposit
+        ?('Required before approval'+(nativeRow.depositSatisfied?' — &#10003; paid in full':(nativeRow.depositPaidTotal>0?' — '+fmC(nativeRow.depositPaidTotal)+' recorded so far':'')))
+        :('Due '+(r.dueOn==='completion'?'on completion':(r.dueOn==='approval'?'on approval':'at a scheduled milestone')));
+      schedRows+=_tr(tag,(+r.pct||0)+'% — '+(r.label||''),fmC(rowAmt),who);
+    });
+    pbBlock='<div style="margin-top:14px;background:#161e2e;border-radius:12px;padding:13px 16px">'
+     +'<div style="font-family:\'JetBrains Mono\',monospace;font-size:8px;font-weight:800;letter-spacing:.16em;color:#8ba4c4;text-transform:uppercase;margin-bottom:4px">💵 Payment schedule — as drafted</div>'
+     +schedRows+'</div>';
+  } else {
+    pbBlock='<div style="margin-top:14px;background:#161e2e;border-radius:12px;padding:13px 16px">'
+     +'<div style="font-family:\'JetBrains Mono\',monospace;font-size:8px;font-weight:800;letter-spacing:.16em;color:#8ba4c4;text-transform:uppercase;margin-bottom:4px">💵 Payment schedule & payouts — born in the estimate</div>'
+     +_tr('T1 · DEPOSIT','35% on signature',_f(val*.35),'→ releases material POs (readiness gate) · permit fees · mobilization. <b style=\'color:#f0c987\'>Deposit stays a liability until earned.</b>')
+     +_tr('T2 · MIDPOINT','35% at rough-in pass',_f(val*.35),'→ sub payouts (on-clear +3 days) · payroll weeks 2–3 · material restock')
+     +_tr('T3 · COMPLETION','30% at final walk',_f(val*.30),'→ final sub retainage · punch labor · overhead + profit release')
+     +'<div style="font-size:9px;font-weight:600;color:#9fb0c8;line-height:1.55;margin-top:9px">Locks with the Proposal Baseline at signature and becomes the job\'s <b style=\'color:#fff\'>live Payment Breakdown</b> — every actual is checked against this plan; any deviation flags a DISCREPANCY the moment it posts. In the coded build the tranches and payout mapping are editable per-activity right here in the builder.</div>'
+     +'<button onclick="_hlEstPbk()" style="width:100%;margin-top:10px;padding:9px;border:1px solid #59718a;border-radius:8px;background:transparent;color:#8ba4c4;font-weight:800;font-size:9.5px;letter-spacing:.06em;text-transform:uppercase;cursor:pointer;font-family:\'Montserrat\',sans-serif">💵 See a live job breakdown — Payment Breakdowns →</button></div>';
+  }
   hlModal('📄 '+num+' — '+(ttl||'Estimate'),
-   '<div style="display:flex;gap:10px;align-items:center;margin-bottom:4px"><b style="font-size:16px;color:#161e2e">'+client+'</b><span style="margin-left:auto;font-family:\'JetBrains Mono\',monospace;font-size:16px;font-weight:900;color:#59718a">'+amt+'</span></div><div style="'+_row+'">Status<b style="margin-left:auto">'+st+'</b></div><div style="'+_row+'">Created<b style="margin-left:auto">'+created+'</b></div><div style="'+_row+';border-bottom:none">Version<b style="margin-left:auto">V1 · locked on send</b></div>'+pbBlock+'<div style="display:flex;gap:9px;margin-top:14px"><button onclick="_hlEstEdit()" style="flex:1;padding:11px;border:none;border-radius:8px;background:#59718a;color:#fff;font-weight:900;font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;cursor:pointer;font-family:\'Montserrat\',sans-serif">✏️ Edit in builder</button><button onclick="_hlEstClient()" style="flex:1;padding:11px;border:1px solid #59718a;border-radius:8px;background:#fff;color:#59718a;font-weight:900;font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;cursor:pointer;font-family:\'Montserrat\',sans-serif">👤 Client record</button>'+deleteBtn+'</div>');
+   '<div style="display:flex;gap:10px;align-items:center;margin-bottom:4px"><b style="font-size:16px;color:#161e2e">'+client+'</b><span style="margin-left:auto;font-family:\'JetBrains Mono\',monospace;font-size:16px;font-weight:900;color:#59718a">'+amt+'</span></div><div style="'+_row+'">Status<b style="margin-left:auto">'+st+'</b></div><div style="'+_row+'">Created<b style="margin-left:auto">'+created+'</b></div><div style="'+_row+';border-bottom:none">Version<b style="margin-left:auto">V1 · locked on send</b></div>'+pbBlock+'<div style="display:flex;gap:9px;margin-top:14px"><button onclick="_hlEstEdit()" style="flex:1;padding:11px;border:none;border-radius:8px;background:#59718a;color:#fff;font-weight:900;font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;cursor:pointer;font-family:\'Montserrat\',sans-serif">✏️ Edit in builder</button><button onclick="_hlEstClient()" style="flex:1;padding:11px;border:1px solid #59718a;border-radius:8px;background:#fff;color:#59718a;font-weight:900;font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;cursor:pointer;font-family:\'Montserrat\',sans-serif">👤 Client record</button>'+lifecycleBtn+cancelBtn+hardDeleteBtn+deleteBtn+'</div>');
 },true);
 function hl63Wire(view,target,label){
   var v=document.getElementById('view-'+view);if(!v)return;
