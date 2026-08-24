@@ -2645,6 +2645,11 @@ function setNavTab(tab) {
   { const chv = $('chirp-view'); if (chv) chv.classList.toggle('hidden', tab !== 'chirp'); }
   { const vv = $('voip-view'); if (vv) vv.classList.toggle('hidden', tab !== 'voip'); }
   { const sb = document.querySelector('.sidebar'); if (sb) { sb.classList.toggle('sidebar-collapsed', tab === 'voip'); sb.classList.toggle('sidebar-email-theme', tab === 'email'); } }
+  // .email-view is now inset (top:12px) instead of covering .main edge-to-edge
+  // like the other overlay views still do, so .main-header -- always present,
+  // never otherwise hidden, same white background as the email toolbar --
+  // would show through as an uneven sliver in that 12px gap unless hidden here.
+  { const mh = document.querySelector('.main-header'); if (mh) mh.classList.toggle('hidden', tab === 'email'); }
   if (tab === 'huddles') renderHuddlesPanel();
   if (tab === 'people') { renderPeoplePanel(); loadContacts().then(renderPeoplePanel); }
   if (tab === 'chirp') openChirpTab();
