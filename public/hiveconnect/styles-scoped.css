@@ -2269,11 +2269,18 @@ html[data-theme="dark"] :is(#hiveconnect-root, .hc-embed).huddle-banner {
 :is(#hiveconnect-root, .hc-embed) .ev-cmd-soon .rail-soon,
 :is(#hiveconnect-root, .hc-embed).ev-cmd-soon .rail-soon { position: static; margin-left: 4px; }
 :is(#hiveconnect-root, .hc-embed) .ev-icon-caret,
-:is(#hiveconnect-root, .hc-embed).ev-icon-caret { padding: 7px 6px !important; font-size: 9px !important; }
+:is(#hiveconnect-root, .hc-embed).ev-icon-caret { padding: 9px 8px !important; font-size: 9px !important; }
+:is(#hiveconnect-root, .hc-embed) #ev-refresh,
+:is(#hiveconnect-root, .hc-embed)#ev-refresh { appearance: none; -webkit-appearance: none; box-shadow: none; }
 
 /* compose split button */
+/* one fused pill, not two floating buttons: the shadow moves to the
+   wrapper and each half loses its own, or the two independent shadows show
+   as a seam down the middle. */
 :is(#hiveconnect-root, .hc-embed) .ev-compose-split,
-:is(#hiveconnect-root, .hc-embed).ev-compose-split { display: inline-flex; align-items: center; gap: 1px; }
+:is(#hiveconnect-root, .hc-embed).ev-compose-split { display: inline-flex; align-items: stretch; box-shadow: 0 2px 8px rgba(245, 121, 59, .25); border-radius: 9px; }
+:is(#hiveconnect-root, .hc-embed) .ev-compose-split .primary-btn,
+:is(#hiveconnect-root, .hc-embed).ev-compose-split .primary-btn { box-shadow: none; }
 :is(#hiveconnect-root, .hc-embed) .ev-compose-split .primary-btn:first-child,
 :is(#hiveconnect-root, .hc-embed).ev-compose-split .primary-btn:first-child { border-radius: 9px 0 0 9px; }
 :is(#hiveconnect-root, .hc-embed) .ev-compose-split .primary-btn:last-child,

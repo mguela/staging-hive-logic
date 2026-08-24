@@ -1516,10 +1516,15 @@ html[data-theme="dark"] .huddle-banner {
 .ev-cmd-soon { opacity: .6; position: relative; }
 .ev-cmd-soon:hover { background: transparent; color: var(--slate); cursor: default; }
 .ev-cmd-soon .rail-soon { position: static; margin-left: 4px; }
-.ev-icon-caret { padding: 7px 6px !important; font-size: 9px !important; }
+.ev-icon-caret { padding: 9px 8px !important; font-size: 9px !important; }
+#ev-refresh { appearance: none; -webkit-appearance: none; box-shadow: none; }
 
 /* compose split button */
-.ev-compose-split { display: inline-flex; align-items: center; gap: 1px; }
+/* one fused pill, not two floating buttons: the shadow moves to the
+   wrapper and each half loses its own, or the two independent shadows show
+   as a seam down the middle. */
+.ev-compose-split { display: inline-flex; align-items: stretch; box-shadow: 0 2px 8px rgba(245, 121, 59, .25); border-radius: 9px; }
+.ev-compose-split .primary-btn { box-shadow: none; }
 .ev-compose-split .primary-btn:first-child { border-radius: 9px 0 0 9px; }
 .ev-compose-split .primary-btn:last-child { border-radius: 0 9px 9px 0; border-left: 1px solid rgba(58,36,8,.18); }
 
