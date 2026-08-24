@@ -71,7 +71,7 @@ test('a blocked or failed real save still keeps the local draft, so work is neve
   // lose the estimate they were drafting.
   const fn = extractFunction(source, 'function efSave(){');
   assert.match(fn, /efSaveListUpdate\(/, 'must update the local list regardless of outcome');
-  const listUpdateFn = extractFunction(source, 'function efSaveListUpdate(isReal){');
+  const listUpdateFn = extractFunction(source, 'function efSaveListUpdate(summary){');
   assert.match(listUpdateFn, /ESTLIST\.unshift/, 'must still push the local list entry');
   // The local/real flag itself now lives in the shared efSaveSummary() helper
   // (also reused when persisting a full local-draft snapshot -- see
