@@ -4660,6 +4660,7 @@ function evMockMsg(o) {
 }
 function evMockAgo(hours) { return new Date(Date.now() - hours * 3600000).toISOString(); }
 let EV_MOCK_MESSAGES = null;
+let EV_MOCK_FOLDERS = []; // custom (non-well-known) folders created in the demo mailbox: {id, displayName}
 function evMockSeed() {
   const me = evMockPerson('Demo Mailbox', 'demo@hivelogic.local');
   const threadId = evMockId();
@@ -4698,7 +4699,14 @@ async function evMockGraph(path, opts = {}) {
   const query = (path.split('?')[1] || '');
 
   if (method === 'GET' && /\/me\/mailFolders$/.test(clean)) {
-    return { value: EV_FOLDERS.map(f => ({ id: f.id, displayName: f.name, wellKnownName: f.id, unreadItemCount: list.filter(m => m.folder === f.id && !m.isRead).length })) };
+    const std = EV_FOLDERS.map(f => ({ id: f.id, displayName: f.name, wellKnownName: f.id, unreadItemCount: list.filter(m => m.folder === f.id && !m.isRead).length }));
+    const custom = EV_MOCK_FOLDERS.map(f => ({ id: f.id, displayName: f.displayName, unreadItemCount: list.filter(m => m.folder === f.id && !m.isRead).length }));
+    return { value: std.concat(custom) };
+  }
+  if (method === 'POST' && /\/me\/mailFolders$/.test(clean)) {
+    const created = { id: evMockId(), displayName: (opts.body || {}).displayName || 'New folder' };
+    EV_MOCK_FOLDERS.push(created);
+    return Object.assign({}, created);
   }
   let fm = clean.match(/\/me\/mailFolders\/([^/]+)\/messages$/);
   if (method === 'GET' && fm) {
@@ -5025,22 +5033,26 @@ function renderEmailSidebar() {
   el.appendChild(accWrap);
 
   // Favourites — pinned folders (standard or custom), for one-click access at
-  // the top of the sidebar. Empty until the user pins something via the ☆ on
-  // a folder row below; a real cross-device preference (hcPrefJson), not a
-  // per-device setting.
+  // the top of the sidebar. Inbox is pinned by default the first time a
+  // mailbox connects (matches the reference design); after that it's a real
+  // cross-device preference (hcPrefJson), not a per-device setting.
+  if (connected && hcPref('hcEmailFavFolders', 'hcEmailFavs', undefined) === undefined) evSaveFavFolders(['inbox']);
   const favIds = evFavFolders();
-  if (favIds.length) {
+  {
     const favWrap = document.createElement('div'); favWrap.className = 'ev-favs';
     const flbl = document.createElement('div'); flbl.className = 'ev-accts-lbl'; flbl.textContent = 'FAVOURITES'; favWrap.appendChild(flbl);
     favIds.forEach(fid => {
       const f = EV_FOLDERS.find(x => x.id === fid) || evCustomFolders.find(x => x.id === fid);
       if (!f) return;
-      const row = document.createElement('button'); row.type = 'button'; row.className = 'ev-fav-row';
+      const row = document.createElement('button'); row.type = 'button'; row.className = 'ev-fav-row' + (connected && evFolderId === fid ? ' active' : '');
       const ic = document.createElement('span'); ic.className = 'ev-fav-ic'; ic.textContent = '★'; row.appendChild(ic);
       const nm = document.createElement('span'); nm.textContent = f.name; row.appendChild(nm);
       row.onclick = () => { if (!evActive) { const c = $('ev-connect'); if (c) c.classList.remove('hidden'); return; } selectFolder(f.id, f.name); };
       favWrap.appendChild(row);
     });
+    const add = document.createElement('button'); add.type = 'button'; add.className = 'ev-add-fav-link'; add.textContent = 'Add favourite';
+    add.onclick = (e) => evAddFavouriteMenu(e, favIds);
+    favWrap.appendChild(add);
     el.appendChild(favWrap);
   }
 
@@ -5143,13 +5155,34 @@ async function refreshFolderCounts() {
 }
 function renderCustomFolders() {
   const wrap = document.querySelector('#panel-email .ev-folders'); if (!wrap) return;
-  [...wrap.querySelectorAll('.ev-folder.custom, .ev-cf-sep')].forEach(x => x.remove());
-  if (!evCustomFolders.length) return;
-  const sep = document.createElement('div'); sep.className = 'ev-cf-sep'; sep.textContent = 'YOUR FOLDERS'; wrap.appendChild(sep);
-  evCustomFolders.forEach(f => {
-    const row = evBuildFolderRow(f, '📁', f.id === evFolderId, true);
-    wrap.appendChild(row);
-  });
+  [...wrap.querySelectorAll('.ev-folder.custom, .ev-cf-sep, .ev-new-folder')].forEach(x => x.remove());
+  if (evCustomFolders.length) {
+    const sep = document.createElement('div'); sep.className = 'ev-cf-sep'; sep.textContent = 'YOUR FOLDERS'; wrap.appendChild(sep);
+    evCustomFolders.forEach(f => {
+      const row = evBuildFolderRow(f, '📁', f.id === evFolderId, true);
+      wrap.appendChild(row);
+    });
+  }
+  const create = document.createElement('button'); create.type = 'button'; create.className = 'ev-new-folder';
+  create.textContent = '+ Create new folder…';
+  create.onclick = evCreateFolder;
+  wrap.appendChild(create);
+}
+function evAddFavouriteMenu(e, favIds) {
+  const all = EV_FOLDERS.concat(evCustomFolders);
+  const options = all.filter(f => !favIds.includes(f.id));
+  if (!options.length) { e.stopPropagation(); evToast('Every folder is already a favourite.'); return; }
+  evMenu(e, options.map(f => [(f.icon || '📁') + ' ' + f.name, () => { evSaveFavFolders(favIds.concat([f.id])); renderEmailSidebar(); }]));
+}
+async function evCreateFolder() {
+  if (!evActive) { evToast('Connect a mailbox first.'); return; }
+  const name = window.prompt('New folder name:'); if (!name || !name.trim()) return;
+  if (evActive.provider === 'imap') { evToast('Creating folders isn\'t available yet for this mailbox type.'); return; }
+  try {
+    await evGraph('/me/mailFolders', { method: 'POST', body: { displayName: name.trim() } });
+    evToast('Folder created ✓');
+    refreshFolderCounts();
+  } catch (e) { evToast('Couldn\'t create folder — ' + (e.message || '')); }
 }
 
 async function selectFolder(id, name) {

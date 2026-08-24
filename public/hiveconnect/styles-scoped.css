@@ -2387,6 +2387,8 @@ html[data-theme="dark"] :is(#hiveconnect-root, .hc-embed).huddle-banner {
 :is(#hiveconnect-root, .hc-embed).ev-fav-row:hover,
 :is(#hiveconnect-root, .hc-embed) .ev-cat-row:hover,
 :is(#hiveconnect-root, .hc-embed).ev-cat-row:hover { background: rgba(116,138,158,.2); }
+:is(#hiveconnect-root, .hc-embed) .ev-fav-row.active,
+:is(#hiveconnect-root, .hc-embed).ev-fav-row.active { background: rgba(255,201,75,.16); color: #ffe3a8; }
 :is(#hiveconnect-root, .hc-embed) .ev-cat-row.active,
 :is(#hiveconnect-root, .hc-embed).ev-cat-row.active { background: rgba(116,138,158,.3); }
 :is(#hiveconnect-root, .hc-embed) .ev-cat-dot-lg,
@@ -2397,6 +2399,14 @@ html[data-theme="dark"] :is(#hiveconnect-root, .hc-embed).huddle-banner {
 :is(#hiveconnect-root, .hc-embed).ev-favs,
 :is(#hiveconnect-root, .hc-embed) .ev-cats-sec,
 :is(#hiveconnect-root, .hc-embed).ev-cats-sec { margin-bottom: 10px; }
+:is(#hiveconnect-root, .hc-embed) .ev-add-fav-link,
+:is(#hiveconnect-root, .hc-embed).ev-add-fav-link,
+:is(#hiveconnect-root, .hc-embed) .ev-new-folder,
+:is(#hiveconnect-root, .hc-embed).ev-new-folder { display: block; width: 100%; background: none; border: none; cursor: pointer; text-align: left; color: #8ba4c4; font-size: 12px; font-weight: 700; padding: 6px 9px; border-radius: 9px; }
+:is(#hiveconnect-root, .hc-embed) .ev-add-fav-link:hover,
+:is(#hiveconnect-root, .hc-embed).ev-add-fav-link:hover,
+:is(#hiveconnect-root, .hc-embed) .ev-new-folder:hover,
+:is(#hiveconnect-root, .hc-embed).ev-new-folder:hover { color: #fff; background: rgba(116,138,158,.16); }
 
 @media (max-width: 900px) {
   :is(#hiveconnect-root, .hc-embed) .ev-body.ev-reading,
