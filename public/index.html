@@ -19,7 +19,7 @@
  * monitor_my_status poll, so "is this person running current code" is a
  * question the database can answer. Do not hand-edit it -- run
  * `node scripts/stamp-page-build.mjs`. */
-var HL_PAGE_BUILD = '97d2d6272dc24e07';
+var HL_PAGE_BUILD = '3ab1e6ad5e495ed0';
 </script>
 <script>
 (function () { // HL_FETCH_DEDUPE_V1 — single wrapper: GET /api/ dedupe + 60s cache + write-invalidate
@@ -5676,6 +5676,15 @@ function ninvSave(){ var amt = parseFloat(document.getElementById('ninv-amt').va
         var hours = document.getElementById('wf-hours'); if (hours) hours.value = data.todaySummary.hours_worked || '';
       }
 
+      // Monitor dashboard hook (2026-08-25): feeds this same currentSession/
+      // isOwner/todaySummary into the new Monitor view's controls so it never
+      // runs a second workforce_status poll -- one source of truth, repainted
+      // in two places. typeof-guarded so this closure never depends on that
+      // view's script having loaded.
+      if (typeof window.hlMonSyncFromWorkforce === 'function') {
+        try { window.hlMonSyncFromWorkforce(currentSession, isOwner, data && data.todaySummary); } catch (e) {}
+      }
+
       var teamRes = await fetch('/api/track1?resource=workforce_team', { headers: { Authorization: 'Bearer ' + sess.access_token } });
       var teamData = await teamRes.json().catch(function(){ return null; });
       var teamCard = document.getElementById('wf-team-card');
@@ -6071,16 +6080,292 @@ function ninvSave(){ var amt = parseFloat(document.getElementById('ninv-amt').va
 
 <div id="view-mon" style="display:none">
   <button class="back" onclick="showView('cc')">← COMMAND CENTER</button>
+
   <div class="card" style="margin-bottom:16px">
-    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:6px">
-      <h2 style="margin:0;font-family:Montserrat;font-size:15px;font-weight:900">HiveLogic Monitor</h2>
-      <button onclick="hlMonitorSettingsOpen()" style="font-size:10px;font-weight:800;padding:7px 14px;border-radius:99px;background:#fff;border:1px solid var(--line);color:#5d657b;cursor:pointer;font-family:Montserrat;margin-right:6px">⚙ Settings</button>
-      <button onclick="mgrMonRefresh()" style="font-size:10px;font-weight:800;padding:7px 14px;border-radius:99px;background:#fff;border:1px solid var(--line);color:#5d657b;cursor:pointer;font-family:Montserrat">Refresh</button>
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px">
+      <div>
+        <h2 style="margin:0;font-family:Montserrat;font-size:15px;font-weight:900">Monitor Module</h2>
+        <div id="mon-clock-pill" style="font-size:11px;color:var(--mut);font-weight:700;margin-top:5px"></div>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button onclick="hlMonitorSettingsOpen()" style="font-size:10px;font-weight:800;padding:7px 14px;border-radius:99px;background:#fff;border:1px solid var(--line);color:#5d657b;cursor:pointer;font-family:Montserrat">⚙ Settings</button>
+        <button onclick="monRefresh()" style="font-size:10px;font-weight:800;padding:7px 14px;border-radius:99px;background:#fff;border:1px solid var(--line);color:#5d657b;cursor:pointer;font-family:Montserrat">Refresh</button>
+      </div>
     </div>
-    <div style="font-size:11px;color:var(--mut);font-weight:600">Activity level + screenshots, captured only while someone is clocked in. Click a name to see their recent sessions.</div>
   </div>
-  <div class="card" style="margin-bottom:16px"><div id="mon-roster">Loading…</div></div>
+
+  <div id="mon-owner-note" style="display:none;font-size:11px;color:var(--mut);font-weight:600;background:#fff;border:1px solid var(--line);border-radius:10px;padding:10px 14px;margin-bottom:16px"></div>
+
+  <!-- Employee summary cards. Today's Hours / This Week are real, derived
+       from workforce_time_sessions (see workforce_week_summary). Active
+       Projects / Productivity are honestly labeled "not available yet" --
+       there is no project/task table or activity-based productivity
+       calculation to source them from. Never fabricated. -->
+  <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px">
+    <div class="card" style="flex:1;min-width:150px">
+      <div style="font-size:10px;color:var(--mut);font-weight:800;letter-spacing:.04em;text-transform:uppercase;margin-bottom:6px">Today's Hours</div>
+      <div id="mon-today-hours" style="font-size:20px;font-weight:900;font-family:ui-monospace,monospace">—</div>
+    </div>
+    <div class="card" style="flex:1;min-width:150px">
+      <div style="font-size:10px;color:var(--mut);font-weight:800;letter-spacing:.04em;text-transform:uppercase;margin-bottom:6px">This Week</div>
+      <div id="mon-week-hours" style="font-size:20px;font-weight:900;font-family:ui-monospace,monospace">—</div>
+    </div>
+    <div class="card" style="flex:1;min-width:150px">
+      <div style="font-size:10px;color:var(--mut);font-weight:800;letter-spacing:.04em;text-transform:uppercase;margin-bottom:6px">Status</div>
+      <div id="mon-status-pill" style="font-size:14px;font-weight:900">—</div>
+    </div>
+    <div class="card" style="flex:1;min-width:150px">
+      <div style="font-size:10px;color:var(--mut);font-weight:800;letter-spacing:.04em;text-transform:uppercase;margin-bottom:6px">Active Projects</div>
+      <div style="font-size:14px;font-weight:800;color:var(--mut)" title="No project/task tracking exists yet -- this card is a real placeholder, not a made-up number.">Not available yet</div>
+    </div>
+    <div class="card" style="flex:1;min-width:150px">
+      <div style="font-size:10px;color:var(--mut);font-weight:800;letter-spacing:.04em;text-transform:uppercase;margin-bottom:6px">Productivity</div>
+      <div style="font-size:14px;font-weight:800;color:var(--mut)" title="Activity samples exist, but nothing computes a productivity percentage from them yet.">Not available yet</div>
+    </div>
+  </div>
+
+  <!-- Time tracking. Buttons call the SAME workforceClockIn/workforceClockOut/
+       workforceBreakToggle functions the Time Clock page and top-bar widget
+       already use -- one place talks to workforce_clock/workforce_break,
+       this dashboard just repaints from the same state (see
+       hlMonSyncFromWorkforce below). -->
+  <div class="card" style="margin-bottom:16px">
+    <h3 style="margin:0 0 10px;font-family:Montserrat;font-size:13px;font-weight:800">Time Tracking</h3>
+    <div id="mon-timer" style="font-size:32px;font-weight:900;font-family:ui-monospace,monospace;color:var(--ink,#161e2e);margin-bottom:12px">00:00:00</div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap">
+      <button class="lg-btn" id="mon-clockin-btn" style="width:auto;padding:10px 20px;display:none" onclick="workforceClockIn()">Start</button>
+      <button class="lg-btn" id="mon-break-btn" style="width:auto;padding:10px 20px;display:none;background:var(--amber)" onclick="workforceBreakToggle()">Start Break</button>
+      <button class="lg-btn" id="mon-clockout-btn" style="width:auto;padding:10px 20px;display:none;background:var(--red)" onclick="workforceClockOut()">Stop</button>
+    </div>
+    <div id="mon-clock-note" style="margin-top:10px;font-size:11px;color:var(--mut);font-weight:600"></div>
+  </div>
+
+  <!-- EOD. Posts to the SAME workforce_summary endpoint/table the Time
+       Clock page's EOD form already uses -- separate field ids (this view
+       and #workforce can both be in the DOM at once) but one backend row. -->
+  <div class="card" id="mon-eod-card" style="margin-bottom:16px;display:none">
+    <h3 style="margin:0 0 4px;font-family:Montserrat;font-size:13px;font-weight:800">End-of-Day Report <span style="font-weight:600;color:var(--mut);font-size:11px">— required before you can Stop</span></h3>
+    <div style="margin:10px 0"><label style="display:block;font-size:11px;font-weight:700;margin-bottom:4px">Completed Tasks</label><textarea id="mon-eod-tasks" oninput="this.dataset.monDirty='1'" rows="2" placeholder="Describe completed tasks..." style="width:100%;box-sizing:border-box;padding:8px 10px;border:1px solid var(--line);border-radius:8px;font-size:12.5px;font-family:Montserrat"></textarea></div>
+    <div style="margin-bottom:10px"><label style="display:block;font-size:11px;font-weight:700;margin-bottom:4px">Plans for Tomorrow</label><textarea id="mon-eod-plans" oninput="this.dataset.monDirty='1'" rows="2" placeholder="What are your plans for tomorrow?" style="width:100%;box-sizing:border-box;padding:8px 10px;border:1px solid var(--line);border-radius:8px;font-size:12.5px;font-family:Montserrat"></textarea></div>
+    <div style="margin-bottom:10px"><label style="display:block;font-size:11px;font-weight:700;margin-bottom:4px">Issues / Blockers</label><textarea id="mon-eod-blockers" oninput="this.dataset.monDirty='1'" rows="2" placeholder="Any issues or blockers?" style="width:100%;box-sizing:border-box;padding:8px 10px;border:1px solid var(--line);border-radius:8px;font-size:12.5px;font-family:Montserrat"></textarea></div>
+    <div style="margin-bottom:12px"><label style="display:block;font-size:11px;font-weight:700;margin-bottom:4px">Support Needed</label><textarea id="mon-eod-support" oninput="this.dataset.monDirty='1'" rows="2" placeholder="What support do you need from the team?" style="width:100%;box-sizing:border-box;padding:8px 10px;border:1px solid var(--line);border-radius:8px;font-size:12.5px;font-family:Montserrat"></textarea></div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap">
+      <button class="lg-btn" style="width:auto;padding:10px 18px;background:#fff;border:1px solid var(--line);color:var(--ink,#161e2e)" onclick="monSaveEodDraft()">Save as Draft</button>
+      <button class="lg-btn" style="width:auto;padding:10px 18px" onclick="monSubmitEod()">Submit EOD</button>
+    </div>
+    <div id="mon-eod-result" style="margin-top:10px;font-size:11.5px;font-weight:700"></div>
+  </div>
+
+  <div class="card" style="margin-bottom:16px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+      <h3 style="margin:0;font-family:Montserrat;font-size:13px;font-weight:800">Activity &amp; Screenshot Review</h3>
+    </div>
+    <div style="font-size:11px;color:var(--mut);font-weight:600;margin-bottom:12px">Activity level + screenshots, captured only while someone is clocked in. Click a name to see their recent sessions.</div>
+    <div id="mon-roster">Loading…</div>
+  </div>
   <div class="card" id="mon-detail-card" style="display:none"><div id="mon-detail">Select someone from the list above.</div></div>
+
+  <script>
+  (function(){
+    var monTimerInterval = null;
+    var monLastSession = null;
+    var MON_EOD_DRAFT_KEY = 'hl_mon_eod_draft';
+
+    function pad2(n){ return String(n).padStart(2, '0'); }
+    function fmtHMS(totalSeconds){
+      var s = Math.max(0, Math.floor(totalSeconds));
+      return pad2(Math.floor(s/3600)) + ':' + pad2(Math.floor((s%3600)/60)) + ':' + pad2(s%60);
+    }
+    function fmtHoursShort(totalSeconds){
+      var s = Math.max(0, Math.floor(totalSeconds));
+      return Math.floor(s/3600) + 'h ' + Math.floor((s%3600)/60) + 'm';
+    }
+
+    function tickTimer(){
+      var el = document.getElementById('mon-timer');
+      if (!el) return;
+      if (!monLastSession || !monLastSession.clock_in) { el.textContent = '00:00:00'; return; }
+      var startMs = new Date(monLastSession.clock_in).getTime();
+      var breakSec = monLastSession.total_break_seconds || 0;
+      if (monLastSession.on_break && monLastSession.break_started_at) {
+        // Worked time is frozen at the moment the break started -- matches
+        // total_break_seconds' own accounting (only finalized when a break
+        // ends), so this never drifts from what clocking out will record.
+        var atBreakMs = new Date(monLastSession.break_started_at).getTime();
+        el.textContent = fmtHMS(Math.round((atBreakMs - startMs) / 1000) - breakSec);
+        return;
+      }
+      el.textContent = fmtHMS(Math.round((Date.now() - startMs) / 1000) - breakSec);
+    }
+
+    function renderClockPill(){
+      var el = document.getElementById('mon-clock-pill');
+      if (!el) return;
+      var now = new Date();
+      var time = now.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+      var date = now.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+      var tz = '';
+      try { tz = Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch (e) {}
+      el.textContent = time + ' · ' + date + (tz ? ' · ' + tz : '');
+    }
+
+    function fillEodField(id, val){
+      var e = document.getElementById(id);
+      // Never stomp text someone is mid-typing -- a poll landing between
+      // keystrokes must not overwrite it.
+      if (e && !e.dataset.monDirty) e.value = val || '';
+    }
+
+    function loadLocalDraftIfEmpty(){
+      try {
+        var raw = localStorage.getItem(MON_EOD_DRAFT_KEY);
+        if (!raw) return;
+        var draft = JSON.parse(raw);
+        if (!draft) return;
+        fillEodField('mon-eod-tasks', draft.tasks);
+        fillEodField('mon-eod-plans', draft.plans);
+        fillEodField('mon-eod-blockers', draft.blockers);
+        fillEodField('mon-eod-support', draft.support);
+      } catch (e) {}
+    }
+
+    // Fed by the #workforce IIFE (public/index.html) right after it derives
+    // currentSession/isOwner/todaySummary from workforce_status -- this view
+    // never polls that endpoint itself. See the hook added at the end of
+    // workforceRefresh().
+    window.hlMonSyncFromWorkforce = function(session, isOwner, todaySummary){
+      monLastSession = session;
+      var inBtn = document.getElementById('mon-clockin-btn');
+      var breakBtn = document.getElementById('mon-break-btn');
+      var outBtn = document.getElementById('mon-clockout-btn');
+      var statusPill = document.getElementById('mon-status-pill');
+      var noteEl = document.getElementById('mon-clock-note');
+      var ownerNote = document.getElementById('mon-owner-note');
+      var eodCard = document.getElementById('mon-eod-card');
+      var timerEl = document.getElementById('mon-timer');
+      if (!inBtn || !breakBtn || !outBtn || !statusPill) return; // view not mounted yet
+
+      if (isOwner) {
+        inBtn.style.display = 'none'; breakBtn.style.display = 'none'; outBtn.style.display = 'none';
+        statusPill.textContent = 'Owner'; statusPill.style.color = 'var(--mut)';
+        if (ownerNote) { ownerNote.style.display = 'block'; ownerNote.textContent = 'Owner account — not on the timeclock. Nothing is monitored or recorded for this account.'; }
+        if (eodCard) eodCard.style.display = 'none';
+        if (noteEl) noteEl.textContent = '';
+        clearInterval(monTimerInterval); monTimerInterval = null;
+        if (timerEl) timerEl.textContent = '00:00:00';
+        return;
+      }
+      if (ownerNote) ownerNote.style.display = 'none';
+
+      if (!session) {
+        inBtn.style.display = 'inline-block'; breakBtn.style.display = 'none'; outBtn.style.display = 'none';
+        statusPill.textContent = 'Offline'; statusPill.style.color = 'var(--mut)';
+        if (eodCard) eodCard.style.display = 'none';
+        if (noteEl) noteEl.textContent = '';
+        clearInterval(monTimerInterval); monTimerInterval = null;
+        if (timerEl) timerEl.textContent = '00:00:00';
+        return;
+      }
+
+      inBtn.style.display = 'none'; breakBtn.style.display = 'inline-block'; outBtn.style.display = 'inline-block';
+      if (session.on_break) {
+        statusPill.textContent = 'On Break'; statusPill.style.color = 'var(--amber)';
+        breakBtn.textContent = 'End Break';
+        outBtn.disabled = true; outBtn.style.opacity = '0.5'; outBtn.title = 'End your break before stopping.';
+        if (noteEl) noteEl.textContent = 'On break since ' + new Date(session.break_started_at).toLocaleTimeString();
+      } else {
+        statusPill.textContent = 'Working'; statusPill.style.color = 'var(--green)';
+        breakBtn.textContent = 'Start Break';
+        outBtn.disabled = false; outBtn.style.opacity = '1'; outBtn.title = '';
+        if (noteEl) noteEl.textContent = 'Clocked in since ' + new Date(session.clock_in).toLocaleTimeString();
+      }
+
+      if (eodCard) eodCard.style.display = 'block';
+      if (todaySummary) {
+        fillEodField('mon-eod-tasks', todaySummary.tasks_completed);
+        fillEodField('mon-eod-plans', todaySummary.plans_tomorrow);
+        fillEodField('mon-eod-blockers', todaySummary.blockers);
+        fillEodField('mon-eod-support', todaySummary.support_needed);
+      } else {
+        loadLocalDraftIfEmpty();
+      }
+
+      clearInterval(monTimerInterval);
+      tickTimer();
+      monTimerInterval = setInterval(tickTimer, 1000);
+    };
+
+    async function monLoadWeekSummary(){
+      return hlRequireSession(async function(sess){
+        var r = await fetch('/api/track1?resource=workforce_week_summary', { headers: { Authorization: 'Bearer ' + sess.access_token } });
+        var data = await r.json().catch(function(){ return null; });
+        var todayEl = document.getElementById('mon-today-hours');
+        var weekEl = document.getElementById('mon-week-hours');
+        if (!data || data.ok === false || data.tablesReady === false) {
+          if (todayEl) todayEl.textContent = '—';
+          if (weekEl) weekEl.textContent = '—';
+          return;
+        }
+        if (todayEl) todayEl.textContent = fmtHoursShort(data.todaySeconds || 0);
+        if (weekEl) weekEl.textContent = fmtHoursShort(data.weekSeconds || 0);
+      }, function(){});
+    }
+
+    window.monSaveEodDraft = function(){
+      try {
+        localStorage.setItem(MON_EOD_DRAFT_KEY, JSON.stringify({
+          tasks: (document.getElementById('mon-eod-tasks') || {}).value || '',
+          plans: (document.getElementById('mon-eod-plans') || {}).value || '',
+          blockers: (document.getElementById('mon-eod-blockers') || {}).value || '',
+          support: (document.getElementById('mon-eod-support') || {}).value || '',
+          savedAt: new Date().toISOString(),
+        }));
+        var r = document.getElementById('mon-eod-result');
+        if (r) { r.style.color = 'var(--mut)'; r.textContent = 'Draft saved on this device.'; }
+      } catch (e) {}
+    };
+
+    window.monSubmitEod = function(){
+      return hlRequireSession(async function(sess){
+        var r = document.getElementById('mon-eod-result');
+        if (r) { r.style.color = 'var(--mut)'; r.textContent = 'Submitting…'; }
+        var body = {
+          tasks_completed: (document.getElementById('mon-eod-tasks') || {}).value || '',
+          plans_tomorrow: (document.getElementById('mon-eod-plans') || {}).value || '',
+          blockers: (document.getElementById('mon-eod-blockers') || {}).value || '',
+          support_needed: (document.getElementById('mon-eod-support') || {}).value || '',
+        };
+        var res = await fetch('/api/track1?resource=workforce_summary', {
+          method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + sess.access_token }, body: JSON.stringify(body),
+        });
+        var data = await res.json().catch(function(){ return null; });
+        if (!data || data.ok === false) {
+          if (r) { r.style.color = 'var(--red)'; r.textContent = (data && data.error) || 'Could not save your report.'; }
+          return;
+        }
+        if (r) { r.style.color = 'var(--green)'; r.textContent = 'End-of-day report saved.'; }
+        ['mon-eod-tasks', 'mon-eod-plans', 'mon-eod-blockers', 'mon-eod-support'].forEach(function(id){
+          var e = document.getElementById(id); if (e) delete e.dataset.monDirty;
+        });
+        try { localStorage.removeItem(MON_EOD_DRAFT_KEY); } catch (e) {}
+      }, function(){});
+    };
+
+    // Single entry point for opening this tab: repaints the clock pill,
+    // loads real Today/This-Week totals, and re-runs the existing
+    // workforceRefresh()/mgrMonRefresh() -- which is what actually talks to
+    // workforce_status/workforce_team/monitor_review and, via the hook
+    // above, repaints this view's own controls. No duplicate polling.
+    window.monRefresh = function(){
+      renderClockPill();
+      monLoadWeekSummary();
+      if (typeof window.workforceRefresh === 'function') window.workforceRefresh();
+      if (typeof window.mgrMonRefresh === 'function') window.mgrMonRefresh();
+    };
+
+    setInterval(renderClockPill, 30000);
+  })();
+  </script>
 </div>
 
 <!-- DEV TO-DO -- the team's exception queue.  It contains only verified
@@ -17529,7 +17814,7 @@ function showView(v){
   if(v==='ajx' && typeof ajxLoad==='function') ajxLoad();
   if(v==='gpux' && typeof mgrGhRefresh==='function') mgrGhRefresh();
   if(v==='mpmx' && typeof mgrMatRefresh==='function') mgrMatRefresh();
-  if(v==='mon' && typeof mgrMonRefresh==='function') mgrMonRefresh();
+  if(v==='mon'){ if (typeof window.monRefresh==='function') window.monRefresh(); else if (typeof mgrMonRefresh==='function') mgrMonRefresh(); }
   if(v==='devtodo' && typeof devTodoLoad==='function') devTodoLoad();
   if(v==='council' && typeof window.hlInitReinaCouncil==='function') window.hlInitReinaCouncil();
   if(v==='vi') hlEnsureHiveSight();

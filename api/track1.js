@@ -6396,6 +6396,53 @@ async function handleWorkforceSummary(req, res) {
   return res.status(405).json({ ok: false, error: 'Method not allowed.' });
 }
 
+// Monday 00:00 in the same business timezone (America/New_York) todayRangeET
+// uses -- so "this week" always means the same calendar week the office
+// clock uses, not whatever timezone the browser happens to be in.
+function weekStartISOET() {
+  const { dateStr, startISO } = todayRangeET();
+  const [y, mo, d] = dateStr.split('-').map(Number);
+  // getUTCDay() is fine here -- dateStr/startISO already carry the ET offset,
+  // constructing a Date from them and asking its UTC day back out the day
+  // number without a second timezone conversion.
+  const asUtcMidnight = new Date(Date.UTC(y, mo - 1, d));
+  const dow = asUtcMidnight.getUTCDay(); // 0=Sun..6=Sat
+  const daysSinceMonday = (dow + 6) % 7;
+  const offset = startISO.slice(-6); // reuse the same "+HH:MM"/"-HH:MM" suffix
+  const monday = new Date(asUtcMidnight.getTime() - daysSinceMonday * 86400000);
+  const my = monday.getUTCFullYear(), mm = String(monday.getUTCMonth() + 1).padStart(2, '0'), md = String(monday.getUTCDate()).padStart(2, '0');
+  return `${my}-${mm}-${md}T00:00:00${offset}`;
+}
+
+// GET /api/track1?resource=workforce_week_summary -- real Today/This-Week
+// worked-seconds totals for the signed-in employee, computed from
+// workforce_time_sessions (the same source of truth clock in/out already
+// writes to) rather than the free-text hours_worked EOD field. Powers the
+// Monitor dashboard's summary cards -- see handleWorkforceStatus for the
+// companion "what's my session doing right now" call.
+async function handleWorkforceWeekSummary(req, res) {
+  const requester = await getRequestingProfile(req);
+  if (!requester) return res.status(401).json({ ok: false, error: 'Not signed in -- log into HiveLogic first.' });
+  const today = todayStr();
+  const weekStart = weekStartISOET();
+  const sessRes = await supabaseRequest(
+    `workforce_time_sessions?employee_id=eq.${requester.id}&clock_in=gte.${encodeURIComponent(weekStart)}`
+    + `&order=clock_in.asc&select=clock_in,clock_out,total_break_seconds,status`
+  );
+  if (!sessRes.ok) return res.status(200).json({ ok: true, tablesReady: false, todaySeconds: 0, weekSeconds: 0 });
+  const sessions = await sessRes.json();
+  const nowMs = Date.now();
+  let todaySeconds = 0, weekSeconds = 0;
+  for (const s of sessions || []) {
+    const startMs = new Date(s.clock_in).getTime();
+    const endMs = s.clock_out ? new Date(s.clock_out).getTime() : nowMs;
+    const worked = Math.max(0, Math.round((endMs - startMs) / 1000) - (s.total_break_seconds || 0));
+    weekSeconds += worked;
+    if (s.clock_in.slice(0, 10) === today) todaySeconds += worked;
+  }
+  return res.status(200).json({ ok: true, tablesReady: true, todaySeconds, weekSeconds, weekStart });
+}
+
 async function handleWorkforceTeam(req, res) {
   const requester = await getRequestingProfile(req);
   if (!requester) return res.status(401).json({ ok: false, error: 'Not signed in -- log into HiveLogic first.' });
@@ -8532,6 +8579,9 @@ if (resource === 'mailconnect') {
 }
   if (resource === 'workforce_team') {
     try { return await handleWorkforceTeam(req, res); } catch (e) { return res.status(500).json({ ok: false, error: e.message }); }
+}
+  if (resource === 'workforce_week_summary') {
+    try { return await handleWorkforceWeekSummary(req, res); } catch (e) { return res.status(500).json({ ok: false, error: e.message }); }
 }
   if (resource === 'production_tracker') {
     try { return await handleProductionTracker(req, res); } catch (e) { return res.status(500).json({ ok: false, error: e.message }); }
