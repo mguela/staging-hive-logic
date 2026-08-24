@@ -2211,7 +2211,7 @@ html[data-theme="dark"] :is(#hiveconnect-root, .hc-embed).huddle-banner {
 :is(#hiveconnect-root, .hc-embed) .ev-thread-h,
 :is(#hiveconnect-root, .hc-embed).ev-thread-h { font-size: 12px; font-weight: 800; color: var(--slate); margin-bottom: 6px; }
 :is(#hiveconnect-root, .hc-embed) .ev-thread-row,
-:is(#hiveconnect-root, .hc-embed).ev-thread-row { display: flex; justify-content: space-between; gap: 10px; width: 100%; text-align: left; border: none; background: transparent; cursor: pointer; padding: 7px 8px; border-radius: 8px; color: var(--ink); font-size: 12.5px; }
+:is(#hiveconnect-root, .hc-embed).ev-thread-row { appearance: none; -webkit-appearance: none; display: flex; justify-content: space-between; gap: 10px; width: 100%; text-align: left; border: none; background: transparent; box-shadow: none; cursor: pointer; padding: 7px 8px; border-radius: 8px; color: var(--ink); font-size: 12.5px; }
 :is(#hiveconnect-root, .hc-embed) .ev-thread-row:hover,
 :is(#hiveconnect-root, .hc-embed).ev-thread-row:hover { background: var(--steel-bg); }
 :is(#hiveconnect-root, .hc-embed) .ev-thread-row.unread .ev-thread-from,

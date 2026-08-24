@@ -1483,7 +1483,7 @@ html[data-theme="dark"] .huddle-banner {
 /* conversation thread strip in reading pane */
 .ev-thread { border-top: 1px solid var(--line); background: var(--card); padding: 10px 20px 14px; }
 .ev-thread-h { font-size: 12px; font-weight: 800; color: var(--slate); margin-bottom: 6px; }
-.ev-thread-row { display: flex; justify-content: space-between; gap: 10px; width: 100%; text-align: left; border: none; background: transparent; cursor: pointer; padding: 7px 8px; border-radius: 8px; color: var(--ink); font-size: 12.5px; }
+.ev-thread-row { appearance: none; -webkit-appearance: none; display: flex; justify-content: space-between; gap: 10px; width: 100%; text-align: left; border: none; background: transparent; box-shadow: none; cursor: pointer; padding: 7px 8px; border-radius: 8px; color: var(--ink); font-size: 12.5px; }
 .ev-thread-row:hover { background: var(--steel-bg); }
 .ev-thread-row.unread .ev-thread-from { font-weight: 800; }
 .ev-thread-from { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
