@@ -19,7 +19,7 @@
  * monitor_my_status poll, so "is this person running current code" is a
  * question the database can answer. Do not hand-edit it -- run
  * `node scripts/stamp-page-build.mjs`. */
-var HL_PAGE_BUILD = '3da3fb3e7730dc11';
+var HL_PAGE_BUILD = '92af97d88765eb17';
 </script>
 <script>
 (function () { // HL_FETCH_DEDUPE_V1 — single wrapper: GET /api/ dedupe + 60s cache + write-invalidate
@@ -1121,6 +1121,8 @@ var HL_PAGE_BUILD = '3da3fb3e7730dc11';
   .ef-int-t b{color:#59718a;font-family:var(--mono)}
   .ef-depbox{border:1px solid var(--line);border-radius:11px;padding:12px;margin-top:10px;background:var(--canvas)}
   .ef-depbox h5{font-size:10.5px;font-weight:800;margin-bottom:8px}
+  @keyframes efFlash{0%,100%{box-shadow:none}30%,70%{box-shadow:0 0 0 4px rgba(198,91,78,.35)}}
+  .ef-flash{animation:efFlash 1.6s ease-in-out}
   .ef-tgl{display:flex;justify-content:space-between;align-items:center;font-size:10.5px;font-weight:700;color:var(--slate);padding:4px 0}
   .ef-rev{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;padding:6px 20px 20px}
   @media(max-width:900px){.ef-rev{grid-template-columns:1fr}}
@@ -3731,7 +3733,23 @@ function efPaymentScheduleForApi(){
 }
 function efRemoteCreate(silent){
   var sched = efPaymentScheduleForApi();
-  if (!sched){ if (!silent) chirpToast('⚠ Add a deposit or a payment schedule before this can become a real estimate — approval requires exactly one deposit row.'); return Promise.resolve(null); }
+  if (!sched){
+    if (!silent) {
+      chirpToast('⚠ Add a deposit or a payment schedule before this can become a real estimate — approval requires exactly one deposit row.');
+      // 2026-08-24: the toast named the fix but never pointed at it -- "Add a
+      // deposit" told nobody WHERE, and the actual control (efPayBlock's
+      // payMode==='none' case) is two small text links at the bottom of a
+      // long totals sidebar, easy to miss entirely. Scroll to and flash it so
+      // the warning and the fix are connected instead of two unrelated facts.
+      var gate=document.getElementById('ef-paygate');
+      if (gate) {
+        gate.scrollIntoView({behavior:'smooth',block:'center'});
+        gate.classList.add('ef-flash');
+        setTimeout(function(){ gate.classList.remove('ef-flash'); }, 1600);
+      }
+    }
+    return Promise.resolve(null);
+  }
   var cl = null; CLIENTDB.forEach(function(c){ if (c.id === EST.client) cl = c; });
   // sourceLeadId is set when the builder was opened from a lead card, so the
   // estimate records which lead produced it and the card can follow along.
@@ -23911,7 +23929,13 @@ function efPayBlock(t){
       +'</div>'+setBox;
     return h;
   }
-  return '<div class="ef-trow"><span class="lnk2" onclick="efVersionGuard();EST.payMode=\'deposit\';efRender()">Add deposit</span><span class="lnk2" onclick="efPaySched()">Add payment schedule</span></div>';
+  // 2026-08-24: this used to be two plain text links with no visual weight,
+  // easy to miss at the bottom of a long totals sidebar. Save silently
+  // refuses to create a real record without one of these -- give it the
+  // same prominence as the warning it triggers.
+  return '<div class="ef-depbox" id="ef-paygate" style="border:2px dashed #C65B4E;background:#fdf1ef"><h5 style="color:#c65b4e">&#9888; No deposit or payment schedule yet</h5>'
+    +'<div style="font-size:10.5px;color:var(--slate);font-weight:600;margin-bottom:8px">Required before this estimate can be saved as a real, durable record.</div>'
+    +'<div class="ef-trow"><span class="lnk2" onclick="efVersionGuard();EST.payMode=\'deposit\';efRender()">+ Add deposit</span><span class="lnk2" onclick="efPaySched()">+ Add payment schedule</span></div></div>';
 }
 function efAddAddr(cid){var v=(document.getElementById('ef-newaddr').value||'').trim();if(!v){chirpToast('&#9888; Type the address first');return;}
   var c=null;CLIENTDB.forEach(function(x){if(x.id===cid)c=x;});if(!c)return;
@@ -26035,6 +26059,22 @@ document.addEventListener('click',function(e){
     : function(){ document.getElementById('hlmodal').remove(); try{ if(orig.indexOf('estFormNew')>-1){ (new Function(orig))(); } else { estFormNew(cid); } }catch(x){ try{estFormNew(null);}catch(y){} } };
   window._hlEstClient=function(){ document.getElementById('hlmodal').remove(); if(cid&&window.openClient){openClient(cid)}else{hlSay('👤 Client record')} };
   window._hlEstPbk=function(){ document.getElementById('hlmodal').remove(); showView('pbkx'); };
+  // 2026-08-24: no way to get rid of a local-only draft that's never going
+  // anywhere -- only ever offered "Edit" or "Client record". Scoped to local
+  // rows specifically: a real (synced) estimate is a server record, and
+  // deleting one is a materially different, bigger operation than clearing a
+  // draft that only ever existed in this browser's localStorage.
+  var deleteBtn=isLocalRow
+    ? '<button onclick="_hlEstDelete()" style="padding:11px 16px;border:1px solid #c65b4e;border-radius:8px;background:#fff;color:#c65b4e;font-weight:900;font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;cursor:pointer;font-family:\'Montserrat\',sans-serif">&#128465; Delete draft</button>'
+    : '';
+  window._hlEstDelete=function(){
+    if(!window.confirm((ttl?ttl+' ':'')+num+' will be permanently deleted. This cannot be undone.')) return;
+    var drafts=efLocalDraftsLoad(); delete drafts[rowKey.slice(6)]; efLocalDraftsSave(drafts);
+    ESTLIST=ESTLIST.filter(function(e){return e.num!==rowKey.slice(6);});
+    document.getElementById('hlmodal').remove();
+    chirpToast('&#10003; '+num+' deleted.');
+    showView('estimates');efListRender();
+  };
   var val=parseFloat(String(amt).replace(/[^0-9.]/g,''))||0;
   var _f=function(n){return '$'+Math.round(n).toLocaleString()};
   var _tr=function(tag,pct,amount,who){return '<div style="padding:8px 0;border-bottom:1px solid #26324a"><div style="display:flex;align-items:baseline;gap:8px"><span style="font-family:\'JetBrains Mono\',monospace;font-size:8px;font-weight:800;color:#f0c987;letter-spacing:.08em">'+tag+'</span><span style="font-size:11px;font-weight:800;color:#fff">'+pct+'</span><span style="margin-left:auto;font-family:\'JetBrains Mono\',monospace;font-size:12px;font-weight:900;color:#7fd4a8">'+amount+'</span></div><div style="font-size:9.5px;font-weight:600;color:#9fb0c8;line-height:1.5;margin-top:3px">'+who+'</div></div>'};
@@ -26046,7 +26086,7 @@ document.addEventListener('click',function(e){
    +'<div style="font-size:9px;font-weight:600;color:#9fb0c8;line-height:1.55;margin-top:9px">Locks with the Proposal Baseline at signature and becomes the job\'s <b style=\'color:#fff\'>live Payment Breakdown</b> — every actual is checked against this plan; any deviation flags a DISCREPANCY the moment it posts. In the coded build the tranches and payout mapping are editable per-activity right here in the builder.</div>'
    +'<button onclick="_hlEstPbk()" style="width:100%;margin-top:10px;padding:9px;border:1px solid #59718a;border-radius:8px;background:transparent;color:#8ba4c4;font-weight:800;font-size:9.5px;letter-spacing:.06em;text-transform:uppercase;cursor:pointer;font-family:\'Montserrat\',sans-serif">💵 See a live job breakdown — Payment Breakdowns →</button></div>';
   hlModal('📄 '+num+' — '+(ttl||'Estimate'),
-   '<div style="display:flex;gap:10px;align-items:center;margin-bottom:4px"><b style="font-size:16px;color:#161e2e">'+client+'</b><span style="margin-left:auto;font-family:\'JetBrains Mono\',monospace;font-size:16px;font-weight:900;color:#59718a">'+amt+'</span></div><div style="'+_row+'">Status<b style="margin-left:auto">'+st+'</b></div><div style="'+_row+'">Created<b style="margin-left:auto">'+created+'</b></div><div style="'+_row+';border-bottom:none">Version<b style="margin-left:auto">V1 · locked on send</b></div>'+pbBlock+'<div style="display:flex;gap:9px;margin-top:14px"><button onclick="_hlEstEdit()" style="flex:1;padding:11px;border:none;border-radius:8px;background:#59718a;color:#fff;font-weight:900;font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;cursor:pointer;font-family:\'Montserrat\',sans-serif">✏️ Edit in builder</button><button onclick="_hlEstClient()" style="flex:1;padding:11px;border:1px solid #59718a;border-radius:8px;background:#fff;color:#59718a;font-weight:900;font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;cursor:pointer;font-family:\'Montserrat\',sans-serif">👤 Client record</button></div>');
+   '<div style="display:flex;gap:10px;align-items:center;margin-bottom:4px"><b style="font-size:16px;color:#161e2e">'+client+'</b><span style="margin-left:auto;font-family:\'JetBrains Mono\',monospace;font-size:16px;font-weight:900;color:#59718a">'+amt+'</span></div><div style="'+_row+'">Status<b style="margin-left:auto">'+st+'</b></div><div style="'+_row+'">Created<b style="margin-left:auto">'+created+'</b></div><div style="'+_row+';border-bottom:none">Version<b style="margin-left:auto">V1 · locked on send</b></div>'+pbBlock+'<div style="display:flex;gap:9px;margin-top:14px"><button onclick="_hlEstEdit()" style="flex:1;padding:11px;border:none;border-radius:8px;background:#59718a;color:#fff;font-weight:900;font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;cursor:pointer;font-family:\'Montserrat\',sans-serif">✏️ Edit in builder</button><button onclick="_hlEstClient()" style="flex:1;padding:11px;border:1px solid #59718a;border-radius:8px;background:#fff;color:#59718a;font-weight:900;font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;cursor:pointer;font-family:\'Montserrat\',sans-serif">👤 Client record</button>'+deleteBtn+'</div>');
 },true);
 function hl63Wire(view,target,label){
   var v=document.getElementById('view-'+view);if(!v)return;
