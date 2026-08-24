@@ -19,7 +19,7 @@
  * monitor_my_status poll, so "is this person running current code" is a
  * question the database can answer. Do not hand-edit it -- run
  * `node scripts/stamp-page-build.mjs`. */
-var HL_PAGE_BUILD = '63280f1cfd80f5a3';
+var HL_PAGE_BUILD = 'df8482a9595af9e3';
 </script>
 <script>
 (function () { // HL_FETCH_DEDUPE_V1 — single wrapper: GET /api/ dedupe + 60s cache + write-invalidate
@@ -24373,6 +24373,34 @@ function efOpenRecordDepositModal(nid,num){
     }).catch(function(e){ err.textContent='Network error: '+e.message; err.style.display='block'; });
   };
 }
+// 2026-08-25: "since im done testing out the feature in estimates, i should
+// be able to delete the records... in approved tab" -- uses the real cancel
+// endpoint (moves to Archived, reason kept on the record) rather than a hard
+// delete, matching cancel.js's own "never a silent delete" design and the
+// fact that staging shares the live production Supabase database. Own modal,
+// not window.prompt/confirm, matching the rest of this flow.
+function efOpenCancelEstimateModal(nid,num){
+  var body='<div id="cnl-body">'
+    +'<div style="font-size:12px;font-weight:700;color:#484f64;margin-bottom:14px">This moves '+esc(num)+' to Archived. The reason below stays on its record — nothing is erased.</div>'
+    +'<label style="'+_lbl+'">Reason</label>'
+    +'<textarea id="cnl-reason" placeholder="e.g. test data, duplicate, client declined" style="'+_inp+';margin-bottom:12px;min-height:64px;resize:vertical"></textarea>'
+    +'<div id="cnl-err" style="display:none;color:#c65b4e;font-size:11px;font-weight:700;margin-bottom:10px"></div>'
+    +'<div style="display:flex;gap:9px"><button onclick="_hlCnlSubmit()" style="flex:1;padding:11px;border:none;border-radius:8px;background:#c65b4e;color:#fff;font-weight:900;font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;cursor:pointer;font-family:\'Montserrat\',sans-serif">Cancel estimate</button><button onclick="document.getElementById(\'hlmodal\').remove()" style="flex:1;padding:11px;border:1px solid #dadde8;border-radius:8px;background:#fff;color:#5d657b;font-weight:900;font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;cursor:pointer;font-family:\'Montserrat\',sans-serif">Back</button></div>'
+    +'</div>';
+  hlModal('&#10005; Cancel estimate',body);
+  window._hlCnlSubmit=function(){
+    var reason=((document.getElementById('cnl-reason')||{}).value||'').trim();
+    var err=document.getElementById('cnl-err');
+    if(!reason){ err.textContent='Enter a reason — it stays on the record.'; err.style.display='block'; return; }
+    err.style.display='none';
+    hlEstApi('cancel',{id:nid,reason:reason}).then(function(d){
+      if(!d||!d.ok){ err.textContent=(d&&d.error)||'Could not cancel this estimate.'; err.style.display='block'; return; }
+      document.getElementById('hlmodal').remove();
+      chirpToast('&#10003; '+num+' cancelled.');
+      loadNativeEstimatesLive();
+    }).catch(function(e){ err.textContent='Network error: '+e.message; err.style.display='block'; });
+  };
+}
 function fmC(n){return '$'+n.toLocaleString('en-US',{minimumFractionDigits:(n%1?2:0),maximumFractionDigits:2});}
 var EQ_STATUS_META={
   draft:{label:'DRAFT',cls:'dr'},
@@ -26240,6 +26268,19 @@ document.addEventListener('click',function(e){
       };
     }
   }
+  // 2026-08-25: "since im done testing out the feature in estimates, i
+  // should be able to delete the records... in approved tab" -- there was no
+  // way to get a real, approved estimate out of the active tabs. A hard
+  // delete is deliberately NOT what cancel.js offers ("Always reasoned and
+  // kept in history — never a silent delete") and staging shares the live
+  // production Supabase database, so this uses the real cancel endpoint
+  // (-> Archived tab, reason kept on the record) instead of destroying rows.
+  // Scoped to 'approved' only: cancelEstimate() itself doesn't accept
+  // 'converted' (it already became a real job by then).
+  var cancelBtn=(nativeRow&&nativeRow.lifecycleStatus==='approved')
+    ? '<button onclick="_hlEstCancel()" style="padding:11px 16px;border:1px solid #c65b4e;border-radius:8px;background:#fff;color:#c65b4e;font-weight:900;font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;cursor:pointer;font-family:\'Montserrat\',sans-serif">&#10005; Cancel estimate</button>'
+    : '';
+  window._hlEstCancel=function(){ document.getElementById('hlmodal').remove(); efOpenCancelEstimateModal(nid,num); };
   window._hlEstEdit=isLocalRow
     ? function(){ document.getElementById('hlmodal').remove(); efOpenLocalDraft(rowKey.slice(6)); }
     : function(){ document.getElementById('hlmodal').remove(); try{ if(orig.indexOf('estFormNew')>-1){ (new Function(orig))(); } else { estFormNew(cid); } }catch(x){ try{estFormNew(null);}catch(y){} } };
@@ -26294,7 +26335,7 @@ document.addEventListener('click',function(e){
      +'<button onclick="_hlEstPbk()" style="width:100%;margin-top:10px;padding:9px;border:1px solid #59718a;border-radius:8px;background:transparent;color:#8ba4c4;font-weight:800;font-size:9.5px;letter-spacing:.06em;text-transform:uppercase;cursor:pointer;font-family:\'Montserrat\',sans-serif">💵 See a live job breakdown — Payment Breakdowns →</button></div>';
   }
   hlModal('📄 '+num+' — '+(ttl||'Estimate'),
-   '<div style="display:flex;gap:10px;align-items:center;margin-bottom:4px"><b style="font-size:16px;color:#161e2e">'+client+'</b><span style="margin-left:auto;font-family:\'JetBrains Mono\',monospace;font-size:16px;font-weight:900;color:#59718a">'+amt+'</span></div><div style="'+_row+'">Status<b style="margin-left:auto">'+st+'</b></div><div style="'+_row+'">Created<b style="margin-left:auto">'+created+'</b></div><div style="'+_row+';border-bottom:none">Version<b style="margin-left:auto">V1 · locked on send</b></div>'+pbBlock+'<div style="display:flex;gap:9px;margin-top:14px"><button onclick="_hlEstEdit()" style="flex:1;padding:11px;border:none;border-radius:8px;background:#59718a;color:#fff;font-weight:900;font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;cursor:pointer;font-family:\'Montserrat\',sans-serif">✏️ Edit in builder</button><button onclick="_hlEstClient()" style="flex:1;padding:11px;border:1px solid #59718a;border-radius:8px;background:#fff;color:#59718a;font-weight:900;font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;cursor:pointer;font-family:\'Montserrat\',sans-serif">👤 Client record</button>'+lifecycleBtn+deleteBtn+'</div>');
+   '<div style="display:flex;gap:10px;align-items:center;margin-bottom:4px"><b style="font-size:16px;color:#161e2e">'+client+'</b><span style="margin-left:auto;font-family:\'JetBrains Mono\',monospace;font-size:16px;font-weight:900;color:#59718a">'+amt+'</span></div><div style="'+_row+'">Status<b style="margin-left:auto">'+st+'</b></div><div style="'+_row+'">Created<b style="margin-left:auto">'+created+'</b></div><div style="'+_row+';border-bottom:none">Version<b style="margin-left:auto">V1 · locked on send</b></div>'+pbBlock+'<div style="display:flex;gap:9px;margin-top:14px"><button onclick="_hlEstEdit()" style="flex:1;padding:11px;border:none;border-radius:8px;background:#59718a;color:#fff;font-weight:900;font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;cursor:pointer;font-family:\'Montserrat\',sans-serif">✏️ Edit in builder</button><button onclick="_hlEstClient()" style="flex:1;padding:11px;border:1px solid #59718a;border-radius:8px;background:#fff;color:#59718a;font-weight:900;font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;cursor:pointer;font-family:\'Montserrat\',sans-serif">👤 Client record</button>'+lifecycleBtn+cancelBtn+deleteBtn+'</div>');
 },true);
 function hl63Wire(view,target,label){
   var v=document.getElementById('view-'+view);if(!v)return;
