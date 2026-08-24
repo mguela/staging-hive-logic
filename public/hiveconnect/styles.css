@@ -1575,15 +1575,14 @@ html[data-theme="dark"] .huddle-banner {
 .ev-c-draft-banner button:hover { background: rgba(0,0,0,.15); }
 .ev-c-draft-spacer { flex: 1; }
 
-/* sidebar: Favourites + Categories sections (hardcoded light text — #panel-email
-   sits on the always-dark --rail background, var(--ink) resolves light and is unreadable here) */
-.ev-fav-row, .ev-cat-row { display: flex; align-items: center; gap: 9px; width: 100%; background: none; border: none; cursor: pointer; color: #e9eefb; font-size: 13px; font-weight: 600; padding: 7px 9px; border-radius: 9px; text-align: left; }
-.ev-fav-row:hover, .ev-cat-row:hover { background: rgba(116,138,158,.2); }
+/* sidebar: Favourites section (hardcoded light text — #panel-email sits on
+   the always-dark --rail background, var(--ink) resolves light and is
+   unreadable here; overridden again for the light Email-tab theme below) */
+.ev-fav-row { display: flex; align-items: center; gap: 9px; width: 100%; background: none; border: none; cursor: pointer; color: #e9eefb; font-size: 13px; font-weight: 600; padding: 7px 9px; border-radius: 9px; text-align: left; }
+.ev-fav-row:hover { background: rgba(116,138,158,.2); }
 .ev-fav-row.active { background: rgba(255,201,75,.16); color: #ffe3a8; }
-.ev-cat-row.active { background: rgba(116,138,158,.3); }
-.ev-cat-dot-lg { width: 10px; height: 10px; border-radius: 50%; flex: none; }
 .ev-fav-ic { width: 18px; text-align: center; flex: none; color: #ffc94b; }
-.ev-favs, .ev-cats-sec { margin-bottom: 10px; }
+.ev-favs, .ev-folders-sec, .ev-groups-sec { margin-bottom: 10px; }
 .ev-add-fav-link, .ev-new-folder { display: block; width: 100%; background: none; border: none; cursor: pointer; text-align: left; color: #8ba4c4; font-size: 12px; font-weight: 700; padding: 6px 9px; border-radius: 9px; }
 .ev-add-fav-link:hover, .ev-new-folder:hover { color: #fff; background: rgba(116,138,158,.16); }
 
@@ -1603,6 +1602,58 @@ html[data-theme="dark"] .huddle-banner {
 @media (max-width: 720px) {
   .ev-list-head { flex-wrap: wrap; }
 }
+
+/* ===== EMAIL Phase 5: light sidebar theme + collapsible sections, matching
+   the reference design (2026-08-25). Every other tab keeps the dark rail —
+   only the Email panel (and the shared header, while Email is the active
+   tab) switches to the light canvas card language the reading pane already
+   uses, since the reference treats Email as its own light workspace rather
+   than an extension of the dark nav rail. */
+.sidebar.sidebar-email-theme { background: var(--card); }
+.sidebar.sidebar-email-theme .sidebar-header { background: var(--card); border-bottom: 1px solid var(--line); }
+.sidebar.sidebar-email-theme .sidebar-title { color: var(--ink); }
+.sidebar.sidebar-email-theme .icon-btn { color: var(--mut); }
+.sidebar.sidebar-email-theme .icon-btn:hover { background: var(--steel-bg); color: var(--ink); }
+.sidebar.sidebar-email-theme #bell-btn { border-color: var(--line); background: var(--steel-bg); color: var(--ink); }
+.sidebar.sidebar-email-theme .ev-accts-lbl { color: var(--mut); }
+.sidebar.sidebar-email-theme .ev-acct,
+.sidebar.sidebar-email-theme .ev-folder,
+.sidebar.sidebar-email-theme .ev-fav-row,
+.sidebar.sidebar-email-theme .ev-group-row { color: var(--ink); }
+.sidebar.sidebar-email-theme .ev-acct-name { color: var(--ink); }
+.sidebar.sidebar-email-theme .ev-acct-add,
+.sidebar.sidebar-email-theme .ev-add-fav-link,
+.sidebar.sidebar-email-theme .ev-new-folder,
+.sidebar.sidebar-email-theme .ev-new-group { color: var(--steel-deep); }
+.sidebar.sidebar-email-theme .ev-acct:hover,
+.sidebar.sidebar-email-theme .ev-folder:hover,
+.sidebar.sidebar-email-theme .ev-fav-row:hover,
+.sidebar.sidebar-email-theme .ev-group-row:hover,
+.sidebar.sidebar-email-theme .ev-acct-add:hover,
+.sidebar.sidebar-email-theme .ev-add-fav-link:hover,
+.sidebar.sidebar-email-theme .ev-new-folder:hover,
+.sidebar.sidebar-email-theme .ev-new-group:hover { background: var(--steel-bg); color: var(--ink); }
+.sidebar.sidebar-email-theme .ev-folder-ct { color: var(--steel-deep); background: var(--steel-bg); }
+.sidebar.sidebar-email-theme .ev-fav-row.active,
+.sidebar.sidebar-email-theme .ev-folder.active { background: var(--gold-soft); color: #8a5a12; }
+.sidebar.sidebar-email-theme .ev-acct.active,
+.sidebar.sidebar-email-theme .ev-acct.active .ev-acct-name { background: var(--steel-bg); color: var(--steel-deep); }
+
+/* collapsible section headers (Favourites / Folders / Groups) — same
+   chevron-rotate pattern already used for Chirp's collapsible people list */
+.ev-sec-head { display: flex; align-items: center; gap: 6px; width: 100%; background: none; border: none; cursor: pointer; padding: 4px 6px 6px; font-family: var(--mono); font-size: 10.5px; font-weight: 800; letter-spacing: .8px; text-transform: uppercase; color: var(--mut); }
+.sidebar.sidebar-email-theme .ev-sec-head { color: var(--mut); }
+.ev-sec-chev { display: inline-block; transition: transform .15s ease; font-size: 10px; }
+.ev-sec-head.collapsed .ev-sec-chev { transform: rotate(-90deg); }
+.ev-sec-body.collapsed { display: none; }
+
+/* Groups: a real, working feature (named member lists you can compose to),
+   not Outlook 365's shared-mailbox Groups — same "map the honest equivalent"
+   call already made for Starred/Important elsewhere in this file. */
+.ev-group-row { display: flex; align-items: center; gap: 9px; width: 100%; background: none; border: none; cursor: pointer; color: #e9eefb; font-size: 13px; font-weight: 600; padding: 7px 9px; border-radius: 9px; text-align: left; }
+.ev-group-row:hover { background: rgba(116,138,158,.2); }
+.ev-group-ic { width: 22px; height: 22px; border-radius: 50%; background: var(--steel-bg); color: var(--steel-deep); font-size: 10px; font-weight: 800; display: flex; align-items: center; justify-content: center; flex: none; }
+.ev-group-count { margin-left: auto; font-size: 10.5px; color: var(--mut); }
 
 /* ==================== TASKS + CALENDAR ==================== */
 .tc-view { position: absolute; inset: 0; z-index: 24; background: var(--canvas); display: flex; flex-direction: column; }

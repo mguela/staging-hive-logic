@@ -2377,28 +2377,23 @@ html[data-theme="dark"] :is(#hiveconnect-root, .hc-embed).huddle-banner {
 :is(#hiveconnect-root, .hc-embed) .ev-c-draft-spacer,
 :is(#hiveconnect-root, .hc-embed).ev-c-draft-spacer { flex: 1; }
 
-/* sidebar: Favourites + Categories sections (hardcoded light text — #panel-email
-   sits on the always-dark --rail background, var(--ink) resolves light and is unreadable here) */
+/* sidebar: Favourites section (hardcoded light text — #panel-email sits on
+   the always-dark --rail background, var(--ink) resolves light and is
+   unreadable here; overridden again for the light Email-tab theme below) */
 :is(#hiveconnect-root, .hc-embed) .ev-fav-row,
-:is(#hiveconnect-root, .hc-embed).ev-fav-row,
-:is(#hiveconnect-root, .hc-embed) .ev-cat-row,
-:is(#hiveconnect-root, .hc-embed).ev-cat-row { display: flex; align-items: center; gap: 9px; width: 100%; background: none; border: none; cursor: pointer; color: #e9eefb; font-size: 13px; font-weight: 600; padding: 7px 9px; border-radius: 9px; text-align: left; }
+:is(#hiveconnect-root, .hc-embed).ev-fav-row { display: flex; align-items: center; gap: 9px; width: 100%; background: none; border: none; cursor: pointer; color: #e9eefb; font-size: 13px; font-weight: 600; padding: 7px 9px; border-radius: 9px; text-align: left; }
 :is(#hiveconnect-root, .hc-embed) .ev-fav-row:hover,
-:is(#hiveconnect-root, .hc-embed).ev-fav-row:hover,
-:is(#hiveconnect-root, .hc-embed) .ev-cat-row:hover,
-:is(#hiveconnect-root, .hc-embed).ev-cat-row:hover { background: rgba(116,138,158,.2); }
+:is(#hiveconnect-root, .hc-embed).ev-fav-row:hover { background: rgba(116,138,158,.2); }
 :is(#hiveconnect-root, .hc-embed) .ev-fav-row.active,
 :is(#hiveconnect-root, .hc-embed).ev-fav-row.active { background: rgba(255,201,75,.16); color: #ffe3a8; }
-:is(#hiveconnect-root, .hc-embed) .ev-cat-row.active,
-:is(#hiveconnect-root, .hc-embed).ev-cat-row.active { background: rgba(116,138,158,.3); }
-:is(#hiveconnect-root, .hc-embed) .ev-cat-dot-lg,
-:is(#hiveconnect-root, .hc-embed).ev-cat-dot-lg { width: 10px; height: 10px; border-radius: 50%; flex: none; }
 :is(#hiveconnect-root, .hc-embed) .ev-fav-ic,
 :is(#hiveconnect-root, .hc-embed).ev-fav-ic { width: 18px; text-align: center; flex: none; color: #ffc94b; }
 :is(#hiveconnect-root, .hc-embed) .ev-favs,
 :is(#hiveconnect-root, .hc-embed).ev-favs,
-:is(#hiveconnect-root, .hc-embed) .ev-cats-sec,
-:is(#hiveconnect-root, .hc-embed).ev-cats-sec { margin-bottom: 10px; }
+:is(#hiveconnect-root, .hc-embed) .ev-folders-sec,
+:is(#hiveconnect-root, .hc-embed).ev-folders-sec,
+:is(#hiveconnect-root, .hc-embed) .ev-groups-sec,
+:is(#hiveconnect-root, .hc-embed).ev-groups-sec { margin-bottom: 10px; }
 :is(#hiveconnect-root, .hc-embed) .ev-add-fav-link,
 :is(#hiveconnect-root, .hc-embed).ev-add-fav-link,
 :is(#hiveconnect-root, .hc-embed) .ev-new-folder,
@@ -2432,6 +2427,96 @@ html[data-theme="dark"] :is(#hiveconnect-root, .hc-embed).huddle-banner {
   :is(#hiveconnect-root, .hc-embed) .ev-list-head,
 :is(#hiveconnect-root, .hc-embed).ev-list-head { flex-wrap: wrap; }
 }
+
+/* ===== EMAIL Phase 5: light sidebar theme + collapsible sections, matching
+   the reference design (2026-08-25). Every other tab keeps the dark rail —
+   only the Email panel (and the shared header, while Email is the active
+   tab) switches to the light canvas card language the reading pane already
+   uses, since the reference treats Email as its own light workspace rather
+   than an extension of the dark nav rail. */
+:is(#hiveconnect-root, .hc-embed) .sidebar.sidebar-email-theme,
+:is(#hiveconnect-root, .hc-embed).sidebar.sidebar-email-theme { background: var(--card); }
+:is(#hiveconnect-root, .hc-embed) .sidebar.sidebar-email-theme .sidebar-header,
+:is(#hiveconnect-root, .hc-embed).sidebar.sidebar-email-theme .sidebar-header { background: var(--card); border-bottom: 1px solid var(--line); }
+:is(#hiveconnect-root, .hc-embed) .sidebar.sidebar-email-theme .sidebar-title,
+:is(#hiveconnect-root, .hc-embed).sidebar.sidebar-email-theme .sidebar-title { color: var(--ink); }
+:is(#hiveconnect-root, .hc-embed) .sidebar.sidebar-email-theme .icon-btn,
+:is(#hiveconnect-root, .hc-embed).sidebar.sidebar-email-theme .icon-btn { color: var(--mut); }
+:is(#hiveconnect-root, .hc-embed) .sidebar.sidebar-email-theme .icon-btn:hover,
+:is(#hiveconnect-root, .hc-embed).sidebar.sidebar-email-theme .icon-btn:hover { background: var(--steel-bg); color: var(--ink); }
+:is(#hiveconnect-root, .hc-embed) .sidebar.sidebar-email-theme #bell-btn,
+:is(#hiveconnect-root, .hc-embed).sidebar.sidebar-email-theme #bell-btn { border-color: var(--line); background: var(--steel-bg); color: var(--ink); }
+:is(#hiveconnect-root, .hc-embed) .sidebar.sidebar-email-theme .ev-accts-lbl,
+:is(#hiveconnect-root, .hc-embed).sidebar.sidebar-email-theme .ev-accts-lbl { color: var(--mut); }
+:is(#hiveconnect-root, .hc-embed) .sidebar.sidebar-email-theme .ev-acct,
+:is(#hiveconnect-root, .hc-embed).sidebar.sidebar-email-theme .ev-acct,
+:is(#hiveconnect-root, .hc-embed) .sidebar.sidebar-email-theme .ev-folder,
+:is(#hiveconnect-root, .hc-embed).sidebar.sidebar-email-theme .ev-folder,
+:is(#hiveconnect-root, .hc-embed) .sidebar.sidebar-email-theme .ev-fav-row,
+:is(#hiveconnect-root, .hc-embed).sidebar.sidebar-email-theme .ev-fav-row,
+:is(#hiveconnect-root, .hc-embed) .sidebar.sidebar-email-theme .ev-group-row,
+:is(#hiveconnect-root, .hc-embed).sidebar.sidebar-email-theme .ev-group-row { color: var(--ink); }
+:is(#hiveconnect-root, .hc-embed) .sidebar.sidebar-email-theme .ev-acct-name,
+:is(#hiveconnect-root, .hc-embed).sidebar.sidebar-email-theme .ev-acct-name { color: var(--ink); }
+:is(#hiveconnect-root, .hc-embed) .sidebar.sidebar-email-theme .ev-acct-add,
+:is(#hiveconnect-root, .hc-embed).sidebar.sidebar-email-theme .ev-acct-add,
+:is(#hiveconnect-root, .hc-embed) .sidebar.sidebar-email-theme .ev-add-fav-link,
+:is(#hiveconnect-root, .hc-embed).sidebar.sidebar-email-theme .ev-add-fav-link,
+:is(#hiveconnect-root, .hc-embed) .sidebar.sidebar-email-theme .ev-new-folder,
+:is(#hiveconnect-root, .hc-embed).sidebar.sidebar-email-theme .ev-new-folder,
+:is(#hiveconnect-root, .hc-embed) .sidebar.sidebar-email-theme .ev-new-group,
+:is(#hiveconnect-root, .hc-embed).sidebar.sidebar-email-theme .ev-new-group { color: var(--steel-deep); }
+:is(#hiveconnect-root, .hc-embed) .sidebar.sidebar-email-theme .ev-acct:hover,
+:is(#hiveconnect-root, .hc-embed).sidebar.sidebar-email-theme .ev-acct:hover,
+:is(#hiveconnect-root, .hc-embed) .sidebar.sidebar-email-theme .ev-folder:hover,
+:is(#hiveconnect-root, .hc-embed).sidebar.sidebar-email-theme .ev-folder:hover,
+:is(#hiveconnect-root, .hc-embed) .sidebar.sidebar-email-theme .ev-fav-row:hover,
+:is(#hiveconnect-root, .hc-embed).sidebar.sidebar-email-theme .ev-fav-row:hover,
+:is(#hiveconnect-root, .hc-embed) .sidebar.sidebar-email-theme .ev-group-row:hover,
+:is(#hiveconnect-root, .hc-embed).sidebar.sidebar-email-theme .ev-group-row:hover,
+:is(#hiveconnect-root, .hc-embed) .sidebar.sidebar-email-theme .ev-acct-add:hover,
+:is(#hiveconnect-root, .hc-embed).sidebar.sidebar-email-theme .ev-acct-add:hover,
+:is(#hiveconnect-root, .hc-embed) .sidebar.sidebar-email-theme .ev-add-fav-link:hover,
+:is(#hiveconnect-root, .hc-embed).sidebar.sidebar-email-theme .ev-add-fav-link:hover,
+:is(#hiveconnect-root, .hc-embed) .sidebar.sidebar-email-theme .ev-new-folder:hover,
+:is(#hiveconnect-root, .hc-embed).sidebar.sidebar-email-theme .ev-new-folder:hover,
+:is(#hiveconnect-root, .hc-embed) .sidebar.sidebar-email-theme .ev-new-group:hover,
+:is(#hiveconnect-root, .hc-embed).sidebar.sidebar-email-theme .ev-new-group:hover { background: var(--steel-bg); color: var(--ink); }
+:is(#hiveconnect-root, .hc-embed) .sidebar.sidebar-email-theme .ev-folder-ct,
+:is(#hiveconnect-root, .hc-embed).sidebar.sidebar-email-theme .ev-folder-ct { color: var(--steel-deep); background: var(--steel-bg); }
+:is(#hiveconnect-root, .hc-embed) .sidebar.sidebar-email-theme .ev-fav-row.active,
+:is(#hiveconnect-root, .hc-embed).sidebar.sidebar-email-theme .ev-fav-row.active,
+:is(#hiveconnect-root, .hc-embed) .sidebar.sidebar-email-theme .ev-folder.active,
+:is(#hiveconnect-root, .hc-embed).sidebar.sidebar-email-theme .ev-folder.active { background: var(--gold-soft); color: #8a5a12; }
+:is(#hiveconnect-root, .hc-embed) .sidebar.sidebar-email-theme .ev-acct.active,
+:is(#hiveconnect-root, .hc-embed).sidebar.sidebar-email-theme .ev-acct.active,
+:is(#hiveconnect-root, .hc-embed) .sidebar.sidebar-email-theme .ev-acct.active .ev-acct-name,
+:is(#hiveconnect-root, .hc-embed).sidebar.sidebar-email-theme .ev-acct.active .ev-acct-name { background: var(--steel-bg); color: var(--steel-deep); }
+
+/* collapsible section headers (Favourites / Folders / Groups) — same
+   chevron-rotate pattern already used for Chirp's collapsible people list */
+:is(#hiveconnect-root, .hc-embed) .ev-sec-head,
+:is(#hiveconnect-root, .hc-embed).ev-sec-head { display: flex; align-items: center; gap: 6px; width: 100%; background: none; border: none; cursor: pointer; padding: 4px 6px 6px; font-family: var(--mono); font-size: 10.5px; font-weight: 800; letter-spacing: .8px; text-transform: uppercase; color: var(--mut); }
+:is(#hiveconnect-root, .hc-embed) .sidebar.sidebar-email-theme .ev-sec-head,
+:is(#hiveconnect-root, .hc-embed).sidebar.sidebar-email-theme .ev-sec-head { color: var(--mut); }
+:is(#hiveconnect-root, .hc-embed) .ev-sec-chev,
+:is(#hiveconnect-root, .hc-embed).ev-sec-chev { display: inline-block; transition: transform .15s ease; font-size: 10px; }
+:is(#hiveconnect-root, .hc-embed) .ev-sec-head.collapsed .ev-sec-chev,
+:is(#hiveconnect-root, .hc-embed).ev-sec-head.collapsed .ev-sec-chev { transform: rotate(-90deg); }
+:is(#hiveconnect-root, .hc-embed) .ev-sec-body.collapsed,
+:is(#hiveconnect-root, .hc-embed).ev-sec-body.collapsed { display: none; }
+
+/* Groups: a real, working feature (named member lists you can compose to),
+   not Outlook 365's shared-mailbox Groups — same "map the honest equivalent"
+   call already made for Starred/Important elsewhere in this file. */
+:is(#hiveconnect-root, .hc-embed) .ev-group-row,
+:is(#hiveconnect-root, .hc-embed).ev-group-row { display: flex; align-items: center; gap: 9px; width: 100%; background: none; border: none; cursor: pointer; color: #e9eefb; font-size: 13px; font-weight: 600; padding: 7px 9px; border-radius: 9px; text-align: left; }
+:is(#hiveconnect-root, .hc-embed) .ev-group-row:hover,
+:is(#hiveconnect-root, .hc-embed).ev-group-row:hover { background: rgba(116,138,158,.2); }
+:is(#hiveconnect-root, .hc-embed) .ev-group-ic,
+:is(#hiveconnect-root, .hc-embed).ev-group-ic { width: 22px; height: 22px; border-radius: 50%; background: var(--steel-bg); color: var(--steel-deep); font-size: 10px; font-weight: 800; display: flex; align-items: center; justify-content: center; flex: none; }
+:is(#hiveconnect-root, .hc-embed) .ev-group-count,
+:is(#hiveconnect-root, .hc-embed).ev-group-count { margin-left: auto; font-size: 10.5px; color: var(--mut); }
 
 /* ==================== TASKS + CALENDAR ==================== */
 :is(#hiveconnect-root, .hc-embed) .tc-view,

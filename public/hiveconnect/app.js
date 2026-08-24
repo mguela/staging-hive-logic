@@ -2644,7 +2644,7 @@ function setNavTab(tab) {
   { const cv = $('calendar-view'); if (cv) cv.classList.toggle('hidden', tab !== 'calendar'); }
   { const chv = $('chirp-view'); if (chv) chv.classList.toggle('hidden', tab !== 'chirp'); }
   { const vv = $('voip-view'); if (vv) vv.classList.toggle('hidden', tab !== 'voip'); }
-  { const sb = document.querySelector('.sidebar'); if (sb) sb.classList.toggle('sidebar-collapsed', tab === 'voip'); }
+  { const sb = document.querySelector('.sidebar'); if (sb) { sb.classList.toggle('sidebar-collapsed', tab === 'voip'); sb.classList.toggle('sidebar-email-theme', tab === 'email'); } }
   if (tab === 'huddles') renderHuddlesPanel();
   if (tab === 'people') { renderPeoplePanel(); loadContacts().then(renderPeoplePanel); }
   if (tab === 'chirp') openChirpTab();
@@ -4458,6 +4458,7 @@ let evCustomFolders = [];     // user-created folders (beyond the standard six)
 let evAllInboxes = false;     // unified 'All Inboxes' view across every signed-in mailbox
 let evUserPickedMailbox = false; // user chose a specific mailbox this visit (resets on tab entry)
 let evAcctMenuOpen = false;   // mailbox dropdown open? (collapsed by default so the sidebar stays clean)
+const evSecCollapsed = { favs: false, folders: false, groups: false }; // sidebar section fold state (session-only)
 let evGroup = true;           // group the list by conversation (thread view)
 
 // ---- Outlook-style command bar / list interactions (2026-08-24) ----
@@ -4466,7 +4467,6 @@ let evLastUndo = null;           // { kind, ids, fromFolder } snapshot backing t
 let evUndoTimer = null;          // clears evLastUndo ~10s after a bulk action
 let evSortBy = 'date', evSortDir = 'desc';   // 'date' | 'from' | 'subject'
 let evFocusedTab = 'focused';    // 'focused' | 'other' -- purely a render-time filter, see renderMessageList
-let evCategoryFilter = null;     // Set<string>|null -- sidebar category quick-filter
 function evFavFolders() { return hcPrefJson('hcEmailFavFolders', 'hcEmailFavs', []) || []; }
 function evSaveFavFolders(f) { hcPrefSet('hcEmailFavFolders', 'hcEmailFavs', f); }
 
@@ -5040,7 +5040,8 @@ function renderEmailSidebar() {
   const favIds = evFavFolders();
   {
     const favWrap = document.createElement('div'); favWrap.className = 'ev-favs';
-    const flbl = document.createElement('div'); flbl.className = 'ev-accts-lbl'; flbl.textContent = 'FAVOURITES'; favWrap.appendChild(flbl);
+    favWrap.appendChild(evSectionHead('Favourites', 'favs'));
+    const favBody = document.createElement('div'); favBody.className = 'ev-sec-body' + (evSecCollapsed.favs ? ' collapsed' : '');
     favIds.forEach(fid => {
       const f = EV_FOLDERS.find(x => x.id === fid) || evCustomFolders.find(x => x.id === fid);
       if (!f) return;
@@ -5048,56 +5049,72 @@ function renderEmailSidebar() {
       const ic = document.createElement('span'); ic.className = 'ev-fav-ic'; ic.textContent = '★'; row.appendChild(ic);
       const nm = document.createElement('span'); nm.textContent = f.name; row.appendChild(nm);
       row.onclick = () => { if (!evActive) { const c = $('ev-connect'); if (c) c.classList.remove('hidden'); return; } selectFolder(f.id, f.name); };
-      favWrap.appendChild(row);
+      favBody.appendChild(row);
     });
     const add = document.createElement('button'); add.type = 'button'; add.className = 'ev-add-fav-link'; add.textContent = 'Add favourite';
     add.onclick = (e) => evAddFavouriteMenu(e, favIds);
-    favWrap.appendChild(add);
+    favBody.appendChild(add);
+    favWrap.appendChild(favBody);
     el.appendChild(favWrap);
   }
 
   // folders (always shown; inert until a mailbox is connected)
-  const fWrap = document.createElement('div'); fWrap.className = 'ev-folders' + (connected ? '' : ' ev-folders-off');
-  // Starred / Important -- smart mailbox-wide views (Graph $filter across every
-  // folder), not a real folder id. Microsoft-only for now: /api/mail.js's IMAP
-  // adapter has no bare $filter route, so an IMAP-only mailbox degrades to an
-  // honest "couldn't load" rather than a fake empty list.
-  [['starred', '⭐', 'Starred'], ['important', '❗', 'Important']].forEach(([id, icon, name]) => {
-    const row = document.createElement('button'); row.className = 'ev-folder' + (connected && evFolderId === id ? ' active' : ''); row.dataset.id = id;
-    const ic = document.createElement('span'); ic.className = 'ev-folder-ic'; ic.textContent = icon; row.appendChild(ic);
-    const nm = document.createElement('span'); nm.className = 'ev-folder-nm'; nm.textContent = name; row.appendChild(nm);
-    row.appendChild(document.createElement('span')).className = 'ev-folder-ct';
-    row.onclick = () => { if (!evActive) { const c = $('ev-connect'); if (c) c.classList.remove('hidden'); return; } selectSmartFolder(id); };
-    fWrap.appendChild(row);
-  });
+  const fSec = document.createElement('div'); fSec.className = 'ev-folders-sec';
+  fSec.appendChild(evSectionHead('Folders', 'folders'));
+  const fWrap = document.createElement('div'); fWrap.className = 'ev-folders ev-sec-body' + (connected ? '' : ' ev-folders-off') + (evSecCollapsed.folders ? ' collapsed' : '');
   EV_FOLDERS.forEach(f => {
     const row = evBuildFolderRow(f, f.icon, connected && f.id === evFolderId, false);
     fWrap.appendChild(row);
   });
-  el.appendChild(fWrap);
+  fSec.appendChild(fWrap);
+  el.appendChild(fSec);
 
-  // Categories — quick sidebar filter over the already-open folder's messages
-  // (client-side only, same list the Outlook-style category dots on each row
-  // already carry; no shared-mailbox/Groups backend exists to fill that slot
-  // honestly, so this is what maps to the reference design's third section).
-  const catWrap = document.createElement('div'); catWrap.className = 'ev-cats-sec';
-  const clbl = document.createElement('div'); clbl.className = 'ev-accts-lbl'; clbl.textContent = 'CATEGORIES'; catWrap.appendChild(clbl);
-  EV_CATS.forEach(c => {
-    const active = !!(evCategoryFilter && evCategoryFilter.has(c.name));
-    const row = document.createElement('button'); row.type = 'button'; row.className = 'ev-cat-row' + (active ? ' active' : '');
-    const dot = document.createElement('span'); dot.className = 'ev-cat-dot-lg'; dot.style.background = c.color; row.appendChild(dot);
-    const nm = document.createElement('span'); nm.textContent = c.name.replace(' category', ''); row.appendChild(nm);
-    row.onclick = () => {
-      evCategoryFilter = evCategoryFilter || new Set();
-      if (evCategoryFilter.has(c.name)) evCategoryFilter.delete(c.name); else evCategoryFilter.add(c.name);
-      if (!evCategoryFilter.size) evCategoryFilter = null;
-      renderEmailSidebar(); renderMessageList();
-    };
-    catWrap.appendChild(row);
+  // Groups — named lists of people you can compose to in one click. A real,
+  // working feature scoped to what this standalone mailbox can actually do;
+  // not Outlook 365's shared-mailbox Groups (a different, much bigger thing
+  // — its own inbox/calendar/conversations — genuinely out of scope here).
+  const groups = evGroups();
+  const gSec = document.createElement('div'); gSec.className = 'ev-groups-sec';
+  gSec.appendChild(evSectionHead('Groups', 'groups'));
+  const gBody = document.createElement('div'); gBody.className = 'ev-sec-body' + (evSecCollapsed.groups ? ' collapsed' : '');
+  groups.forEach(g => {
+    const row = document.createElement('button'); row.type = 'button'; row.className = 'ev-group-row'; row.title = 'Compose to ' + g.name;
+    const ic = document.createElement('span'); ic.className = 'ev-group-ic'; ic.textContent = (g.name || '?').charAt(0).toUpperCase(); row.appendChild(ic);
+    const nm = document.createElement('span'); nm.textContent = g.name; row.appendChild(nm);
+    const ct = document.createElement('span'); ct.className = 'ev-group-count'; ct.textContent = (g.members || []).length; row.appendChild(ct);
+    row.onclick = () => evGroupCompose(g);
+    gBody.appendChild(row);
   });
-  el.appendChild(catWrap);
+  const newGroup = document.createElement('button'); newGroup.type = 'button'; newGroup.className = 'ev-new-group'; newGroup.textContent = 'New group';
+  newGroup.onclick = evCreateGroup;
+  gBody.appendChild(newGroup);
+  gSec.appendChild(gBody);
+  el.appendChild(gSec);
 
   if (connected) refreshFolderCounts();
+}
+// one collapsible section header (Favourites / Folders / Groups), matching
+// the chevron-fold pattern already used for Chirp's people list.
+function evSectionHead(label, key) {
+  const head = document.createElement('button'); head.type = 'button'; head.className = 'ev-sec-head' + (evSecCollapsed[key] ? ' collapsed' : '');
+  const chev = document.createElement('span'); chev.className = 'ev-sec-chev'; chev.textContent = '▾'; head.appendChild(chev);
+  head.appendChild(document.createTextNode(label));
+  head.onclick = () => { evSecCollapsed[key] = !evSecCollapsed[key]; renderEmailSidebar(); };
+  return head;
+}
+function evGroups() { return hcPrefJson('hcEmailGroups', 'hcEmailGroups', []) || []; }
+function evSaveGroups(g) { hcPrefSet('hcEmailGroups', 'hcEmailGroups', g); }
+function evCreateGroup() {
+  const name = window.prompt('Group name:'); if (!name || !name.trim()) return;
+  const membersRaw = window.prompt('Members (comma-separated email addresses):', '');
+  const members = (membersRaw || '').split(',').map(s => s.trim()).filter(Boolean);
+  evSaveGroups(evGroups().concat([{ id: evMockId(), name: name.trim(), members }]));
+  renderEmailSidebar();
+  evToast('Group created ✓');
+}
+function evGroupCompose(g) {
+  openEmailCompose('new', null);
+  setTimeout(() => { evSetChips('ev-c-to', g.members || []); }, 30);
 }
 // one folder row: icon, name, unread count, favourite-pin toggle, and a
 // drag-and-drop target so a message row can be dropped onto it to move.
@@ -6074,10 +6091,8 @@ function evVisibleMessages() {
 // it must never touch the Graph query in selectFolder (2026-08-17 lesson: a
 // stuck server-side filter left the Inbox unable to show its own mail).
 function evMsgIsOther(m) { return (m.inferenceClassification || 'focused') === 'other'; }
-function evFilterFocusedAndCategory(rows) {
-  let out = evFocusedTab === 'other' ? rows.filter(evMsgIsOther) : rows.filter(m => !evMsgIsOther(m));
-  if (evCategoryFilter && evCategoryFilter.size) out = out.filter(m => (m.categories || []).some(c => evCategoryFilter.has(c)));
-  return out;
+function evFilterFocused(rows) {
+  return evFocusedTab === 'other' ? rows.filter(evMsgIsOther) : rows.filter(m => !evMsgIsOther(m));
 }
 function evSenderLabel(m) { const f = (m.from && m.from.emailAddress) || {}; return f.name || f.address || ''; }
 function evSortRows(rows) {
@@ -6151,7 +6166,7 @@ function renderMessageList() {
     rows = grouped;
   }
   const otherCount = rows.filter(evMsgIsOther).length;
-  const shown = evSortRows(evFilterFocusedAndCategory(rows));
+  const shown = evSortRows(evFilterFocused(rows));
   evUpdateListHeadUI(shown, { focusedCount: rows.length - otherCount, otherCount });
   if (hidden > 0) {
     // Said out loud, with the way back. Silently swallowing mail is how a
