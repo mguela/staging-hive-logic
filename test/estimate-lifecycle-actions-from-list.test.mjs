@@ -52,9 +52,12 @@ test('a draft estimate gets a Send button that calls the real send endpoint', ()
 test('a sent-but-unpaid estimate gets a deposit-recording action, not a raw Approve button', () => {
   // Approve must stay gated on the deposit -- this is Chris's spec'd
   // deposit-gate design, and approve.js itself blocks it server-side too.
+  // 2026-08-25: the actual record-deposit-payment call moved into its own
+  // efOpenRecordDepositModal() (a real in-app form replacing window.prompt) --
+  // this just needs to confirm the button still routes there.
   const fn = estimatesRowClickHandler();
   assert.match(fn, /lifecycleStatus===\s*'sent'\s*&&\s*!nativeRow\.depositSatisfied/);
-  assert.match(fn, /hlEstApi\('record-deposit-payment'/);
+  assert.match(fn, /efOpenRecordDepositModal\(nid,num\)/);
 });
 
 test('approve only becomes available once the deposit is satisfied', () => {
@@ -70,9 +73,17 @@ test('an approved estimate can convert to a job from the list too', () => {
 });
 
 test('every lifecycle action refreshes the native list on success, so the row moves tabs live', () => {
+  // 2026-08-25: record-deposit-payment's refresh call now lives inside
+  // efOpenRecordDepositModal(), not inline in the click handler -- checked
+  // separately so this still covers all four actions.
   const fn = estimatesRowClickHandler();
-  const successCallCount = (fn.match(/loadNativeEstimatesLive\(\)/g) || []).length;
-  assert.ok(successCallCount >= 4, 'send/deposit/approve/convert must each trigger a refresh on success');
+  const inlineCallCount = (fn.match(/loadNativeEstimatesLive\(\)/g) || []).length;
+  assert.ok(inlineCallCount >= 3, 'send/approve/convert must each trigger a refresh on success');
+  const start = source.indexOf('function efOpenRecordDepositModal(nid,num){');
+  let depth = 0, i = source.indexOf('{', start);
+  do { if (source[i] === '{') depth++; else if (source[i] === '}') depth--; i++; } while (depth > 0);
+  const depositFn = source.slice(start, i);
+  assert.match(depositFn, /loadNativeEstimatesLive\(\)/, 'recording a deposit payment must also refresh the list');
 });
 
 test('the lifecycle button is scoped to native rows only, never shown for local drafts or Jobber-synced rows', () => {

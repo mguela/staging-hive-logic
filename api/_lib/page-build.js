@@ -90,7 +90,7 @@ import fs from 'node:fs';
 // The build the server expects clients to be running. Mirrors the
 // HL_PAGE_BUILD literal in public/index.html; the test above keeps them equal
 // to each other AND to the actual file hash.
-export const PAGE_BUILD = '130570a1e9073d69';
+export const PAGE_BUILD = '489fb51c5dd85109';
 
 // Matches the marker in either file, capturing the value so it can be blanked.
 export const PAGE_BUILD_MARKER = /var HL_PAGE_BUILD = '([0-9a-f]{16})';/;

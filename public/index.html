@@ -19,7 +19,7 @@
  * monitor_my_status poll, so "is this person running current code" is a
  * question the database can answer. Do not hand-edit it -- run
  * `node scripts/stamp-page-build.mjs`. */
-var HL_PAGE_BUILD = '130570a1e9073d69';
+var HL_PAGE_BUILD = '489fb51c5dd85109';
 </script>
 <script>
 (function () { // HL_FETCH_DEDUPE_V1 — single wrapper: GET /api/ dedupe + 60s cache + write-invalidate
@@ -24284,7 +24284,14 @@ function nativeEstimateToRow(e){
     lifecycleStatus:e.lifecycleStatus||'draft',
     depositSatisfied:!!e.depositSatisfied,
     depositRequired:e.depositRequired||0,
-    depositPaidTotal:e.depositPaidTotal||0
+    depositPaidTotal:e.depositPaidTotal||0,
+    // 2026-08-25: the summary modal used to show a hardcoded 35/35/30
+    // "Payment schedule & payouts" preview regardless of what the estimate
+    // actually specified -- confusing for a real estimate drafted as a
+    // genuine 50/50 split. Carrying the real schedule + total through lets
+    // the modal render the estimate's own numbers instead of invented ones.
+    paymentSchedule:e.paymentSchedule||[],
+    totalPrice:(e.totals&&e.totals.price)||0
   };
 }
 function loadNativeEstimatesLive(){
@@ -24292,6 +24299,54 @@ function loadNativeEstimatesLive(){
     EQ_NATIVE=(d&&d.ok&&d.estimates)?d.estimates.map(nativeEstimateToRow):[];
     eqRender();
   }).catch(function(){ EQ_NATIVE=[]; });
+}
+// 2026-08-25: "instead of the popup by chrome, there should be our own
+// popup" -- window.prompt() twice (amount, then method) was also the reason
+// a $40 payment silently overshot the deposit: nothing showed the actual
+// remaining balance before typing a number blind. This shows it, caps the
+// input to it, and validates before ever calling the server. On success, if
+// the deposit is now satisfied, it replaces its own content with an inline
+// "Approve" button (one-click reveal per jomell -- paying does NOT
+// auto-approve; approve.js gates that on the controller/admin role on
+// purpose, and this preserves that human sign-off step).
+function efOpenRecordDepositModal(nid,num){
+  var row=EQ_NATIVE.filter(function(e){return e.nativeId===nid;})[0];
+  var remaining=row?(row.depositRequired-row.depositPaidTotal):0;
+  var body='<div id="rdp-body">'
+    +'<div style="font-size:12px;font-weight:700;color:#484f64;margin-bottom:14px">Remaining to satisfy the deposit on '+esc(num)+': <b style="color:#1B7A50">'+fmC(remaining)+'</b></div>'
+    +'<label style="'+_lbl+'">Amount received</label>'
+    +'<input id="rdp-amt" type="number" step="0.01" min="0.01" max="'+remaining.toFixed(2)+'" value="'+remaining.toFixed(2)+'" style="'+_inp+';margin-bottom:12px">'
+    +'<label style="'+_lbl+'">Payment method</label>'
+    +'<select id="rdp-method" style="'+_inp+';margin-bottom:14px"><option value="check">Check</option><option value="card">Card</option><option value="ach">ACH</option><option value="cash">Cash</option><option value="other">Other</option></select>'
+    +'<div id="rdp-err" style="display:none;color:#c65b4e;font-size:11px;font-weight:700;margin-bottom:10px"></div>'
+    +'<div style="display:flex;gap:9px"><button onclick="_hlRdpSubmit()" style="flex:1;padding:11px;border:none;border-radius:8px;background:#1B7A50;color:#fff;font-weight:900;font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;cursor:pointer;font-family:\'Montserrat\',sans-serif">Record payment</button><button onclick="document.getElementById(\'hlmodal\').remove()" style="flex:1;padding:11px;border:1px solid #dadde8;border-radius:8px;background:#fff;color:#5d657b;font-weight:900;font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;cursor:pointer;font-family:\'Montserrat\',sans-serif">Cancel</button></div>'
+    +'</div>';
+  hlModal('&#128176; Record deposit payment',body);
+  window._hlRdpSubmit=function(){
+    var amt2=+((document.getElementById('rdp-amt')||{}).value)||0;
+    var method=(document.getElementById('rdp-method')||{}).value||'other';
+    var err=document.getElementById('rdp-err');
+    if(amt2<=0){ err.textContent='Enter an amount greater than zero.'; err.style.display='block'; return; }
+    if(amt2>remaining+0.01){ err.textContent='That would exceed the '+fmC(remaining)+' still required — enter '+fmC(remaining)+' or less.'; err.style.display='block'; return; }
+    err.style.display='none';
+    hlEstApi('record-deposit-payment',{id:nid,amount:amt2,method:method}).then(function(d){
+      if(!d||!d.ok){ err.textContent=(d&&d.error)||'Could not record this payment.'; err.style.display='block'; return; }
+      loadNativeEstimatesLive();
+      if(d.estimate&&d.estimate.depositSatisfied){
+        document.getElementById('rdp-body').innerHTML='<div style="font-size:13px;font-weight:800;color:#1B7A50;margin-bottom:12px">&#10003; '+fmC(amt2)+' recorded — the deposit is now fully paid.</div>'
+          +'<button onclick="_hlRdpApproveNow()" style="width:100%;padding:11px;border:none;border-radius:8px;background:#1B7A50;color:#fff;font-weight:900;font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;cursor:pointer;font-family:\'Montserrat\',sans-serif">&#10003; Approve now</button>';
+        window._hlRdpApproveNow=function(){
+          hlEstApi('approve',{id:nid}).then(function(d2){
+            if(d2&&d2.ok){ document.getElementById('hlmodal').remove(); chirpToast('&#10003; '+num+' approved.'); loadNativeEstimatesLive(); }
+            else chirpToast('&#9888; Could not approve: '+((d2&&d2.error)||'unknown error'));
+          }).catch(function(e){ chirpToast('&#9888; Network error: '+e.message); });
+        };
+      } else {
+        document.getElementById('hlmodal').remove();
+        chirpToast('&#10003; '+fmC(amt2)+' recorded. '+(d.note||''));
+      }
+    }).catch(function(e){ err.textContent='Network error: '+e.message; err.style.display='block'; });
+  };
 }
 function fmC(n){return '$'+n.toLocaleString('en-US',{minimumFractionDigits:(n%1?2:0),maximumFractionDigits:2});}
 var EQ_STATUS_META={
@@ -26141,16 +26196,7 @@ document.addEventListener('click',function(e){
       };
     } else if(nativeRow.lifecycleStatus==='sent'&&!nativeRow.depositSatisfied){
       lifecycleBtn='<button onclick="_hlEstRecordDeposit()" style="flex:1;padding:11px;border:none;border-radius:8px;background:#1B7A50;color:#fff;font-weight:900;font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;cursor:pointer;font-family:\'Montserrat\',sans-serif">&#128176; Record deposit payment</button>';
-      window._hlEstRecordDeposit=function(){
-        var remaining=nativeRow.depositRequired-nativeRow.depositPaidTotal;
-        var amt2=Number(window.prompt('Deposit payment amount received (of $'+remaining.toFixed(2)+' remaining):'));
-        if(!amt2||amt2<=0)return;
-        var method=window.prompt('Payment method (check, card, ach, etc.):','check')||'other';
-        hlEstApi('record-deposit-payment',{id:nid,amount:amt2,method:method}).then(function(d){
-          if(d&&d.ok){ chirpToast('&#10003; $'+amt2.toFixed(2)+' recorded. '+(d.note||'')); document.getElementById('hlmodal').remove(); loadNativeEstimatesLive(); }
-          else chirpToast('&#9888; Could not record payment: '+((d&&d.error)||'unknown error'));
-        }).catch(function(e){ chirpToast('&#9888; Network error: '+e.message); });
-      };
+      window._hlEstRecordDeposit=function(){ efOpenRecordDepositModal(nid,num); };
     } else if(nativeRow.lifecycleStatus==='sent'&&nativeRow.depositSatisfied){
       lifecycleBtn='<button onclick="_hlEstApprove()" style="flex:1;padding:11px;border:none;border-radius:8px;background:#1B7A50;color:#fff;font-weight:900;font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;cursor:pointer;font-family:\'Montserrat\',sans-serif">&#10003; Approve</button>';
       window._hlEstApprove=function(){
@@ -26193,13 +26239,35 @@ document.addEventListener('click',function(e){
   var val=parseFloat(String(amt).replace(/[^0-9.]/g,''))||0;
   var _f=function(n){return '$'+Math.round(n).toLocaleString()};
   var _tr=function(tag,pct,amount,who){return '<div style="padding:8px 0;border-bottom:1px solid #26324a"><div style="display:flex;align-items:baseline;gap:8px"><span style="font-family:\'JetBrains Mono\',monospace;font-size:8px;font-weight:800;color:#f0c987;letter-spacing:.08em">'+tag+'</span><span style="font-size:11px;font-weight:800;color:#fff">'+pct+'</span><span style="margin-left:auto;font-family:\'JetBrains Mono\',monospace;font-size:12px;font-weight:900;color:#7fd4a8">'+amount+'</span></div><div style="font-size:9.5px;font-weight:600;color:#9fb0c8;line-height:1.5;margin-top:3px">'+who+'</div></div>'};
-  var pbBlock='<div style="margin-top:14px;background:#161e2e;border-radius:12px;padding:13px 16px">'
-   +'<div style="font-family:\'JetBrains Mono\',monospace;font-size:8px;font-weight:800;letter-spacing:.16em;color:#8ba4c4;text-transform:uppercase;margin-bottom:4px">💵 Payment schedule & payouts — born in the estimate</div>'
-   +_tr('T1 · DEPOSIT','35% on signature',_f(val*.35),'→ releases material POs (readiness gate) · permit fees · mobilization. <b style=\'color:#f0c987\'>Deposit stays a liability until earned.</b>')
-   +_tr('T2 · MIDPOINT','35% at rough-in pass',_f(val*.35),'→ sub payouts (on-clear +3 days) · payroll weeks 2–3 · material restock')
-   +_tr('T3 · COMPLETION','30% at final walk',_f(val*.30),'→ final sub retainage · punch labor · overhead + profit release')
-   +'<div style="font-size:9px;font-weight:600;color:#9fb0c8;line-height:1.55;margin-top:9px">Locks with the Proposal Baseline at signature and becomes the job\'s <b style=\'color:#fff\'>live Payment Breakdown</b> — every actual is checked against this plan; any deviation flags a DISCREPANCY the moment it posts. In the coded build the tranches and payout mapping are editable per-activity right here in the builder.</div>'
-   +'<button onclick="_hlEstPbk()" style="width:100%;margin-top:10px;padding:9px;border:1px solid #59718a;border-radius:8px;background:transparent;color:#8ba4c4;font-weight:800;font-size:9.5px;letter-spacing:.06em;text-transform:uppercase;cursor:pointer;font-family:\'Montserrat\',sans-serif">💵 See a live job breakdown — Payment Breakdowns →</button></div>';
+  var pbBlock;
+  if(nativeRow&&nativeRow.paymentSchedule&&nativeRow.paymentSchedule.length){
+    // 2026-08-25: "this was drafted by 50% payment upfront and then 50% upon
+    // completion. however its making it pay the whole amount" -- traced to
+    // the block below, which used to show a hardcoded 35/35/30 split for
+    // every estimate no matter what it actually specified. Renders the
+    // estimate's OWN real rows instead.
+    var tp=nativeRow.totalPrice||0;
+    var schedRows='';
+    nativeRow.paymentSchedule.forEach(function(r,ri){
+      var rowAmt=tp*(+r.pct||0)/100;
+      var tag=r.isDeposit?'DEPOSIT':'PAYMENT '+(ri+1);
+      var who=r.isDeposit
+        ?('Required before approval'+(nativeRow.depositSatisfied?' — &#10003; paid in full':(nativeRow.depositPaidTotal>0?' — '+fmC(nativeRow.depositPaidTotal)+' recorded so far':'')))
+        :('Due '+(r.dueOn==='completion'?'on completion':(r.dueOn==='approval'?'on approval':'at a scheduled milestone')));
+      schedRows+=_tr(tag,(+r.pct||0)+'% — '+(r.label||''),fmC(rowAmt),who);
+    });
+    pbBlock='<div style="margin-top:14px;background:#161e2e;border-radius:12px;padding:13px 16px">'
+     +'<div style="font-family:\'JetBrains Mono\',monospace;font-size:8px;font-weight:800;letter-spacing:.16em;color:#8ba4c4;text-transform:uppercase;margin-bottom:4px">💵 Payment schedule — as drafted</div>'
+     +schedRows+'</div>';
+  } else {
+    pbBlock='<div style="margin-top:14px;background:#161e2e;border-radius:12px;padding:13px 16px">'
+     +'<div style="font-family:\'JetBrains Mono\',monospace;font-size:8px;font-weight:800;letter-spacing:.16em;color:#8ba4c4;text-transform:uppercase;margin-bottom:4px">💵 Payment schedule & payouts — born in the estimate</div>'
+     +_tr('T1 · DEPOSIT','35% on signature',_f(val*.35),'→ releases material POs (readiness gate) · permit fees · mobilization. <b style=\'color:#f0c987\'>Deposit stays a liability until earned.</b>')
+     +_tr('T2 · MIDPOINT','35% at rough-in pass',_f(val*.35),'→ sub payouts (on-clear +3 days) · payroll weeks 2–3 · material restock')
+     +_tr('T3 · COMPLETION','30% at final walk',_f(val*.30),'→ final sub retainage · punch labor · overhead + profit release')
+     +'<div style="font-size:9px;font-weight:600;color:#9fb0c8;line-height:1.55;margin-top:9px">Locks with the Proposal Baseline at signature and becomes the job\'s <b style=\'color:#fff\'>live Payment Breakdown</b> — every actual is checked against this plan; any deviation flags a DISCREPANCY the moment it posts. In the coded build the tranches and payout mapping are editable per-activity right here in the builder.</div>'
+     +'<button onclick="_hlEstPbk()" style="width:100%;margin-top:10px;padding:9px;border:1px solid #59718a;border-radius:8px;background:transparent;color:#8ba4c4;font-weight:800;font-size:9.5px;letter-spacing:.06em;text-transform:uppercase;cursor:pointer;font-family:\'Montserrat\',sans-serif">💵 See a live job breakdown — Payment Breakdowns →</button></div>';
+  }
   hlModal('📄 '+num+' — '+(ttl||'Estimate'),
    '<div style="display:flex;gap:10px;align-items:center;margin-bottom:4px"><b style="font-size:16px;color:#161e2e">'+client+'</b><span style="margin-left:auto;font-family:\'JetBrains Mono\',monospace;font-size:16px;font-weight:900;color:#59718a">'+amt+'</span></div><div style="'+_row+'">Status<b style="margin-left:auto">'+st+'</b></div><div style="'+_row+'">Created<b style="margin-left:auto">'+created+'</b></div><div style="'+_row+';border-bottom:none">Version<b style="margin-left:auto">V1 · locked on send</b></div>'+pbBlock+'<div style="display:flex;gap:9px;margin-top:14px"><button onclick="_hlEstEdit()" style="flex:1;padding:11px;border:none;border-radius:8px;background:#59718a;color:#fff;font-weight:900;font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;cursor:pointer;font-family:\'Montserrat\',sans-serif">✏️ Edit in builder</button><button onclick="_hlEstClient()" style="flex:1;padding:11px;border:1px solid #59718a;border-radius:8px;background:#fff;color:#59718a;font-weight:900;font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;cursor:pointer;font-family:\'Montserrat\',sans-serif">👤 Client record</button>'+lifecycleBtn+deleteBtn+'</div>');
 },true);
