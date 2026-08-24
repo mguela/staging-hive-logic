@@ -595,23 +595,37 @@ test('the /api/agents/ prefix is the automation surface, and does not cover the 
 
 import { MONITOR_AGENT_RESOURCES as HANDLER_EXEMPT } from '../api/track1.js';
 
+// Full picture: every resource track1.js exempts from its own handler-level
+// gate, paired with the ONE HTTP method the edge allows it on. Originally
+// every entry here was POST-only (the agent's four write actions); Phase 5
+// (2026-08-25) added a GET-only agent read (monitor_app_rules, so the agent
+// can fetch the app whitelist to classify locally) -- hence a method map
+// instead of a flat "everything is POST" assumption.
+const HANDLER_EXEMPT_METHODS = {
+  monitor_pair: 'POST',
+  monitor_heartbeat: 'POST',
+  monitor_consent: 'POST',
+  monitor_screenshot_upload: 'POST',
+  monitor_app_rules: 'GET',
+};
+
 test('the Monitor agent resource list matches what the guard allowlists', () => {
   // The handler's exemption list and this file's own list of agent resources
   // must describe the same set -- if they drift, one gate closes silently.
   assert.deepEqual(
-    [...HANDLER_EXEMPT].sort(), [...MONITOR_AGENT_RESOURCES].sort(),
+    [...HANDLER_EXEMPT].sort(), Object.keys(HANDLER_EXEMPT_METHODS).sort(),
     'track1 MONITOR_AGENT_RESOURCES must cover exactly the agent routes this suite guards',
   );
   for (const resource of HANDLER_EXEMPT) {
+    const method = HANDLER_EXEMPT_METHODS[resource];
     assert.equal(
-      isPublicResourcePath('/api/track1', new URLSearchParams({ resource }), 'POST'), true,
-      `${resource} is exempt from track1's handler gate but not from the edge -- the agent still cannot reach it`,
+      isPublicResourcePath('/api/track1', new URLSearchParams({ resource }), method), true,
+      `${resource} is exempt from track1's handler gate but not from the edge on ${method} -- the agent still cannot reach it`,
     );
   }
   // And the reverse: nothing is allowlisted at the edge as a monitor_* agent
   // route without also being in the handler's exemption list.
-  const edgeMonitorResources = ['monitor_pair', 'monitor_heartbeat', 'monitor_consent', 'monitor_screenshot_upload'];
-  for (const resource of edgeMonitorResources) {
+  for (const resource of Object.keys(HANDLER_EXEMPT_METHODS)) {
     assert.ok(
       HANDLER_EXEMPT.includes(resource),
       `${resource} is public at the edge but would be re-blocked by requireApiAuth`,
@@ -619,12 +633,13 @@ test('the Monitor agent resource list matches what the guard allowlists', () => 
   }
 });
 
-test('the agent exemption is POST-only on both layers', () => {
+test('each agent exemption is public on exactly its one method, nowhere else', () => {
   for (const resource of HANDLER_EXEMPT) {
-    for (const m of ['GET', 'PUT', 'PATCH', 'DELETE']) {
+    const allowedMethod = HANDLER_EXEMPT_METHODS[resource];
+    for (const m of ['GET', 'POST', 'PUT', 'PATCH', 'DELETE']) {
       assert.equal(
-        isPublicResourcePath('/api/track1', new URLSearchParams({ resource }), m), false,
-        `${resource} must not be public on ${m}`,
+        isPublicResourcePath('/api/track1', new URLSearchParams({ resource }), m), m === allowedMethod,
+        `${resource} on ${m}: expected public=${m === allowedMethod}`,
       );
     }
   }

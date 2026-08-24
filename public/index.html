@@ -19,7 +19,7 @@
  * monitor_my_status poll, so "is this person running current code" is a
  * question the database can answer. Do not hand-edit it -- run
  * `node scripts/stamp-page-build.mjs`. */
-var HL_PAGE_BUILD = 'b9d21ae880c7cb79';
+var HL_PAGE_BUILD = '3f84d0f21fe4687e';
 </script>
 <script>
 (function () { // HL_FETCH_DEDUPE_V1 — single wrapper: GET /api/ dedupe + 60s cache + write-invalidate
@@ -6106,10 +6106,12 @@ function ninvSave(){ var amt = parseFloat(document.getElementById('ninv-amt').va
   <div id="mon-owner-note" style="display:none;font-size:11px;color:var(--mut);font-weight:600;background:#fff;border:1px solid var(--line);border-radius:10px;padding:10px 14px;margin-bottom:16px"></div>
 
   <!-- Employee summary cards. Today's Hours / This Week are real, derived
-       from workforce_time_sessions (see workforce_week_summary). Active
-       Projects / Productivity are honestly labeled "not available yet" --
-       there is no project/task table or activity-based productivity
-       calculation to source them from. Never fabricated. -->
+       from workforce_time_sessions (see workforce_week_summary).
+       Productivity is real too as of Phase 5 (2026-08-25) -- a real % of
+       classified activity samples, from monitor_app_usage -- but stays
+       "Not available yet" until today's samples include at least one app
+       with a whitelist rule (see monLoadAppUsage). Active Projects stays
+       honestly "Not available yet": no project/task table exists. -->
   <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px">
     <div class="card" style="flex:1;min-width:150px">
       <div style="font-size:10px;color:var(--mut);font-weight:800;letter-spacing:.04em;text-transform:uppercase;margin-bottom:6px">Today's Hours</div>
@@ -6129,8 +6131,20 @@ function ninvSave(){ var amt = parseFloat(document.getElementById('ninv-amt').va
     </div>
     <div class="card" style="flex:1;min-width:150px">
       <div style="font-size:10px;color:var(--mut);font-weight:800;letter-spacing:.04em;text-transform:uppercase;margin-bottom:6px">Productivity</div>
-      <div style="font-size:14px;font-weight:800;color:var(--mut)" title="Activity samples exist, but nothing computes a productivity percentage from them yet.">Not available yet</div>
+      <div id="mon-productivity" style="font-size:20px;font-weight:900;font-family:ui-monospace,monospace;color:var(--mut)">—</div>
     </div>
+  </div>
+
+  <!-- App Usage breakdown -- real, from today's monitor_activity_samples
+       joined against the app whitelist (monitor_app_rules). An app with no
+       rule shows as "Unclassified", never guessed into a category. -->
+  <div class="card" id="mon-appusage-card" style="margin-bottom:16px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+      <h3 style="margin:0;font-family:Montserrat;font-size:13px;font-weight:800">App Usage — Today</h3>
+      <button id="mon-appusage-manage" onclick="hlMonitorSettingsOpen()" style="border:none;background:none;color:var(--green,#1B7A50);font-weight:800;font-size:11px;cursor:pointer">Manage whitelist</button>
+    </div>
+    <div style="font-size:10.5px;color:var(--mut);font-weight:600;margin-bottom:10px">Approximate — one sample per heartbeat (default every 60s) while clocked in and monitored.</div>
+    <div id="mon-appusage-list">Loading…</div>
   </div>
 
   <!-- Time tracking. Buttons call the SAME workforceClockIn/workforceClockOut/
@@ -6320,6 +6334,45 @@ function ninvSave(){ var amt = parseFloat(document.getElementById('ninv-amt').va
       }, function(){});
     }
 
+    // Phase 5 (2026-08-25): real productivity % + app-usage breakdown for
+    // today, from monitor_activity_samples joined against the app
+    // whitelist (monitor_app_rules). See handleMonitorAppUsage.
+    var MON_CATEGORY_META = {
+      productive: { label: 'Productive', color: 'var(--green)' },
+      unproductive: { label: 'Unproductive', color: 'var(--red)' },
+      neutral: { label: 'Neutral', color: 'var(--mut)' },
+      unclassified: { label: 'Unclassified', color: 'var(--mut)' },
+    };
+    async function monLoadAppUsage(){
+      return hlRequireSession(async function(sess){
+        var r = await fetch('/api/track1?resource=monitor_app_usage', { headers: { Authorization: 'Bearer ' + sess.access_token } });
+        var data = await r.json().catch(function(){ return null; });
+        var prodEl = document.getElementById('mon-productivity');
+        var listEl = document.getElementById('mon-appusage-list');
+        if (!data || data.ok === false || data.tablesReady === false) {
+          if (prodEl) prodEl.textContent = '—';
+          if (listEl) listEl.innerHTML = '<div style="color:var(--mut);font-size:12px">Could not load app usage.</div>';
+          return;
+        }
+        if (prodEl) prodEl.textContent = (data.productivityPercent == null) ? 'Not available yet' : (data.productivityPercent + '%');
+        if (prodEl) prodEl.style.fontSize = (data.productivityPercent == null) ? '14px' : '20px';
+        if (!listEl) return;
+        var apps = data.apps || [];
+        if (!apps.length) { listEl.innerHTML = '<div style="color:var(--mut);font-size:12px">No app activity recorded yet today.</div>'; return; }
+        var total = data.sampleCount || apps.reduce(function(s, a){ return s + a.sampleCount; }, 0);
+        listEl.innerHTML = apps.map(function(a){
+          var pct = total > 0 ? Math.round((a.sampleCount / total) * 100) : 0;
+          var meta = MON_CATEGORY_META[a.category] || MON_CATEGORY_META.unclassified;
+          return '<div style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--line)">'
+            + '<span style="flex:1;font-size:12.5px;font-weight:700">' + (window.esc ? esc(a.appName) : a.appName) + '</span>'
+            + '<span style="font-size:10px;font-weight:800;color:' + meta.color + ';text-transform:uppercase">' + meta.label + '</span>'
+            + '<span style="font-size:11px;color:var(--mut);font-weight:700;width:56px;text-align:right">' + fmtHoursShort(a.sampleCount * 60) + '</span>'
+            + '<span style="font-size:11px;color:var(--mut);font-weight:700;width:40px;text-align:right">' + pct + '%</span>'
+            + '</div>';
+        }).join('');
+      }, function(){});
+    }
+
     window.monSaveEodDraft = function(){
       try {
         localStorage.setItem(MON_EOD_DRAFT_KEY, JSON.stringify({
@@ -6368,6 +6421,7 @@ function ninvSave(){ var amt = parseFloat(document.getElementById('ninv-amt').va
     window.monRefresh = function(){
       renderClockPill();
       monLoadWeekSummary();
+      monLoadAppUsage();
       if (typeof window.workforceRefresh === 'function') window.workforceRefresh();
       if (typeof window.mgrMonRefresh === 'function') window.mgrMonRefresh();
     };
@@ -25909,6 +25963,14 @@ window.hlMonitorSettingsOpen = function(){
     var r = await fetch('/api/track1?resource=monitor_settings', { headers:{ Authorization:'Bearer '+sess.access_token } });
     var data = await r.json().catch(function(){return null;});
     if(!data || data.ok===false){ var m0=document.getElementById('hlmodal'); if(m0) m0.remove(); if(window.chirpToast) chirpToast('⚠️ ' + ((data&&data.error)||'Could not load Monitor settings.')); return; }
+    // Phase 5 (2026-08-25): app whitelist / productivity rules, appended
+    // below the existing settings. Best-effort -- Monitor Settings still
+    // opens fine if this fetch fails, just without the whitelist section.
+    var rulesData = null;
+    try {
+      var rr = await fetch('/api/track1?resource=monitor_app_rules', { headers:{ Authorization:'Bearer '+sess.access_token } });
+      rulesData = await rr.json().catch(function(){ return null; });
+    } catch(e) {}
     var mins=[1,2,3,5,10,15,20,30];
     var opts = mins.map(function(m){ return '<option value="'+m+'"'+(m===data.screenshotIntervalMinutes?' selected':'')+'>Every '+m+' minute'+(m===1?'':'s')+'</option>'; }).join('');
     var roster = data.roster || [];
@@ -25928,8 +25990,58 @@ window.hlMonitorSettingsOpen = function(){
         +     '<input type="checkbox" '+(on?'checked':'')+' onchange="hlMonitorUserToggle(\''+p.employeeId+'\', {monitoringEnabled:this.checked}, this)" style="'+_sw+'"></label>'
         + '</span></div>';
     }).join('') : '<div style="font-size:11px;color:#8b92a8;font-weight:600;padding:6px 0">No one has paired HiveLogic Monitor yet.</div>';
-    hlModal('🖥️ Monitor Settings', '<span style="'+_lbl+'">Screenshot frequency</span><select id="hlmon-interval" style="'+_inp+'">'+opts+'</select><span style="'+_lbl+'">Privacy</span><div style="'+_row+'">Blur screenshots<input type="checkbox" id="hlmon-blur" '+(data.blurScreenshots?'checked':'')+' style="'+_sw+'"></div><span style="'+_lbl+'">Monitoring per person</span><div style="font-size:9px;color:#8b92a8;font-weight:600;line-height:1.5;margin:2px 0 6px"><b>Monitor</b> — on means this person is recorded while clocked in, and must approve the prompt to stay clocked in. Off means they are not monitored at all, and the idle timeout does not apply to them. Nothing is ever recorded without their yes, and nothing is recorded while they are clocked out.</div>'+rosterHtml+'<button onclick="hlMonitorSettingsSave()" style="width:100%;margin-top:14px;padding:12px;border:none;border-radius:9px;background:#59718a;color:#fff;font-family:\'Montserrat\',sans-serif;font-weight:900;font-size:11px;letter-spacing:.06em;text-transform:uppercase;cursor:pointer">Save settings</button>');
+    // Phase 5 (2026-08-25): app whitelist -- one row per rule, category
+    // select + delete; a small add-rule form underneath.
+    var rules = (rulesData && rulesData.ok !== false) ? (rulesData.rules || []) : [];
+    var catOpts = function(current){
+      return ['productive','neutral','unproductive'].map(function(c){
+        return '<option value="'+c+'"'+(c===current?' selected':'')+'>'+c.charAt(0).toUpperCase()+c.slice(1)+'</option>';
+      }).join('');
+    };
+    var rulesHtml = rules.length ? rules.map(function(rule){
+      return '<div style="'+_row+'">'+rule.appName
+        + '<span style="margin-left:auto;display:flex;align-items:center;gap:8px">'
+        +   '<select onchange="hlMonitorAppRuleSet(\''+rule.appName.replace(/'/g,"\\'")+'\', this.value)" style="'+_inp+';width:auto;padding:4px 8px;font-size:9px">'+catOpts(rule.category)+'</select>'
+        +   '<button onclick="hlMonitorAppRuleDelete(\''+rule.id+'\')" title="Remove rule" style="border:none;background:none;color:#c65b4e;font-weight:900;cursor:pointer;font-size:13px;padding:0">&times;</button>'
+        + '</span></div>';
+    }).join('') : '<div style="font-size:11px;color:#8b92a8;font-weight:600;padding:6px 0">No app rules yet. Add one below.</div>';
+    var addRuleHtml = '<div style="display:flex;gap:6px;margin-top:8px">'
+      + '<input id="hlmon-newapp-name" type="text" placeholder="App name (e.g. Google Chrome)" style="'+_inp+';flex:1"/>'
+      + '<select id="hlmon-newapp-category" style="'+_inp+';width:auto">'+catOpts('neutral')+'</select>'
+      + '<button onclick="hlMonitorAppRuleAdd()" style="padding:0 14px;border:none;border-radius:7px;background:#59718a;color:#fff;font-weight:800;font-size:10.5px;cursor:pointer;font-family:Montserrat">Add</button>'
+      + '</div>';
+    hlModal('🖥️ Monitor Settings', '<span style="'+_lbl+'">Screenshot frequency</span><select id="hlmon-interval" style="'+_inp+'">'+opts+'</select><span style="'+_lbl+'">Privacy</span><div style="'+_row+'">Blur screenshots<input type="checkbox" id="hlmon-blur" '+(data.blurScreenshots?'checked':'')+' style="'+_sw+'"></div><span style="'+_lbl+'">Monitoring per person</span><div style="font-size:9px;color:#8b92a8;font-weight:600;line-height:1.5;margin:2px 0 6px"><b>Monitor</b> — on means this person is recorded while clocked in, and must approve the prompt to stay clocked in. Off means they are not monitored at all, and the idle timeout does not apply to them. Nothing is ever recorded without their yes, and nothing is recorded while they are clocked out.</div>'+rosterHtml+'<span style="'+_lbl+'">App whitelist (productivity)</span><div style="font-size:9px;color:#8b92a8;font-weight:600;line-height:1.5;margin:2px 0 6px">Classifies apps as Productive / Neutral / Unproductive. Powers the Monitor dashboard\'s Productivity % and the desktop agent\'s "not productive" notification. An app with no rule here is shown as Unclassified, never guessed.</div>'+rulesHtml+addRuleHtml+'<button onclick="hlMonitorSettingsSave()" style="width:100%;margin-top:14px;padding:12px;border:none;border-radius:9px;background:#59718a;color:#fff;font-family:\'Montserrat\',sans-serif;font-weight:900;font-size:11px;letter-spacing:.06em;text-transform:uppercase;cursor:pointer">Save settings</button>');
   }, function(){ if(window.chirpToast) chirpToast('Sign in to view this.'); });
+};
+window.hlMonitorAppRuleAdd = function(){
+  return hlRequireSession(async function(sess){
+    var nameEl = document.getElementById('hlmon-newapp-name');
+    var catEl = document.getElementById('hlmon-newapp-category');
+    var appName = nameEl ? nameEl.value.trim() : '';
+    if (!appName) { if(window.chirpToast) chirpToast('Enter an app name first.'); return; }
+    var r = await fetch('/api/track1?resource=monitor_app_rules', { method:'POST', headers:{ 'Content-Type':'application/json', Authorization:'Bearer '+sess.access_token }, body: JSON.stringify({ appName: appName, category: catEl ? catEl.value : 'neutral' }) });
+    var d = await r.json().catch(function(){return null;});
+    if(!d || d.ok===false){ if(window.chirpToast) chirpToast('⚠️ ' + ((d&&d.error)||'Could not add the rule.')); return; }
+    if(window.chirpToast) chirpToast('✅ Rule saved.');
+    window.hlMonitorSettingsOpen();
+  });
+};
+window.hlMonitorAppRuleSet = function(appName, category){
+  return hlRequireSession(async function(sess){
+    var r = await fetch('/api/track1?resource=monitor_app_rules', { method:'POST', headers:{ 'Content-Type':'application/json', Authorization:'Bearer '+sess.access_token }, body: JSON.stringify({ appName: appName, category: category }) });
+    var d = await r.json().catch(function(){return null;});
+    if(!d || d.ok===false){ if(window.chirpToast) chirpToast('⚠️ ' + ((d&&d.error)||'Could not update the rule.')); return; }
+    if(window.chirpToast) chirpToast('✅ Updated.');
+  });
+};
+window.hlMonitorAppRuleDelete = function(id){
+  return hlRequireSession(async function(sess){
+    var r = await fetch('/api/track1?resource=monitor_app_rules&id='+encodeURIComponent(id), { method:'DELETE', headers:{ Authorization:'Bearer '+sess.access_token } });
+    var d = await r.json().catch(function(){return null;});
+    if(!d || d.ok===false){ if(window.chirpToast) chirpToast('⚠️ ' + ((d&&d.error)||'Could not remove the rule.')); return; }
+    if(window.chirpToast) chirpToast('🗑️ Rule removed.');
+    window.hlMonitorSettingsOpen();
+  });
 };
 window.hlMonitorSettingsSave = function(){
   return hlRequireSession(async function(sess){

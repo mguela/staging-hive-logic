@@ -64,6 +64,20 @@ let lastConsentPromptSessionId = null; // which monitor session we've already as
 let lastScreenshotAt = 0; // ms epoch of the last screenshot capture -- drives the admin-configurable interval instead of a fixed heartbeat count
 let lastScreenshotSessionId = null; // forces an immediate first screenshot whenever the monitor session changes
 
+// Phase 5 (2026-08-25): app whitelist / productivity classification. The
+// rule list is cached and refreshed on its own slower cadence (not every
+// 60s heartbeat) -- it changes rarely (an admin editing it in Monitor
+// Settings) and this app never blocks/slows the heartbeat loop on a
+// second network round trip. lastUnproductiveNoticeApp/At rate-limit the
+// notification so switching tabs on the SAME unproductive app for an hour
+// shows one notice, not sixty.
+let appRulesCache = new Map(); // app_name -> category
+let appRulesFetchedAt = 0;
+const APP_RULES_REFRESH_MS = 10 * 60 * 1000; // 10 minutes
+let lastUnproductiveNoticeApp = null;
+let lastUnproductiveNoticeAt = 0;
+const UNPRODUCTIVE_NOTICE_COOLDOWN_MS = 15 * 60 * 1000; // 15 minutes per distinct app
+
 function detectPlatform() {
   if (process.platform === 'win32') return 'windows';
   if (process.platform === 'darwin') return 'mac';
@@ -216,6 +230,56 @@ async function getActiveAppName() {
   }
 }
 
+// Refreshes appRulesCache from the server on its own slower cadence (see
+// APP_RULES_REFRESH_MS). Uses the agent's own bearer token -- the same
+// GET-only exemption monitor_heartbeat etc. use (see
+// api/track1.js MONITOR_AGENT_RESOURCES / api/_lib/guard.js). Best-effort:
+// a failed fetch just keeps whatever was cached before (or an empty map on
+// first run), never blocks the heartbeat loop.
+async function refreshAppRulesIfStale() {
+  if (!CONFIG.agentToken) return;
+  if (Date.now() - appRulesFetchedAt < APP_RULES_REFRESH_MS) return;
+  try {
+    const r = await fetch(`${CONFIG.apiBase}/api/track1?resource=monitor_app_rules`, {
+      headers: { Authorization: `Bearer ${CONFIG.agentToken}` },
+    });
+    const data = await r.json().catch(() => null);
+    if (data && data.ok !== false && Array.isArray(data.rules)) {
+      appRulesCache = new Map(data.rules.map((rule) => [rule.appName, rule.category]));
+      appRulesFetchedAt = Date.now();
+    }
+  } catch (e) {
+    // Keep the stale cache -- classifying against last-known rules is
+    // better than not classifying at all.
+  }
+}
+
+// Chris: "provide a pop up notif that the app currently open is not
+// productive." Classifies locally against the cached whitelist and shows
+// a real OS notification -- but only for an app explicitly marked
+// 'unproductive' (never for 'unclassified', which would be guessing), and
+// at most once per distinct app per UNPRODUCTIVE_NOTICE_COOLDOWN_MS so
+// switching back to the same app repeatedly doesn't spam. Same
+// Notification API the startup notice already uses.
+function maybeNotifyUnproductiveApp(activeApp) {
+  if (!activeApp) return;
+  const category = appRulesCache.get(activeApp);
+  if (category !== 'unproductive') return;
+  const now = Date.now();
+  if (activeApp === lastUnproductiveNoticeApp && (now - lastUnproductiveNoticeAt) < UNPRODUCTIVE_NOTICE_COOLDOWN_MS) return;
+  lastUnproductiveNoticeApp = activeApp;
+  lastUnproductiveNoticeAt = now;
+  try {
+    new Notification({
+      title: 'HiveLogic Monitor',
+      body: `"${activeApp}" is marked unproductive. This does not affect your clock -- just a heads up.`,
+      silent: false,
+    }).show();
+  } catch (e) {
+    logLine(`Unproductive-app notification failed: ${e.message}`);
+  }
+}
+
 // -----------------------------------------------------------------------
 // Monitoring loop -- heartbeat decides clocked-in status server-side;
 // this app never trusts its own guess about whether someone is working.
@@ -292,6 +356,15 @@ async function sendHeartbeat() {
 
     lastStatus = withinBusinessHours(CONFIG) ? 'Recording' : 'Clocked in — outside monitoring hours';
     refreshTrayMenu();
+
+    // Phase 5 (2026-08-25): only while actually recording (clocked in,
+    // monitored, consented, within business hours) -- the same condition
+    // that gates capture below, so there is never a productivity notice
+    // for time that isn't itself being monitored.
+    if (withinBusinessHours(CONFIG)) {
+      await refreshAppRulesIfStale();
+      maybeNotifyUnproductiveApp(activeApp);
+    }
 
     if (data.monitorSessionId !== lastScreenshotSessionId) {
       lastScreenshotSessionId = data.monitorSessionId;
