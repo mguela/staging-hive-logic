@@ -23,8 +23,8 @@
 // here are global on purpose (no module system in this codebase yet).
 
 let voipData = { calls: [], voicemails: [], status: null, extensions: [], numbers: [] };
-let voipCenterTab = 'dial'; // dial | directory | history | voicemail
 let voipCallTimerInterval = null;
+let voipClockInterval = null;
 
 // Shared color/shadow tokens for the new premium card look. Green stays
 // the primary accent (matches the rest of HiveConnect); blue is reserved
@@ -39,6 +39,16 @@ const VOIP_UI = {
   ink: '#161e2e', sub: '#5d657b', line: '#e3e5ec',
   cardShadow: '0 14px 32px rgba(22,30,46,.09),0 4px 12px rgba(22,30,46,.06)',
   cardRadius: '16px',
+  // Dialer-mockup reskin (2026-08-24): page background + icon-chip colors
+  // for the 6 stat tiles and card headers. Additive only -- every key
+  // above stays as-is so nothing already using them breaks.
+  bg: '#f6f8fc', white: '#ffffff', borderSoft: '#eceef5',
+  chipGreen: '#1B7A50', chipGreenBg: '#e6f2ec',
+  chipOrange: '#c9862e', chipOrangeBg: '#fbeee0',
+  chipPurple: '#7a5bc9', chipPurpleBg: '#efe9fb',
+  chipIndigo: '#3b6fd6', chipIndigoBg: '#eaf0fd',
+  chipTeal: '#1c8f8f', chipTealBg: '#e3f4f3',
+  chipBlue: '#2f7fd1', chipBlueBg: '#e8f2fc',
 };
 // Expose on window so sibling scripts (voip-callflow.js) never hard-fail if
 // they run before this const is in scope (load-order / stale-cache mismatch).
@@ -50,6 +60,38 @@ function voipFmtWhen(iso) { if (!iso) return '&mdash;'; const d = new Date(iso);
 function voipFmtTime(iso) { if (!iso) return '&mdash;'; const d = new Date(iso); return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }); }
 function voipNotify(msg) { (window.hlToast || alert)(msg); }
 function voipSoon() { voipNotify('Coming soon.'); }
+
+// Toolbar clock pill (mockup match, 2026-08-24) -- live local time, date,
+// and UTC offset from the browser's own clock/timezone via Intl. No city
+// name is shown: nothing at this layer gives a reliable real office
+// location, and this codebase's standing rule is to never invent one.
+function voipClockParts() {
+  const now = new Date();
+  const time = now.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  const date = now.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+  const offsetMin = -now.getTimezoneOffset();
+  const sign = offsetMin >= 0 ? '+' : '-';
+  const abs = Math.abs(offsetMin);
+  const oh = Math.floor(abs / 60), om = abs % 60;
+  const utc = `UTC${sign}${oh}${om ? ':' + String(om).padStart(2, '0') : ''}`;
+  let tz = '';
+  try { tz = Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch (e) {}
+  return { time, date, utc, tz };
+}
+function voipStartClock() {
+  const el = document.getElementById('voip-clock-pill');
+  if (!el) return;
+  clearInterval(voipClockInterval);
+  const tick = () => {
+    if (!document.body.contains(el)) { clearInterval(voipClockInterval); return; }
+    const { time, date, utc, tz } = voipClockParts();
+    el.innerHTML = `<span style="font-weight:800;color:${VOIP_UI.ink}">${voipEscapeHtml(time)}</span>`
+      + `<span style="color:${VOIP_UI.line};margin:0 6px">&middot;</span><span style="color:${VOIP_UI.sub}">${voipEscapeHtml(date)}</span>`
+      + `<span style="color:${VOIP_UI.line};margin:0 6px">&middot;</span><span style="color:${VOIP_UI.gray};font-weight:700">${voipEscapeHtml(utc)}${tz ? ' (' + voipEscapeHtml(tz) + ')' : ''}</span>`;
+  };
+  tick();
+  voipClockInterval = setInterval(tick, 1000);
+}
 
 async function voipApi(path, method, body) {
   const headers = {};
@@ -128,28 +170,40 @@ function voipBucketByRecency(items, dateField, buckets) {
 }
 
 function voipStatCard(opts) {
+  const chip = opts.icon ? `<div style="width:42px;height:42px;border-radius:12px;background:${opts.chipBg};display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0">${opts.icon}</div>` : '';
   const spark = opts.sparkline ? `<div style="margin-left:auto">${voipSparklineSvg(opts.sparkline, opts.sparkColor || VOIP_UI.green)}</div>` : '';
-  return `<div style="flex:1;min-width:200px;background:#fff;border:1px solid ${VOIP_UI.line};border-radius:${VOIP_UI.cardRadius};padding:13px 18px;box-shadow:${VOIP_UI.cardShadow};display:flex;align-items:center;gap:12px">
-    <div style="flex:1">
-      <div style="font-size:21px;font-weight:800;color:${opts.dim ? VOIP_UI.gray : VOIP_UI.ink};line-height:1">${opts.value}</div>
-      <div style="font-size:10.5px;color:${VOIP_UI.gray};font-weight:800;letter-spacing:.06em;text-transform:uppercase;margin-top:5px">${opts.label}</div>
-      ${opts.sub ? `<div style="font-size:10.5px;color:${VOIP_UI.amber};font-weight:700;margin-top:4px">${opts.sub}</div>` : ''}
+  return `<div style="flex:1;min-width:180px;background:${VOIP_UI.white};border:1px solid ${VOIP_UI.borderSoft};border-radius:${VOIP_UI.cardRadius};padding:13px 16px;box-shadow:${VOIP_UI.cardShadow};display:flex;align-items:center;gap:12px">
+    ${chip}
+    <div style="flex:1;min-width:0">
+      <div style="font-size:20px;font-weight:800;color:${opts.dim ? VOIP_UI.gray : VOIP_UI.ink};line-height:1">${opts.value}</div>
+      <div style="font-size:10px;color:${VOIP_UI.gray};font-weight:800;letter-spacing:.04em;margin-top:5px;white-space:nowrap">${opts.label}</div>
+      ${opts.sub ? `<div style="font-size:10px;color:${VOIP_UI.amber};font-weight:700;margin-top:4px">${opts.sub}</div>` : ''}
     </div>
     ${spark}
   </div>`;
 }
 
+// 6 tiles (mockup match, 2026-08-24). "Calls in queue"/"Active Calls"/
+// "Available Agents" are real derived numbers -- queueStatus.waiting sum,
+// and the same busy/available checks voipRenderAgentsCard already uses
+// (voipExtensionIsBusy / voipAgentStatusFor) -- not invented figures.
 function voipRenderStats(status, calls, voicemails) {
   const unread = voicemails.filter(v => !v.read).length;
   const callVolume = voipBucketByRecency(calls, 'started_at', 7);
   const vmVolume = voipBucketByRecency(voicemails, 'created_at', 7);
-  const extFlat = new Array(7).fill(status && status.extensionCount || 0);
+  const queues = (voipData && voipData.queues) || [];
+  const queueWaiting = queues.reduce((sum, q) => sum + (q.waiting || 0), 0);
+  const extensions = (voipData && voipData.extensions) || [];
+  const activeCalls = extensions.filter(e => voipExtensionIsBusy(e.id)).length;
+  const availableAgents = extensions.filter(e => !voipExtensionIsBusy(e.id) && voipAgentStatusFor(e.id) === 'available').length;
   return `
     <div style="display:flex;gap:12px;margin-bottom:14px;flex-wrap:wrap">
-      ${voipStatCard({ value: calls.length, label: 'Recent calls', sparkline: callVolume, sparkColor: VOIP_UI.green })}
-      ${voipStatCard({ value: '&mdash;', label: 'Calls in queue', sub: 'Not tracked yet', dim: true, sparkline: new Array(7).fill(0), sparkColor: VOIP_UI.grayBorder })}
-      ${voipStatCard({ value: unread, label: 'Unread voicemail', sparkline: vmVolume, sparkColor: VOIP_UI.blue })}
-      ${voipStatCard({ value: status && status.extensionCount || 0, label: 'Extensions active', sparkline: extFlat, sparkColor: VOIP_UI.green })}
+      ${voipStatCard({ icon: '&#128222;', chipBg: VOIP_UI.chipGreenBg, value: calls.length, label: 'RECENT CALLS', sparkline: callVolume, sparkColor: VOIP_UI.chipGreen })}
+      ${voipStatCard({ icon: '&#128101;', chipBg: VOIP_UI.chipOrangeBg, value: queueWaiting, label: 'CALLS IN QUEUE' })}
+      ${voipStatCard({ icon: '&#128233;', chipBg: VOIP_UI.chipPurpleBg, value: unread, label: 'UNREAD VOICEMAIL', sparkline: vmVolume, sparkColor: VOIP_UI.chipPurple })}
+      ${voipStatCard({ icon: '&#128100;', chipBg: VOIP_UI.chipIndigoBg, value: status && status.extensionCount || 0, label: 'EXTENSIONS ACTIVE' })}
+      ${voipStatCard({ icon: '&#128242;', chipBg: VOIP_UI.chipTealBg, value: activeCalls, label: 'ACTIVE CALLS' })}
+      ${voipStatCard({ icon: '&#127911;', chipBg: VOIP_UI.chipBlueBg, value: availableAgents, label: 'AVAILABLE AGENTS' })}
     </div>`;
 }
 // ---------------------------------------------------------------------
@@ -341,7 +395,7 @@ async function voipRunRowMenuAction(action, number) {
     const r = await voipApi('?resource=contact_create', 'POST', { e164: number, name: name.trim() });
     if (!r.ok) return voipNotify((r.data && r.data.error) || 'Could not save contact.');
     voipNotify('Contact saved.');
-    voipRenderCenterTab();
+    voipRefreshOpenModal();
   } else if (action === 'block_number') {
     if (!window.confirm('Block ' + number + '? They will no longer be able to reach you.')) return;
     const r = await voipApi('?resource=blocklist', 'POST', { e164: number, reason: 'Blocked from call log' });
@@ -410,7 +464,7 @@ async function voipConfirmLink(e164, jobberClientId, name) {
   if (!r.ok) return voipNotify((r.data && r.data.error) || 'Could not link contact.');
   voipNotify('Linked to ' + name + '.');
   voipCloseContactLinker();
-  voipRenderCenterTab();
+  voipRefreshOpenModal();
 }
 
 // ---------------------------------------------------------------------
@@ -830,7 +884,7 @@ function voipRenderQuickShortcutsCard(container) {
     <div style="font-size:10.5px;color:${VOIP_UI.gray};line-height:1.6">Intercom, Broadcast, Call Flip, DND Mode, and Call Recording are planned &mdash; not built yet.</div>`;
   container.innerHTML = voipCardShell('Quick Shortcuts', '', inner);
   const vmBtn = document.getElementById('voip-shortcut-voicemail');
-  if (vmBtn) vmBtn.addEventListener('click', () => { voipCenterTab = 'voicemail'; voipRenderCenterTab(); });
+  if (vmBtn) vmBtn.addEventListener('click', () => voipOpenFullSectionModal('Voicemail', (body) => voipRenderVoicemailPanel(body)));
 }
 
 // ---------------------------------------------------------------------
@@ -960,45 +1014,115 @@ function voipRenderDirectoryTab(container) {
 }
 
 // ---------------------------------------------------------------------
-// Center column tabs: Dial Pad / Directory / Call History / Voicemail.
+// Dialer-mockup reskin (2026-08-24): Directory / Call History / Voicemail
+// moved from center tabs to persistent right-column preview cards. Each
+// preview reuses the exact same full renderer as before (voipRenderDirectoryTab,
+// voipRenderCallsTable, voipRenderVoicemailPanel) inside a "View all" modal --
+// nothing about search/pagination/Call Intelligence/contact-linking/
+// playback/transcript/delete changed, it's just one click deeper now.
 // ---------------------------------------------------------------------
-function voipCenterTabBarHtml() {
-  const tabs = [['dial', 'Dial Pad'], ['directory', 'Directory'], ['history', 'Call History'], ['voicemail', 'Voicemail']];
-  return `<div style="display:flex;gap:4px;border-bottom:1px solid ${VOIP_UI.line};margin-bottom:20px;flex-wrap:wrap">
-    ${tabs.map(([k, label]) => `<button class="voip-ctab" data-t="${k}" style="padding:12px 16px;border:none;background:none;font-family:inherit;font-weight:800;font-size:12.5px;cursor:pointer;border-bottom:3px solid ${voipCenterTab === k ? VOIP_UI.green : 'transparent'};color:${voipCenterTab === k ? VOIP_UI.green : VOIP_UI.gray}">${label}</button>`).join('')}
+function voipCloseFullSectionModal() {
+  const el = document.getElementById('voip-section-modal-backdrop');
+  if (el) el.remove();
+}
+function voipOpenFullSectionModal(title, mountFn) {
+  voipCloseFullSectionModal();
+  const overlay = document.createElement('div');
+  overlay.id = 'voip-section-modal-backdrop';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(22,30,46,.42);z-index:9000;display:flex;align-items:center;justify-content:center;padding:24px';
+  overlay.innerHTML = `<div style="background:${VOIP_UI.white};border-radius:${VOIP_UI.cardRadius};padding:20px;width:760px;max-width:100%;max-height:88vh;overflow:hidden;display:flex;flex-direction:column;box-shadow:${VOIP_UI.cardShadow}">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-shrink:0">
+      <h3 style="margin:0;font-size:14px;font-weight:800;color:${VOIP_UI.ink}">${voipEscapeHtml(title)}</h3>
+      <button id="voip-section-modal-close" style="border:none;background:none;color:${VOIP_UI.gray};font-size:18px;font-weight:800;cursor:pointer;padding:0">&times;</button>
+    </div>
+    <div id="voip-section-modal-body" style="overflow-y:auto;flex:1;min-height:0"></div>
   </div>`;
+  document.body.appendChild(overlay);
+  overlay._mountFn = mountFn;
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) voipCloseFullSectionModal(); });
+  document.getElementById('voip-section-modal-close').addEventListener('click', voipCloseFullSectionModal);
+  mountFn(document.getElementById('voip-section-modal-body'));
+}
+// Re-runs whatever full view is currently open in the modal (e.g. after
+// creating/linking a contact from inside it) -- no-op if nothing is open.
+function voipRefreshOpenModal() {
+  const overlay = document.getElementById('voip-section-modal-backdrop');
+  const body = document.getElementById('voip-section-modal-body');
+  if (overlay && body && overlay._mountFn) overlay._mountFn(body);
 }
 
-async function voipRenderCenterTab() {
-  const body = document.getElementById('voip-center-body');
-  const tabbar = document.getElementById('voip-center-tabbar');
-  if (!body || !tabbar) return;
-  tabbar.innerHTML = voipCenterTabBarHtml();
-  tabbar.querySelectorAll('.voip-ctab').forEach(b => b.addEventListener('click', () => { voipCenterTab = b.dataset.t; voipRenderCenterTab(); }));
-  if (voipCenterTab === 'dial') {
-    body.innerHTML = voipDialerHtml() + `
-      <div style="margin-top:28px">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
-          <h4 style="margin:0;font-size:11.5px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:${VOIP_UI.ink}">Recent Calls</h4>
-          <button id="voip-view-all-calls" style="border:none;background:none;color:${VOIP_UI.green};font-weight:800;font-size:11.5px;cursor:pointer">View All &rarr;</button>
-        </div>
-        ${voipRenderCallsTable(voipData.calls.slice(0, 5))}
-      </div>`;
-    wireVoipDialer(body, voipData.extensions);
-    body.querySelectorAll('.voip-call-row').forEach(el => el.addEventListener('click', (e) => { if (e.target.closest('button')) return; voipDial(el.dataset.to); }));
-    const viewAll = document.getElementById('voip-view-all-calls');
-    if (viewAll) viewAll.addEventListener('click', () => { voipCenterTab = 'history'; voipRenderCenterTab(); });
-  } else if (voipCenterTab === 'directory') {
-    voipRenderDirectoryTab(body);
-  } else if (voipCenterTab === 'history') {
-    body.innerHTML = `<div style="color:${VOIP_UI.gray};font-size:13px;padding:16px 0">Loading&hellip;</div>`;
-    const histRes = await voipApi('?resource=calls&limit=300');
-    const histCalls = histRes.ok ? histRes.data.calls : voipData.calls;
-    body.innerHTML = `<div style="max-height:calc(100vh - 340px);min-height:320px;overflow-y:auto">${voipRenderCallsTable(histCalls)}</div>`;
-    body.querySelectorAll('.voip-call-row').forEach(el => el.addEventListener('click', (e) => { if (e.target.closest('button')) return; voipDial(el.dataset.to); }));
-  } else if (voipCenterTab === 'voicemail') {
-    voipRenderVoicemailPanel(body);
-  }
+// Same full call-history view the old "History" tab rendered -- extracted
+// so both the "View all" modal and (in future) any other caller can reuse
+// it verbatim.
+async function voipRenderCallHistoryFull(container) {
+  container.innerHTML = `<div style="color:${VOIP_UI.gray};font-size:13px;padding:16px 0">Loading&hellip;</div>`;
+  const histRes = await voipApi('?resource=calls&limit=300');
+  const histCalls = histRes.ok ? histRes.data.calls : voipData.calls;
+  container.innerHTML = `<div style="max-height:calc(88vh - 120px);min-height:320px;overflow-y:auto">${voipRenderCallsTable(histCalls)}</div>`;
+  container.querySelectorAll('.voip-call-row').forEach(el => el.addEventListener('click', (e) => { if (e.target.closest('button')) return; voipDial(el.dataset.to); }));
+}
+
+function voipRenderDialPadCard(container) {
+  const gear = `<button id="voip-dialpad-settings" title="Settings" style="border:none;background:${VOIP_UI.grayBg};color:${VOIP_UI.sub};width:28px;height:28px;border-radius:8px;cursor:pointer;display:flex;align-items:center;justify-content:center"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 11-4 0v-.09A1.65 1.65 0 009.5 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 110-4h.09A1.65 1.65 0 004.6 9.5a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 114 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 110 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg></button>`;
+  container.innerHTML = voipCardShell('VOIP Dial Pad', gear, voipDialerHtml());
+  wireVoipDialer(container, voipData.extensions);
+  const gearBtn = document.getElementById('voip-dialpad-settings');
+  if (gearBtn) gearBtn.addEventListener('click', voipOpenSettings);
+}
+
+function voipRenderDirectoryPreviewCard(container) {
+  const extensions = (voipData.extensions || []).slice(0, 5);
+  const rows = extensions.map(e => `
+    <div class="voip-dirprev-row" data-to="${voipEscapeHtml(e.extensionNumber)}" style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid ${VOIP_UI.line};cursor:pointer">
+      <div style="width:30px;height:30px;border-radius:50%;background:${VOIP_UI.grayBg};color:${VOIP_UI.sub};display:flex;align-items:center;justify-content:center;font-weight:800;font-size:10.5px;flex-shrink:0">${voipInitials(e.name)}</div>
+      <div style="flex:1;min-width:0"><div style="font-size:12px;font-weight:700;color:${VOIP_UI.ink};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${voipEscapeHtml(e.name)}</div></div>
+      <span style="font-size:10px;color:${VOIP_UI.gray};font-weight:700">ext. ${voipEscapeHtml(e.extensionNumber)}</span>
+      <button class="voip-dirprev-call" data-to="${voipEscapeHtml(e.extensionNumber)}" style="border:none;background:${VOIP_UI.greenBg};color:${VOIP_UI.green};width:26px;height:26px;border-radius:50%;cursor:pointer;flex-shrink:0">&#128222;</button>
+    </div>`).join('');
+  const badge = `<button id="voip-dirprev-viewall" style="border:none;background:none;color:${VOIP_UI.green};font-weight:800;font-size:11px;cursor:pointer">View all</button>`;
+  container.innerHTML = voipCardShell('Directory', badge, rows || voipEmptyState('&#128101;', 'No team or clients yet.'));
+  container.querySelectorAll('.voip-dirprev-call').forEach(b => b.addEventListener('click', (e) => { e.stopPropagation(); voipDial(b.dataset.to); }));
+  container.querySelectorAll('.voip-dirprev-row').forEach(el => el.addEventListener('click', (e) => { if (e.target.closest('button')) return; voipDial(el.dataset.to); }));
+  const viewAll = document.getElementById('voip-dirprev-viewall');
+  if (viewAll) viewAll.addEventListener('click', () => voipOpenFullSectionModal('Directory', voipRenderDirectoryTab));
+}
+
+function voipRenderCallHistoryPreviewCard(container) {
+  const calls = (voipData.calls || []).slice(0, 5);
+  const rows = calls.length ? calls.map(c => {
+    const number = c.direction === 'inbound' ? c.from_number : c.to_number;
+    const primary = c.clientName || number;
+    const detail = c.direction === 'inbound' ? 'Incoming' : ('Outgoing (' + voipFmtDuration(c.duration_seconds) + ')');
+    return `<div class="voip-histprev-row" data-to="${voipEscapeHtml(number)}" style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid ${VOIP_UI.line};cursor:pointer">
+      <div style="min-width:0">
+        <div style="display:flex;align-items:center;gap:6px">${voipDirectionIcon(c.direction)}<span style="font-size:12px;font-weight:700;color:${VOIP_UI.ink};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${voipEscapeHtml(primary)}</span></div>
+        <div style="font-size:10px;color:${VOIP_UI.gray};margin-left:20px">${detail}</div>
+      </div>
+      <span style="font-size:10px;color:${VOIP_UI.gray};font-weight:700;white-space:nowrap">${voipFmtTime(c.started_at)}</span>
+    </div>`;
+  }).join('') : voipEmptyState('&#128222;', 'No calls logged yet.');
+  const badge = `<button id="voip-histprev-viewall" style="border:none;background:none;color:${VOIP_UI.green};font-weight:800;font-size:11px;cursor:pointer">View all</button>`;
+  container.innerHTML = voipCardShell('Call History', badge, rows);
+  container.querySelectorAll('.voip-histprev-row').forEach(el => el.addEventListener('click', () => voipDial(el.dataset.to)));
+  const viewAll = document.getElementById('voip-histprev-viewall');
+  if (viewAll) viewAll.addEventListener('click', () => voipOpenFullSectionModal('Call History', voipRenderCallHistoryFull));
+}
+
+function voipRenderVoicemailPreviewCard(container) {
+  const vms = (voipData.voicemails || []).slice(0, 4);
+  const rows = vms.length ? vms.map(v => `
+    <div class="voip-vmprev-row" data-to="${voipEscapeHtml(v.from_number)}" style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid ${VOIP_UI.line};cursor:pointer">
+      <div style="display:flex;align-items:center;gap:8px;min-width:0">
+        ${v.read ? '' : `<span style="width:7px;height:7px;border-radius:50%;background:${VOIP_UI.red};flex-shrink:0"></span>`}
+        <span style="font-size:12px;font-weight:700;color:${VOIP_UI.ink};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${voipEscapeHtml(v.from_number)}</span>
+      </div>
+      <span style="font-size:10px;color:${VOIP_UI.gray};font-weight:700;white-space:nowrap">${voipFmtDuration(v.duration_seconds)}</span>
+    </div>`).join('') : voipEmptyState('&#128233;', 'No voicemails.');
+  const badge = `<button id="voip-vmprev-viewall" style="border:none;background:none;color:${VOIP_UI.green};font-weight:800;font-size:11px;cursor:pointer">View all</button>`;
+  container.innerHTML = voipCardShell('Voicemail', badge, rows);
+  container.querySelectorAll('.voip-vmprev-row').forEach(el => el.addEventListener('click', () => voipDial(el.dataset.to)));
+  const viewAll = document.getElementById('voip-vmprev-viewall');
+  if (viewAll) viewAll.addEventListener('click', () => voipOpenFullSectionModal('Voicemail', (body) => voipRenderVoicemailPanel(body)));
 }
 // ---------------------------------------------------------------------
 // Greeting recorder modal -- start/stop, preview, redo, then Save hands
@@ -1455,28 +1579,34 @@ async function openVoipTab() {
 
   root.innerHTML = `
     ${voipRenderStats(status, voipData.calls, voipData.voicemails)}
-    <div style="display:grid;grid-template-columns:272px minmax(300px,1fr) 264px;gap:14px;align-items:start">
+    <div style="display:grid;grid-template-columns:280px minmax(320px,1fr) 300px;gap:14px;align-items:start">
       <div style="min-width:0;display:flex;flex-direction:column;gap:12px">
-        <div id="voip-box-active"></div>
         <div id="voip-box-comingsoon"></div>
-      </div>
-      <div style="min-width:0;background:#fff;border:1px solid ${VOIP_UI.line};border-radius:${VOIP_UI.cardRadius};padding:18px;box-shadow:${VOIP_UI.cardShadow}">
-        <div id="voip-center-tabbar"></div>
-        <div id="voip-center-body"></div>
-      </div>
-      <div style="min-width:0;display:flex;flex-direction:column;gap:12px">
         <div id="voip-box-callqueues"></div>
         <div id="voip-box-agents"></div>
         <div id="voip-box-shortcuts"></div>
       </div>
+      <div style="min-width:0;display:flex;flex-direction:column;gap:12px">
+        <div id="voip-box-active"></div>
+        <div id="voip-box-dialpad"></div>
+      </div>
+      <div style="min-width:0;display:flex;flex-direction:column;gap:12px">
+        <div id="voip-box-directory-preview"></div>
+        <div id="voip-box-history-preview"></div>
+        <div id="voip-box-voicemail-preview"></div>
+      </div>
     </div>`;
 
-  voipRenderActiveCallCard(document.getElementById('voip-box-active'));
   voipRenderQueueOverviewCard(document.getElementById('voip-box-comingsoon'));
   voipRenderCallbacksCard(document.getElementById('voip-box-callqueues'));
   voipRenderAgentsCard(document.getElementById('voip-box-agents'), voipData.extensions);
   voipRenderQuickShortcutsCard(document.getElementById('voip-box-shortcuts'));
-  voipRenderCenterTab();
+  voipRenderActiveCallCard(document.getElementById('voip-box-active'));
+  voipRenderDialPadCard(document.getElementById('voip-box-dialpad'));
+  voipRenderDirectoryPreviewCard(document.getElementById('voip-box-directory-preview'));
+  voipRenderCallHistoryPreviewCard(document.getElementById('voip-box-history-preview'));
+  voipRenderVoicemailPreviewCard(document.getElementById('voip-box-voicemail-preview'));
+  voipStartClock();
   voipStartLiveUpdates();
 }
 
@@ -1484,9 +1614,8 @@ async function openVoipTab() {
 { const b = document.getElementById('voip-settings-btn'); if (b) b.addEventListener('click', voipOpenSettings); }
 
 async function voipRefreshCalls() {
-  const body = document.getElementById('voip-center-body');
-  if (!body || !document.body.contains(body)) { clearInterval(window.__voipCallsPoll); window.__voipCallsPoll = null; return; }
-  if (voipCenterTab !== 'dial' && voipCenterTab !== 'history') return;
+  const root = document.getElementById('voip-list');
+  if (!root || !document.body.contains(root)) { clearInterval(window.__voipCallsPoll); window.__voipCallsPoll = null; return; }
   let res; try { res = await voipApi('?resource=calls&limit=50'); } catch (e) { return; }
   if (!res || !res.ok || !res.data) return;
   const fresh = res.data.calls || [];
@@ -1494,14 +1623,12 @@ async function voipRefreshCalls() {
   const changed = key(fresh) !== key((voipData && voipData.calls) || []);
   if (voipData) voipData.calls = fresh;
   if (!changed) return;
-  const inp = document.getElementById('voip-dial-input');
-  if (inp && document.activeElement === inp) return; // never stomp mid-typing; next poll gets it
-  const saved = inp ? inp.value : null;
-  voipRenderCenterTab();
-  if (saved) {
-    const inp2 = document.getElementById('voip-dial-input');
-    if (inp2) inp2.value = saved;
-  }
+  // The dial pad card is never re-rendered by this poll, so mid-typing in
+  // #voip-dial-input is never at risk -- only the history preview (and the
+  // full-history modal, if it's the one currently open) refresh.
+  const histBox = document.getElementById('voip-box-history-preview');
+  if (histBox) voipRenderCallHistoryPreviewCard(histBox);
+  voipRefreshOpenModal();
 }
 
 // ---- authenticated recording playback (no Twilio login popups) ----
