@@ -19,7 +19,7 @@
  * monitor_my_status poll, so "is this person running current code" is a
  * question the database can answer. Do not hand-edit it -- run
  * `node scripts/stamp-page-build.mjs`. */
-var HL_PAGE_BUILD = 'b69464bbca513c41';
+var HL_PAGE_BUILD = '3da3fb3e7730dc11';
 </script>
 <script>
 (function () { // HL_FETCH_DEDUPE_V1 — single wrapper: GET /api/ dedupe + 60s cache + write-invalidate
@@ -23755,8 +23755,14 @@ function efSaveSummary(isReal){
   var _efToday=efTodayParts();
   return {num:'#'+EST.num.replace('EST-',''),title:EST.title||'Untitled estimate',client:cl2?cl2.n:'&#8212;',cid:EST.client,prop:cl2?(cl2.a+', '+cl2.t):'&#8212;',created:_efToday.label,cd:_efToday.cd,st:EST.status==='sent'?'aw':'dr',stl:EST.status==='sent'?'Awaiting response':'Draft',amt:Math.round(t.total),local:!isReal};
 }
-function efSaveListUpdate(isReal){
-  ESTLIST.unshift(efSaveSummary(isReal));
+function efSaveListUpdate(summary){
+  // 2026-08-24: re-saving the SAME estimate (e.g. Save -> reopen a local
+  // draft -> edit -> Save again) used to always unshift a fresh row, leaving
+  // the old one still sitting in the list -- a visible duplicate of the same
+  // #2483. Drop any existing row for this estimate number first, so a
+  // re-save replaces it in place instead of piling up alongside it.
+  ESTLIST=ESTLIST.filter(function(e){return e.num!==summary.num;});
+  ESTLIST.unshift(summary);
   try{localStorage.removeItem('hl_est_draft');}catch(e){}
   showView('estimates');efListRender();
 }
@@ -23797,7 +23803,7 @@ function efOpenLocalDraft(key){
 function efSave(){
   if (EST.remoteId){
     chirpToast('&#10003; '+EST.num+' — already a real record; edits since then aren’t re-synced yet.');
-    efSaveListUpdate(true);
+    efSaveListUpdate(efSaveSummary(true));
     return;
   }
   // Captured before efRemoteCreate() runs -- on success it overwrites
@@ -23812,11 +23818,25 @@ function efSave(){
       // stack a second, vaguer message on top of that honest one.
       chirpToast('&#10003; '+EST.num+' saved — a real record now, not a local-only draft.');
       delete drafts[priorLocalKey];
-    } else {
-      drafts[priorLocalKey]={est:JSON.parse(JSON.stringify(EST)),summary:efSaveSummary(false)};
+      efLocalDraftsSave(drafts);
+      efSaveListUpdate(efSaveSummary(true));
+      return;
     }
+    var summary=efSaveSummary(false);
+    // 2026-08-24: jovie folloso's name turned into the "-" placeholder on
+    // re-save after reopening the draft -- CLIENTDB hadn't finished loading
+    // this client yet at that exact moment (efOpenLocalDraft() renders the
+    // builder synchronously; the client list can still be loading in the
+    // background). Rather than overwrite a name we already knew was real
+    // with a blank placeholder, keep the prior save's name when the fresh
+    // lookup comes back empty.
+    var prior=drafts[priorLocalKey];
+    if(summary.client==='&#8212;'&&prior&&prior.summary&&prior.summary.client&&prior.summary.client!=='&#8212;'){
+      summary.client=prior.summary.client;
+    }
+    drafts[priorLocalKey]={est:JSON.parse(JSON.stringify(EST)),summary:summary};
     efLocalDraftsSave(drafts);
-    efSaveListUpdate(!!est);
+    efSaveListUpdate(summary);
   });
 }
 /* ---- form render ---- */
