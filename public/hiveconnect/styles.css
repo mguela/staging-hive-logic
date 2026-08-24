@@ -1596,7 +1596,7 @@ html[data-theme="dark"] .huddle-banner {
 .ev-fav-row:hover { background: rgba(116,138,158,.2); }
 .ev-fav-row.active { background: rgba(255,201,75,.16); color: #ffe3a8; }
 .ev-fav-ic { width: 18px; text-align: center; flex: none; color: #ffc94b; }
-.ev-favs, .ev-folders-sec, .ev-groups-sec { margin-bottom: 10px; }
+.ev-favs, .ev-folders-sec, .ev-groups-sec { margin-top: 14px; margin-bottom: 10px; }
 .ev-add-fav-link, .ev-new-folder { display: block; width: 100%; background: none; border: none; cursor: pointer; text-align: left; color: #8ba4c4; font-size: 12px; font-weight: 700; padding: 6px 9px; border-radius: 9px; }
 .ev-add-fav-link:hover, .ev-new-folder:hover { color: #fff; background: rgba(116,138,158,.16); }
 

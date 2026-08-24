@@ -2415,7 +2415,7 @@ html[data-theme="dark"] :is(#hiveconnect-root, .hc-embed).huddle-banner {
 :is(#hiveconnect-root, .hc-embed) .ev-folders-sec,
 :is(#hiveconnect-root, .hc-embed).ev-folders-sec,
 :is(#hiveconnect-root, .hc-embed) .ev-groups-sec,
-:is(#hiveconnect-root, .hc-embed).ev-groups-sec { margin-bottom: 10px; }
+:is(#hiveconnect-root, .hc-embed).ev-groups-sec { margin-top: 14px; margin-bottom: 10px; }
 :is(#hiveconnect-root, .hc-embed) .ev-add-fav-link,
 :is(#hiveconnect-root, .hc-embed).ev-add-fav-link,
 :is(#hiveconnect-root, .hc-embed) .ev-new-folder,
