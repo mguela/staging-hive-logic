@@ -1368,7 +1368,7 @@ html[data-theme="dark"] .huddle-banner {
 .ev-item { display: flex; gap: 6px; padding: 12px 14px; border-bottom: 1px solid var(--line); cursor: pointer; }
 .ev-item:hover { background: var(--steel-bg); }
 .ev-item.open { background: var(--gold-soft); }
-.ev-item-l { width: 10px; flex: none; display: flex; align-items: flex-start; padding-top: 5px; }
+.ev-item-l { width: 20px; flex: none; display: flex; flex-direction: column; align-items: center; gap: 4px; padding-top: 3px; }
 .ev-item-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--gold); }
 .ev-item-mid { flex: 1; min-width: 0; }
 .ev-item-top { display: flex; justify-content: space-between; gap: 8px; }
@@ -1538,15 +1538,18 @@ html[data-theme="dark"] .huddle-banner {
 .ev-sort-btn { background: none; border: none; color: var(--steel-deep); font-family: var(--sans); font-size: 12px; font-weight: 700; cursor: pointer; padding: 5px 8px; border-radius: 7px; }
 .ev-sort-btn:hover { background: var(--steel-bg); }
 
-/* checkbox + avatar + star on list rows */
-.ev-item-l { display: flex; align-items: flex-start; gap: 6px; }
-.ev-item-check { width: 15px; height: 15px; margin-top: 3px; accent-color: var(--steel-deep); cursor: pointer; flex: none; opacity: 0; }
+/* checkbox + avatar + star on list rows -- .ev-item-l is a narrow column
+   (checkbox/unread-dot/star); the avatar is its own sibling column so a
+   30px circle never has to squeeze into (and overflow out of) that 20px
+   strip, which is what overlapped it onto the sender name/subject text. */
+.ev-item-check { width: 14px; height: 14px; accent-color: var(--steel-deep); cursor: pointer; flex: none; opacity: 0; }
 .ev-item:hover .ev-item-check, .ev-list.has-selection .ev-item-check, .ev-item.selected .ev-item-check { opacity: 1; }
 .ev-item.selected { background: var(--steel-bg); }
 .ev-avatar { width: 30px; height: 30px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-family: var(--mono); font-weight: 800; font-size: 11px; color: #fff; flex: none; }
+.ev-item > .ev-avatar { margin-top: 1px; }
 .ev-avatar.acct-0 { background: #3b82f6; } .ev-avatar.acct-1 { background: #22c55e; }
 .ev-avatar.acct-2 { background: #f59e0b; } .ev-avatar.acct-3 { background: #a855f7; }
-.ev-item-star { border: none; background: none; cursor: pointer; font-size: 14px; line-height: 1; padding: 2px; color: var(--mut); flex: none; }
+.ev-item-star { border: none; background: none; cursor: pointer; font-size: 13px; line-height: 1; padding: 0; color: var(--mut); flex: none; }
 .ev-item-star.on { color: var(--gold); }
 
 /* skeleton loading rows */

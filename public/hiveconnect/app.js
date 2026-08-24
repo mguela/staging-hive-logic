@@ -6213,12 +6213,12 @@ function renderMessageList() {
     chk.onclick = (e) => e.stopPropagation();
     chk.onchange = () => evToggleSelect(m.id, chk.checked);
     l.appendChild(chk);
-    const av = document.createElement('span'); av.className = 'ev-avatar ' + evAvatarClass(m); av.textContent = evInitials(from); l.appendChild(av);
     if (!m.isRead) { const d = document.createElement('span'); d.className = 'ev-item-dot'; l.appendChild(d); }
     const star = document.createElement('button'); star.type = 'button'; star.className = 'ev-item-star' + (flagged ? ' on' : ''); star.title = flagged ? 'Unflag' : 'Flag'; star.textContent = flagged ? '★' : '☆';
     star.onclick = (e) => { e.stopPropagation(); evFlag(m.id, !flagged); };
     l.appendChild(star);
     row.appendChild(l);
+    const av = document.createElement('span'); av.className = 'ev-avatar ' + evAvatarClass(m); av.textContent = evInitials(from); row.appendChild(av);
     const mid = document.createElement('div'); mid.className = 'ev-item-mid';
     const top = document.createElement('div'); top.className = 'ev-item-top';
     const fn = document.createElement('span'); fn.className = 'ev-item-from'; fn.textContent = from; top.appendChild(fn);

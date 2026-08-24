@@ -2012,7 +2012,7 @@ html[data-theme="dark"] :is(#hiveconnect-root, .hc-embed).huddle-banner {
 :is(#hiveconnect-root, .hc-embed) .ev-item.open,
 :is(#hiveconnect-root, .hc-embed).ev-item.open { background: var(--gold-soft); }
 :is(#hiveconnect-root, .hc-embed) .ev-item-l,
-:is(#hiveconnect-root, .hc-embed).ev-item-l { width: 10px; flex: none; display: flex; align-items: flex-start; padding-top: 5px; }
+:is(#hiveconnect-root, .hc-embed).ev-item-l { width: 20px; flex: none; display: flex; flex-direction: column; align-items: center; gap: 4px; padding-top: 3px; }
 :is(#hiveconnect-root, .hc-embed) .ev-item-dot,
 :is(#hiveconnect-root, .hc-embed).ev-item-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--gold); }
 :is(#hiveconnect-root, .hc-embed) .ev-item-mid,
@@ -2307,11 +2307,12 @@ html[data-theme="dark"] :is(#hiveconnect-root, .hc-embed).huddle-banner {
 :is(#hiveconnect-root, .hc-embed) .ev-sort-btn:hover,
 :is(#hiveconnect-root, .hc-embed).ev-sort-btn:hover { background: var(--steel-bg); }
 
-/* checkbox + avatar + star on list rows */
-:is(#hiveconnect-root, .hc-embed) .ev-item-l,
-:is(#hiveconnect-root, .hc-embed).ev-item-l { display: flex; align-items: flex-start; gap: 6px; }
+/* checkbox + avatar + star on list rows -- .ev-item-l is a narrow column
+   (checkbox/unread-dot/star); the avatar is its own sibling column so a
+   30px circle never has to squeeze into (and overflow out of) that 20px
+   strip, which is what overlapped it onto the sender name/subject text. */
 :is(#hiveconnect-root, .hc-embed) .ev-item-check,
-:is(#hiveconnect-root, .hc-embed).ev-item-check { width: 15px; height: 15px; margin-top: 3px; accent-color: var(--steel-deep); cursor: pointer; flex: none; opacity: 0; }
+:is(#hiveconnect-root, .hc-embed).ev-item-check { width: 14px; height: 14px; accent-color: var(--steel-deep); cursor: pointer; flex: none; opacity: 0; }
 :is(#hiveconnect-root, .hc-embed) .ev-item:hover .ev-item-check,
 :is(#hiveconnect-root, .hc-embed).ev-item:hover .ev-item-check,
 :is(#hiveconnect-root, .hc-embed) .ev-list.has-selection .ev-item-check,
@@ -2322,6 +2323,8 @@ html[data-theme="dark"] :is(#hiveconnect-root, .hc-embed).huddle-banner {
 :is(#hiveconnect-root, .hc-embed).ev-item.selected { background: var(--steel-bg); }
 :is(#hiveconnect-root, .hc-embed) .ev-avatar,
 :is(#hiveconnect-root, .hc-embed).ev-avatar { width: 30px; height: 30px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-family: var(--mono); font-weight: 800; font-size: 11px; color: #fff; flex: none; }
+:is(#hiveconnect-root, .hc-embed) .ev-item > .ev-avatar,
+:is(#hiveconnect-root, .hc-embed).ev-item > .ev-avatar { margin-top: 1px; }
 :is(#hiveconnect-root, .hc-embed) .ev-avatar.acct-0,
 :is(#hiveconnect-root, .hc-embed).ev-avatar.acct-0 { background: #3b82f6; } :is(#hiveconnect-root, .hc-embed) .ev-avatar.acct-1,
 :is(#hiveconnect-root, .hc-embed).ev-avatar.acct-1 { background: #22c55e; }
@@ -2329,7 +2332,7 @@ html[data-theme="dark"] :is(#hiveconnect-root, .hc-embed).huddle-banner {
 :is(#hiveconnect-root, .hc-embed).ev-avatar.acct-2 { background: #f59e0b; } :is(#hiveconnect-root, .hc-embed) .ev-avatar.acct-3,
 :is(#hiveconnect-root, .hc-embed).ev-avatar.acct-3 { background: #a855f7; }
 :is(#hiveconnect-root, .hc-embed) .ev-item-star,
-:is(#hiveconnect-root, .hc-embed).ev-item-star { border: none; background: none; cursor: pointer; font-size: 14px; line-height: 1; padding: 2px; color: var(--mut); flex: none; }
+:is(#hiveconnect-root, .hc-embed).ev-item-star { border: none; background: none; cursor: pointer; font-size: 13px; line-height: 1; padding: 0; color: var(--mut); flex: none; }
 :is(#hiveconnect-root, .hc-embed) .ev-item-star.on,
 :is(#hiveconnect-root, .hc-embed).ev-item-star.on { color: var(--gold); }
 
