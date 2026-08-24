@@ -1590,6 +1590,17 @@ html[data-theme="dark"] .huddle-banner {
   .ev-body:not(.ev-reading) .ev-read { display: none; }
 }
 
+/* ===== EMAIL Phase 4: importance flag, reading-pane avatar, save-draft
+   button, starred/important smart folders (2026-08-25) ===== */
+.ev-item-important { color: var(--red); font-weight: 900; margin-right: 4px; }
+.ev-read-top { display: flex; align-items: flex-start; gap: 12px; }
+.ev-avatar-lg { width: 40px; height: 40px; font-size: 14px; flex: none; }
+.ev-read-top-right { flex: 1; min-width: 0; }
+
+@media (max-width: 720px) {
+  .ev-list-head { flex-wrap: wrap; }
+}
+
 /* ==================== TASKS + CALENDAR ==================== */
 .tc-view { position: absolute; inset: 0; z-index: 24; background: var(--canvas); display: flex; flex-direction: column; }
 .tc-toolbar { display: flex; align-items: center; gap: 12px; padding: 13px 20px; border-bottom: 1px solid var(--line); background: var(--card); }

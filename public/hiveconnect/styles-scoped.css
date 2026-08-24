@@ -2407,6 +2407,22 @@ html[data-theme="dark"] :is(#hiveconnect-root, .hc-embed).huddle-banner {
 :is(#hiveconnect-root, .hc-embed).ev-body:not(.ev-reading) .ev-read { display: none; }
 }
 
+/* ===== EMAIL Phase 4: importance flag, reading-pane avatar, save-draft
+   button, starred/important smart folders (2026-08-25) ===== */
+:is(#hiveconnect-root, .hc-embed) .ev-item-important,
+:is(#hiveconnect-root, .hc-embed).ev-item-important { color: var(--red); font-weight: 900; margin-right: 4px; }
+:is(#hiveconnect-root, .hc-embed) .ev-read-top,
+:is(#hiveconnect-root, .hc-embed).ev-read-top { display: flex; align-items: flex-start; gap: 12px; }
+:is(#hiveconnect-root, .hc-embed) .ev-avatar-lg,
+:is(#hiveconnect-root, .hc-embed).ev-avatar-lg { width: 40px; height: 40px; font-size: 14px; flex: none; }
+:is(#hiveconnect-root, .hc-embed) .ev-read-top-right,
+:is(#hiveconnect-root, .hc-embed).ev-read-top-right { flex: 1; min-width: 0; }
+
+@media (max-width: 720px) {
+  :is(#hiveconnect-root, .hc-embed) .ev-list-head,
+:is(#hiveconnect-root, .hc-embed).ev-list-head { flex-wrap: wrap; }
+}
+
 /* ==================== TASKS + CALENDAR ==================== */
 :is(#hiveconnect-root, .hc-embed) .tc-view,
 :is(#hiveconnect-root, .hc-embed).tc-view { position: absolute; inset: 0; z-index: 24; background: var(--canvas); display: flex; flex-direction: column; }

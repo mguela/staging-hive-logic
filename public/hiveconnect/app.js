@@ -4443,6 +4443,7 @@ let evMessages = [];          // current list
 let evNextLink = null;        // Graph @odata.nextLink for paging into full mailbox history
 let evOpenId = null;          // open message id
 let evComposeMode = 'new', evComposeSource = null;
+let evComposeDraftId = null; // Graph id of the server-side draft this compose session has saved, if any
 let evAttachments = [];       // [{name,type,bytes(base64)}]
 let evCustomFolders = [];     // user-created folders (beyond the standard six)
 /* Inbox mode: 'all' | 'triage'.
@@ -4912,6 +4913,18 @@ function renderEmailSidebar() {
 
   // folders (always shown; inert until a mailbox is connected)
   const fWrap = document.createElement('div'); fWrap.className = 'ev-folders' + (connected ? '' : ' ev-folders-off');
+  // Starred / Important -- smart mailbox-wide views (Graph $filter across every
+  // folder), not a real folder id. Microsoft-only for now: /api/mail.js's IMAP
+  // adapter has no bare $filter route, so an IMAP-only mailbox degrades to an
+  // honest "couldn't load" rather than a fake empty list.
+  [['starred', '⭐', 'Starred'], ['important', '❗', 'Important']].forEach(([id, icon, name]) => {
+    const row = document.createElement('button'); row.className = 'ev-folder' + (connected && evFolderId === id ? ' active' : ''); row.dataset.id = id;
+    const ic = document.createElement('span'); ic.className = 'ev-folder-ic'; ic.textContent = icon; row.appendChild(ic);
+    const nm = document.createElement('span'); nm.className = 'ev-folder-nm'; nm.textContent = name; row.appendChild(nm);
+    row.appendChild(document.createElement('span')).className = 'ev-folder-ct';
+    row.onclick = () => { if (!evActive) { const c = $('ev-connect'); if (c) c.classList.remove('hidden'); return; } selectSmartFolder(id); };
+    fWrap.appendChild(row);
+  });
   EV_FOLDERS.forEach(f => {
     const row = evBuildFolderRow(f, f.icon, connected && f.id === evFolderId, false);
     fWrap.appendChild(row);
@@ -5013,7 +5026,7 @@ async function selectFolder(id, name) {
   const read = $('ev-read'); if (read) read.innerHTML = '<div class="ev-read-empty">Select a message to read it here.</div>';
   const list = $('ev-list'); if (list) list.innerHTML = '<div class="ev-loading">Loading…</div>';
   try {
-    const sel = '$select=id,subject,from,receivedDateTime,isRead,bodyPreview,hasAttachments,flag,conversationId,categories,inferenceClassification';
+    const sel = '$select=id,subject,from,receivedDateTime,isRead,bodyPreview,hasAttachments,flag,conversationId,categories,inferenceClassification,importance';
     const baseUrl = `/me/mailFolders/${id}/messages?${sel}&$top=100&$orderby=receivedDateTime desc`;
     let j;
     // Unified view only fans out on well-known folder ids (inbox, sentitems, ...) which exist in every mailbox.
@@ -5036,6 +5049,42 @@ async function selectFolder(id, name) {
     }
     renderMessageList();
     evPrefetchBriefs();   // so the first click finds Reina already finished
+  } catch (e) {
+    if (list) list.innerHTML = '<div class="ev-loading">Couldn\'t load mail — ' + esc(e.message) + '</div>';
+  }
+}
+// Starred / Important -- mailbox-wide smart views (Graph $filter, not a real
+// folder). Kept separate from selectFolder rather than folded into it: these
+// aren't a mode switch on the current folder, they're a different query shape
+// entirely, and selectFolder's job stays "load this one real folder."
+async function selectSmartFolder(kind) {
+  const name = kind === 'starred' ? 'Starred' : 'Important';
+  evFolderId = kind; evFolderName = name; evOpenId = null; evSelected.clear();
+  document.querySelectorAll('#panel-email .ev-folder').forEach(b => b.classList.toggle('active', b.dataset.id === kind));
+  const fn = $('ev-folder-name'); if (fn) fn.textContent = name + (!evAllInboxes && evActive && evActive.username ? ' — ' + evActive.username : '');
+  const read = $('ev-read'); if (read) read.innerHTML = '<div class="ev-read-empty">Select a message to read it here.</div>';
+  const list = $('ev-list'); if (list) list.innerHTML = '<div class="ev-loading">Loading…</div>';
+  const filter = kind === 'starred' ? "flag/flagStatus eq 'flagged'" : "importance eq 'high'";
+  const sel = '$select=id,subject,from,receivedDateTime,isRead,bodyPreview,hasAttachments,flag,conversationId,categories,inferenceClassification,importance';
+  const baseUrl = `/me/messages?$filter=${encodeURIComponent(filter)}&${sel}&$top=100&$orderby=receivedDateTime desc`;
+  try {
+    if (evAllInboxes && evAccounts.length > 1) {
+      const fetchOne = async (a) => {
+        const jj = await evGraph(baseUrl, { account: a });
+        return (jj.value || []).map(m => Object.assign(m, { _acct: a.homeAccountId, _acctName: a.username || a.name || '' }));
+      };
+      const settled = await Promise.allSettled(evAccounts.map(fetchOne));
+      const ok = settled.filter(r => r.status === 'fulfilled');
+      if (!ok.length && settled.length) throw (settled[0].reason || new Error('All mailboxes failed to load'));
+      evMessages = ok.reduce((acc, r) => acc.concat(r.value), [])
+        .sort((x, y) => new Date(y.receivedDateTime || 0) - new Date(x.receivedDateTime || 0));
+      evNextLink = null;
+    } else {
+      const j = await evGraph(baseUrl);
+      evMessages = j.value || [];
+      evNextLink = j['@odata.nextLink'] || null;
+    }
+    renderMessageList();
   } catch (e) {
     if (list) list.innerHTML = '<div class="ev-loading">Couldn\'t load mail — ' + esc(e.message) + '</div>';
   }
@@ -6002,7 +6051,9 @@ function renderMessageList() {
     if (cnt) { const cc = document.createElement('span'); cc.className = 'ev-item-count'; cc.textContent = cnt; top.appendChild(cc); }
     const dt = document.createElement('span'); dt.className = 'ev-item-date'; dt.textContent = evFmtDate(m.receivedDateTime); top.appendChild(dt);
     mid.appendChild(top);
-    const subj = document.createElement('div'); subj.className = 'ev-item-subj'; subj.textContent = m.subject || '(no subject)';
+    const subj = document.createElement('div'); subj.className = 'ev-item-subj';
+    if (m.importance === 'high') { const imp = document.createElement('span'); imp.className = 'ev-item-important'; imp.textContent = '!'; imp.title = 'High importance'; subj.appendChild(imp); }
+    subj.appendChild(document.createTextNode(m.subject || '(no subject)'));
     if (m.hasAttachments) { const clip = document.createElement('span'); clip.className = 'ev-item-clip'; clip.textContent = ' 📎'; subj.appendChild(clip); }
     mid.appendChild(subj);
     const prev = document.createElement('div'); prev.className = 'ev-item-prev'; prev.textContent = m.bodyPreview || ''; mid.appendChild(prev);
@@ -6016,6 +6067,7 @@ function renderMessageList() {
     const qa = document.createElement('div'); qa.className = 'ev-item-qa';
     const qab = (label, title, fn) => { const b = document.createElement('button'); b.textContent = label; b.title = title; b.onclick = (e) => { e.stopPropagation(); fn(); }; qa.appendChild(b); };
     qab('🗄', 'Archive', () => evMove(m.id, 'archive', 'Archived'));
+    qab(m.isRead ? '●' : '✓', m.isRead ? 'Mark unread' : 'Mark read', () => (m.isRead ? evMarkUnread(m.id) : evMarkRead(m.id)));
     qab('🚩', 'Flag', () => evFlag(m.id, !(m.flag && m.flag.flagStatus === 'flagged')));
     qab('🗑', 'Delete', () => evDelete(m.id));
     row.appendChild(qa);
@@ -6089,10 +6141,18 @@ function renderReadingPane(m) {
   const flagged = m.flag && m.flag.flagStatus === 'flagged';
   read.innerHTML = '';
   const head = document.createElement('div'); head.className = 'ev-read-head';
-  const subj = document.createElement('div'); subj.className = 'ev-read-subj'; subj.textContent = m.subject || '(no subject)'; head.appendChild(subj);
+  const subj = document.createElement('div'); subj.className = 'ev-read-subj';
+  if (m.importance === 'high') { const imp = document.createElement('span'); imp.className = 'ev-item-important'; imp.textContent = '!'; imp.title = 'High importance'; subj.appendChild(imp); }
+  subj.appendChild(document.createTextNode(m.subject || '(no subject)'));
+  const top = document.createElement('div'); top.className = 'ev-read-top';
+  const av = document.createElement('span'); av.className = 'ev-avatar ev-avatar-lg ' + evAvatarClass(m); av.textContent = evInitials(from.name || from.address || ''); top.appendChild(av);
+  const topRight = document.createElement('div'); topRight.className = 'ev-read-top-right';
+  topRight.appendChild(subj);
   const meta = document.createElement('div'); meta.className = 'ev-read-meta';
   meta.innerHTML = '<b>' + esc(from.name || from.address || '') + '</b> &lt;' + esc(from.address || '') + '&gt;<br><span class="muted">To: ' + esc(evAddrsFull(m.toRecipients)) + (m.ccRecipients && m.ccRecipients.length ? ' · Cc: ' + esc(evAddrsFull(m.ccRecipients)) : '') + '</span><span class="ev-read-when">' + esc(new Date(m.receivedDateTime).toLocaleString()) + '</span>';
-  head.appendChild(meta);
+  topRight.appendChild(meta);
+  top.appendChild(topRight);
+  head.appendChild(top);
   // action bar — clean icon actions + Reina + More (iCloud/Outlook style)
   evEnsureToolbarCss();
   const bar = document.createElement('div'); bar.className = 'ev-read-actions';
@@ -6321,7 +6381,11 @@ async function evBulkAction(kind, opts) {
   const okCount = undoItems.length, failCount = ids.length - okCount;
   evSelected.clear();
   renderMessageList(); refreshFolderCounts();
-  if (['delete', 'archive', 'report', 'move'].includes(kind) && okCount) {
+  // Starred/Important aren't real folders -- there's nowhere coherent to move
+  // a message "back to" (the fetch is mailbox-wide, not one folder), so Undo
+  // is honestly unavailable for an action taken from one of those views.
+  const fromIsVirtual = fromFolder === 'starred' || fromFolder === 'important';
+  if (['delete', 'archive', 'report', 'move'].includes(kind) && okCount && !fromIsVirtual) {
     evLastUndo = { kind, items: undoItems, fromFolder };
     clearTimeout(evUndoTimer); evUndoTimer = setTimeout(() => { evLastUndo = null; evUpdateCmdbarState(); }, 10000);
   }
@@ -6621,7 +6685,7 @@ function evSigHtml() { const s = evGetSig(); return s ? '<br><br><span style="co
 function nl2br(s) { return esc(s).replace(/\n/g, '<br>'); }
 
 function openEmailCompose(mode, src) {
-  evComposeMode = mode || 'new'; evComposeSource = src || null; evAttachments = [];
+  evComposeMode = mode || 'new'; evComposeSource = src || null; evAttachments = []; evComposeDraftId = null;
   const fromSel = $('ev-c-from'); if (fromSel) { fromSel.innerHTML = ''; evAccounts.forEach(a => { const o = document.createElement('option'); o.value = a.homeAccountId; o.textContent = a.username; if (evActive && a.homeAccountId === evActive.homeAccountId) o.selected = true; fromSel.appendChild(o); }); }
   let to = '', cc = '', subj = '', bodyHtml = '';
   const sig = evSigHtml();
@@ -6774,13 +6838,51 @@ async function evSendCompose() {
   if (evAttachments.length) message.attachments = evAttachments.map(a => ({ '@odata.type': '#microsoft.graph.fileAttachment', name: a.name, contentType: a.type || 'application/octet-stream', contentBytes: a.bytes }));
   const send = $('ev-c-send'); send.disabled = true; send.textContent = 'Sending…';
   try {
-    await evGraph('/me/sendMail', { method: 'POST', body: { message, saveToSentItems: true } });
+    if (evComposeDraftId) {
+      // A real server draft exists for this session -- update it with the
+      // final content, then send THAT draft (moves it out of Drafts), rather
+      // than firing a separate /sendMail and leaving a stale duplicate behind.
+      await evGraph('/me/messages/' + evComposeDraftId, { method: 'PATCH', body: message });
+      await evGraph('/me/messages/' + evComposeDraftId + '/send', { method: 'POST' });
+    } else {
+      await evGraph('/me/sendMail', { method: 'POST', body: { message, saveToSentItems: true } });
+    }
     $('ev-compose-backdrop').classList.add('hidden');
+    evComposeDraftId = null;
     evClearDraft();
     evToast('Sent ✓');
     if (evFolderId === 'sentitems') selectFolder('sentitems', 'Sent');
   } catch (e) { msg.textContent = 'Send failed — ' + e.message; msg.classList.remove('hidden'); }
   finally { send.disabled = false; send.textContent = 'Send'; }
+}
+// Explicit "Save draft" — writes a REAL draft to the mailbox's Drafts folder
+// via Graph (distinct from the silent localStorage autosave, which only
+// protects against an accidental refresh and never leaves this browser).
+// First save creates the draft and remembers its id; later saves in the same
+// compose session PATCH that same draft instead of creating duplicates.
+async function evSaveDraftToServer() {
+  const fromId = $('ev-c-from') ? $('ev-c-from').value : null;
+  const fromAcc = fromId ? evAccounts.find(a => a.homeAccountId === fromId) : null;
+  if (fromAcc) evActive = fromAcc;
+  // /api/mail.js's IMAP adapter only speaks sendMail + move today -- no
+  // draft-creation/PATCH support yet. Fail honestly up front rather than
+  // let the Graph-shaped call 404 against a mailbox that can't do this.
+  if (evActive && evActive.provider === 'imap') { evToast('Save draft isn\'t available yet for this mailbox type — Send still works.'); return; }
+  const to = evChipFieldAddresses('ev-c-to').map(a => ({ emailAddress: { address: a } }));
+  const cc = evChipFieldAddresses('ev-c-cc').map(a => ({ emailAddress: { address: a } }));
+  const bcc = evChipFieldAddresses('ev-c-bcc').map(a => ({ emailAddress: { address: a } }));
+  const subject = $('ev-c-subj').value.trim();
+  const bodyHtml = $('ev-c-body').innerHTML;
+  const message = { subject, body: { contentType: 'HTML', content: bodyHtml }, toRecipients: to, ccRecipients: cc, bccRecipients: bcc };
+  const btn = $('ev-c-savedraft'); const was = btn ? btn.textContent : null;
+  if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+  try {
+    if (evComposeDraftId) await evGraph('/me/messages/' + evComposeDraftId, { method: 'PATCH', body: message });
+    else { const created = await evGraph('/me/messages', { method: 'POST', body: message }); evComposeDraftId = (created && created.id) || null; }
+    evClearDraft(); // the server now has it -- the local recovery copy is redundant
+    evToast('Draft saved');
+  } catch (e) { evToast('Save draft failed — ' + (e.message || '')); }
+  finally { if (btn) { btn.disabled = false; btn.textContent = was; } }
 }
 
 let evToastT = null;
@@ -6801,6 +6903,7 @@ function evToast(text) {
 { const bd2 = $('ev-c-body'); if (bd2) bd2.addEventListener('input', evScheduleDraftSave); }
 ['ev-c-to', 'ev-c-cc', 'ev-c-bcc'].forEach(id => { const el = $(id); if (el) el.addEventListener('blur', evScheduleDraftSave); });
 { const b = $('ev-c-send'); if (b) b.addEventListener('click', evSendCompose); }
+{ const b = $('ev-c-savedraft'); if (b) b.addEventListener('click', evSaveDraftToServer); }
 { const b = $('ev-c-cctoggle'); if (b) b.addEventListener('click', () => { $('ev-c-cc-row').classList.remove('hidden'); b.classList.add('hidden'); $('ev-c-cc').focus(); }); }
 { const b = $('ev-c-bcctoggle'); if (b) b.addEventListener('click', () => { $('ev-c-bcc-row').classList.remove('hidden'); b.classList.add('hidden'); $('ev-c-bcc').focus(); }); }
 { const b = $('ev-c-attach'); if (b) b.addEventListener('click', () => $('ev-c-file').click()); }
@@ -6896,7 +6999,7 @@ document.addEventListener('keydown', (e) => {
 //    50 envelopes of the open folder and say so in the header.
 //  * In All Inboxes mode every mailbox is searched, and each hit carries the
 //    _acct tag openEmailMessage() needs to open it against the right account.
-const EV_SEARCH_SELECT = '$select=id,subject,from,receivedDateTime,isRead,bodyPreview,hasAttachments,flag,conversationId,categories,inferenceClassification';
+const EV_SEARCH_SELECT = '$select=id,subject,from,receivedDateTime,isRead,bodyPreview,hasAttachments,flag,conversationId,categories,inferenceClassification,importance';
 function evSearchHaystack(m) {
   const f = (m.from && m.from.emailAddress) || {};
   return [m.subject, f.name, f.address, m.bodyPreview].join(' ').toLowerCase();
