@@ -19,7 +19,7 @@
  * monitor_my_status poll, so "is this person running current code" is a
  * question the database can answer. Do not hand-edit it -- run
  * `node scripts/stamp-page-build.mjs`. */
-var HL_PAGE_BUILD = '3f8efd46b0691e67';
+var HL_PAGE_BUILD = '3862dabb0ab575b4';
 </script>
 <script>
 (function () { // HL_FETCH_DEDUPE_V1 — single wrapper: GET /api/ dedupe + 60s cache + write-invalidate
@@ -6214,7 +6214,6 @@ function ninvSave(){ var amt = parseFloat(document.getElementById('ninv-amt').va
   </div>
 
   <div id="mon-tz-footer" style="text-align:center;font-size:10.5px;color:var(--mut);font-weight:600;margin:4px 0 20px"></div>
-  <div class="card" id="mon-detail-card" style="display:none"><div id="mon-detail">Select someone from the list above.</div></div>
 
   <script>
   (function(){
@@ -6758,43 +6757,64 @@ function devTodoLoad(){
     }, function(){ el.textContent='Sign in to view this.'; });
   };
 
+  // "View All" (2026-08-25): a real popup (hlModal, the same modal utility
+  // Monitor Settings/App Whitelist already use) instead of the old inline
+  // panel below the roster table. Screenshots are grouped by the real
+  // calendar date they were captured on (capturedAt, local time) -- one
+  // heading per day, newest first -- rather than one flat grid.
   window.mgrMonOpenEmployee = function(employeeId, name){
-    var card = document.getElementById('mon-detail-card'); if(card) card.style.display='block';
-    var el = document.getElementById('mon-detail'); if(!el) return;
-    el.textContent = 'Loading ' + name + '…';
+    hlModal('🖼️ ' + name, '<div style="font-size:12px;color:#8b92a8;font-weight:600;padding:6px 0">Loading…</div>');
+    // Wider than hlModal's 560px default -- a screenshot gallery needs more
+    // room than a settings form. Scoped to this one modal instance only.
+    var card = document.querySelector('#hlmodal > div'); if (card) card.style.width = '820px';
     return hlRequireSession(async function(sess){
+      var body = document.getElementById('hlmodal-body');
       var r = await fetch('/api/track1?resource=monitor_review&employeeId=' + encodeURIComponent(employeeId), { headers:{ Authorization:'Bearer '+sess.access_token } });
       var data = await r.json().catch(function(){return null;});
-      if(!data || data.ok===false){ el.textContent = (data&&data.error) || 'Could not load that employee.'; return; }
+      if(!data || data.ok===false){ if(body) body.textContent = (data&&data.error) || 'Could not load that employee.'; return; }
       var sessions = data.sessions || [], shots = data.screenshots || [], samples = data.activitySamples || [];
       var avgActivity = samples.length ? Math.round(samples.reduce(function(a,s){return a+(s.activity_level||0);},0)/samples.length) : null;
-      el.innerHTML='';
-      var head = document.createElement('div'); head.style.cssText='display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px';
-      var h = document.createElement('h3'); h.style.cssText='margin:0;font-family:Montserrat;font-size:13px;font-weight:900'; h.textContent = name;
-      var stat = document.createElement('span'); stat.style.cssText='font-size:11px;font-weight:800;color:var(--mut)'; stat.textContent = avgActivity!==null ? ('Avg activity: '+avgActivity+'%') : 'No activity samples yet';
-      head.appendChild(h); head.appendChild(stat); el.appendChild(head);
+      if (!body) return;
+
+      var headHtml = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:8px">'
+        + '<span style="font-size:11px;font-weight:800;color:var(--mut)">' + shots.length + ' screenshot' + (shots.length===1?'':'s') + ' · ' + sessions.length + ' session' + (sessions.length===1?'':'s') + '</span>'
+        + '<span style="font-size:11px;font-weight:800;color:var(--mut)">' + (avgActivity!==null ? ('Avg activity: '+avgActivity+'%') : 'No activity samples yet') + '</span>'
+        + '</div>';
+
       if(!sessions.length){
-        var none = document.createElement('div'); none.style.cssText='font-size:12px;color:var(--mut);font-weight:600'; none.textContent='No monitored sessions yet — they need to clock in with the desktop agent running.';
-        el.appendChild(none);
-      } else {
-        var grid = document.createElement('div'); grid.style.cssText='display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px';
-        shots.forEach(function(s){
-          var t = document.createElement('a'); t.href = s.url || '#'; t.target='_blank'; t.rel='noopener';
-          t.style.cssText='display:block;border:1px solid var(--line);border-radius:8px;overflow:hidden;text-decoration:none;color:inherit';
-          if(s.url){
-            var img = document.createElement('img'); img.src = s.url; img.style.cssText='width:100%;height:90px;object-fit:cover;display:block;background:#eef1f5'; t.appendChild(img);
-          }
-          var cap = document.createElement('div'); cap.style.cssText='font-size:9.5px;font-weight:700;color:var(--mut);padding:4px 6px'; cap.textContent = new Date(s.capturedAt).toLocaleTimeString() + ' · display ' + s.displayIndex;
-          t.appendChild(cap);
-          grid.appendChild(t);
-        });
-        el.appendChild(grid);
-        if(!shots.length){
-          var noshot = document.createElement('div'); noshot.style.cssText='font-size:12px;color:var(--mut);font-weight:600;margin-top:8px'; noshot.textContent='No screenshots yet for this employee.';
-          el.appendChild(noshot);
-        }
+        body.innerHTML = headHtml + '<div style="font-size:12px;color:#8b92a8;font-weight:600;text-align:center;padding:20px 0">No monitored sessions yet — they need to clock in with the desktop agent running.</div>';
+        return;
       }
-    }, function(){ el.textContent='Sign in to view this.'; });
+
+      // Group by the local calendar date each screenshot was captured on.
+      var byDate = {}; // 'YYYY-MM-DD' -> [{shot, dateObj}]
+      var order = [];
+      shots.forEach(function(s){
+        var d = new Date(s.capturedAt);
+        var key = isNaN(d.getTime()) ? 'unknown' : (d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'));
+        if (!byDate[key]) { byDate[key] = []; order.push(key); }
+        byDate[key].push(s);
+      });
+      order.sort(function(a,b){ return a < b ? 1 : -1; }); // newest date first
+
+      var sectionsHtml = order.map(function(key){
+        var dayShots = byDate[key];
+        var dateLabel = key === 'unknown' ? 'Unknown date' : new Date(key + 'T00:00:00').toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+        var gridItems = dayShots.map(function(s){
+          var time = new Date(s.capturedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+          return '<a href="'+(s.url||'#')+'" target="_blank" rel="noopener" style="display:block;border:1px solid var(--line);border-radius:8px;overflow:hidden;text-decoration:none;color:inherit">'
+            + (s.url ? '<img src="'+s.url+'" style="width:100%;height:90px;object-fit:cover;display:block;background:#eef1f5">' : '<div style="width:100%;height:90px;background:#eef1f5"></div>')
+            + '<div style="font-size:9.5px;font-weight:700;color:var(--mut);padding:4px 6px">'+time+' · display '+s.displayIndex+'</div>'
+            + '</a>';
+        }).join('');
+        return '<div style="margin-bottom:18px">'
+          + '<div style="font-size:11px;font-weight:800;color:var(--ink,#161e2e);margin-bottom:8px;padding-bottom:6px;border-bottom:1px solid var(--line)">'+dateLabel+' <span style="color:var(--mut);font-weight:700">· '+dayShots.length+'</span></div>'
+          + '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px">'+gridItems+'</div>'
+          + '</div>';
+      }).join('');
+
+      body.innerHTML = headHtml + (shots.length ? sectionsHtml : '<div style="font-size:12px;color:#8b92a8;font-weight:600;text-align:center;padding:20px 0">No screenshots yet for this employee.</div>');
+    }, function(){ var m=document.getElementById('hlmodal'); if(m) m.remove(); if(window.chirpToast) chirpToast('Sign in to view this.'); });
   };
 })();
 </script>
@@ -26047,7 +26067,7 @@ function hlModal(title, body){
   var old=document.getElementById('hlmodal'); if(old) old.remove();
   var d=document.createElement('div'); d.id='hlmodal';
   d.style.cssText='position:fixed;inset:0;background:rgba(22,30,46,.55);z-index:9500;display:flex;align-items:center;justify-content:center;padding:20px';
-  d.innerHTML='<div style="background:#fff;border-radius:16px;width:560px;max-width:96%;max-height:88vh;overflow-y:auto;font-family:\'Montserrat\',sans-serif"><div style="display:flex;align-items:center;padding:16px 20px;border-bottom:1px solid #dadde8;position:sticky;top:0;background:#fff;z-index:2"><b style="font-size:14px;color:#161e2e">'+title+'</b><span onclick="document.getElementById(\'hlmodal\').remove()" style="margin-left:auto;cursor:pointer;font-size:16px;font-weight:800;color:#5d657b">✕</span></div><div style="padding:18px 20px">'+body+'</div></div>';
+  d.innerHTML='<div style="background:#fff;border-radius:16px;width:560px;max-width:96%;max-height:88vh;overflow-y:auto;font-family:\'Montserrat\',sans-serif"><div style="display:flex;align-items:center;padding:16px 20px;border-bottom:1px solid #dadde8;position:sticky;top:0;background:#fff;z-index:2"><b style="font-size:14px;color:#161e2e">'+title+'</b><span onclick="document.getElementById(\'hlmodal\').remove()" style="margin-left:auto;cursor:pointer;font-size:16px;font-weight:800;color:#5d657b">✕</span></div><div id="hlmodal-body" style="padding:18px 20px">'+body+'</div></div>';
   d.addEventListener('click',function(e){ if(e.target===d) d.remove(); });
   document.body.appendChild(d);
 }
@@ -26269,6 +26289,12 @@ window.__hlMonWhitelistCategory = 'all';
 window.hlMonitorWhitelistOpen = function(){
   return hlRequireSession(async function(sess){
     hlModal('🗂️ App Whitelist', '<div style="font-size:11px;color:#8b92a8;font-weight:600;padding:6px 0">Loading…</div>');
+    // Belt-and-braces (2026-08-25): this whole callback is async with no
+    // surrounding try/catch, so any thrown error (a bad selector, a
+    // rendering bug) used to reject silently -- the modal would open on
+    // "Loading…" and just sit there with nothing in the console pointing
+    // at why. Now it reports itself instead of failing invisibly.
+    try {
     var r = await fetch('/api/track1?resource=monitor_app_rules', { headers:{ Authorization:'Bearer '+sess.access_token } });
     var d = await r.json().catch(function(){return null;});
     if(!d || d.ok===false){ var m0=document.getElementById('hlmodal'); if(m0) m0.remove(); if(window.chirpToast) chirpToast('⚠️ ' + ((d&&d.error)||'Could not load the whitelist.')); return; }
@@ -26292,6 +26318,11 @@ window.hlMonitorWhitelistOpen = function(){
     hlModal('🗂️ App Whitelist', '<div style="font-size:9px;color:#8b92a8;font-weight:600;line-height:1.5;margin-bottom:10px">Classifies apps as Productive / Neutral / Unproductive. Powers the Monitor dashboard\'s Productivity % and the desktop agent\'s "not productive" notification. An app with no rule here shows as Unclassified, never guessed.</div>'+addRuleHtml+'<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px">'+searchHtml+tabsHtml+countHtml+'</div><div id="hlmon-whitelist-list" style="max-height:320px;overflow-y:auto"></div><div style="margin-top:10px;padding-top:10px;border-top:1px solid #e3e5ec;font-size:9.5px;color:#8b92a8;font-weight:600">ℹ️ Changes take effect immediately on all connected agents.</div>');
     hlMonitorWhitelistRenderTabs();
     hlMonitorWhitelistFilter();
+    } catch (e) {
+      console.error('hlMonitorWhitelistOpen failed:', e);
+      var m1=document.getElementById('hlmodal'); if(m1) m1.remove();
+      if(window.chirpToast) chirpToast('⚠️ Could not open the whitelist: ' + (e && e.message || e));
+    }
   }, function(){ if(window.chirpToast) chirpToast('Sign in to view this.'); });
 };
 function hlMonitorWhitelistRenderTabs(){
