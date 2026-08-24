@@ -1679,7 +1679,7 @@ html[data-theme="dark"] .huddle-banner {
    highlight states (set by more specific class rules) still show through;
    an ID-scoped selector like this one would out-specificity them otherwise.
    .ev-acct-add keeps its own intentional dashed "add new" border. */
-#panel-email button:not(.ev-acct-add) { border: none; }
+#panel-email button:not(.ev-acct-add) { border: none; appearance: none; -webkit-appearance: none; box-shadow: none; }
 
 /* ==================== TASKS + CALENDAR ==================== */
 .tc-view { position: absolute; inset: 0; z-index: 24; background: var(--canvas); display: flex; flex-direction: column; }

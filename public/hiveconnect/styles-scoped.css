@@ -2554,7 +2554,7 @@ html[data-theme="dark"] :is(#hiveconnect-root, .hc-embed).huddle-banner {
    an ID-scoped selector like this one would out-specificity them otherwise.
    .ev-acct-add keeps its own intentional dashed "add new" border. */
 :is(#hiveconnect-root, .hc-embed) #panel-email button:not(.ev-acct-add),
-:is(#hiveconnect-root, .hc-embed)#panel-email button:not(.ev-acct-add) { border: none; }
+:is(#hiveconnect-root, .hc-embed)#panel-email button:not(.ev-acct-add) { border: none; appearance: none; -webkit-appearance: none; box-shadow: none; }
 
 /* ==================== TASKS + CALENDAR ==================== */
 :is(#hiveconnect-root, .hc-embed) .tc-view,
