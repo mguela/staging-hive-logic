@@ -6119,6 +6119,7 @@ async function handleMonitorSettings(req, res) {
   for (const a of agents || []) {
     (agentsByEmployee[a.employee_id] = agentsByEmployee[a.employee_id] || []).push(a);
   }
+  const aliveCutoff = new Date(Date.now() - MONITOR_AGENT_ALIVE_MINUTES * 60 * 1000).toISOString();
   const roster = [];
   for (const p of profiles || []) {
     const name = p.full_name || p.email || 'Unknown';
@@ -6131,6 +6132,11 @@ async function handleMonitorSettings(req, res) {
           deviceName: a.device_name, platform: a.platform, status: a.status,
           lastSeenAt: a.last_seen_at, agentVersion: a.agent_version || null,
           agentVersionState: agentVersionState(a.agent_version),
+          // Agent Status (2026-08-25): whether the agent has actually
+          // checked in recently, distinct from `status` (pairing/consent
+          // state) -- same "last heartbeat within the alive window" real
+          // signal handleMonitorReview's roster uses.
+          online: a.last_seen_at ? a.last_seen_at >= aliveCutoff : false,
           monitoringEnabled,
         });
       }
@@ -6139,6 +6145,7 @@ async function handleMonitorSettings(req, res) {
         employeeId: p.id, name,
         deviceName: null, platform: null, status: 'not_installed',
         lastSeenAt: null, agentVersion: null, agentVersionState: null,
+        online: false,
         monitoringEnabled,
       });
     }
@@ -6336,7 +6343,7 @@ async function handleMonitorReview(req, res) {
   const employeeId = req.query.employeeId || null;
 
   if (!employeeId) {
-    const agentsRes = await supabaseRequest('monitor_agents?select=id,employee_id,device_name,platform,status,paired_at,last_seen_at&order=last_seen_at.desc');
+    const agentsRes = await supabaseRequest('monitor_agents?select=id,employee_id,device_name,platform,status,paired_at,last_seen_at,agent_version&order=last_seen_at.desc');
     const agents = agentsRes.ok ? await agentsRes.json() : [];
     const empIds = [...new Set((agents || []).map((a) => a.employee_id))];
     let profiles = [];
@@ -6345,6 +6352,34 @@ async function handleMonitorReview(req, res) {
       profiles = profRes.ok ? await profRes.json() : [];
     }
     const byId = Object.fromEntries((profiles || []).map((p) => [p.id, p]));
+    const aliveCutoff = new Date(Date.now() - MONITOR_AGENT_ALIVE_MINUTES * 60 * 1000).toISOString();
+    // Real, bounded activity-level indicator (2026-08-25): only computed for
+    // agents that are actually online right now (last_seen within the alive
+    // window) -- an offline agent has no "current" activity to report, and
+    // fetching this for every agent that has EVER paired would be an
+    // unbounded query for no one still looking at their screen. Averages the
+    // 5 most recent samples of their currently-open session; honestly null
+    // (not 0) when there is no open session or no samples yet.
+    const onlineAgents = (agents || []).filter((a) => a.last_seen_at && a.last_seen_at >= aliveCutoff);
+    const activityByEmployee = {};
+    if (onlineAgents.length) {
+      const onlineIds = [...new Set(onlineAgents.map((a) => a.employee_id))];
+      const openSessRes = await supabaseRequest(`monitor_sessions?employee_id=in.(${onlineIds.join(',')})&ended_at=is.null&select=id,employee_id&order=started_at.desc`);
+      const openSessions = openSessRes.ok ? await openSessRes.json() : [];
+      const sessionByEmployee = {};
+      for (const s of openSessions || []) if (!sessionByEmployee[s.employee_id]) sessionByEmployee[s.employee_id] = s.id;
+      const sessionIds = Object.values(sessionByEmployee);
+      if (sessionIds.length) {
+        const actRes = await supabaseRequest(`monitor_activity_samples?monitor_session_id=in.(${sessionIds.join(',')})&select=monitor_session_id,activity_level,sampled_at&order=sampled_at.desc&limit=${sessionIds.length * 5}`);
+        const actRows = actRes.ok ? await actRes.json() : [];
+        const bySession = {};
+        for (const s of actRows || []) (bySession[s.monitor_session_id] = bySession[s.monitor_session_id] || []).push(s.activity_level);
+        for (const [empId, sessId] of Object.entries(sessionByEmployee)) {
+          const levels = (bySession[sessId] || []).slice(0, 5).filter((v) => typeof v === 'number');
+          if (levels.length) activityByEmployee[empId] = Math.round(levels.reduce((a, b) => a + b, 0) / levels.length);
+        }
+      }
+    }
     const roster = (agents || []).map((a) => ({
       employeeId: a.employee_id,
       name: (byId[a.employee_id] && byId[a.employee_id].full_name) || (byId[a.employee_id] && byId[a.employee_id].email) || 'Unknown',
@@ -6353,6 +6388,9 @@ async function handleMonitorReview(req, res) {
       status: a.status,
       pairedAt: a.paired_at,
       lastSeenAt: a.last_seen_at,
+      agentVersion: a.agent_version || null,
+      online: a.last_seen_at ? a.last_seen_at >= aliveCutoff : false,
+      activityLevel: Object.prototype.hasOwnProperty.call(activityByEmployee, a.employee_id) ? activityByEmployee[a.employee_id] : null,
     }));
     return res.status(200).json({ ok: true, resource: 'monitor_review', roster });
   }

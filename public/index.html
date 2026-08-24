@@ -19,7 +19,7 @@
  * monitor_my_status poll, so "is this person running current code" is a
  * question the database can answer. Do not hand-edit it -- run
  * `node scripts/stamp-page-build.mjs`. */
-var HL_PAGE_BUILD = 'f6b1fec0e9e6560c';
+var HL_PAGE_BUILD = '79d0c3dc5042b980';
 </script>
 <script>
 (function () { // HL_FETCH_DEDUPE_V1 — single wrapper: GET /api/ dedupe + 60s cache + write-invalidate
@@ -6105,62 +6105,86 @@ function ninvSave(){ var amt = parseFloat(document.getElementById('ninv-amt').va
 
   <div id="mon-owner-note" style="display:none;font-size:11px;color:var(--mut);font-weight:600;background:#fff;border:1px solid var(--line);border-radius:10px;padding:10px 14px;margin-bottom:16px"></div>
 
-  <!-- Employee summary cards. Today's Hours / This Week are real, derived
-       from workforce_time_sessions (see workforce_week_summary).
-       Productivity is real too as of Phase 5 (2026-08-25) -- a real % of
-       classified activity samples, from monitor_app_usage -- but stays
-       "Not available yet" until today's samples include at least one app
-       with a whitelist rule (see monLoadAppUsage). Active Projects stays
-       honestly "Not available yet": no project/task table exists. -->
+  <!-- Employee summary cards. Today's Hours / This Week / Productivity are
+       real. Productivity (Phase 5, 2026-08-25) is a real % of classified
+       activity samples, from monitor_app_usage -- stays "Not available
+       yet" until today's samples include at least one whitelisted app
+       (see monLoadAppUsage). Active Projects stays honestly "Not
+       available yet": no project/task table exists. -->
   <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px">
-    <div class="card" style="flex:1;min-width:150px">
-      <div style="font-size:10px;color:var(--mut);font-weight:800;letter-spacing:.04em;text-transform:uppercase;margin-bottom:6px">Today's Hours</div>
-      <div id="mon-today-hours" style="font-size:20px;font-weight:900;font-family:ui-monospace,monospace">—</div>
+    <div class="card" style="flex:1;min-width:170px">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+        <span style="width:32px;height:32px;border-radius:9px;background:#eaf0fd;color:#3b6fd6;display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0">🕐</span>
+        <span style="font-size:10px;color:var(--mut);font-weight:800;letter-spacing:.04em;text-transform:uppercase">Today's Hours</span>
+      </div>
+      <div id="mon-today-hours" style="font-size:22px;font-weight:900;font-family:ui-monospace,monospace">—</div>
+      <div style="font-size:10px;color:var(--mut);font-weight:600;margin-top:3px">Tracked time today</div>
     </div>
-    <div class="card" style="flex:1;min-width:150px">
-      <div style="font-size:10px;color:var(--mut);font-weight:800;letter-spacing:.04em;text-transform:uppercase;margin-bottom:6px">This Week</div>
-      <div id="mon-week-hours" style="font-size:20px;font-weight:900;font-family:ui-monospace,monospace">—</div>
+    <div class="card" style="flex:1;min-width:170px">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+        <span style="width:32px;height:32px;border-radius:9px;background:#efe9fb;color:#7a5bc9;display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0">📅</span>
+        <span style="font-size:10px;color:var(--mut);font-weight:800;letter-spacing:.04em;text-transform:uppercase">This Week</span>
+      </div>
+      <div id="mon-week-hours" style="font-size:22px;font-weight:900;font-family:ui-monospace,monospace">—</div>
+      <div style="font-size:10px;color:var(--mut);font-weight:600;margin-top:3px">Tracked this week</div>
     </div>
-    <div class="card" style="flex:1;min-width:150px">
-      <div style="font-size:10px;color:var(--mut);font-weight:800;letter-spacing:.04em;text-transform:uppercase;margin-bottom:6px">Status</div>
-      <div id="mon-status-pill" style="font-size:14px;font-weight:900">—</div>
+    <div class="card" id="mon-status-card" style="flex:1;min-width:170px;border-color:var(--line)">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+        <span id="mon-status-icon" style="width:32px;height:32px;border-radius:9px;background:var(--mut,#f0f1f6);color:#fff;display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0">●</span>
+        <span style="font-size:10px;color:var(--mut);font-weight:800;letter-spacing:.04em;text-transform:uppercase">Status</span>
+      </div>
+      <div id="mon-status-pill" style="font-size:18px;font-weight:900">—</div>
+      <div id="mon-status-caption" style="font-size:10px;color:var(--mut);font-weight:600;margin-top:3px">—</div>
     </div>
-    <div class="card" style="flex:1;min-width:150px">
-      <div style="font-size:10px;color:var(--mut);font-weight:800;letter-spacing:.04em;text-transform:uppercase;margin-bottom:6px">Active Projects</div>
+    <div class="card" style="flex:1;min-width:170px">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+        <span style="width:32px;height:32px;border-radius:9px;background:#fbeee0;color:#c9862e;display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0">💼</span>
+        <span style="font-size:10px;color:var(--mut);font-weight:800;letter-spacing:.04em;text-transform:uppercase">Active Projects</span>
+      </div>
       <div style="font-size:14px;font-weight:800;color:var(--mut)" title="No project/task tracking exists yet -- this card is a real placeholder, not a made-up number.">Not available yet</div>
+      <div style="font-size:10px;color:var(--mut);font-weight:600;margin-top:3px">Projects assigned</div>
     </div>
-    <div class="card" style="flex:1;min-width:150px">
-      <div style="font-size:10px;color:var(--mut);font-weight:800;letter-spacing:.04em;text-transform:uppercase;margin-bottom:6px">Productivity</div>
-      <div id="mon-productivity" style="font-size:20px;font-weight:900;font-family:ui-monospace,monospace;color:var(--mut)">—</div>
+    <div class="card" style="flex:1;min-width:170px">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+        <span style="width:32px;height:32px;border-radius:9px;background:#eaf0fd;color:#3b6fd6;display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0">📈</span>
+        <span style="font-size:10px;color:var(--mut);font-weight:800;letter-spacing:.04em;text-transform:uppercase">Productivity</span>
+      </div>
+      <div id="mon-productivity" style="font-size:22px;font-weight:900;font-family:ui-monospace,monospace;color:var(--mut)">—</div>
+      <div style="font-size:10px;color:var(--mut);font-weight:600;margin-top:3px">Productivity score</div>
     </div>
   </div>
 
-  <!-- App Usage breakdown -- real, from today's monitor_activity_samples
-       joined against the app whitelist (monitor_app_rules). An app with no
-       rule shows as "Unclassified", never guessed into a category. -->
-  <div class="card" id="mon-appusage-card" style="margin-bottom:16px">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
-      <h3 style="margin:0;font-family:Montserrat;font-size:13px;font-weight:800">App Usage — Today</h3>
-      <button id="mon-appusage-manage" onclick="hlMonitorWhitelistOpen()" style="border:none;background:none;color:var(--green,#1B7A50);font-weight:800;font-size:11px;cursor:pointer">Manage whitelist</button>
+  <div style="display:grid;grid-template-columns:minmax(280px,1fr) minmax(280px,1fr);gap:16px;margin-bottom:16px">
+    <!-- App Usage breakdown -- real, from today's monitor_activity_samples
+         joined against the app whitelist (monitor_app_rules). An app with
+         no rule shows as "Unclassified", never guessed into a category. -->
+    <div class="card" id="mon-appusage-card" style="min-width:0">
+      <h3 style="margin:0 0 4px;font-family:Montserrat;font-size:13px;font-weight:800">App Usage — Today</h3>
+      <div style="font-size:10.5px;color:var(--mut);font-weight:600;margin-bottom:10px">Approximate — one sample per heartbeat (default every 60s) while clocked in and monitored.</div>
+      <div id="mon-appusage-list">Loading…</div>
     </div>
-    <div style="font-size:10.5px;color:var(--mut);font-weight:600;margin-bottom:10px">Approximate — one sample per heartbeat (default every 60s) while clocked in and monitored.</div>
-    <div id="mon-appusage-list">Loading…</div>
-  </div>
 
-  <!-- Time tracking. Buttons call the SAME workforceClockIn/workforceClockOut/
-       workforceBreakToggle functions the Time Clock page and top-bar widget
-       already use -- one place talks to workforce_clock/workforce_break,
-       this dashboard just repaints from the same state (see
-       hlMonSyncFromWorkforce below). -->
-  <div class="card" style="margin-bottom:16px">
-    <h3 style="margin:0 0 10px;font-family:Montserrat;font-size:13px;font-weight:800">Time Tracking</h3>
-    <div id="mon-timer" style="font-size:32px;font-weight:900;font-family:ui-monospace,monospace;color:var(--ink,#161e2e);margin-bottom:12px">00:00:00</div>
-    <div style="display:flex;gap:10px;flex-wrap:wrap">
-      <button class="lg-btn" id="mon-clockin-btn" style="width:auto;padding:10px 20px;display:none" onclick="workforceClockIn()">Start</button>
-      <button class="lg-btn" id="mon-break-btn" style="width:auto;padding:10px 20px;display:none;background:var(--amber)" onclick="workforceBreakToggle()">Start Break</button>
-      <button class="lg-btn" id="mon-clockout-btn" style="width:auto;padding:10px 20px;display:none;background:var(--red)" onclick="workforceClockOut()">Stop</button>
+    <!-- Time tracking. Buttons call the SAME workforceClockIn/
+         workforceClockOut/workforceBreakToggle functions the Time Clock
+         page and top-bar widget already use -- one place talks to
+         workforce_clock/workforce_break, this dashboard just repaints
+         from the same state (see hlMonSyncFromWorkforce below). Reset
+         does not touch any backend record -- it re-syncs this card's
+         display from the server, for when it looks stuck. -->
+    <div class="card" style="min-width:0">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+        <h3 style="margin:0;font-family:Montserrat;font-size:13px;font-weight:800">Time Tracking</h3>
+        <button onclick="hlMonitorWhitelistOpen()" style="border:none;background:none;color:var(--green,#1B7A50);font-weight:800;font-size:11px;cursor:pointer;white-space:nowrap">🗂 Manage Whitelist</button>
+      </div>
+      <div id="mon-clock-note" style="font-size:11px;color:var(--mut);font-weight:600;margin-bottom:6px"></div>
+      <div id="mon-timer" style="font-size:32px;font-weight:900;font-family:ui-monospace,monospace;color:var(--ink,#161e2e);margin-bottom:12px">00:00:00</div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <button class="lg-btn" id="mon-clockin-btn" style="width:auto;padding:10px 20px;display:none" onclick="workforceClockIn()">▶ Start</button>
+        <button class="lg-btn" id="mon-break-btn" style="width:auto;padding:10px 20px;display:none;background:var(--amber)" onclick="workforceBreakToggle()">⏸ Start Break</button>
+        <button class="lg-btn" id="mon-clockout-btn" style="width:auto;padding:10px 20px;display:none;background:var(--red)" onclick="workforceClockOut()">■ Stop</button>
+        <button id="mon-reset-btn" onclick="monRefresh()" title="Re-sync this card from the server" style="width:auto;padding:10px 16px;border:none;border-radius:10px;background:#59718a;color:#fff;font-weight:800;font-size:13px;cursor:pointer;font-family:Montserrat">↻ Reset</button>
+      </div>
     </div>
-    <div id="mon-clock-note" style="margin-top:10px;font-size:11px;color:var(--mut);font-weight:600"></div>
   </div>
 
   <!-- EOD. Posts to the SAME workforce_summary endpoint/table the Time
@@ -6168,13 +6192,15 @@ function ninvSave(){ var amt = parseFloat(document.getElementById('ninv-amt').va
        and #workforce can both be in the DOM at once) but one backend row. -->
   <div class="card" id="mon-eod-card" style="margin-bottom:16px;display:none">
     <h3 style="margin:0 0 4px;font-family:Montserrat;font-size:13px;font-weight:800">End-of-Day Report <span style="font-weight:600;color:var(--mut);font-size:11px">— required before you can Stop</span></h3>
-    <div style="margin:10px 0"><label style="display:block;font-size:11px;font-weight:700;margin-bottom:4px">Completed Tasks</label><textarea id="mon-eod-tasks" oninput="this.dataset.monDirty='1'" rows="2" placeholder="Describe completed tasks..." style="width:100%;box-sizing:border-box;padding:8px 10px;border:1px solid var(--line);border-radius:8px;font-size:12.5px;font-family:Montserrat"></textarea></div>
-    <div style="margin-bottom:10px"><label style="display:block;font-size:11px;font-weight:700;margin-bottom:4px">Plans for Tomorrow</label><textarea id="mon-eod-plans" oninput="this.dataset.monDirty='1'" rows="2" placeholder="What are your plans for tomorrow?" style="width:100%;box-sizing:border-box;padding:8px 10px;border:1px solid var(--line);border-radius:8px;font-size:12.5px;font-family:Montserrat"></textarea></div>
-    <div style="margin-bottom:10px"><label style="display:block;font-size:11px;font-weight:700;margin-bottom:4px">Issues / Blockers</label><textarea id="mon-eod-blockers" oninput="this.dataset.monDirty='1'" rows="2" placeholder="Any issues or blockers?" style="width:100%;box-sizing:border-box;padding:8px 10px;border:1px solid var(--line);border-radius:8px;font-size:12.5px;font-family:Montserrat"></textarea></div>
-    <div style="margin-bottom:12px"><label style="display:block;font-size:11px;font-weight:700;margin-bottom:4px">Support Needed</label><textarea id="mon-eod-support" oninput="this.dataset.monDirty='1'" rows="2" placeholder="What support do you need from the team?" style="width:100%;box-sizing:border-box;padding:8px 10px;border:1px solid var(--line);border-radius:8px;font-size:12.5px;font-family:Montserrat"></textarea></div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;margin:10px 0">
+      <div><label style="display:block;font-size:11px;font-weight:700;margin-bottom:4px">Completed Tasks</label><textarea id="mon-eod-tasks" oninput="this.dataset.monDirty='1'" rows="2" placeholder="What did you accomplish today?" style="width:100%;box-sizing:border-box;padding:8px 10px;border:1px solid var(--line);border-radius:8px;font-size:12.5px;font-family:Montserrat"></textarea></div>
+      <div><label style="display:block;font-size:11px;font-weight:700;margin-bottom:4px">Plans for Tomorrow</label><textarea id="mon-eod-plans" oninput="this.dataset.monDirty='1'" rows="2" placeholder="What are your top priorities?" style="width:100%;box-sizing:border-box;padding:8px 10px;border:1px solid var(--line);border-radius:8px;font-size:12.5px;font-family:Montserrat"></textarea></div>
+      <div><label style="display:block;font-size:11px;font-weight:700;margin-bottom:4px">Issues / Blockers</label><textarea id="mon-eod-blockers" oninput="this.dataset.monDirty='1'" rows="2" placeholder="What's preventing your progress?" style="width:100%;box-sizing:border-box;padding:8px 10px;border:1px solid var(--line);border-radius:8px;font-size:12.5px;font-family:Montserrat"></textarea></div>
+      <div><label style="display:block;font-size:11px;font-weight:700;margin-bottom:4px">Support Needed</label><textarea id="mon-eod-support" oninput="this.dataset.monDirty='1'" rows="2" placeholder="What help do you need?" style="width:100%;box-sizing:border-box;padding:8px 10px;border:1px solid var(--line);border-radius:8px;font-size:12.5px;font-family:Montserrat"></textarea></div>
+    </div>
     <div style="display:flex;gap:10px;flex-wrap:wrap">
-      <button class="lg-btn" style="width:auto;padding:10px 18px;background:#fff;border:1px solid var(--line);color:var(--ink,#161e2e)" onclick="monSaveEodDraft()">Save as Draft</button>
-      <button class="lg-btn" style="width:auto;padding:10px 18px" onclick="monSubmitEod()">Submit EOD</button>
+      <button class="lg-btn" style="width:auto;padding:10px 18px;background:#fff;border:1px solid var(--line);color:var(--ink,#161e2e)" onclick="monSaveEodDraft()">📋 Save as Draft</button>
+      <button class="lg-btn" style="width:auto;padding:10px 18px" onclick="monSubmitEod()">📨 Submit EOD</button>
     </div>
     <div id="mon-eod-result" style="margin-top:10px;font-size:11.5px;font-weight:700"></div>
   </div>
@@ -6183,9 +6209,11 @@ function ninvSave(){ var amt = parseFloat(document.getElementById('ninv-amt').va
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
       <h3 style="margin:0;font-family:Montserrat;font-size:13px;font-weight:800">Activity &amp; Screenshot Review</h3>
     </div>
-    <div style="font-size:11px;color:var(--mut);font-weight:600;margin-bottom:12px">Activity level + screenshots, captured only while someone is clocked in. Click a name to see their recent sessions.</div>
-    <div id="mon-roster">Loading…</div>
+    <div style="font-size:11px;color:var(--mut);font-weight:600;margin-bottom:12px">Activity level + screenshots, captured only while someone is clocked in. Click "View All" to see full sessions.</div>
+    <div id="mon-roster" style="overflow-x:auto">Loading…</div>
   </div>
+
+  <div id="mon-tz-footer" style="text-align:center;font-size:10.5px;color:var(--mut);font-weight:600;margin:4px 0 20px"></div>
   <div class="card" id="mon-detail-card" style="display:none"><div id="mon-detail">Select someone from the list above.</div></div>
 
   <script>
@@ -6230,6 +6258,24 @@ function ninvSave(){ var amt = parseFloat(document.getElementById('ninv-amt').va
       var tz = '';
       try { tz = Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch (e) {}
       el.textContent = time + ' · ' + date + (tz ? ' · ' + tz : '');
+      var footer = document.getElementById('mon-tz-footer');
+      if (footer) footer.textContent = tz ? ('All times in ' + tz) : '';
+    }
+
+    // Highlights the Status card to match its state -- green/working,
+    // amber/on break, neutral otherwise -- mirroring how the mockup's
+    // "Working" card gets a green border+icon while idle states stay
+    // plain. Purely presentational; the actual state always comes from
+    // hlMonSyncFromWorkforce's caller (workforce_status).
+    function applyStatusCard(label, caption, color, bg){
+      var card = document.getElementById('mon-status-card');
+      var icon = document.getElementById('mon-status-icon');
+      var pill = document.getElementById('mon-status-pill');
+      var cap = document.getElementById('mon-status-caption');
+      if (pill) { pill.textContent = label; pill.style.color = color; }
+      if (cap) cap.textContent = caption;
+      if (icon) { icon.style.background = color; icon.textContent = '●'; }
+      if (card) card.style.borderColor = bg ? color : 'var(--line)';
     }
 
     function fillEodField(id, val){
@@ -6270,7 +6316,7 @@ function ninvSave(){ var amt = parseFloat(document.getElementById('ninv-amt').va
 
       if (isOwner) {
         inBtn.style.display = 'none'; breakBtn.style.display = 'none'; outBtn.style.display = 'none';
-        statusPill.textContent = 'Owner'; statusPill.style.color = 'var(--mut)';
+        applyStatusCard('Owner', 'Not on the timeclock', 'var(--mut)', false);
         if (ownerNote) { ownerNote.style.display = 'block'; ownerNote.textContent = 'Owner account — not on the timeclock. Nothing is monitored or recorded for this account.'; }
         if (eodCard) eodCard.style.display = 'none';
         if (noteEl) noteEl.textContent = '';
@@ -6282,7 +6328,7 @@ function ninvSave(){ var amt = parseFloat(document.getElementById('ninv-amt').va
 
       if (!session) {
         inBtn.style.display = 'inline-block'; breakBtn.style.display = 'none'; outBtn.style.display = 'none';
-        statusPill.textContent = 'Offline'; statusPill.style.color = 'var(--mut)';
+        applyStatusCard('Offline', 'Not clocked in', 'var(--mut)', false);
         if (eodCard) eodCard.style.display = 'none';
         if (noteEl) noteEl.textContent = '';
         clearInterval(monTimerInterval); monTimerInterval = null;
@@ -6292,12 +6338,12 @@ function ninvSave(){ var amt = parseFloat(document.getElementById('ninv-amt').va
 
       inBtn.style.display = 'none'; breakBtn.style.display = 'inline-block'; outBtn.style.display = 'inline-block';
       if (session.on_break) {
-        statusPill.textContent = 'On Break'; statusPill.style.color = 'var(--amber)';
+        applyStatusCard('On Break', 'Break in progress', 'var(--amber)', true);
         breakBtn.textContent = 'End Break';
         outBtn.disabled = true; outBtn.style.opacity = '0.5'; outBtn.title = 'End your break before stopping.';
         if (noteEl) noteEl.textContent = 'On break since ' + new Date(session.break_started_at).toLocaleTimeString();
       } else {
-        statusPill.textContent = 'Working'; statusPill.style.color = 'var(--green)';
+        applyStatusCard('Working', 'Monitoring active', 'var(--green)', true);
         breakBtn.textContent = 'Start Break';
         outBtn.disabled = false; outBtn.style.opacity = '1'; outBtn.title = '';
         if (noteEl) noteEl.textContent = 'Clocked in since ' + new Date(session.clock_in).toLocaleTimeString();
@@ -6358,7 +6404,7 @@ function ninvSave(){ var amt = parseFloat(document.getElementById('ninv-amt').va
         if (prodEl) prodEl.style.fontSize = (data.productivityPercent == null) ? '14px' : '20px';
         if (!listEl) return;
         var apps = data.apps || [];
-        if (!apps.length) { listEl.innerHTML = '<div style="color:var(--mut);font-size:12px">No app activity recorded yet today.</div>'; return; }
+        if (!apps.length) { listEl.innerHTML = '<div style="text-align:center;padding:24px 6px;color:var(--mut)"><div style="font-size:26px;margin-bottom:8px;opacity:.6">🖥️</div><div style="font-weight:800;font-size:12.5px;margin-bottom:2px">No app activity recorded yet.</div><div style="font-size:11px">App usage will appear here once activity is detected.</div></div>'; return; }
         var total = data.sampleCount || apps.reduce(function(s, a){ return s + a.sampleCount; }, 0);
         listEl.innerHTML = apps.map(function(a){
           var pct = total > 0 ? Math.round((a.sampleCount / total) * 100) : 0;
@@ -6598,6 +6644,15 @@ function devTodoLoad(){
 
 <script>
 (function(){
+  function fmtRelative(iso){
+    if (!iso) return 'never';
+    var mins = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60000));
+    if (mins < 1) return 'just now';
+    if (mins === 1) return '1 min ago';
+    if (mins < 60) return mins + ' min ago';
+    var hrs = Math.round(mins / 60);
+    return hrs + (hrs === 1 ? ' hr ago' : ' hrs ago');
+  }
   window.mgrMonRefresh = function(){
     var el = document.getElementById('mon-roster');
     if(!el) return;
@@ -6608,50 +6663,47 @@ function devTodoLoad(){
       if(!data || data.ok===false){ el.textContent = (data&&data.error) || 'Could not load Monitor data.'; return; }
       var roster = data.roster || [];
       if(!roster.length){ el.innerHTML = '<div style="font-size:12px;color:var(--mut);font-weight:600">No one has set up HiveLogic Monitor yet — it shows up here the moment someone pairs the desktop app.</div>'; return; }
-      var wrap = document.createElement('div'); wrap.style.cssText='display:flex;flex-direction:column;gap:6px';
-      roster.forEach(function(p){
-        var row = document.createElement('div');
-        row.style.cssText='display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--line);border-radius:10px;cursor:pointer';
-        row.onclick = function(){ mgrMonOpenEmployee(p.employeeId, p.name); };
-        var dot = document.createElement('span');
-        dot.style.cssText='width:8px;height:8px;border-radius:50%;background:' + (p.status==='active' ? 'var(--green)' : '#c7cfdb');
-        var name = document.createElement('span'); name.style.cssText='font-weight:800;font-size:12.5px;flex:1'; name.textContent = p.name;
-        var meta = document.createElement('span'); meta.style.cssText='font-size:10.5px;color:var(--mut);font-weight:700';
-        meta.textContent = (p.platform||'—') + ' · last seen ' + (p.lastSeenAt ? new Date(p.lastSeenAt).toLocaleString() : 'never');
-        // The API has sent agentVersion/agentVersionState since the version
-        // reporting shipped, and this row dropped both on the floor -- so the
-        // only place anyone could read which build a machine runs was the
-        // database. That is the same half-shipped shape the version reporting
-        // was built to end, one layer up. 'unknown' is deliberately not 'stale':
-        // an agent from before the reporting existed tells us nothing, and
-        // guessing would be the unfounded claim this whole mechanism prevents.
-        // A machine that has never checked in has no agent to have a version.
-        // Badging it "version unknown" implies an agent whose build we cannot
-        // determine, when the truth is simpler and already on the row: nothing
-        // has ever run there. The row says "last seen never"; that is the whole
-        // statement. (Visible on 2026-08-18: two never-paired people carried
-        // grey version badges alongside a real one, which read as three agents
-        // in the same unknown state rather than one.)
-        var ver = document.createElement('span');
+      // Table layout (2026-08-25): STATUS (real online/offline from
+      // "last heartbeat within the alive window", not just 'paired' vs
+      // not), LAST SEEN, OS / AGENT (platform + version, honestly labeled
+      // per the comment below), ACTIVITY LEVEL (real, bounded -- see
+      // handleMonitorReview's activityByEmployee -- null/"—" when there's
+      // no open session or no samples yet, never guessed), and a View All
+      // button into the existing per-employee detail (mgrMonOpenEmployee).
+      var th = function(label){ return '<th style="padding:8px 10px;font-size:9.5px;color:var(--mut);font-weight:800;letter-spacing:.05em;text-transform:uppercase;text-align:left;white-space:nowrap">'+label+'</th>'; };
+      var rows = roster.map(function(p){
         var vState = p.lastSeenAt ? (p.agentVersionState || 'unknown') : null;
-        var vStyle = vState === 'current' ? 'background:#e6f2ec;color:#1B7A50'
-                   : vState === 'stale'   ? 'background:#fdf0e3;color:#9a5b12'
-                   :                        'background:#e9eff4;color:#59718a';
-        ver.style.cssText = 'font-size:9.5px;font-weight:800;border-radius:99px;padding:3px 9px;white-space:nowrap;' + vStyle;
-        ver.textContent = vState === 'unknown' ? 'version unknown'
-                        : vState === 'stale'   ? ('v' + p.agentVersion + ' · update pending')
-                        :                        ('v' + p.agentVersion);
-        ver.title = vState === 'unknown'
+        // The API has sent agentVersion/agentVersionState since the version
+        // reporting shipped. 'unknown' is deliberately not 'stale': an agent
+        // from before the reporting existed tells us nothing, and guessing
+        // would be the unfounded claim this whole mechanism prevents. A
+        // machine that has never checked in has no agent to have a version.
+        var agentLabel = !p.lastSeenAt ? '—'
+          : (p.platform || '—') + (vState === 'unknown' ? ' · version unknown' : vState === 'stale' ? (' · v'+p.agentVersion+' (update pending)') : (' · v'+p.agentVersion));
+        // What "update pending" is measured against -- named, not implied,
+        // so the badge never reads as a lie in a nicer colour.
+        var agentTitle = vState === 'unknown'
           ? 'This agent is running a build from before it reported its version, so we do not know which one.'
           : vState === 'stale'
             ? ('Running v' + p.agentVersion + '; the current build is v' + (data.expectedAgentVersion || '?') + '. Agents update at startup and every 30 minutes.')
-            : 'Running the current build.';
-        row.appendChild(dot); row.appendChild(name);
-        if (vState) row.appendChild(ver);
-        row.appendChild(meta);
-        wrap.appendChild(row);
-      });
-      el.innerHTML=''; el.appendChild(wrap);
+            : (vState === 'current' ? 'Running the current build.' : '');
+        var actLevel = p.activityLevel;
+        var actLabel = actLevel == null ? '—' : (actLevel >= 66 ? 'High' : actLevel >= 26 ? 'Medium' : actLevel > 0 ? 'Low' : 'None');
+        var actColor = actLevel == null ? '#c7cfdb' : (actLevel >= 66 ? 'var(--green)' : actLevel >= 26 ? 'var(--amber)' : '#c65b4e');
+        var segs = 5, filled = actLevel == null ? 0 : Math.max(0, Math.min(segs, Math.round((actLevel/100)*segs)));
+        var bar = '<span style="display:inline-flex;gap:2px;vertical-align:middle;margin-right:6px">' + Array.from({length:segs}).map(function(_, i){
+          return '<span style="width:8px;height:8px;border-radius:2px;background:' + (i < filled ? actColor : '#e3e5ec') + '"></span>';
+        }).join('') + '</span>';
+        return '<tr style="border-top:1px solid var(--line)">'
+          + '<td style="padding:9px 10px;font-weight:800;font-size:12px;white-space:nowrap">'+ (window.esc?esc(p.name):p.name) +'</td>'
+          + '<td style="padding:9px 10px;white-space:nowrap"><span style="display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:700;color:'+(p.online?'var(--green)':'var(--mut)')+'"><span style="width:7px;height:7px;border-radius:50%;background:'+(p.online?'var(--green)':'#c7cfdb')+'"></span>'+(p.online?'Online':'Offline')+'</span></td>'
+          + '<td style="padding:9px 10px;font-size:11px;color:var(--mut);font-weight:600;white-space:nowrap">'+(p.lastSeenAt ? fmtRelative(p.lastSeenAt) : 'never')+'</td>'
+          + '<td style="padding:9px 10px;font-size:11px;color:var(--mut);font-weight:600;white-space:nowrap" title="'+agentTitle.replace(/"/g,'&quot;')+'">'+agentLabel+'</td>'
+          + '<td style="padding:9px 10px;white-space:nowrap">'+bar+'<span style="font-size:10.5px;font-weight:800;color:'+actColor+'">'+actLabel+'</span></td>'
+          + '<td style="padding:9px 10px;text-align:right;white-space:nowrap"><button onclick="mgrMonOpenEmployee(\''+p.employeeId+'\', '+JSON.stringify(p.name)+')" style="border:1px solid var(--line);background:#fff;color:var(--ink,#161e2e);font-weight:800;font-size:10px;padding:5px 12px;border-radius:7px;cursor:pointer;font-family:Montserrat">View All</button></td>'
+          + '</tr>';
+      }).join('');
+      el.innerHTML = '<table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr>'+th('User')+th('Status')+th('Last Seen')+th('OS / Agent')+th('Activity Level')+th('')+'</tr></thead><tbody>'+rows+'</tbody></table>';
     }, function(){ el.textContent='Sign in to view this.'; });
   };
 
@@ -25977,15 +26029,28 @@ window.hlMonitorSettingsOpen = function(){
     // data-name for hlMonitorRosterFilter, and the list itself scrolls
     // instead of growing the whole modal -- a roster of 50 no longer
     // pushes Save Settings off the bottom of the screen.
-    var rosterHtml = roster.length ? roster.map(function(p){
+    // Table layout (2026-08-25): Agent Status (real online/offline, same
+    // "last heartbeat within the alive window" signal the dashboard's
+    // roster table uses) is its own column, separate from Pairing/
+    // Installation Status (paired / not paired / not installed yet) --
+    // the mockup's two-status split matches two genuinely different
+    // facts (is the agent alive right now vs. has it ever been set up).
+    var rosterTh = function(label){ return '<th style="padding:6px 8px;font-size:9px;color:#8b92a8;font-weight:800;letter-spacing:.05em;text-transform:uppercase;text-align:left;white-space:nowrap">'+label+'</th>'; };
+    var rosterRows = roster.length ? roster.map(function(p){
       var on = !!p.monitoringEnabled;
-      return '<div class="hlmon-roster-row" data-name="'+(p.name||'').toLowerCase().replace(/"/g,'&quot;')+'" style="'+_row+'">'+p.name
-        + '<span style="font-size:9px;color:#8b92a8;font-weight:700;margin-left:6px">'+(p.status==='active'?'paired':(p.status==='not_installed'?'not installed yet':'not paired'))+'</span>'
-        + '<span style="margin-left:auto;display:flex;align-items:center;gap:14px">'
-        +   '<label style="display:flex;align-items:center;gap:5px;font-size:9px;font-weight:800;color:#8b92a8;text-transform:uppercase" title="Monitored people must approve the prompt to stay clocked in. Turn this off and they are not monitored at all -- and the idle timeout does not apply to them, because nothing is watching their machine.">Monitor'
-        +     '<input type="checkbox" '+(on?'checked':'')+' onchange="hlMonitorUserToggle(\''+p.employeeId+'\', {monitoringEnabled:this.checked}, this)" style="'+_sw+'"></label>'
-        + '</span></div>';
-    }).join('') : '<div style="font-size:11px;color:#8b92a8;font-weight:600;padding:6px 0">No one has paired HiveLogic Monitor yet.</div>';
+      var pairLabel = p.status==='active' ? 'Paired' : (p.status==='not_installed' ? 'Not installed yet' : 'Not paired');
+      var pairColor = p.status==='active' ? '#1B7A50' : (p.status==='not_installed' ? '#8b92a8' : '#b8791f');
+      var pairBg = p.status==='active' ? '#e6f2ec' : (p.status==='not_installed' ? '#f0f1f6' : '#fdf3e2');
+      return '<tr class="hlmon-roster-row" data-name="'+(p.name||'').toLowerCase().replace(/"/g,'&quot;')+'" style="border-top:1px solid #e3e5ec">'
+        + '<td style="padding:8px;font-weight:800;font-size:11.5px;white-space:nowrap">'+p.name+'</td>'
+        + '<td style="padding:8px;white-space:nowrap"><span style="display:inline-flex;align-items:center;gap:5px;font-size:10px;font-weight:700;color:'+(p.online?'#1B7A50':'#8b92a8')+'"><span style="width:6px;height:6px;border-radius:50%;background:'+(p.online?'#1B7A50':'#c7cfdb')+'"></span>'+(p.online?'Online':'Offline')+'</span></td>'
+        + '<td style="padding:8px;white-space:nowrap"><span style="font-size:9px;font-weight:800;border-radius:99px;padding:3px 9px;background:'+pairBg+';color:'+pairColor+'">'+pairLabel+'</span></td>'
+        + '<td style="padding:8px;text-align:right"><label title="Monitored people must approve the prompt to stay clocked in. Turn this off and they are not monitored at all -- and the idle timeout does not apply to them, because nothing is watching their machine."><input type="checkbox" '+(on?'checked':'')+' onchange="hlMonitorUserToggle(\''+p.employeeId+'\', {monitoringEnabled:this.checked}, this)" style="'+_sw+'"></label></td>'
+        + '</tr>';
+    }).join('') : '';
+    var rosterHtml = roster.length
+      ? '<table style="width:100%;border-collapse:collapse"><thead><tr>'+rosterTh('Name')+rosterTh('Agent Status')+rosterTh('Pairing / Installation Status')+rosterTh('Monitor')+'</tr></thead><tbody>'+rosterRows+'</tbody></table>'
+      : '<div style="font-size:11px;color:#8b92a8;font-weight:600;padding:6px 0">No employees found.</div>';
     var rosterSearch = roster.length > 6
       ? '<input id="hlmon-roster-search" type="text" placeholder="Search '+roster.length+' people…" oninput="hlMonitorRosterFilter(this.value)" style="'+_inp+';margin-bottom:6px"/>'
       : '';
@@ -26006,6 +26071,12 @@ window.hlMonitorRosterFilter = function(q){
 // sort (Unproductive first -- the rows someone is most likely checking)
 // + a capped-height scrolling list, same pattern as the roster above.
 var MON_CATEGORY_ORDER = { unproductive: 0, neutral: 1, productive: 2 };
+var MON_CAT_COLORS = {
+  productive: { color: '#1B7A50', bg: '#e6f2ec' },
+  neutral: { color: '#5d657b', bg: '#f0f1f6' },
+  unproductive: { color: '#c65b4e', bg: '#faeeec' },
+};
+window.__hlMonWhitelistCategory = 'all';
 window.hlMonitorWhitelistOpen = function(){
   return hlRequireSession(async function(sess){
     hlModal('🗂️ App Whitelist', '<div style="font-size:11px;color:#8b92a8;font-weight:600;padding:6px 0">Loading…</div>');
@@ -26015,43 +26086,79 @@ window.hlMonitorWhitelistOpen = function(){
     window.__hlMonRules = (d.rules || []).slice().sort(function(a, b){
       return (MON_CATEGORY_ORDER[a.category] - MON_CATEGORY_ORDER[b.category]) || a.appName.localeCompare(b.appName);
     });
+    window.__hlMonWhitelistCategory = 'all';
     var catOpts = function(current){
       return ['productive','neutral','unproductive'].map(function(c){
         return '<option value="'+c+'"'+(c===current?' selected':'')+'>'+c.charAt(0).toUpperCase()+c.slice(1)+'</option>';
       }).join('');
     };
-    var searchHtml = window.__hlMonRules.length > 8
-      ? '<input id="hlmon-whitelist-search" type="text" placeholder="Search '+window.__hlMonRules.length+' apps…" oninput="hlMonitorWhitelistFilter(this.value)" style="'+_inp+';margin-bottom:8px"/>'
-      : '';
-    var addRuleHtml = '<div style="display:flex;gap:6px;margin-bottom:10px">'
+    var addRuleHtml = '<div style="display:flex;gap:6px;margin-bottom:12px">'
       + '<input id="hlmon-newapp-name" type="text" placeholder="App name (e.g. Google Chrome)" style="'+_inp+';flex:1"/>'
       + '<select id="hlmon-newapp-category" style="'+_inp+';width:auto">'+catOpts('neutral')+'</select>'
-      + '<button onclick="hlMonitorAppRuleAdd()" style="padding:0 14px;border:none;border-radius:7px;background:#59718a;color:#fff;font-weight:800;font-size:10.5px;cursor:pointer;font-family:Montserrat">Add</button>'
+      + '<button onclick="hlMonitorAppRuleAdd()" style="padding:0 16px;border:none;border-radius:7px;background:#3b6fd6;color:#fff;font-weight:800;font-size:10.5px;cursor:pointer;font-family:Montserrat;white-space:nowrap">+ Add App</button>'
       + '</div>';
-    hlModal('🗂️ App Whitelist', '<div style="font-size:9px;color:#8b92a8;font-weight:600;line-height:1.5;margin-bottom:8px">Classifies apps as Productive / Neutral / Unproductive. Powers the Monitor dashboard\'s Productivity % and the desktop agent\'s "not productive" notification. An app with no rule here shows as Unclassified, never guessed.</div>'+addRuleHtml+searchHtml+'<div id="hlmon-whitelist-list" style="max-height:340px;overflow-y:auto"></div>');
-    hlMonitorWhitelistRender(window.__hlMonRules);
+    var searchHtml = '<input id="hlmon-whitelist-search" type="text" placeholder="Search apps…" oninput="hlMonitorWhitelistFilter()" style="'+_inp+'"/>';
+    var tabsHtml = '<div id="hlmon-whitelist-tabs" style="display:flex;gap:4px;flex-wrap:wrap"></div>';
+    var countHtml = '<span id="hlmon-whitelist-count" style="font-size:10px;color:#8b92a8;font-weight:700;white-space:nowrap"></span>';
+    hlModal('🗂️ App Whitelist', '<div style="font-size:9px;color:#8b92a8;font-weight:600;line-height:1.5;margin-bottom:10px">Classifies apps as Productive / Neutral / Unproductive. Powers the Monitor dashboard\'s Productivity % and the desktop agent\'s "not productive" notification. An app with no rule here shows as Unclassified, never guessed.</div>'+addRuleHtml+'<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px">'+searchHtml+tabsHtml+countHtml+'</div><div id="hlmon-whitelist-list" style="max-height:320px;overflow-y:auto"></div><div style="margin-top:10px;padding-top:10px;border-top:1px solid #e3e5ec;font-size:9.5px;color:#8b92a8;font-weight:600">ℹ️ Changes take effect immediately on all connected agents.</div>');
+    hlMonitorWhitelistRenderTabs();
+    hlMonitorWhitelistFilter();
   }, function(){ if(window.chirpToast) chirpToast('Sign in to view this.'); });
 };
+function hlMonitorWhitelistRenderTabs(){
+  var el = document.getElementById('hlmon-whitelist-tabs');
+  if (!el) return;
+  var cats = [['all','All'], ['productive','Productive'], ['neutral','Neutral'], ['unproductive','Unproductive']];
+  var active = window.__hlMonWhitelistCategory || 'all';
+  el.innerHTML = cats.map(function(pair){
+    var isOn = pair[0] === active;
+    return '<button onclick="hlMonitorWhitelistSetCategory(\''+pair[0]+'\')" style="border:none;border-radius:7px;padding:6px 12px;font-size:10px;font-weight:800;cursor:pointer;font-family:Montserrat;background:'+(isOn?'#eaf0fd':'transparent')+';color:'+(isOn?'#3b6fd6':'#5d657b')+'">'+pair[1]+'</button>';
+  }).join('');
+}
+window.hlMonitorWhitelistSetCategory = function(cat){
+  window.__hlMonWhitelistCategory = cat;
+  hlMonitorWhitelistRenderTabs();
+  hlMonitorWhitelistFilter();
+};
+// Colored initial avatar instead of a fake per-app brand logo -- this
+// codebase does not bundle real app icon assets, and guessing at a
+// Chrome/VS Code/etc. logo would be exactly the kind of invented detail
+// the rest of Monitor deliberately avoids.
+function hlMonAppAvatar(name){
+  var initial = (name || '?').trim().charAt(0).toUpperCase() || '?';
+  var hue = 0; for (var i=0;i<name.length;i++) hue = (hue + name.charCodeAt(i)) % 360;
+  return '<span style="width:26px;height:26px;border-radius:7px;background:hsl('+hue+',55%,92%);color:hsl('+hue+',45%,38%);display:inline-flex;align-items:center;justify-content:center;font-weight:800;font-size:11px;flex-shrink:0">'+initial+'</span>';
+}
 function hlMonitorWhitelistRender(rules){
   var el = document.getElementById('hlmon-whitelist-list');
+  var countEl = document.getElementById('hlmon-whitelist-count');
+  if (countEl) countEl.textContent = rules.length + ' app' + (rules.length===1?'':'s');
   if (!el) return;
   var catOpts = function(current){
     return ['productive','neutral','unproductive'].map(function(c){
       return '<option value="'+c+'"'+(c===current?' selected':'')+'>'+c.charAt(0).toUpperCase()+c.slice(1)+'</option>';
     }).join('');
   };
-  el.innerHTML = rules.length ? rules.map(function(rule){
-    return '<div style="'+_row+'">'+rule.appName
-      + '<span style="margin-left:auto;display:flex;align-items:center;gap:8px">'
-      +   '<select onchange="hlMonitorAppRuleSet(\''+rule.appName.replace(/'/g,"\\'")+'\', this.value)" style="'+_inp+';width:auto;padding:4px 8px;font-size:9px">'+catOpts(rule.category)+'</select>'
-      +   '<button onclick="hlMonitorAppRuleDelete(\''+rule.id+'\')" title="Remove rule" style="border:none;background:none;color:#c65b4e;font-weight:900;cursor:pointer;font-size:13px;padding:0">&times;</button>'
-      + '</span></div>';
-  }).join('') : '<div style="font-size:11px;color:#8b92a8;font-weight:600;padding:6px 0">No app rules match. Add one above.</div>';
+  if (!rules.length) { el.innerHTML = '<div style="font-size:11px;color:#8b92a8;font-weight:600;padding:16px 0;text-align:center">No app rules match. Add one above.</div>'; return; }
+  var th = function(label){ return '<th style="padding:6px 8px;font-size:9px;color:#8b92a8;font-weight:800;letter-spacing:.05em;text-transform:uppercase;text-align:left">'+label+'</th>'; };
+  var rows = rules.map(function(rule){
+    return '<tr style="border-top:1px solid #e3e5ec">'
+      + '<td style="padding:8px;white-space:nowrap"><span style="display:flex;align-items:center;gap:9px;font-weight:700;font-size:12px">'+hlMonAppAvatar(rule.appName)+(window.esc?esc(rule.appName):rule.appName)+'</span></td>'
+      + '<td style="padding:8px"><select onchange="hlMonitorAppRuleSet(\''+rule.appName.replace(/'/g,"\\'")+'\', this.value)" style="'+_inp+';width:auto;padding:5px 9px;font-size:10px;background:'+(MON_CAT_COLORS[rule.category]||MON_CAT_COLORS.neutral).bg+';color:'+(MON_CAT_COLORS[rule.category]||MON_CAT_COLORS.neutral).color+';border:none;font-weight:800">'+catOpts(rule.category)+'</select></td>'
+      + '<td style="padding:8px;text-align:right"><button onclick="hlMonitorAppRuleDelete(\''+rule.id+'\')" title="Remove rule" style="border:1px solid #f0cec7;background:#faeeec;color:#c65b4e;font-weight:900;cursor:pointer;font-size:12px;width:26px;height:26px;border-radius:7px">🗑</button></td>'
+      + '</tr>';
+  }).join('');
+  el.innerHTML = '<table style="width:100%;border-collapse:collapse"><thead><tr>'+th('App Name')+th('Category')+th('')+'</tr></thead><tbody>'+rows+'</tbody></table>';
 }
-window.hlMonitorWhitelistFilter = function(q){
-  var needle = (q||'').trim().toLowerCase();
+window.hlMonitorWhitelistFilter = function(){
+  var searchEl = document.getElementById('hlmon-whitelist-search');
+  var needle = ((searchEl && searchEl.value) || '').trim().toLowerCase();
+  var cat = window.__hlMonWhitelistCategory || 'all';
   var all = window.__hlMonRules || [];
-  hlMonitorWhitelistRender(needle ? all.filter(function(r){ return r.appName.toLowerCase().indexOf(needle) !== -1; }) : all);
+  var filtered = all.filter(function(r){
+    return (cat === 'all' || r.category === cat) && (!needle || r.appName.toLowerCase().indexOf(needle) !== -1);
+  });
+  hlMonitorWhitelistRender(filtered);
 };
 window.hlMonitorAppRuleAdd = function(){
   return hlRequireSession(async function(sess){
