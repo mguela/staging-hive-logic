@@ -1961,7 +1961,8 @@ html[data-theme="dark"] :is(#hiveconnect-root, .hc-embed).huddle-banner {
 :is(#hiveconnect-root, .hc-embed).ev-acct-x:hover { background: var(--red); color: #fff; }
 :is(#hiveconnect-root, .hc-embed) .ev-acct-add,
 :is(#hiveconnect-root, .hc-embed).ev-acct-add { display: flex; align-items: center; gap: 6px; width: 100%; padding: 8px 9px; margin-top: 2px; border: 1px dashed var(--line);
-  border-radius: 9px; background: transparent; cursor: pointer; color: var(--steel-deep); font-weight: 700; font-size: 12px; }
+  border-radius: 9px; background: transparent; cursor: pointer; color: var(--steel-deep); font-weight: 700; font-size: 12px;
+  appearance: none; -webkit-appearance: none; box-shadow: none; }
 :is(#hiveconnect-root, .hc-embed) .ev-acct-add:hover,
 :is(#hiveconnect-root, .hc-embed).ev-acct-add:hover { background: var(--steel-bg); }
 :is(#hiveconnect-root, .hc-embed) .ev-folders,

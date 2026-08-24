@@ -1341,7 +1341,8 @@ html[data-theme="dark"] .huddle-banner {
 .ev-acct:hover .ev-acct-x { opacity: 1; }
 .ev-acct-x:hover { background: var(--red); color: #fff; }
 .ev-acct-add { display: flex; align-items: center; gap: 6px; width: 100%; padding: 8px 9px; margin-top: 2px; border: 1px dashed var(--line);
-  border-radius: 9px; background: transparent; cursor: pointer; color: var(--steel-deep); font-weight: 700; font-size: 12px; }
+  border-radius: 9px; background: transparent; cursor: pointer; color: var(--steel-deep); font-weight: 700; font-size: 12px;
+  appearance: none; -webkit-appearance: none; box-shadow: none; }
 .ev-acct-add:hover { background: var(--steel-bg); }
 .ev-folders { padding: 8px 8px 16px; }
 .ev-folder { display: flex; align-items: center; gap: 10px; width: 100%; padding: 9px 11px; border: none; border-radius: 9px;
