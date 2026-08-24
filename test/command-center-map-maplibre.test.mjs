@@ -32,7 +32,8 @@ const SOURCE = [
   'function ccMapLoadLib(){',
   'function ccMapStyle(){',
   'function ccCirclePoly(lng, lat, miles){',
-  'function ccMapMarker(gl, map, lngLat, html, popupHtml){',
+  'function ccAttrEsc(v){',
+  'function ccMapMarker(gl, map, lngLat, html, popupHtml, opts){',
   'function ccSetMarkersVisible(markers, on){',
   'function ccAddBuildings(map){',
   'function ccTiltControl(gl, map){',
@@ -53,7 +54,10 @@ const POINTS = [
 async function build({ points = POINTS, viewMode = 'jobs' } = {}) {
   const calls = { controls: [], sources: [], layers: [], rotationEnabled: false, fitted: null, ctor: null };
   const markers = [];
-  const el = () => ({ style: { cssText: '', display: '' }, innerHTML: '', textContent: '' });
+  // addEventListener is part of the stub because a job pin now wires hover and
+  // click handlers onto its marker element. Without it ccMapMarker throws and
+  // every pin assertion fails for a reason that has nothing to do with pins.
+  const el = () => ({ style: { cssText: '', display: '' }, innerHTML: '', textContent: '', _on: {}, addEventListener(t, fn) { this._on[t] = fn; } });
 
   class Marker {
     constructor(opts) { this.el = opts.element; this.popup = null; }
@@ -86,7 +90,19 @@ async function build({ points = POINTS, viewMode = 'jobs' } = {}) {
         resize() {}
       },
       Marker,
-      Popup: class { setHTML(h) { this.html = h; return this; } },
+      // As much of the real Popup surface as the map code uses. A hovered job
+      // pin owns its popup outright (setLngLat/addTo/remove/on) rather than
+      // being bound by setPopup, so a stub with only setHTML made loadMapLive
+      // throw and every pin assertion below fail for the wrong reason.
+      Popup: class {
+        constructor(opts) { this.opts = opts; this.shown = false; }
+        setLngLat(ll) { this.lngLat = ll; return this; }
+        setHTML(h) { this.html = h; return this; }
+        addTo() { this.shown = true; return this; }
+        remove() { this.shown = false; return this; }
+        on() { return this; }
+        getElement() { return null; }
+      },
       NavigationControl: class { constructor(o) { this.kind = 'nav'; this.opts = o; } },
       AttributionControl: class { constructor(o) { this.kind = 'attrib'; this.opts = o; } },
       LngLatBounds: class {
@@ -130,11 +146,28 @@ test('the map is MapLibre with a tilted, rotated camera', async () => {
   assert.ok(calls.rotationEnabled, 'touch rotation must be explicitly enabled');
 });
 
-test('the zoom/compass control is present and shows pitch', async () => {
+// visualizePitch:true makes MapLibre's compass click call resetNorthPitch(),
+// which zeroes pitch as well as bearing. The button is labelled "Reset bearing
+// to north" and sits directly above a 2D/3D button that owns tilt, so flattening
+// the map was it reaching into another control's job (2026-08-23: "turns the map
+// 2D from 3D"). resetNorth() -- bearing only -- is the contract.
+test('the compass resets bearing without flattening the map', async () => {
   const { calls } = await build();
   const nav = calls.controls.find((c) => c.kind === 'nav');
-  assert.ok(nav, 'NavigationControl must be added -- without it there is no tilt or compass affordance');
-  assert.equal(nav.opts.visualizePitch, true);
+  assert.ok(nav, 'NavigationControl must be added -- without it there is no compass affordance');
+  assert.equal(nav.opts.visualizePitch, false,
+    'true makes the compass flatten the map out of 3D as a side effect of pointing north');
+});
+
+// MapLibre's cameraForBounds computes from `options.bearing || 0`, so a fitBounds
+// with no bearing does not leave the camera alone -- it SETS bearing 0. This runs
+// on every first load, and it silently threw away the bearing the map is
+// constructed with, leaving the compass with nothing to correct.
+test('framing the jobs keeps the camera bearing instead of re-northing it', async () => {
+  const { calls } = await build();
+  assert.ok(calls.fitted, 'the first load must frame the active jobs');
+  assert.equal(calls.fitted.o.bearing, calls.ctor.bearing,
+    'fitBounds without an explicit bearing resets the map to due north');
 });
 
 // The basemap is the half of "bright and vibrant" that is easiest to lose:
@@ -161,7 +194,12 @@ test('two jobs at one address stay a single pin with a count badge', async () =>
   assert.equal(markers.length, 3, 'the two same-address jobs must not draw as two pins');
   const badge = markers.find((m) => />2</.test(m.el.innerHTML));
   assert.ok(badge, 'the grouped pin must still show the job count');
-  assert.match(badge.popup.html, /2 active jobs at this address/);
+  // A job pin owns its popup (__ccPopup) instead of being bound by setPopup,
+  // because setPopup installs MapLibre's click-to-toggle and that would fight
+  // click-to-open-the-job. The popup itself is unchanged.
+  const pop = badge.popup || badge.__ccPopup;
+  assert.ok(pop, 'the grouped pin must still carry a popup');
+  assert.match(pop.html, /2 active jobs at this address/);
 });
 
 test('the 5/10/15 mile rings are still drawn around the shop', async () => {

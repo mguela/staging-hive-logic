@@ -28,7 +28,7 @@
 //     buffer. That's an estimate and is labeled "approx" everywhere.
 
 import { supabaseRequest } from './_lib/jobber.js';
-import { summarizeBillable, billingWarnings } from './_lib/tm-billable.js';
+import { summarizeBillable, billingWarnings, hlClockToEntries, nativeClockWarnings } from './_lib/tm-billable.js';
 import { buildInvoiceOutboxRow } from './_lib/tm-invoice-message.js';
 import crypto from 'crypto';
 import { authnetConfigured, getHostedPaymentPageToken } from './_lib/authnet.js';
@@ -164,6 +164,37 @@ function todayRangeET() {
     startISO: new Date(startET.getTime() + offsetMs).toISOString(),
     endISO: new Date(endET.getTime() + offsetMs).toISOString(),
   };
+}
+
+
+// Every clock entry for a job, from BOTH clocks.
+//
+// The field app writes job_time_entries. The schedule board writes hl_clock,
+// keyed to an hl_appointment rather than to the job. A job scheduled and worked
+// natively therefore had all of its hours in a table the invoice never read,
+// and billed zero. This is the join that was missing.
+//
+// Used by tm_invoice_prefill AND tm_invoice_create deliberately: when the
+// preview and the invoice read through different code they eventually disagree,
+// and the number the customer is billed is the one nobody previewed.
+export async function billableEntriesForJob(sb, jobRef) {
+  const ref = encodeURIComponent(jobRef);
+  const own = await sb(`job_time_entries?job_ref=eq.${ref}&select=id,kind,tech_name,started_at,ended_at&order=started_at.asc`) || [];
+
+  // Native side is best-effort: a job with no appointments is the normal case,
+  // and a failure here must not stop an invoice the field app can already bill.
+  let native = [];
+  try {
+    const appts = await sb(`hl_appointments?job_ref=eq.${ref}&canceled=eq.false&select=id,title`) || [];
+    if (appts.length) {
+      const ids = appts.map((a) => `"${a.id}"`).join(',');
+      const titleById = Object.fromEntries(appts.map((a) => [String(a.id), a.title || null]));
+      const clock = await sb(`hl_clock?target_kind=eq.hl_appointment&target_id=in.(${ids})&select=id,employee_jid,target_id,label,clock_in,clock_out&order=clock_in.asc`) || [];
+      native = hlClockToEntries(clock, { apptTitleById: titleById });
+    }
+  } catch (e) { /* board clock unavailable -- bill what the field app recorded */ }
+
+  return own.concat(native).sort((a, b) => String(a.started_at || '').localeCompare(String(b.started_at || '')));
 }
 
 export default async function handler(req, res) {
@@ -841,9 +872,12 @@ export default async function handler(req, res) {
       if (!staff) return res.status(401).json({ ok: false, error: 'Not signed in.' });
       const jobRef = (req.query && req.query.jobRef) || '';
       if (!jobRef) return res.status(400).json({ ok: false, error: 'jobRef is required.' });
-      const entries = await sb(`job_time_entries?job_ref=eq.${encodeURIComponent(jobRef)}&select=id,kind,tech_name,started_at,ended_at&order=started_at.asc`);
-      const summary = summarizeBillable(entries || []);
-      return res.status(200).json({ ok: true, ...summary, warnings: billingWarnings(summary) });
+      const entries = await billableEntriesForJob(sb, jobRef);
+      const summary = summarizeBillable(entries);
+      return res.status(200).json({
+        ok: true, ...summary,
+        warnings: billingWarnings(summary).concat(nativeClockWarnings(entries)),
+      });
     }
 
     if (action === 'tm_invoice_create') {
@@ -856,8 +890,8 @@ export default async function handler(req, res) {
       // a customer agrees to knock half an hour off, a legitimate correction --
       // but the measured figure is recorded alongside so the invoice can always
       // be reconciled against what actually happened.
-      const clockEntries = await sb(`job_time_entries?job_ref=eq.${encodeURIComponent(jobRef)}&select=id,kind,tech_name,started_at,ended_at&order=started_at.asc`);
-      const clock = summarizeBillable(clockEntries || []);
+      const clockEntries = await billableEntriesForJob(sb, jobRef);
+      const clock = summarizeBillable(clockEntries);
       const suppliedHours = num(hours);
       const hrs = suppliedHours > 0 ? suppliedHours : clock.hours;
       if (!(hrs > 0)) {
@@ -865,7 +899,8 @@ export default async function handler(req, res) {
           ok: false,
           error: clock.entryCount
             ? 'No billable time is recorded against this job yet, so there are no hours to invoice.'
-            : 'Hours must be a positive number, and nothing is on the clock for this job.',
+            : 'Hours must be a positive number, and nothing is on either clock for this job '
+              + '(the field app or the schedule board).',
           clock, warnings: billingWarnings(clock),
         });
       }
@@ -981,11 +1016,13 @@ export default async function handler(req, res) {
         clock,
         hoursSource: overridden ? 'entered' : (suppliedHours > 0 ? 'entered-matches-clock' : 'clock'),
         delivery,
-        warnings: billingWarnings(clock).concat(
-          overridden
-            ? [`Invoiced ${hrs}h, the clock recorded ${clock.hours}h billable.`]
-            : [],
-        ),
+        warnings: billingWarnings(clock)
+          .concat(nativeClockWarnings(clockEntries))
+          .concat(
+            overridden
+              ? [`Invoiced ${hrs}h, the clock recorded ${clock.hours}h billable.`]
+              : [],
+          ),
         cardPricingActive,
         note: cardPricingActive ? undefined : 'Card pricing is not active yet — run sql/033_card_pricing.sql, then new invoices will include it.',
         payUrl,

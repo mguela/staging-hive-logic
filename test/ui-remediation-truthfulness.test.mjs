@@ -39,7 +39,17 @@ test('preserved zero-backend mockups are hidden from normal production nav', () 
   assert.match(html, /__ucNav\.style\.display = __canSeeInternal \? '' : 'none'/);
   assert.equal((html.match(/class="uc-note"/g) || []).length, 14);
   assert.match(html, /Partial prototype:[\s\S]*ticket form[\s\S]*do not write to production/);
-  assert.match(html, /"tmx": "uc"/);
+
+  // 2026-08-23: tmx (T&M / "Do Work") deliberately moved OUT of Under
+  // Construction and into Jobs, at Chris's call. It is not a zero-backend
+  // mockup like the 14 above -- it calls tm_live and tm_rate_types_list, both
+  // implemented in api/track1.js, which is why it carries the "Partial
+  // prototype" banner asserted just above rather than a "design mockup, not a
+  // working feature" one. The banner and the nav tooltip are what keep it
+  // honest now; the group no longer does. The 14-mockup count above is
+  // unchanged and is what this test actually guards.
+  assert.match(html, /"tmx": "jobs"/);
+  assert.doesNotMatch(html, /"tmx": "uc"/);
 });
 
 test('manager sheet views paginate the loaded 250-row window instead of rendering it all at once', () => {
@@ -50,14 +60,37 @@ test('manager sheet views paginate the loaded 250-row window instead of renderin
   assert.match(html, /'Next →'/);
 });
 
-test('Documents uses bounded server pages and labels its page-local search honestly', () => {
+test('Documents uses bounded server pages, and its search claim matches what it does', () => {
   assert.match(html, /docPageSize: 50/);
   assert.match(html, /select\('\*', \{ count: 'exact' \}\)/);
   assert.match(html, /q = q\.range\(from, from \+ pageSize - 1\)/);
   assert.match(html, /function hlDocPage\(delta\)/);
   assert.match(docsView, /id="hldoc-page"/);
-  assert.match(docsView, /placeholder="Search this page…"/);
-  assert.match(html, /Search filters this page only/);
+
+  // 2026-08-21: search is now served by /api/hivedoc across every file store,
+  // so the box no longer filters only the loaded page and must not say it does.
+  // The honesty requirement is unchanged -- what is honest changed.
+  assert.match(docsView, /placeholder="Search every file…"/);
+  assert.match(docsView, /oninput="hlDocSearchInput\(\)"/);
+
+  // The page-local caveat still has to appear on the browse path that IS page
+  // local, and disappear on the unified path. A caveat that is always shown is
+  // as untruthful as one that is never shown.
+  assert.match(html, /var caveat = HLDOC\.unified \? '' : ' · Search filters this page only'/);
+});
+
+test('a client folder reads every store, not just hand-filed uploads', () => {
+  // The point of the HiveDoc unification: a client folder that queried the
+  // documents table alone showed the few uploads someone filed by hand and hid
+  // every job-site photo, which is where the real files are.
+  assert.match(html, /if\(hlDocFolderClient\(activeFolder\) \|\| searchText\)\{/);
+  assert.match(html, /return hlDocRenderUnified\(activeFolder, searchText, requestToken\)/);
+  assert.match(html, /fetch\('\/api\/hivedoc\?'/);
+
+  // Private buckets: a file is opened through a signed URL minted per request,
+  // never by rendering a storage path into the page.
+  assert.match(html, /async function hlDocOpenFile\(system, id, ev\)/);
+  assert.match(html, /resource: 'file', system: system, id: id/);
 });
 
 test('Today brief schedule row is a real navigation link', () => {

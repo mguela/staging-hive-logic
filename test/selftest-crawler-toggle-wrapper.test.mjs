@@ -72,3 +72,36 @@ test('an unrelated class name is unaffected by the children check', () => {
   const wrapper = fakeEl({ className: 'not-a-recognized-class', children: [fakeEl({ onclick: true })] });
   assert.equal(runIsTestable(wrapper), false);
 });
+
+// ---- a second, wider instance of the exact same bug --------------------
+//
+// Found 2026-08-22 investigating HiveGrid's tox toolbar: the children-onclick
+// exclusion above only ever ran for the CLASS-NAME path -- a wrapper that
+// qualified via a literal onclick ATTRIBUTE (the earlier `el.hasAttribute
+// ('onclick')` check, checked before the exclusion could run) always short-
+// circuited straight to true. HiveGrid's .wbcanvasbox wraps its entire
+// ~20-button .wbtools toolbar (plus the canvas) under onclick="void(0)" -- a
+// vestigial no-op with no action of its own -- and read as one NO_OUTCOME
+// finding whose label ran every tool's own label together
+// ("✋V ◉C ╱L ▭A ▣R ✂D ↔M..."). Live-confirmed against production: clicking
+// .wbcanvasbox itself does nothing; each .wbtool child is already tested
+// and clicked on its own via the same querySelectorAll('*') pass.
+test('a wrapper with its OWN onclick attribute is still excluded when a child also carries its own onclick', () => {
+  const child = fakeEl({ tagName: 'DIV', className: 'wbtool', onclick: true });
+  const wrapper = fakeEl({ tagName: 'DIV', className: 'wbcanvasbox', onclick: true, children: [child] });
+  assert.equal(runIsTestable(wrapper), false);
+});
+
+test('a wrapper with its own onclick and NO onclick-bearing children is still testable (unaffected by the fix)', () => {
+  const wrapper = fakeEl({ tagName: 'DIV', onclick: true, children: [fakeEl({ tagName: 'SPAN' })] });
+  assert.equal(runIsTestable(wrapper), true);
+});
+
+test('a genuine BUTTON is unaffected by the children check even if it wraps onclick-bearing children', () => {
+  // BUTTON/A/role=button etc. return true immediately, before the children
+  // check ever runs -- a semantic control is trusted regardless of markup
+  // nested inside it.
+  const child = fakeEl({ tagName: 'SPAN', onclick: true });
+  const button = fakeEl({ tagName: 'BUTTON', children: [child] });
+  assert.equal(runIsTestable(button), true);
+});

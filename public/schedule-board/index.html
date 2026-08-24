@@ -161,6 +161,19 @@ body.map-under #mapbgtilt{display:flex}
 /* job pin on the real map (readiness-colored); click → Street View */
 .mbjob{width:18px;height:18px;border-radius:50%;border:2.5px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.55)}
 .mbjob:hover{transform:scale(1.35);transition:transform .12s}
+/* Hover detail on a map pin. Both map libraries are in play here -- Mapbox when
+   a token is present, MapLibre when it is not -- and they use different class
+   prefixes for the same popup, so every rule is written for both. The default
+   popup is a white card with dark text, which reads as a hole punched in the
+   board once it is in dark mode; these follow the board's own tokens instead. */
+.mbpop .mapboxgl-popup-content,.mbpop .maplibregl-popup-content{
+  background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:10px;
+  padding:9px 11px;box-shadow:var(--shadow);font-size:12px;line-height:1.45}
+.mbpop .mapboxgl-popup-tip,.mbpop .maplibregl-popup-tip{border-top-color:var(--panel);border-bottom-color:var(--panel)}
+.mbpop-b b{font-size:12.5px}
+.mbpop-b hr{border:none;border-top:1px solid var(--line);margin:6px 0}
+.mbpop-s{color:var(--mut);font-weight:600}
+.mbpop-h{margin-top:6px;font-size:10px;font-weight:800;color:var(--accent)}
 .labtn{margin-top:8px;padding:6px 12px;border:1px solid var(--line);border-radius:8px;background:var(--chip);color:var(--ink);font-size:12px;font-weight:700;cursor:pointer}
 .labtn:hover{background:var(--accent);color:#fff;border-color:var(--accent)}
 /* clickable crew rail → tech status sheet */
@@ -400,6 +413,10 @@ body.map-under #mapbgtilt{display:flex}
 .dlabel{font-size:9px;font-weight:900;letter-spacing:.06em;text-transform:uppercase;color:var(--mut);padding-top:2px}
 .dval{line-height:1.4}
 .dsub{font-size:11px;color:var(--mut);margin-top:3px;line-height:1.6}
+/* Phone and email on the Client card are real and clickable — the browser
+   default link blue is close to unreadable on the dark panel. */
+.dsub a{color:var(--accent);font-weight:700;text-decoration:none}
+.dsub a:hover{text-decoration:underline}
 .av2{display:inline-flex;width:22px;height:22px;border-radius:50%;color:#fff;font-size:9px;font-weight:800;align-items:center;justify-content:center;vertical-align:-7px;margin-right:4px}
 .rez{margin-bottom:7px}
 .rez:last-child{margin-bottom:0}

@@ -32,7 +32,9 @@ import { listFindings, setFindingStatus, createManualFinding, listFindingAttachm
 import { companySlugForUser } from './_lib/tenant.js';
 import { createNativeJob } from './_lib/native-job.js';
 import { jobRef } from './_lib/project-numbers.js';
+import { invoiceAmountDue } from './_lib/invoice-balance.js';
 import { twilioRequest } from './_lib/voice.js';
+import { checkRateLimit } from './_lib/portal-auth.js';
 import crypto from 'crypto';
 import { provisionHiveConnectAccount, getMapping, postBotMessage } from './hiveconnect-bridge.js';
 import { encryptSecret as _encSecret, decryptSecret as _decSecret } from './_lib/secrets.js';
@@ -866,6 +868,98 @@ async function handleFiDailyBrief(res) {
 // Jobber flagged is_lead). See 20260818140000_lead_pipeline_request_stage.sql.
 const LEAD_STAGES = ['request', 'new', 'contacted', 'estimate_booked', 'estimate_sent', 'won', 'lost'];
 
+// ---- half-finished forms, of any kind --------------------------------------
+//
+// Chris, 2026-08-23: "i inavertently clicked away from the screen and lost my
+// work, that can't happen... it needs a home to save the incomplete form too.
+// and it needs to be easily found when you want to return to it."
+//
+// Server-side and keyed by owner, not localStorage. A draft he deliberately
+// saved is a fact about HIM: it has to be on the laptop and the tablet too,
+// and clearing site data must not eat it. (The unsent keystrokes BEFORE he
+// presses save are the sanctioned local exception and stay in the browser.)
+//
+// The payload is the form AS TYPED, never a validated lead. Half a phone
+// number and no name at all still has to survive -- that is exactly the state
+// he is in when the phone rings again.
+const FORM_DRAFT_MAX = 60;
+
+async function handleFormDrafts(req, res) {
+  const requester = await getRequestingProfile(req);
+  if (!requester) return res.status(401).json({ ok: false, error: 'Not signed in -- log into HiveLogic first.' });
+  const owner = encodeURIComponent(requester.id);
+
+  // Each screen asks for its own kind: the Leads page shows lead drafts, Jobs
+  // shows job drafts. No kind means all of them, which is what a single
+  // "everything unfinished" list would want.
+  const kind = String((req.query && req.query.kind) || '').trim();
+  const kindFilter = kind ? `&kind=eq.${encodeURIComponent(kind)}` : '';
+
+  if (req.method === 'GET') {
+    const r = await supabaseRequest(
+      `form_drafts?owner_id=eq.${owner}${kindFilter}&select=id,kind,label,payload,created_at,updated_at&order=updated_at.desc&limit=${FORM_DRAFT_MAX}`
+    );
+    if (!r.ok) {
+      const text = await r.text();
+      // Until the table is applied this must read as "no drafts", not as a
+      // broken Leads view -- the board around it is fine either way.
+      if (/relation .* does not exist/i.test(text)) return res.status(200).json({ ok: true, drafts: [], tableReady: false });
+      return res.status(500).json({ ok: false, error: text });
+    }
+    return res.status(200).json({ ok: true, tableReady: true, drafts: await r.json() });
+  }
+
+  if (req.method === 'POST') {
+    const b = req.body || {};
+    const payload = (b.payload && typeof b.payload === 'object') ? b.payload : null;
+    if (!payload) return res.status(400).json({ ok: false, error: 'Nothing to save.' });
+    // A draft is small by nature. A megabyte of it is a bug or an abuse, and
+    // either way it does not belong in the row.
+    if (JSON.stringify(payload).length > 20000) return res.status(413).json({ ok: false, error: 'That draft is too large to save.' });
+    const label = String(b.label || '').trim().slice(0, 120) || null;
+    const id = String(b.id || '').trim();
+    const now = new Date().toISOString();
+
+    if (id) {
+      // owner_id in the filter, not just the id: without it, knowing another
+      // person's draft id would be enough to overwrite it.
+      const r = await supabaseRequest(`form_drafts?id=eq.${encodeURIComponent(id)}&owner_id=eq.${owner}`, {
+        method: 'PATCH',
+        headers: { Prefer: 'return=representation' },
+        body: JSON.stringify({ label, payload, updated_at: now }),
+      });
+      if (!r.ok) return res.status(500).json({ ok: false, error: await r.text() });
+      const rows = await r.json();
+      if (!rows.length) return res.status(404).json({ ok: false, error: 'That draft is gone -- saving it as a new one.' });
+      return res.status(200).json({ ok: true, draft: rows[0] });
+    }
+
+    const r = await supabaseRequest('form_drafts', {
+      method: 'POST',
+      headers: { Prefer: 'return=representation' },
+      body: JSON.stringify([{ owner_id: requester.id, kind: kind || String((b && b.kind) || 'lead'), label, payload }]),
+    });
+    if (!r.ok) {
+      const text = await r.text();
+      if (/relation .* does not exist/i.test(text)) {
+        return res.status(200).json({ ok: false, error: 'Draft storage is not set up yet -- run the lead_drafts migration.' });
+      }
+      return res.status(500).json({ ok: false, error: text });
+    }
+    return res.status(200).json({ ok: true, draft: (await r.json())[0] });
+  }
+
+  if (req.method === 'DELETE') {
+    const id = String((req.query && req.query.id) || (req.body && req.body.id) || '').trim();
+    if (!id) return res.status(400).json({ ok: false, error: 'Which draft?' });
+    const r = await supabaseRequest(`form_drafts?id=eq.${encodeURIComponent(id)}&owner_id=eq.${owner}`, { method: 'DELETE' });
+    if (!r.ok) return res.status(500).json({ ok: false, error: await r.text() });
+    return res.status(200).json({ ok: true, deleted: id });
+  }
+
+  return res.status(405).json({ ok: false, error: 'GET, POST or DELETE only' });
+}
+
 async function handleLeads(req, res) {
   const requester = await getRequestingProfile(req);
   if (!requester) return res.status(401).json({ ok: false, error: 'Not signed in -- log into HiveLogic first.' });
@@ -930,16 +1024,17 @@ async function handleLeads(req, res) {
       companyName: c.company_name,
       email: c.email,
       stage: p.stage || 'new',
-        estimatedValue: p.estimated_value != null ? Number(p.estimated_value) : null,
-        leadSource: p.lead_source || null,
-        referredByClientId: p.referred_by_client_id || null,
-        division: p.division || null,
-        need: p.need || null,
-        phone: p.phone || null,
-        serviceAddress: p.service_address || null,
-        urgency: p.urgency || null,
-        lostReason: p.lost_reason || null,
-        notes: p.notes || null,
+      estimatedValue: p.estimated_value != null ? Number(p.estimated_value) : null,
+      propertyType: p.property_type || null,
+      leadSource: p.lead_source || null,
+      referredByClientId: p.referred_by_client_id || null,
+      division: p.division || null,
+      need: p.need || null,
+      phone: p.phone || null,
+      serviceAddress: p.service_address || null,
+      urgency: p.urgency || null,
+      lostReason: p.lost_reason || null,
+      notes: p.notes || null,
       firstContactedAt: p.first_contacted_at || null,
       lastContactedAt: p.last_contacted_at || null,
       createdAt: p.created_at || c.jobber_updated_at,
@@ -987,11 +1082,30 @@ async function handleLeads(req, res) {
       const client = (await cRes.json())[0];
       clientId = client.jobber_id;
     }
+    // A lead can be born already closed: "Not a good fit" on the New Lead form
+    // takes the call down AND closes it out in one press, and the work we turned
+    // away has to be countable. stage was hardcoded 'new' here, so that lead
+    // landed in the pipeline looking live and the reason went nowhere.
+    // Same validation the PATCH branch uses -- an unknown stage is rejected
+    // rather than written.
+    const wantStage = String(b.stage || '').trim();
+    if (wantStage && LEAD_STAGES.indexOf(wantStage) === -1) {
+      return res.status(400).json({ ok: false, error: 'stage must be one of: ' + LEAD_STAGES.join(', ') });
+    }
+    if (wantStage === 'lost' && !String(b.lostReason || '').trim()) {
+      return res.status(400).json({ ok: false, error: 'lostReason is required when moving a lead to Lost.' });
+    }
+    const nowIso = new Date().toISOString();
     const pipeRow = {
       client_id: clientId,
       request_id: String(b.requestId || '').trim() || null,
       title: String(b.title || '').trim() || null,
-      stage: 'new',
+      stage: wantStage || 'new',
+      lost_reason: String(b.lostReason || '').trim() || null,
+      // A lead that arrives at any stage past 'new' was contacted to get there
+      // -- that is the call that produced it -- so the clock the SLA note
+      // promises starts now rather than staying null forever.
+      first_contacted_at: (wantStage && wantStage !== 'new') ? nowIso : null,
       estimated_value: (isFinite(Number(b.estimatedValue)) && Number(b.estimatedValue) > 0) ? Number(b.estimatedValue) : null,
       lead_source: String(b.leadSource || '').trim() || null,
       referred_by_client_id: b.referredByClientId ? String(b.referredByClientId).trim() : null,
@@ -1000,6 +1114,11 @@ async function handleLeads(req, res) {
       phone: String(b.phone || '').trim() || null,
       service_address: String(b.serviceAddress || '').trim() || null,
       urgency: String(b.urgency || '').trim() || null,
+      // The form has posted this since it was built and there was nowhere to
+      // put it, so every Residential/Commercial choice anyone ever made was
+      // dropped. Capped rather than constrained: a lead is taken down while
+      // somebody is on the phone, and a rejected value mid-call costs a lead.
+      property_type: String(b.propertyType || '').trim().slice(0, 60) || null,
       notes: String(b.notes || '').trim() || null,
       updated_at: new Date().toISOString()
     };
@@ -1060,7 +1179,22 @@ async function handleLeads(req, res) {
     if (b.division !== undefined) patch.division = String(b.division || '').trim() || null;
     if (b.need !== undefined) patch.need = String(b.need || '').trim() || null;
     if (b.notes !== undefined) patch.notes = String(b.notes || '').trim() || null;
+    if (b.propertyType !== undefined) patch.property_type = String(b.propertyType || '').trim().slice(0, 60) || null;
     if (b.lostReason !== undefined) patch.lost_reason = String(b.lostReason || '').trim() || null;
+    // The job this lead became, written when a lead is converted straight to
+    // work. Sits beside estimate_id: same idea, the other exit from the
+    // pipeline. Validated against the jobs table rather than trusted, because a
+    // dangling ref here is a lead that looks converted and points at nothing.
+    if (b.jobRef !== undefined) {
+      const jobRef = String(b.jobRef || '').trim();
+      if (!jobRef) patch.job_ref = null;
+      else {
+        const jr = await supabaseRequest(`jobs?jobber_id=eq.${encodeURIComponent(jobRef)}&select=jobber_id&limit=1`);
+        const jrows = jr.ok ? await jr.json() : [];
+        if (!jrows.length) return res.status(404).json({ ok: false, error: 'That job does not exist.' });
+        patch.job_ref = jobRef;
+      }
+    }
     if (!existing || (existing.stage === 'new' && patch.stage && patch.stage !== 'new') || (!existing.first_contacted_at && patch.stage && patch.stage !== 'new')) {
       patch.first_contacted_at = now;
     }
@@ -3224,6 +3358,16 @@ export async function handleReinaLabRead(req, res) {
     || !/^[\p{L}\p{N} '#&.\-]+$/u.test(requestedLookupTerm))) {
     return res.status(400).json({ ok: false, error: 'Invalid lookup term.' });
   }
+  // visits.assigned_users is [{ id, name }] straight from Jobber.
+  const assignedNames = (value) => {
+    const rows = Array.isArray(value) ? value : [];
+    const names = [];
+    for (const entry of rows.slice(0, 12)) {
+      const name = entry && typeof entry === 'object' ? text(entry.name, 160) : null;
+      if (name && !names.includes(name)) names.push(name);
+    }
+    return names;
+  };
   const jobProjection = (j) => ({
     jobNumber: j.job_number,
     title: j.title,
@@ -3261,6 +3405,376 @@ export async function handleReinaLabRead(req, res) {
       return { available: false, reason: 'Executive snapshot temporarily unavailable.' };
     }
   };
+  // What is actually owed.
+  //
+  // This used to filter on `balance > 0`, which returned NOTHING -- Jobber's
+  // sync has never written that column, and all 2,852 invoices carry
+  // balance = NULL. So Reina, asked who owed money, said nobody, while 27
+  // invoices sat past due. A filter on a column nobody populates does not
+  // fail; it quietly answers "none", which is the worst possible way for this
+  // to be wrong.
+  //
+  // Status is what the sync does maintain, so status is what selects an
+  // unpaid invoice, and the amount owed is derived from figures that are
+  // actually there. Derived is stated as derived: `amountDueIsExact` is false
+  // when it came from arithmetic rather than from Jobber's own balance, so an
+  // invoice paid down in a way this cannot see is never reported as certain.
+  // Estimates, with the LIVE ones first.
+  //
+  // Ordering the whole table by last-updated buried them: 730 archived and 666
+  // converted quotes crowd out the ten still awaiting an answer, which are the
+  // only ones anybody asks about. Reina had "access to estimates" and could
+  // not have told you which were outstanding. Open ones are read on their own
+  // and come first; recent activity follows as context.
+  const OPEN_QUOTE_STATUSES = ['awaiting_response', 'draft', 'approved'];
+  const QUOTE_COLUMNS = 'quote_number,title,quote_status,total,client_name,jobber_created_at,jobber_updated_at';
+  const readEstimates = async () => {
+    const project = (row) => ({
+      quoteNumber: text(row.quote_number, 80), title: text(row.title, 240), status: text(row.quote_status, 40),
+      total: number(row.total), clientName: text(row.client_name, 160),
+      createdAt: row.jobber_created_at || null, updatedAt: row.jobber_updated_at || null,
+    });
+    try {
+      const [openResponse, recentResponse] = await Promise.all([
+        supabaseRequest(`quotes?select=${QUOTE_COLUMNS}&quote_status=in.(${OPEN_QUOTE_STATUSES.join(',')})&order=jobber_updated_at.desc.nullslast&limit=60`),
+        supabaseRequest(`quotes?select=${QUOTE_COLUMNS}&quote_status=not.in.(${OPEN_QUOTE_STATUSES.join(',')})&order=jobber_updated_at.desc.nullslast&limit=60`),
+      ]);
+      if (!openResponse.ok && !recentResponse.ok) return { available: false, reason: 'Source temporarily unavailable.', records: [] };
+      const openRows = openResponse.ok ? await openResponse.json() : [];
+      const recentRows = recentResponse.ok ? await recentResponse.json() : [];
+      const open = (Array.isArray(openRows) ? openRows : []).map(project);
+      const recent = (Array.isArray(recentRows) ? recentRows : []).map(project);
+      return { available: true, recordLimit: 120, openCount: open.length, records: [...open, ...recent] };
+    } catch (_) {
+      return { available: false, reason: 'Source temporarily unavailable.', records: [] };
+    }
+  };
+
+  const RECEIVABLE_STATUSES = ['past_due', 'awaiting_payment', 'bad_debt', 'draft'];
+  const readReceivables = async () => {
+    try {
+      const response = await supabaseRequest(`invoices?select=invoice_number,invoice_status,subject,total,balance,payments,deposit,discount,due_date,issued_date,job_id,client_id,jobber_updated_at&invoice_status=in.(${RECEIVABLE_STATUSES.join(',')})&order=due_date.asc.nullslast&limit=150`);
+      if (!response.ok) return { available: false, reason: 'Source temporarily unavailable.', records: [] };
+      const rows = await response.json();
+      if (!Array.isArray(rows)) return { available: false, reason: 'Source returned an invalid shape.', records: [] };
+      // "Who owes me money" is a question about PEOPLE. An invoice number
+      // without a name attached cannot answer it.
+      const clientIds = [...new Set(rows.map((row) => row.client_id).filter(Boolean))].slice(0, 150);
+      const names = new Map();
+      if (clientIds.length) {
+        const list = clientIds.map((id) => `"${String(id).replace(/"/g, '')}"`).join(',');
+        const clientResponse = await supabaseRequest(`clients?select=jobber_id,name,company_name&jobber_id=in.(${encodeURIComponent(list)})&limit=150`);
+        if (clientResponse.ok) {
+          const clientRows = await clientResponse.json();
+          for (const row of Array.isArray(clientRows) ? clientRows : []) {
+            names.set(String(row.jobber_id), row.name || row.company_name || null);
+          }
+        }
+      }
+      const records = rows.slice(0, 150).map((row) => {
+        // The same arithmetic the invoices screen and the client portal use,
+        // from the same helper. Reina quoting a different number than the
+        // screen shows would be worse than her not knowing.
+        const owed = invoiceAmountDue(row);
+        return {
+          invoiceNumber: text(row.invoice_number, 80),
+          status: text(row.invoice_status, 40),
+          subject: text(row.subject, 240),
+          clientName: text(names.get(String(row.client_id)), 160),
+          total: number(row.total),
+          amountDue: owed.amountDue,
+          amountDueIsExact: owed.isExact,
+          paid: number(row.payments),
+          dueDate: row.due_date || null,
+          issuedDate: row.issued_date || null,
+          jobRef: text(row.job_id, 100),
+          updatedAt: row.jobber_updated_at || null,
+        };
+      }).filter((record) => record.amountDue == null || record.amountDue > 0);
+      return { available: true, recordLimit: 150, basis: 'unpaid_status', records };
+    } catch (_) {
+      return { available: false, reason: 'Source temporarily unavailable.', records: [] };
+    }
+  };
+
+  // ---- the rest of the business ------------------------------------------
+  // Added 2026-08-21 after Reina, reading the right calendar, had to say
+  // "technician assignments aren't included". The pattern held everywhere: the
+  // data existed and the bridge simply never asked. These are the remaining
+  // tables with real rows in them that a person actually asks about. Tables
+  // that are empty today are deliberately NOT here -- a query per turn for a
+  // table with nothing in it is latency spent to learn nothing, and the turn
+  // budget is the thing that broke tonight.
+  const readPeople = async () => {
+    const [rolesResult, tradesResult] = await Promise.all([
+      readRows('employee_roles?select=jobber_id,lens,division,crew_label,is_lead,permission_role,updated_at&order=sort_order.asc&limit=80', (row) => ({
+        personRef: text(row.jobber_id, 100), area: text(row.lens, 80), division: text(row.division, 120),
+        crew: text(row.crew_label, 120), isLead: row.is_lead === true, role: text(row.permission_role, 60),
+        updatedAt: row.updated_at || null,
+      }), 80),
+      readRows('trades?select=name,category,description,active,sort_order&active=is.true&order=sort_order.asc&limit=80', (row) => ({
+        name: text(row.name, 120), category: text(row.category, 120), description: text(row.description, 300),
+      }), 80),
+    ]);
+    return { available: rolesResult.available || tradesResult.available, crewRoles: rolesResult, trades: tradesResult };
+  };
+
+  const readTimeclock = async () => readRows(
+    'workforce_time_sessions?select=employee_id,clock_in,clock_out,status,status_flag,on_break,total_break_seconds,close_reason&order=clock_in.desc&limit=80',
+    (row) => ({
+      personRef: text(row.employee_id, 100), clockIn: row.clock_in || null, clockOut: row.clock_out || null,
+      status: text(row.status, 40), flag: text(row.status_flag, 60), onBreak: row.on_break === true,
+      breakSeconds: number(row.total_break_seconds), closeReason: text(row.close_reason, 120),
+    }), 80);
+
+  const readTimesheets = async () => readRows(
+    'time_sheet_entries?select=start_at,end_at,final_duration,user_id,job_id,jobber_updated_at&order=start_at.desc&limit=120',
+    (row) => ({
+      startAt: row.start_at || null, endAt: row.end_at || null, durationSeconds: number(row.final_duration),
+      personRef: text(row.user_id, 100), jobRef: text(row.job_id, 100), updatedAt: row.jobber_updated_at || null,
+    }), 120);
+
+  const readActivity = async () => readRows(
+    'timeline_events?select=job_id,label,source,occurred_at&order=occurred_at.desc&limit=120',
+    (row) => ({
+      jobRef: text(row.job_id, 100), label: text(row.label, 300), source: text(row.source, 80),
+      occurredAt: row.occurred_at || null,
+    }), 120);
+
+  // Photo metadata only, and never gps_lat/gps_lng -- the same rule the
+  // vehicle read follows. Where a photo was taken is a coordinate.
+  const readPhotos = async () => readRows(
+    'media?select=job_id,media_type,captured_at,uploaded_by,created_at&order=created_at.desc&limit=120',
+    (row) => ({
+      jobRef: text(row.job_id, 100), kind: text(row.media_type, 40),
+      capturedAt: row.captured_at || null, addedAt: row.created_at || null,
+    }), 120);
+
+  const readCosting = async () => readRows(
+    'cost_lines?select=section,name,amount,frequency,cost_type,source,confidence,archived,updated_at&archived=is.false&order=sort_order.asc&limit=150',
+    (row) => ({
+      section: text(row.section, 120), name: text(row.name, 200), amount: number(row.amount),
+      frequency: text(row.frequency, 24), costType: text(row.cost_type, 40), source: text(row.source, 80),
+      confidence: text(row.confidence, 40), updatedAt: row.updated_at || null,
+    }), 150);
+
+  // Summaries, never numbers and never the raw transcript. Who called is
+  // contact data; what a call was about is a business fact, and only the
+  // second one belongs in an answer.
+  const readCalls = async () => {
+    const [callsResult, voicemailResult] = await Promise.all([
+      readRows('voice_calls?select=direction,status,client_id,job_id,started_at,ended_at,duration_seconds,ai_summary,escalation_requested&order=started_at.desc&limit=60', (row) => ({
+        direction: text(row.direction, 24), status: text(row.status, 40), clientRef: text(row.client_id, 100),
+        jobRef: text(row.job_id, 100), startedAt: row.started_at || null, endedAt: row.ended_at || null,
+        seconds: number(row.duration_seconds), summary: text(row.ai_summary, 600),
+        escalationRequested: row.escalation_requested === true,
+      }), 60),
+      readRows('voice_voicemails?select=duration_seconds,ai_summary,read,created_at&deleted_at=is.null&order=created_at.desc&limit=40', (row) => ({
+        seconds: number(row.duration_seconds), summary: text(row.ai_summary, 600),
+        heard: row.read === true, receivedAt: row.created_at || null,
+      }), 40),
+    ]);
+    return { available: callsResult.available || voicemailResult.available, calls: callsResult, voicemail: voicemailResult };
+  };
+
+  // ---- everything about ONE job -------------------------------------------
+  //
+  // Asked "was the material ordered for this job", Reina said the material
+  // status was not available. She was right -- and she had also looked at
+  // nothing, because the areas she reads are business-wide lists, 150 rows
+  // deep and one row per job. There was no way to go DOWN into a single job.
+  //
+  // When a question is about one job, this reads what is attached to it:
+  // the visit and who is on it, what has happened, the photos, the money, the
+  // hours, the change orders and the line items. Bounded per source, because
+  // depth on one job must not cost what breadth across all of them does.
+  //
+  // An empty section here means NO RECORD EXISTS, which is a different and
+  // more useful fact than "not read this turn" -- and it is the difference
+  // between "nobody has logged materials for this job" and "I did not look".
+  //
+  // A job carries TWO identities. Everything synced from Jobber hangs off the
+  // opaque Jobber id; the tables HiveLogic grew on its own (purchase orders
+  // most recently) key on the row's own uuid. Resolve both here so a source
+  // is never missed for having picked the wrong one -- "no purchase orders on
+  // this job" has to mean there are none, not that we asked with the other id.
+  const resolveJobId = async (jobNumber) => {
+    if (!jobNumber) return null;
+    try {
+      const response = await supabaseRequest(`jobs?select=jobber_id,uuid_id&job_number=eq.${encodeURIComponent(jobNumber)}&limit=2`);
+      if (!response.ok) return null;
+      const rows = await response.json();
+      // Exactly one, or nothing. A job number that is not unique cannot be
+      // used to answer a question about "this job".
+      if (!Array.isArray(rows) || rows.length !== 1) return null;
+      const jobberId = rows[0].jobber_id || null;
+      const uuidId = rows[0].uuid_id || null;
+      return jobberId || uuidId ? { jobberId, uuidId } : null;
+    } catch (_) { return null; }
+  };
+
+  // The Job Setup checklist, in the words it is written in on the screen.
+  //
+  // job_workflow.readiness_items stores only the boxes somebody has touched,
+  // under keys like "permits.filed_approved". Handed over raw, that is both
+  // unreadable and misleading: an untouched box is simply absent, so a job
+  // where nothing has been checked looks the same as a job with no checklist.
+  // Spelling out all twelve items, checked or not, is the difference between
+  // "materials are not on site" and "nobody has said either way".
+  //
+  // Two items are not stored at all -- they are computed from the workflow
+  // row, exactly as public/index.html computes them -- so what Reina says
+  // matches what the setup screen shows.
+  const READINESS_GATES = [
+    { gate: 'Client confirmed', items: [
+      ['client.start_date', 'Start date confirmed with client'],
+      ['client.access', 'Access and parking arranged (gate codes, pets)'],
+    ] },
+    { gate: 'Deposit collected', items: [
+      ['deposit.invoice_sent', 'Deposit invoice sent'],
+      ['deposit.payment_received', 'Payment received and cleared', 'depositPaid'],
+    ] },
+    { gate: 'Materials and POs', items: [
+      ['materials.on_site', 'Materials on site', 'materialsOnSite'],
+    ] },
+    { gate: 'Permits and documents', items: [
+      ['permits.filed_approved', 'Permits filed and approved'],
+      ['permits.plans_in_folder', 'Plans and specs in job folder'],
+      ['permits.coi_current', 'COI current'],
+    ] },
+    { gate: 'Crew assigned', items: [
+      ['crew.lead_helpers', 'Lead and helpers chained'],
+      ['crew.sub_commitments', 'Sub commitments confirmed'],
+    ] },
+  ];
+
+  const readinessChecklist = (workflowRow) => {
+    const stored = workflowRow && workflowRow.readiness_items && typeof workflowRow.readiness_items === 'object'
+      ? workflowRow.readiness_items : {};
+    const computed = {
+      depositPaid: !!(workflowRow && workflowRow.deposit_paid_at),
+      materialsOnSite: !!(workflowRow && workflowRow.materials_status === 'on_site'),
+    };
+    const out = [];
+    for (const { gate, items } of READINESS_GATES) {
+      for (const [key, label, computedFrom] of items) {
+        if (computedFrom) {
+          out.push({ gate, item: label, done: computed[computedFrom] === true, checkedBy: null, checkedAt: null });
+          continue;
+        }
+        const entry = stored[key] && typeof stored[key] === 'object' ? stored[key] : null;
+        // Who ticked it is stored as their sign-in address. Who is the useful
+        // part; the address is not, and this bridge does not hand out
+        // addresses.
+        const by = entry ? text(entry.by, 160) : null;
+        out.push({
+          gate, item: label,
+          done: !!(entry && entry.done === true),
+          checkedBy: by ? by.split('@')[0] : null,
+          checkedAt: entry ? entry.at || null : null,
+        });
+      }
+    }
+    return out;
+  };
+
+  const readJobDossier = async (job, jobNumber) => {
+    if (!job || (!job.jobberId && !job.uuidId)) return null;
+    const id = encodeURIComponent(job.jobberId || job.uuidId);
+    const poProjection = (row) => ({
+      poNumber: text(row.po_number, 80), orderType: text(row.order_type, 60),
+      status: text(row.lifecycle_status, 60), overheadCategory: text(row.overhead_category, 120),
+      notPreapproved: row.not_preapproved === true, version: number(row.version),
+      createdAt: row.created_at || null, updatedAt: row.updated_at || null,
+    });
+    const PO_SELECT = 'po_number,overhead_category,order_type,lifecycle_status,not_preapproved,version,created_at,updated_at';
+    const NO_IDENTITY = { available: true, records: [] };
+    const readPurchaseOrders = (column, value) => (value
+      ? readRows(`purchase_orders?select=${PO_SELECT}&${column}=eq.${encodeURIComponent(value)}&order=updated_at.desc&limit=30`, poProjection, 30)
+      : Promise.resolve(NO_IDENTITY));
+    // Both identities were asked under; a purchase order carrying both must
+    // not be reported twice, and one source failing must not be reported as
+    // "no purchase orders".
+    const mergePurchaseOrders = (a, b) => {
+      if (a.available !== true && b.available !== true) {
+        return { available: false, reason: a.reason || b.reason || 'Source temporarily unavailable.', records: [] };
+      }
+      const seen = new Set();
+      const records = [];
+      for (const record of [...(a.records || []), ...(b.records || [])]) {
+        const key = record.poNumber || JSON.stringify(record);
+        if (seen.has(key)) continue;
+        seen.add(key);
+        records.push(record);
+      }
+      return { available: true, recordLimit: 30, records: records.slice(0, 30) };
+    };
+
+    const [visits, timeline, photos, invoices, expenses, changeOrders, lineItems, workflow, hours,
+      posByJobberId, posByUuid] = await Promise.all([
+      readRows(`visits?select=title,start_at,end_at,completed_at,visit_status,assigned_users,arrival_window_start,arrival_window_end&job_id=eq.${id}&order=start_at.desc&limit=30`, (row) => ({
+        title: text(row.title, 240), startAt: row.start_at || null, endAt: row.end_at || null,
+        completedAt: row.completed_at || null, status: text(row.visit_status, 60),
+        assignedTo: assignedNames(row.assigned_users),
+        arrivalWindowStart: row.arrival_window_start || null, arrivalWindowEnd: row.arrival_window_end || null,
+      }), 30),
+      readRows(`timeline_events?select=label,source,occurred_at&job_id=eq.${id}&order=occurred_at.desc&limit=40`, (row) => ({
+        label: text(row.label, 300), source: text(row.source, 80), occurredAt: row.occurred_at || null,
+      }), 40),
+      readRows(`media?select=media_type,captured_at,created_at&job_id=eq.${id}&order=created_at.desc&limit=30`, (row) => ({
+        kind: text(row.media_type, 40), capturedAt: row.captured_at || null, addedAt: row.created_at || null,
+      }), 30),
+      readRows(`invoices?select=invoice_number,invoice_status,subject,total,balance,payments,deposit,discount,due_date,issued_date&job_id=eq.${id}&order=issued_date.desc&limit=20`, (row) => {
+        const owed = invoiceAmountDue(row);
+        return {
+          invoiceNumber: text(row.invoice_number, 80), status: text(row.invoice_status, 40),
+          subject: text(row.subject, 240), total: number(row.total),
+          amountDue: owed.amountDue, amountDueIsExact: owed.isExact,
+          dueDate: row.due_date || null, issuedDate: row.issued_date || null,
+        };
+      }, 20),
+      readRows(`expenses?select=title,total,expense_date,reimbursable_to_user&job_id=eq.${id}&order=expense_date.desc&limit=30`, (row) => ({
+        title: text(row.title, 240), total: number(row.total), date: row.expense_date || null,
+        reimbursable: row.reimbursable_to_user === true,
+      }), 30),
+      readRows(`change_orders?select=co_number,kind,lifecycle_status,version,created_at,updated_at&job_id=eq.${id}&order=updated_at.desc&limit=20`, (row) => ({
+        changeOrderNumber: text(row.co_number, 80), kind: text(row.kind, 60),
+        status: text(row.lifecycle_status, 60), version: number(row.version),
+        createdAt: row.created_at || null, updatedAt: row.updated_at || null,
+      }), 20),
+      readRows(`job_line_items?select=description,quantity,unit_price,line_total,sort_order&job_ref=eq.${id}&order=sort_order.asc&limit=60`, (row) => ({
+        description: text(row.description, 300), quantity: number(row.quantity),
+        unitPrice: number(row.unit_price), lineTotal: number(row.line_total),
+      }), 60),
+      readRows(`job_workflow?select=materials_status,materials_eta,deposit_required,deposit_paid_at,deposit_amount,on_hold_at,on_hold_reason,readiness_items,updated_at&job_ref=eq.${id}&limit=5`, (row) => ({
+        materialsStatus: text(row.materials_status, 40), materialsEta: row.materials_eta || null,
+        depositRequired: number(row.deposit_required), depositPaidAt: row.deposit_paid_at || null,
+        depositAmount: number(row.deposit_amount), onHoldAt: row.on_hold_at || null,
+        onHoldReason: text(row.on_hold_reason, 300),
+        setupChecklist: readinessChecklist(row),
+        updatedAt: row.updated_at || null,
+      }), 5),
+      readRows(`time_sheet_entries?select=start_at,end_at,final_duration,user_id&job_id=eq.${id}&order=start_at.desc&limit=60`, (row) => ({
+        startAt: row.start_at || null, endAt: row.end_at || null,
+        durationSeconds: number(row.final_duration), personRef: text(row.user_id, 100),
+      }), 60),
+      // Asked as two queries rather than one `or=`, because a Jobber id is
+      // base64 -- padding and all -- and PostgREST's or() list is the wrong
+      // place to find out how that quotes.
+      readPurchaseOrders('job_id', job.jobberId),
+      readPurchaseOrders('job_uuid', job.uuidId),
+    ]);
+    return {
+      available: true,
+      jobNumber: jobNumber == null ? null : String(jobNumber).slice(0, 40),
+      // Said in words, because "the section is empty" and "the section was not
+      // read" look identical in JSON and mean opposite things.
+      note: 'Everything HiveLogic has attached to this one job. A section with no records means nothing has been recorded against this job, not that it was not read. workflow.setupChecklist is the Job Setup checklist in full -- every item is listed whether or not anyone has ticked it, so an item marked done:false means it has not been confirmed, and "Materials on site" reflects the materials status staff set on the job.',
+      visits, timeline, photos, invoices, expenses, changeOrders, lineItems, workflow, hours,
+      purchaseOrders: mergePurchaseOrders(posByJobberId, posByUuid),
+    };
+  };
+
   const exactLookup = async () => {
     if (!requestedLookupKind || !requestedLookupTerm) return null;
     const pattern = encodeURIComponent(`*${requestedLookupTerm}*`);
@@ -3380,9 +3894,28 @@ export async function handleReinaLabRead(req, res) {
     return result([]);
   };
 
+  // WHICH AREAS THIS TURN NEEDS.
+  //
+  // Every area used to be read on every turn. That was survivable with six of
+  // them and it is not with twenty: the full read is what pushed the composer
+  // past its budget tonight and made Reina answer "unavailable" to everything.
+  // The caller says what the question is about, and only those are fetched.
+  //
+  // No `areas` parameter means all of them, so every existing caller behaves
+  // exactly as before. An unknown name is ignored rather than rejected -- a
+  // stale caller asking for something that no longer exists should get a
+  // smaller answer, not an error.
+  const requestedAreas = String((req.query && req.query.areas) || '').split(',')
+    .map((name) => name.trim()).filter(Boolean);
+  const wants = (name) => requestedAreas.length === 0 || requestedAreas.includes(name);
+  const skipped = { available: false, reason: 'Not read for this turn. Ask about it directly.', records: [] };
+  const when = (name, read) => wants(name) ? read() : Promise.resolve(skipped);
+
   const [vehiclesRes, jobsRes, jobLookupRes, briefResult, clients, executive, receivables, estimates, workflow,
     schedule, leads, requests, expenses, vendors, subscriptions, subcontractors,
-    purchaseOrders, internalEstimates, syncHealth, mail, exactLookupResult] = await Promise.all([
+    purchaseOrders, internalEstimates, syncHealth, mail,
+    people, timeclock, timesheets, activity, photos, costing, calls,
+    exactLookupResult] = await Promise.all([
     supabaseRequest(`vehicles?select=name,${VEHICLE_GPS_COLUMNS}&order=name.asc`),
     supabaseRequest('jobs_enriched?select=job_number,title,job_status,job_type,total,start_at,end_at,completed_at,jobber_updated_at,client_name,loc_city,loc_province&job_status=neq.archived&order=jobber_updated_at.desc&limit=150'),
     requestedJobNumber
@@ -3399,80 +3932,80 @@ export async function handleReinaLabRead(req, res) {
       if (statusCode !== 200 || !payload || payload.ok !== true) return null;
       return payload;
     })().catch(() => null),
-    readRows('clients?select=jobber_id,name,company_name,is_lead,is_archived,jobber_created_at,jobber_updated_at&order=jobber_updated_at.desc&limit=200', (row) => ({
+    when('clients', () => readRows('clients?select=jobber_id,name,company_name,is_lead,is_archived,jobber_created_at,jobber_updated_at&order=jobber_updated_at.desc&limit=200', (row) => ({
       clientRef: text(row.jobber_id, 100), name: text(row.name, 160), companyName: text(row.company_name, 160),
       isLead: row.is_lead === true, isArchived: row.is_archived === true,
       createdAt: row.jobber_created_at || null, updatedAt: row.jobber_updated_at || null,
-    }), 200),
-    readExecutiveSnapshot(),
-    readRows('invoices?select=invoice_number,invoice_status,subject,total,balance,due_date,issued_date,job_id,jobber_updated_at&balance=gt.0&order=due_date.asc&limit=100', (row) => ({
-      invoiceNumber: text(row.invoice_number, 80), status: text(row.invoice_status, 40), subject: text(row.subject, 240),
-      total: number(row.total), balance: number(row.balance), dueDate: row.due_date || null, issuedDate: row.issued_date || null,
-      jobRef: text(row.job_id, 100), updatedAt: row.jobber_updated_at || null,
-    }), 100),
-    readRows('quotes?select=quote_number,title,quote_status,total,client_name,jobber_created_at,jobber_updated_at&order=jobber_updated_at.desc&limit=100', (row) => ({
-      quoteNumber: text(row.quote_number, 80), title: text(row.title, 240), status: text(row.quote_status, 40),
-      total: number(row.total), clientName: text(row.client_name, 160), createdAt: row.jobber_created_at || null, updatedAt: row.jobber_updated_at || null,
-    }), 100),
-    readRows('job_workflow?select=job_ref,deposit_required,deposit_paid_at,deposit_amount,setup_complete_at,materials_status,materials_eta,on_hold_at,on_hold_reason,readiness_items,readiness_override_at,is_tm,tm_service_type,tm_rate_hourly,updated_at&order=updated_at.desc&limit=150', (row) => ({
+    }), 200)),
+    when('executive', readExecutiveSnapshot),
+    when('receivables', () => readReceivables()),
+    when('estimates', () => readEstimates()),
+    when('workflow', () => readRows('job_workflow?select=job_ref,deposit_required,deposit_paid_at,deposit_amount,setup_complete_at,materials_status,materials_eta,on_hold_at,on_hold_reason,readiness_items,readiness_override_at,is_tm,tm_service_type,tm_rate_hourly,updated_at&order=updated_at.desc&limit=150', (row) => ({
       jobRef: text(row.job_ref, 100), depositRequired: number(row.deposit_required), depositPaidAt: row.deposit_paid_at || null,
       depositAmount: number(row.deposit_amount), setupCompleteAt: row.setup_complete_at || null, materialsStatus: text(row.materials_status, 40),
       materialsEta: row.materials_eta || null, onHoldAt: row.on_hold_at || null, onHoldReason: text(row.on_hold_reason, 300),
       readiness: row.readiness_items && typeof row.readiness_items === 'object' ? row.readiness_items : {},
       readinessOverrideAt: row.readiness_override_at || null, isTimeAndMaterials: row.is_tm === true,
       serviceType: text(row.tm_service_type, 120), hourlyRate: number(row.tm_rate_hourly), updatedAt: row.updated_at || null,
-    }), 150),
-    readRows('visits?select=title,start_at,end_at,completed_at,is_all_day,job_id,arrival_window_start,arrival_window_end,visit_status,jobber_updated_at&order=start_at.desc&limit=150', (row) => ({
+    }), 150)),
+    // assigned_users is why she had to say "technician assignments aren't
+    // included, so I can't confirm coverage" while reading the right calendar.
+    // The column was there and synced; the projection just never selected it.
+    when('schedule', () => readRows('visits?select=title,start_at,end_at,completed_at,is_all_day,job_id,arrival_window_start,arrival_window_end,visit_status,assigned_users,jobber_updated_at&order=start_at.desc&limit=150', (row) => ({
       title: text(row.title, 240), startAt: row.start_at || null, endAt: row.end_at || null, completedAt: row.completed_at || null,
       isAllDay: row.is_all_day === true, jobRef: text(row.job_id, 100), arrivalWindowStart: row.arrival_window_start || null,
-      arrivalWindowEnd: row.arrival_window_end || null, status: text(row.visit_status, 60), updatedAt: row.jobber_updated_at || null,
-    }), 150),
-    readRows('lead_pipeline?select=id,stage,estimated_value,lead_source,division,need,urgency,lost_reason,first_contacted_at,last_contacted_at,created_at,updated_at&order=updated_at.desc&limit=100', (row) => ({
+      arrivalWindowEnd: row.arrival_window_end || null, status: text(row.visit_status, 60),
+      // Names only. The Jobber user id behind each one is an identifier for
+      // systems, not an answer to "who is on this job".
+      assignedTo: assignedNames(row.assigned_users),
+      updatedAt: row.jobber_updated_at || null,
+    }), 150)),
+    when('leads', () => readRows('lead_pipeline?select=id,stage,estimated_value,lead_source,division,need,urgency,lost_reason,first_contacted_at,last_contacted_at,created_at,updated_at&order=updated_at.desc&limit=100', (row) => ({
       leadRef: text(row.id, 80), stage: text(row.stage, 40), estimatedValue: number(row.estimated_value), source: text(row.lead_source, 120),
       division: text(row.division, 120), need: text(row.need, 300), urgency: text(row.urgency, 80), lostReason: text(row.lost_reason, 240),
       firstContactedAt: row.first_contacted_at || null, lastContactedAt: row.last_contacted_at || null,
       createdAt: row.created_at || null, updatedAt: row.updated_at || null,
-    }), 100),
-    readRows('requests?select=title,request_status,jobber_created_at,jobber_updated_at&order=jobber_updated_at.desc&limit=100', (row) => ({
+    }), 100)),
+    when('requests', () => readRows('requests?select=title,request_status,jobber_created_at,jobber_updated_at&order=jobber_updated_at.desc&limit=100', (row) => ({
       title: text(row.title, 240), status: text(row.request_status, 60), createdAt: row.jobber_created_at || null, updatedAt: row.jobber_updated_at || null,
-    }), 100),
-    readRows('expenses?select=title,total,expense_date,reimbursable_to_user,job_id,jobber_updated_at&order=expense_date.desc&limit=100', (row) => ({
+    }), 100)),
+    when('expenses', () => readRows('expenses?select=title,total,expense_date,reimbursable_to_user,job_id,jobber_updated_at&order=expense_date.desc&limit=100', (row) => ({
       title: text(row.title, 240), total: number(row.total), date: row.expense_date || null,
       reimbursable: row.reimbursable_to_user === true, jobRef: text(row.job_id, 100), updatedAt: row.jobber_updated_at || null,
-    }), 100),
-    readRows('vendors?select=name,category,subcategory,what_they_provide,relationship_owner,status,updated_at&order=name.asc&limit=150', (row) => ({
+    }), 100)),
+    when('vendors', () => readRows('vendors?select=name,category,subcategory,what_they_provide,relationship_owner,status,updated_at&order=name.asc&limit=150', (row) => ({
       name: text(row.name, 160), category: text(row.category, 80), subcategory: text(row.subcategory, 120),
       provides: text(row.what_they_provide, 300), owner: text(row.relationship_owner, 160), status: text(row.status, 40), updatedAt: row.updated_at || null,
-    }), 150),
-    readRows('subscriptions?select=name,category,what_it_does,relationship_owner,monthly_cost,cost_source,billing_cycle,renewal_date,status,updated_at&order=name.asc&limit=150', (row) => ({
+    }), 150)),
+    when('subscriptions', () => readRows('subscriptions?select=name,category,what_it_does,relationship_owner,monthly_cost,cost_source,billing_cycle,renewal_date,status,updated_at&order=name.asc&limit=150', (row) => ({
       name: text(row.name, 160), category: text(row.category, 80), purpose: text(row.what_it_does, 300), owner: text(row.relationship_owner, 160),
       monthlyCost: number(row.monthly_cost), costSource: text(row.cost_source, 40), billingCycle: text(row.billing_cycle, 40),
       renewalDate: row.renewal_date || null, status: text(row.status, 40), updatedAt: row.updated_at || null,
-    }), 150),
-    readRows('subcontractors?select=name,trade,status,track_1099,w9_on_file,updated_at&order=name.asc&limit=150', (row) => ({
+    }), 150)),
+    when('subcontractors', () => readRows('subcontractors?select=name,trade,status,track_1099,w9_on_file,updated_at&order=name.asc&limit=150', (row) => ({
       name: text(row.name, 160), trade: text(row.trade, 120), status: text(row.status, 40),
       tracks1099: row.track_1099 === true, w9OnFile: row.w9_on_file === true, updatedAt: row.updated_at || null,
-    }), 150),
-    readRows('purchase_orders?select=po_number,job_id,overhead_category,order_type,lifecycle_status,not_preapproved,version,created_at,updated_at&order=updated_at.desc&limit=100', (row) => ({
+    }), 150)),
+    when('purchaseOrders', () => readRows('purchase_orders?select=po_number,job_id,overhead_category,order_type,lifecycle_status,not_preapproved,version,created_at,updated_at&order=updated_at.desc&limit=100', (row) => ({
       poNumber: text(row.po_number, 80), jobRef: text(row.job_id, 100), overheadCategory: text(row.overhead_category, 120),
       orderType: text(row.order_type, 60), status: text(row.lifecycle_status, 60), notPreapproved: row.not_preapproved === true,
       version: number(row.version), createdAt: row.created_at || null, updatedAt: row.updated_at || null,
-    }), 100),
-    readRows('estimates?select=estimate_number,client_id,lifecycle_status,version,created_at,updated_at&order=updated_at.desc&limit=100', (row) => ({
+    }), 100)),
+    when('internalEstimates', () => readRows('estimates?select=estimate_number,client_id,lifecycle_status,version,created_at,updated_at&order=updated_at.desc&limit=100', (row) => ({
       estimateNumber: text(row.estimate_number, 80), clientRef: text(row.client_id, 100), status: text(row.lifecycle_status, 60),
       version: number(row.version), createdAt: row.created_at || null, updatedAt: row.updated_at || null,
-    }), 100),
-    readRows('sync_log?select=ran_at,status,clients_synced,jobs_synced,invoices_synced&order=ran_at.desc&limit=20', (row) => ({
+    }), 100)),
+    when('syncHealth', () => readRows('sync_log?select=ran_at,status,clients_synced,jobs_synced,invoices_synced&order=ran_at.desc&limit=20', (row) => ({
       ranAt: row.ran_at || null, status: text(row.status, 40), clientsSynced: number(row.clients_synced),
       jobsSynced: number(row.jobs_synced), invoicesSynced: number(row.invoices_synced),
-    }), 20),
+    }), 20)),
     // Mail Reina has already triaged: who it was from, what it was about, and
     // what she thought should happen. Deliberately NOT the message body -- the
     // triage summary is what makes an inbox answerable out loud, and a raw
     // inbox in a prompt is a different decision than this one. The sender's
     // address is reduced to its domain: enough to tell a supplier from a
     // customer, without putting private contact details in a model prompt.
-    readRows('reina_mail_triage?select=subject,from_name,from_address,received_at,label,corrected_label,confidence,summary_text,action_text,acted_action,acted_at&order=received_at.desc&limit=120', (row) => ({
+    when('mail', () => readRows('reina_mail_triage?select=subject,from_name,from_address,received_at,label,corrected_label,confidence,summary_text,action_text,acted_action,acted_at&order=received_at.desc&limit=120', (row) => ({
       subject: text(row.subject, 240),
       fromName: text(row.from_name, 160),
       fromDomain: text(String(row.from_address || '').split('@')[1] || null, 120),
@@ -3483,7 +4016,14 @@ export async function handleReinaLabRead(req, res) {
       suggestedAction: text(row.action_text, 400),
       actedAction: text(row.acted_action, 60),
       actedAt: row.acted_at || null,
-    }), 120),
+    }), 120)),
+    when('people', readPeople),
+    when('timeclock', readTimeclock),
+    when('timesheets', readTimesheets),
+    when('activity', readActivity),
+    when('photos', readPhotos),
+    when('costing', readCosting),
+    when('calls', readCalls),
     exactLookup(),
   ]);
   if (!vehiclesRes.ok || !jobsRes.ok) return res.status(503).json({ ok: false, error: 'Verified HiveLogic source unavailable.' });
@@ -3524,6 +4064,22 @@ export async function handleReinaLabRead(req, res) {
       confidence: decision.confidence ? String(decision.confidence).slice(0, 500) : null,
     })),
   } : { available: false, reason: 'Today\'s Decisions are temporarily unavailable.' };
+
+  // A question about ONE job gets that job in depth. The id comes from
+  // whichever identification actually succeeded -- an explicit job number, or
+  // a single unambiguous match from the exact lookup.
+  let dossierJobNumber = null;
+  if (requestedJobNumber && jobLookup && jobLookup.available === true) {
+    dossierJobNumber = requestedJobNumber;
+  } else if (exactLookupResult && exactLookupResult.kind === 'job'
+    && exactLookupResult.available === true && exactLookupResult.records.length === 1) {
+    dossierJobNumber = exactLookupResult.records[0].jobNumber || null;
+  }
+  // The projections deliberately do not carry Jobber's opaque id -- it is an
+  // identifier for systems, not an answer -- so resolve it here, once, and
+  // only when a dossier is actually being built.
+  const jobDossier = await readJobDossier(await resolveJobId(dossierJobNumber), dossierJobNumber);
+
   return res.status(200).json({
     ok: true,
     source: 'HiveLogic read-only bridge',
@@ -3531,15 +4087,21 @@ export async function handleReinaLabRead(req, res) {
     access: {
       mode: 'full_business_read',
       readOnly: true,
-      businessAreas: ['executive', 'clients', 'jobs', 'schedule', 'receivables', 'estimates', 'sales', 'requests', 'expenses', 'vendors', 'subscriptions', 'subcontractors', 'purchasing', 'fleet', 'mail', 'today_decisions', 'sync_health'],
+      businessAreas: ['executive', 'clients', 'jobs', 'schedule', 'receivables', 'estimates', 'sales', 'requests', 'expenses', 'vendors', 'subscriptions', 'subcontractors', 'purchasing', 'fleet', 'mail', 'people', 'timeclock', 'timesheets', 'activity', 'photos', 'costing', 'calls', 'today_decisions', 'sync_health'],
+      areasReadThisTurn: requestedAreas.length ? requestedAreas : 'all',
       excluded: ['credentials', 'tokens', 'bank accounts', 'payment card data', 'payroll', 'tax identifiers', 'private contact details', 'mail message bodies', 'raw notes', 'write operations'],
     },
     vehicles,
     jobs,
     jobLookup,
+    jobDossier,
     exactLookup: exactLookupResult,
     todayDecisions,
-    business: { clients, executive, receivables, estimates, workflow, schedule, leads, requests, expenses, vendors, subscriptions, subcontractors, purchaseOrders, internalEstimates, syncHealth, mail },
+    business: {
+      clients, executive, receivables, estimates, workflow, schedule, leads, requests, expenses,
+      vendors, subscriptions, subcontractors, purchaseOrders, internalEstimates, syncHealth, mail,
+      people, timeclock, timesheets, activity, photos, costing, calls,
+    },
   });
 }
 
@@ -3921,6 +4483,45 @@ async function handleNotifications(req, res) {
 // SMS is gated behind REINA_LEAD_ALERT_PHONE (unset = no-op for SMS, exactly
 // like REINA_VOICEMAIL_ALERT_PHONE in api/voice-webhook.js) -- the in-app
 // notifications group above works regardless of this env var.
+// A lead's name, made safe to put in a text message to a person.
+//
+// The first version of this blocklisted 13 TLDs, which is the wrong shape of
+// rule and was trivially bypassed: .ly, .ai, .ru, .gg, .tv, .click, .page and
+// every other TLD sailed through, as did "call 914-555-0142 now", as did a
+// quote character that closed the framing quotes and let the text read as our
+// own prose. bit.ly/x auto-linkifies in every mobile SMS client.
+//
+// So this allowlists what MAY appear instead. There is no rendering context to
+// escape into here -- only a person holding a phone, reading a message that
+// arrives FROM THEIR OWN COMPANY NUMBER, deciding whether to tap. The two
+// payloads that matter are a link and a phone number, and both are removed
+// outright rather than encoded.
+//
+// Ordinary lead names pass through untouched: "Kitchen remodel — cabinets",
+// "Back door will not latch", "O'Brien - 14 Maple Ave". That matters as much
+// as the blocking does; a sanitiser that mangles real enquiries gets turned off.
+function smsSafeLeadTitle(raw) {
+  let t = String(raw == null ? '' : raw).replace(/\s+/g, ' ').trim();
+  // A double quote would close the framing the alert puts around this. The
+  // apostrophe is kept -- O'Brien is a customer, not an attack.
+  t = t.replace(/["`]/g, '');
+  // The character allowlist runs FIRST, so the markers added below survive it
+  // intact. Unicode letters and numbers are kept so a real customer's name
+  // comes through; the lookalike dot (U+2024) and its friends do not, because
+  // they are simply not in this set.
+  t = t.replace(/[^\p{L}\p{N} .,'&()#+/–—-]/gu, '');
+  // Any dot-joined token, with no TLD list to fall behind: bit.ly, evil.tv,
+  // 192.0.2.10, hivelogic-id.ai/r. A real lead name has no reason to hold one.
+  t = t.replace(/\S*[^\s.]\.[^\s.]\S*/g, '[link removed]');
+  // Explicit schemes and www., including the obfuscated ones people still tap.
+  t = t.replace(/\b(?:h[tx]{2}ps?:\/{0,2}|www\b)\S*/gi, '[link removed]');
+  // A callback number is the other half of a voice-phishing attempt, and the
+  // sender being the company's own number is what sells it.
+  t = t.replace(/[+(]?\d[\d\s().-]{6,}\d/g, '[number removed]');
+  t = t.replace(/\s+/g, ' ').trim();
+  return t.length > 60 ? t.slice(0, 60).trimEnd() + '…' : (t || 'New lead');
+}
+
 async function handleCheckNewLeadsGet(req, res) {
   const cronSecret = process.env.CRON_SECRET;
   const authHeader = req.headers.authorization || '';
@@ -3961,7 +4562,15 @@ async function handleCheckNewLeadsGet(req, res) {
       const mainNumber = numRes.ok ? (await numRes.json())[0] : null;
       if (mainNumber) {
         for (const cand of alerted.slice(0, 5)) {
-          const body = 'New lead opportunity: ' + cand.title + ' (' + (cand.source === 'request' ? 'Jobber request' : 'new lead') + ')';
+          // The name is quoted, trimmed and stripped of anything link-shaped
+          // (2026-08-23, security review of the web lead intake). Since
+          // /api/web-lead exists, a lead name can be typed by a stranger --
+          // and this SMS arrives on Chris's phone FROM HIS OWN COMPANY NUMBER,
+          // which makes it a ready-made phishing channel: name a lead
+          // "HiveLogic alert: re-auth at <domain>" and it reads as a system
+          // message from a trusted sender. Quoting it makes it visibly
+          // somebody's words rather than ours.
+          const body = 'New lead opportunity: "' + smsSafeLeadTitle(cand.title) + '" (' + (cand.source === 'request' ? 'Jobber request' : 'new lead') + ')';
           await twilioRequest('Messages.json', { method: 'POST', body: new URLSearchParams({ From: mainNumber.e164, To: alertPhone, Body: body }) });
         }
       }
@@ -3989,6 +4598,153 @@ async function handleCheckNewLeadsGet(req, res) {
 // /api/clients: that endpoint returns thousands of rows to callers who don't
 // need an address, and this is only ever wanted for the one client a user just
 // picked.
+// GET /api/track1?resource=schedule_unscheduled
+//
+// Chris, 2026-08-23: "AFTER SAVING THE JOB FORM TO UNASSIGNED JOBS, IT DIDN'T
+// SHOW IN THE UNASSIGNED JOBS LAYER ON THE SCHEDULE"
+//
+// It could not have. The board's `demands` array -- the thing the unscheduled
+// rail renders -- was the literal `[]` in public/schedule-board/data.js. The
+// rail has never shown anything for anyone: the counter has always read 0 and
+// the panel has always said "No unscheduled work 🎉", on a company with 18 open
+// jobs that have no slot.
+//
+// So "Add to Unscheduled" wrote a perfectly good job into a list nothing
+// displayed. This is the source that list should have had.
+//
+// UNSCHEDULED means: open, not archived, not completed, and nowhere to be --
+// no start time from Jobber and no HiveLogic appointment. A job with a
+// start_at is scheduled, even if the board has no appointment row for it,
+// because that is the time the client was given.
+async function handleScheduleUnscheduled(req, res) {
+  const jRes = await supabaseRequest(
+    'jobs?select=jobber_id,job_number,title,client_id,division_code,total,job_status,start_at,completed_at' +
+    '&completed_at=is.null&start_at=is.null&job_status=neq.archived' +
+    '&order=jobber_created_at.desc&limit=200'
+  );
+  if (!jRes.ok) return res.status(500).json({ ok: false, error: 'Could not read jobs.' });
+  let jobs = await jRes.json();
+
+  // A job that already has an appointment is on the board, not waiting for one.
+  // hl_appointments is empty in production today, so this filters nothing yet --
+  // it is here so the rail does not start double-listing the moment somebody
+  // books one.
+  try {
+    const refs = jobs.map(j => j.jobber_id).filter(Boolean);
+    if (refs.length) {
+      const inList = refs.map(r => encodeURIComponent(`"${r}"`)).join(',');
+      const aRes = await supabaseRequest(`hl_appointments?job_ref=in.(${inList})&canceled=eq.false&select=job_ref`);
+      if (aRes.ok) {
+        const booked = new Set((await aRes.json()).map(a => a.job_ref));
+        jobs = jobs.filter(j => !booked.has(j.jobber_id));
+      }
+    }
+  } catch { /* an unfiltered rail beats an empty one */ }
+
+  // Who and where, so the card is worth reading. Both non-fatal: a job with no
+  // client name still needs to be schedulable.
+  const clientIds = [...new Set(jobs.map(j => j.client_id).filter(Boolean))];
+  const nameById = new Map(), cityById = new Map();
+  if (clientIds.length) {
+    const inList = clientIds.map(c => encodeURIComponent(`"${c}"`)).join(',');
+    try {
+      const cRes = await supabaseRequest(`clients?jobber_id=in.(${inList})&select=jobber_id,name,company_name`);
+      if (cRes.ok) for (const c of await cRes.json()) {
+        nameById.set(c.jobber_id, c.name || c.company_name || null);
+      }
+    } catch { /* names are a convenience */ }
+    try {
+      const lRes = await supabaseRequest(`client_locations?jobber_id=in.(${inList})&select=jobber_id,city,street`);
+      if (lRes.ok) for (const l of await lRes.json()) {
+        if (!cityById.has(l.jobber_id)) cityById.set(l.jobber_id, l.city || null);
+      }
+    } catch { /* nor is the town */ }
+  }
+
+  const jobsOut = jobs.map(j => ({
+    jobRef: j.jobber_id,
+    jobNo: j.job_number || null,
+    title: j.title || 'Untitled job',
+    client: nameById.get(j.client_id) || null,
+    city: cityById.get(j.client_id) || null,
+    division: j.division_code || null,
+    total: j.total != null ? Number(j.total) : null,
+  }));
+
+  res.status(200).json({ ok: true, resource: 'schedule_unscheduled', jobs: jobsOut });
+}
+
+// GET /api/track1?resource=address_suggest&q=... -- address autocomplete for
+// somewhere HiveLogic has never been.
+//
+// Chris, 2026-08-23: "as you are entering a new address for the new client, it
+// should be offering a selectable list of addresses that relate to the
+// characters being typed into the text box"
+//
+// The FIRST tier of that happens in the browser with no network at all: 6,409
+// of 8,690 clients have a service address on file, they are already in the
+// client book the form has loaded, and offering those first is both instant and
+// the more useful half -- an address we already hold usually means a client we
+// already have, which is the duplicate this form is trying not to create.
+//
+// This is the second tier: a house nobody has worked on yet. It goes through
+// Nominatim/OpenStreetMap, the same keyless geocoder api/_lib/geocode.js
+// already uses, so it needs no API key and no billing account.
+//
+// NOMINATIM'S USAGE POLICY IS THE CONSTRAINT, and it is why this is shaped the
+// way it is. One request per second, and a real identifying User-Agent. Firing
+// on every keystroke would breach that and get the IP blocked -- which would
+// take the service-area geocoding down with it, a feature nobody was touching.
+// So: the browser debounces, this end requires a query long enough to be a real
+// address fragment, asks for at most five, and caps how often one user can ask.
+async function handleAddressSuggest(req, res) {
+  const q = String(req.query.q || '').trim();
+  // Short enough that it would match half of Connecticut, and that is exactly
+  // the request Nominatim asks people not to send.
+  if (q.length < 6) return res.status(200).json({ ok: true, suggestions: [], reason: 'too-short' });
+
+  const rl = await checkRateLimit({
+    bucket: 'address_suggest',
+    identifier: String(req.headers['x-forwarded-for'] || '').split(',')[0].trim() || 'unknown',
+    limit: 40,
+    windowMs: 60 * 1000,
+    deps: { supabaseRequest },
+  });
+  if (!rl.allowed) {
+    // Not an error the user should see as a failure: the on-file addresses are
+    // still there, and this tier is a bonus.
+    return res.status(200).json({ ok: true, suggestions: [], reason: 'throttled' });
+  }
+
+  try {
+    const url = 'https://nominatim.openstreetmap.org/search'
+      + '?format=json&addressdetails=1&limit=5&countrycodes=us'
+      + '&q=' + encodeURIComponent(q);
+    const r = await fetch(url, {
+      headers: { 'User-Agent': 'HiveLogic/1.0 c_kendall@icloud.com', Accept: 'application/json' },
+    });
+    if (!r.ok) return res.status(200).json({ ok: true, suggestions: [], reason: 'upstream' });
+    const rows = await r.json();
+    const suggestions = (Array.isArray(rows) ? rows : []).map((hit) => {
+      const a = hit.address || {};
+      const street = [a.house_number, a.road].filter(Boolean).join(' ');
+      const town = a.city || a.town || a.village || a.hamlet || a.suburb || null;
+      const line = [street || null, town, a.state, a.postcode].filter(Boolean).join(', ');
+      return {
+        // What goes in the box: the tidy one-line form, falling back to
+        // Nominatim's own label when we could not assemble one.
+        address: line || String(hit.display_name || '').slice(0, 200),
+        lat: Number(hit.lat), lng: Number(hit.lon),
+      };
+    }).filter((s) => s.address);
+    return res.status(200).json({ ok: true, suggestions });
+  } catch (e) {
+    // A geocoder being unreachable must never be more than a missing
+    // convenience -- the address box still takes anything typed into it.
+    return res.status(200).json({ ok: true, suggestions: [], reason: 'unreachable' });
+  }
+}
+
 async function handleClientLocation(req, res) {
   const requester = await getRequestingProfile(req);
   if (!requester) return res.status(401).json({ ok: false, error: 'Not signed in -- log into HiveLogic first.' });
@@ -4020,6 +4776,17 @@ async function handleCreateClient(req, res) {
   const last = String(b.lastName || '').trim();
   const company = String(b.companyName || '').trim();
   if (!first && !last && !company) return res.status(400).json({ ok: false, error: 'Need a first/last name or a company name.' });
+  // Phone (2026-08-21): the Schedule board's "new client" path needs one --
+  // a dispatcher booking a visit for someone they cannot call has booked half
+  // a visit. Stored raw AND as e164 when it parses, matching what the sync
+  // writes for Jobber clients so downstream callers do not have to special-case
+  // HiveLogic-created rows.
+  const phoneRaw = String(b.phone || '').trim();
+  const digits = phoneRaw.replace(/\D/g, '');
+  const e164 = digits.length === 10 ? ('+1' + digits)
+    : (digits.length === 11 && digits[0] === '1') ? ('+' + digits)
+    : null;
+
   const row = {
     jobber_id: 'HL-' + Date.now(),
     name: (first || last) ? (first + ' ' + last).trim() : company,
@@ -4027,14 +4794,51 @@ async function handleCreateClient(req, res) {
     last_name: last || null,
     company_name: company || null,
     email: String(b.email || '').trim() || null,
+    phone: phoneRaw || null,
+    phone_e164: e164,
     is_lead: true,
     is_archived: false,
-    jobber_updated_at: new Date().toISOString()
+    jobber_updated_at: new Date().toISOString(),
+    // The rest of what the New Client form asks. Optional to a fault: the
+    // Schedule board's quick-add calls this endpoint with a name and nothing
+    // else, and must keep working. Trimmed to null rather than stored as ''
+    // so "not asked" and "answered blank" read the same downstream.
+    client_type: String(b.clientType || '').trim() || null,
+    preferred_contact: String(b.preferredContact || '').trim() || null,
+    source: String(b.source || '').trim() || null,
+    brand: String(b.brand || '').trim() || null,
+    membership: String(b.membership || '').trim() || null,
+    second_contact: String(b.secondContact || '').trim() || null,
+    property_notes: String(b.propertyNotes || '').trim() || null,
   };
   const r = await supabaseRequest('clients', { method: 'POST', headers: { Prefer: 'return=representation' }, body: JSON.stringify(row) });
   if (!r.ok) return res.status(500).json({ ok: false, error: 'Insert failed: ' + (await r.text()).slice(0, 300) });
   const created = (await r.json())[0];
-  return res.status(200).json({ ok: true, resource: 'create_client', client: created, note: 'Saved in HiveLogic. Not pushed to Jobber yet -- Jobber write-back is a later phase.' });
+
+  // Address, when given. A separate row in client_locations because that is
+  // where every other client's address already lives -- the board reads the
+  // same table for a Jobber client and a HiveLogic one. Deliberately NOT
+  // fatal: the client exists either way, and losing the whole client because
+  // the address failed to write would be the worse outcome. lat/lng are left
+  // null for the existing geocoder to fill rather than guessed here.
+  let locationSaved = false;
+  const street = String(b.street || '').trim();
+  if (created && created.jobber_id && street) {
+    try {
+      const locRow = {
+        jobber_id: created.jobber_id,
+        street,
+        city: String(b.city || '').trim() || null,
+        province: String(b.province || '').trim() || null,
+        postal_code: String(b.postalCode || '').trim() || null,
+        country: String(b.country || '').trim() || null,
+      };
+      const lr = await supabaseRequest('client_locations', { method: 'POST', body: JSON.stringify(locRow) });
+      locationSaved = lr.ok;
+    } catch (e) { locationSaved = false; }
+  }
+
+  return res.status(200).json({ ok: true, resource: 'create_client', client: created, locationSaved, note: 'Saved in HiveLogic. Not pushed to Jobber yet -- Jobber write-back is a later phase.' });
 }
 async function handleCreateJob(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ ok: false, error: 'POST only' });
@@ -4460,11 +5264,30 @@ async function handleScheduleRange(req, res) {
   );
   const clientIds = [...new Set(visits.map((v) => v.client_id).filter(Boolean))];
   const jobIds = [...new Set(visits.map((v) => v.job_id).filter(Boolean))];
+  // Contact details, not just a name. The Schedule board's job sheet used to
+  // print a phone, an email and a street address invented from a hash of the
+  // client's name (synthClient(), left over from when that board was a
+  // synthetic lab). Real values live here: phone_e164 is populated for 7,434 of
+  // 8,690 clients and email for 7,962 -- it is clients.phone, the column an
+  // older comment in this file writes off as empty, that has none. Batched into
+  // the two round trips already being made rather than fetched per visit.
   let clientsById = {};
   if (clientIds.length) {
-    const r = await supabaseRequest('clients?jobber_id=in.(' + clientIds.join(',') + ')&select=jobber_id,name');
+    const r = await supabaseRequest('clients?jobber_id=in.(' + clientIds.join(',') + ')&select=jobber_id,name,phone,phone_e164,email');
     const list = r.ok ? await r.json() : [];
-    clientsById = Object.fromEntries(list.map((c) => [c.jobber_id, c.name]));
+    clientsById = Object.fromEntries(list.map((c) => [c.jobber_id, c]));
+  }
+  // The service address. jobs_enriched carries only city/province/coords, so a
+  // street address has to come from client_locations -- the same source
+  // Command Center's map pins read.
+  let addrByClient = {};
+  if (clientIds.length) {
+    const r = await supabaseRequest('client_locations?jobber_id=in.(' + clientIds.join(',') + ')&select=jobber_id,street,city,province,postal_code');
+    const list = r.ok ? await r.json() : [];
+    addrByClient = Object.fromEntries(list.filter((l) => l.street).map((l) => [
+      l.jobber_id,
+      [l.street, l.city, l.province].filter(Boolean).join(', ') + (l.postal_code ? ' ' + l.postal_code : ''),
+    ]));
   }
   let jobsById = {};
   if (jobIds.length) {
@@ -4488,10 +5311,17 @@ async function handleScheduleRange(req, res) {
     } catch (e) { assigned = []; }
     const job = jobsById[v.job_id] || null;
     const geo = geoById[v.job_id] || null;
+    const client = clientsById[v.client_id] || null;
     return {
       visitId: v.jobber_id,
       title: v.title,
-      clientName: clientsById[v.client_id] || null,
+      clientName: client ? client.name : null,
+      clientId: v.client_id || null,
+      // Nulls, deliberately, where a client has no number or no address on
+      // file. A caller can say "none on file"; it cannot un-invent a value.
+      clientPhone: client ? (client.phone_e164 || client.phone || null) : null,
+      clientEmail: client ? (client.email || null) : null,
+      clientAddress: addrByClient[v.client_id] || null,
       jobNumber: job ? job.job_number : null,
       jobberId: job ? job.jobber_id : null,
       jobStatus: job ? job.job_status : null,
@@ -7793,6 +8623,12 @@ if (resource === 'mailconnect') {
   if (resource === 'client_location') {
     try { return await handleClientLocation(req, res); } catch (e) { return res.status(500).json({ ok: false, error: e.message }); }
   }
+  if (resource === 'schedule_unscheduled' && req.method === 'GET') {
+    try { return await handleScheduleUnscheduled(req, res); } catch (e) { return res.status(500).json({ ok: false, error: e.message }); }
+  }
+  if (resource === 'address_suggest' && req.method === 'GET') {
+    try { return await handleAddressSuggest(req, res); } catch (e) { return res.status(500).json({ ok: false, error: e.message }); }
+  }
   if (resource === 'create_job') {
     try { return await handleCreateJob(req, res); } catch (e) { return res.status(500).json({ ok: false, error: e.message }); }
   }
@@ -7819,6 +8655,11 @@ if (resource === 'mailconnect') {
   }
   if (resource === 'leads') {
     try { return await handleLeads(req, res); } catch (e) { return res.status(500).json({ ok: false, error: e.message }); }
+  }
+  // lead_drafts kept as an alias: a page cached in someone's browser from
+  // before the rename would otherwise start 400ing on a form they had open.
+  if (resource === 'form_drafts' || resource === 'lead_drafts') {
+    try { return await handleFormDrafts(req, res); } catch (e) { return res.status(500).json({ ok: false, error: e.message }); }
   }
 const cfg = RESOURCE_CONFIG[resource];
   if (!cfg) {

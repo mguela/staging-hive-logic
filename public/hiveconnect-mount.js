@@ -39,7 +39,7 @@
   var HC_BODY_ROOTS =
     '#recovery-overlay,#contact-card,#help-overlay,#incoming-calls,#rail-toast,' +
     '#ev-toast,#hd-err,#chirp-incoming,#chirp-audio,#ev-move-menu,#ev-cat-menu,' +
-    '#ev-flag-menu,#ev-ai-menu,#ev-tpl-menu,' +
+    '#ev-flag-menu,#ev-ai-menu,#ev-tpl-menu,#hv-picker,' +
     '.modal-backdrop,.incoming-calls,.rail-toast,.hd-err,.ev-move-menu,.chirp-incoming';
 
   function currentHiveLogicUser() {

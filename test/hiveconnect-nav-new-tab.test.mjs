@@ -1,9 +1,17 @@
 // test/hiveconnect-nav-new-tab.test.mjs
-// The sidebar HiveConnect tab used to swap the current view in place
-// (openHiveConnect() -> showView('hiveconnect')). It now opens in a separate
-// browser tab instead, landing on the real #/hiveconnect route -- hlCheckRoute
-// already calls openHiveConnect() itself for that hash, so the new tab boots
-// the same SPA and mounts HiveConnect on its own, no separate page needed.
+//
+// The sidebar HiveConnect tab opened a separate browser tab for a while. It is
+// back to swapping the view in place, because the new tab had a cost that was
+// invisible from the code: a new tab is a COLD BOOT of the whole SPA.
+//
+// Chris, 2026-08-23, watching a screen recording of it: "it flashes
+// Hiveconnect, then immediately goes to the sign in screen and then loads
+// hiveconnect". That sign-in form is HiveLogic's own, shown while
+// hlTrySilentLogin() restores the session on the fresh tab. Every click
+// reloaded the app and left another HiveLogic tab behind; his recording had
+// eight of them open.
+//
+// This file kept its name so the history stays findable.
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -29,29 +37,33 @@ function extractFunction(src, declSnippet) {
   return src.slice(declStart, i);
 }
 
-test('the sidebar HiveConnect nav item opens a new tab, not the in-place view', () => {
+test('the sidebar HiveConnect nav item still routes through one entry point', () => {
+  // The onclick is unchanged; what it DOES changed, so a bookmark, a keyboard
+  // shortcut or a role-permission toggle that names this handler keeps working.
   assert.match(source, /id="nav-hiveconnect" onclick="openHiveConnectNewTab\(\)"/);
 });
 
-test('openHiveConnectNewTab opens the real #/hiveconnect route in a new tab', () => {
+test('it opens in place and never asks the browser for a tab', () => {
   const FN = extractFunction(source, 'function openHiveConnectNewTab(){');
-  const calls = [];
+  const opened = [];
+  let inPlace = 0;
   const ctx = vm.createContext({
     window: {},
     location: { origin: 'https://hivelogic-live.vercel.app' },
+    openHiveConnect: () => { inPlace++; },
   });
-  ctx.window.open = (...args) => calls.push(args);
+  ctx.window.open = (...args) => opened.push(args);
   vm.runInContext(`${FN} openHiveConnectNewTab();`, ctx);
 
-  assert.equal(calls.length, 1);
-  assert.deepEqual(calls[0], ['https://hivelogic-live.vercel.app/#/hiveconnect', '_blank']);
+  assert.equal(inPlace, 1, 'the view swaps in the tab he is already in');
+  assert.equal(opened.length, 0, 'a new tab is a cold boot, and a cold boot shows the login screen');
 });
 
-test('openHiveConnect itself is untouched -- the new tab still mounts HiveConnect the normal way', () => {
+test('openHiveConnect itself is untouched, so #/hiveconnect still boots straight in', () => {
   // hlCheckRoute() calls openHiveConnect() (not openHiveConnectNewTab()) when a
   // fresh load lands on #/hiveconnect -- confirmed by the routing table already
-  // covered in showview-hash-sync.test.mjs. This just pins that the function
-  // the new tab depends on for its own boot hasn't been altered by this change.
+  // covered in showview-hash-sync.test.mjs. A pasted or bookmarked link must
+  // keep working; only the sidebar's route to it changed.
   const FN = extractFunction(source, 'function openHiveConnect(){');
   assert.match(FN, /showView\('hiveconnect'\)/);
   assert.match(FN, /__mountHiveConnect/);

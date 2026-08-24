@@ -92,7 +92,7 @@ test('canvasFp and styleAmongMutations are both captured before/after the click 
   assert.match(src, /aCanvas = canvasFp\(sdoc\)/);
   assert.match(src, /canvasChanged = aCanvas !== bCanvas/);
   assert.match(src, /styled = styleAmongMutations\(mutRecords\)/);
-  assert.match(src, /var moved = aFp !== bFp \|\| aAct !== bAct \|\| muts > 3 \|\| d\.f\.length > 0 \|\| opened \|\| toastChanged \|\| selectionChanged \|\| scrolled \|\| canvasChanged \|\| styled;/);
+  assert.match(src, /var moved = aFp !== bFp \|\| aAct !== bAct \|\| muts > 3 \|\| d\.f\.length > 0 \|\| opened \|\| toastChanged \|\| selectionChanged \|\| scrolled \|\| canvasChanged \|\| styled \|\| closed \|\| switched \|\| reordered/);
 });
 
 // ---- MEDIA: "dictate" (Sub Portal's real-mic voice-dictation button) ----

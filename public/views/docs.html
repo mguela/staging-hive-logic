@@ -17,7 +17,7 @@
       <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap">
         <div id="hldoc-crumb" style="font-weight:800;font-size:14px">All documents</div>
         <div style="display:flex;gap:8px;align-items:center">
-          <input id="hldoc-search" placeholder="Search this page…" aria-label="Search the current document page by filename, client, or job" style="border:1px solid var(--line);border-radius:8px;padding:8px 12px;font-size:12px;width:220px" oninput="hlDocRenderCurrentPage()">
+          <input id="hldoc-search" placeholder="Search every file…" aria-label="Search every file by name, client, job, or category" style="border:1px solid var(--line);border-radius:8px;padding:8px 12px;font-size:12px;width:220px" oninput="hlDocSearchInput()">
           <label class="btn primary" style="margin:0;cursor:pointer">Upload<input id="hldoc-file" type="file" style="display:none" onchange="hlDocUpload(this.files[0])"></label>
         </div>
       </div>

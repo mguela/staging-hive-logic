@@ -11,18 +11,21 @@
 // receives nothing, and no amount of server code changes that.
 //
 // Actions:
-//   key         the VAPID public key, so the page can subscribe. Public by
-//               design; the private half never leaves the server.
+//   key         the VAPID public key, so the page can subscribe. It is public
+//               data -- every subscribing browser gets it -- but it is served
+//               behind the session anyway: the edge middleware gates /api/*
+//               wholesale, and the only caller is a signed-in page.
 //   subscribe   store this browser
 //   unsubscribe forget this browser
-//   mute        "Not this sender" -- the learning signal, pressed on the toast
+//   mute        "Mute sender" -- the learning signal, pressed on the toast
 //   unmute      undo that, from the settings list
+//   channel     desktop toasts on or off, WITHOUT dropping the subscription
 //   rules       what she has learned, so it is inspectable and reversible
 //   test        send one to prove it works end to end
 
 import { supabaseRequest as defaultSupabaseRequest } from '../_lib/jobber.js';
 import { requireApiAuth } from '../_lib/guard.js';
-import { muteRuleFor, normalizeAddress, domainOf } from '../_lib/reina-notify.js';
+import { muteRuleFor, normalizeAddress, domainOf, desktopPushEnabled, desktopChannelRule } from '../_lib/reina-notify.js';
 import { sendPush, vapidPublicKey, vapidConfigured } from '../_lib/reina-push-send.js';
 
 function jsonError(res, status, error) { return res.status(status).json({ ok: false, error }); }
@@ -105,6 +108,30 @@ async function handleUnmute(ownerId, body, deps) {
   return { ok: true, unmuted: value };
 }
 
+// Desktop toast on or off, without touching the subscription.
+//
+// Deleting the subscription is what a "turn it off" button naturally does, and
+// here it would have been wrong: mail-sweep picks the owners it scans from the
+// subscription table, so removing the row stops the mailbox read and starves
+// the in-app nudge as a side effect. The browser stays subscribed; only the
+// toast is suppressed.
+async function handleChannel(ownerId, body, deps) {
+  const enabled = !(body && body.enabled === false);
+  const r = await deps.supabaseRequest('reina_notify_rules?on_conflict=owner_id,match_kind,match_value', {
+    method: 'POST',
+    headers: { Prefer: 'resolution=merge-duplicates' },
+    body: JSON.stringify([desktopChannelRule(ownerId, enabled)]),
+  });
+  if (!r.ok) { const e = new Error('could not save that preference'); e.status = 502; throw e; }
+  return {
+    ok: true,
+    desktop: enabled,
+    note: enabled
+      ? 'Desktop notifications are back on.'
+      : 'Desktop notifications are off. Mail still arrives in HiveLogic, and Reina still reads it.',
+  };
+}
+
 // What she has learned, so it is a list he can read and undo -- not a model
 // that quietly drifted.
 async function handleRules(ownerId, deps) {
@@ -120,7 +147,12 @@ async function handleRules(ownerId, deps) {
   return {
     ok: true,
     configured: vapidConfigured(),
-    rules: (rules || []).map((r) => ({
+    desktop: desktopPushEnabled(rules || []),
+    // The channel row lives in this table for storage reasons only. It is a
+    // setting, not something Reina learned about a sender, and listing it
+    // among the muted senders would invite him to "undo" it and wonder why
+    // his toasts came back.
+    rules: (rules || []).filter((r) => r.match_kind !== 'channel').map((r) => ({
       scope: r.match_kind, value: r.match_value, notify: r.notify,
       source: r.source, hits: r.hits, updatedAt: r.updated_at,
     })),
@@ -136,6 +168,16 @@ async function handleRules(ownerId, deps) {
 // Proof it works, on demand, without waiting for an email to arrive. A feature
 // that only reveals itself hours later is one he cannot tell is broken.
 async function handleTest(ownerId, deps) {
+  // "Nothing subscribed" and "you turned these off" are different answers, and
+  // only one of them is something he can act on.
+  const rulesRes = await deps.supabaseRequest(
+    `reina_notify_rules?owner_id=eq.${enc(ownerId)}&select=match_kind,match_value,notify&limit=500`
+  );
+  const rules = rulesRes.ok ? ((await rulesRes.json().catch(() => [])) || []) : [];
+  if (!desktopPushEnabled(rules)) {
+    return { ok: true, sent: 0, desktop: false, note: 'Desktop notifications are off. Turn them on to test one.' };
+  }
+
   const r = await deps.supabaseRequest(
     `reina_push_subscriptions?owner_id=eq.${enc(ownerId)}&failed_at=is.null&select=*`
   );
@@ -158,25 +200,32 @@ export default async function handler(req, res, injected = {}) {
 
   const action = String((req.query && req.query.action) || '');
 
-  // The public key is public -- that is the whole point of it -- and the page
-  // needs it before there is anything to authenticate against.
-  if (action === 'key') {
-    return res.status(200).json({ ok: true, key: vapidPublicKey(), configured: vapidConfigured() });
-  }
-
   const auth = await requireApiAuth(req, { fetchImpl: deps.fetchImpl });
   if (!auth.ok || !auth.user || !auth.user.id) {
     return jsonError(res, 401, 'Not signed in — log into HiveLogic first.');
   }
   const ownerId = auth.user.id;
-  if (req.method !== 'POST') return jsonError(res, 405, 'POST only');
+  if (req.method !== 'POST' && !(req.method === 'GET' && action === 'key')) {
+    return jsonError(res, 405, 'POST only');
+  }
   const body = (typeof req.body === 'object' && req.body) || {};
 
   try {
+    // The VAPID public key. Public data -- it ships to every browser that
+    // subscribes -- but served behind the session anyway, because the edge
+    // middleware gates /api/* wholesale and the only caller is a signed-in
+    // page. It sat above requireApiAuth in the first cut, which was pointless:
+    // the middleware refused the request before this file ever ran, and the
+    // page read that refusal as "the keys are not set" and sent Chris to
+    // Vercel to look for keys that were already there.
+    if (action === 'key') {
+      return res.status(200).json({ ok: true, key: vapidPublicKey(), configured: vapidConfigured() });
+    }
     if (action === 'subscribe') return res.status(200).json(await handleSubscribe(ownerId, body, deps));
     if (action === 'unsubscribe') return res.status(200).json(await handleUnsubscribe(ownerId, body, deps));
     if (action === 'mute') return res.status(200).json(await handleMute(ownerId, body, deps));
     if (action === 'unmute') return res.status(200).json(await handleUnmute(ownerId, body, deps));
+    if (action === 'channel') return res.status(200).json(await handleChannel(ownerId, body, deps));
     if (action === 'rules') return res.status(200).json(await handleRules(ownerId, deps));
     if (action === 'test') return res.status(200).json(await handleTest(ownerId, deps));
     return jsonError(res, 400, 'unknown action');

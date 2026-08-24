@@ -120,6 +120,61 @@ test('me is reachable from tasks.js even when app.js loads as a module (mounted 
   assert.match(app, /profiles\.set\(data\.id, data\); me = data; window\.me = me;/);
 });
 
+// ---- a fourth instance of the same module-boundary bug --------------------
+//
+// Self-test, recurring since 2026-08-19: "Uncaught ReferenceError:
+// TASK_STATUSES is not defined @tasks.js:230". Same root cause as `me`
+// above, just missed for these three -- openTaskDetail() (also body-only, so
+// the top-level scan above cannot see it) references bare TASK_STATUSES,
+// TASK_STATUS_LABEL, and TASK_WAITING_REASONS, all declared `const` in
+// app.js and invisible to tasks.js once app.js loads as a module in the
+// mounted context.
+test('TASK_STATUSES, TASK_STATUS_LABEL, and TASK_WAITING_REASONS are reachable from tasks.js in the mounted context too', () => {
+  const app = readFileSync(new URL('app.js', dir), 'utf-8');
+  const start = app.indexOf('const TASK_STATUSES = ');
+  assert.ok(start > -1, 'sanity: the task-status constants still live in app.js');
+  const block = app.slice(start, app.indexOf('/* ====', start + 1));
+  for (const name of ['TASK_STATUSES', 'TASK_STATUS_LABEL', 'TASK_WAITING_REASONS']) {
+    assert.match(block, new RegExp(`const ${name} = `), `sanity: ${name} still declared here`);
+    assert.match(block, new RegExp(`window\\.${name} = ${name};`),
+      `${name} must be mirrored onto window, the same fix already applied to \`me\``);
+  }
+});
+
+// ---- a fifth instance, found chasing the fourth to its actual end --------
+//
+// Self-test 2026-08-22: after the TASK_STATUSES fix landed, a fresh run hit
+// the NEXT unmirrored binding in the same function: "Uncaught
+// ReferenceError: $ is not defined @tasks.js:255". `$`, `profiles`,
+// `channels`, and `railToast` are all in the same APP_OWNED family as `me`
+// and TASK_STATUSES, and none of them collide with anything HiveLogic's own
+// index.html declares globally, so all four get the same one-line mirror.
+// `sb` and `esc` are deliberately EXCLUDED: HiveLogic's own index.html
+// declares its own global `sb` (the documented reason app.js loads as a
+// module here at all) and its own global `esc` (a different HTML-escaping
+// function) -- mirroring either would silently overwrite HiveLogic's own
+// version for the rest of the page's life once HiveConnect mounts, trading
+// a broken HiveConnect feature for corrupted HiveLogic behavior elsewhere.
+test('$, profiles, channels, and railToast are reachable from tasks.js in the mounted context too', () => {
+  const app = readFileSync(new URL('app.js', dir), 'utf-8');
+  assert.match(app, /const \$ = id => document\.getElementById\(id\);\r?\n(?:[^\n]*\r?\n)*?\s*window\.\$ = \$;/);
+  assert.match(app, /let profiles = new Map\(\);[^\n]*\r?\n\s*window\.profiles = profiles;/);
+  assert.match(app, /let channels = new Map\(\);[^\n]*\r?\n\s*window\.channels = channels;/);
+  assert.match(app, /clearTimeout\(railToastT\); railToastT = setTimeout\(\(\) => t\.classList\.remove\('show'\), 2600\);\r?\n\}\r?\n\s*window\.railToast = railToast;/);
+});
+
+test('sb and esc are deliberately NOT mirrored onto window -- both collide with a real HiveLogic global', () => {
+  const app = readFileSync(new URL('app.js', dir), 'utf-8');
+  assert.doesNotMatch(app, /window\.sb = sb/, 'sb collides with HiveLogic\'s own global `var sb` -- the reason app.js loads as a module at all');
+  assert.doesNotMatch(app, /window\.esc = esc/, 'esc collides with HiveLogic\'s own global `esc` HTML-escaping function');
+  // Confirm the collisions this guard exists for are actually real, not a
+  // stale assumption -- if either global disappears from HiveLogic's own
+  // page, this test should start failing loudly so the exclusion above gets
+  // revisited rather than silently going stale.
+  const page = readFileSync(new URL('../../public/index.html', dir), 'utf-8');
+  assert.match(page, /function esc\(s\)\{/, 'sanity: HiveLogic\'s own top-level esc() must still exist for this exclusion to make sense');
+});
+
 test('all three controls are actually bound, not just the one that threw first', () => {
   const tasks = readFileSync(new URL('tasks.js', dir), 'utf-8');
   // bindTasksControls sits after openTasksTabNative in the file, so the slice

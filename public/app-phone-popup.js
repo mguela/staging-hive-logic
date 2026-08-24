@@ -47,6 +47,8 @@
     waitingCallLabel: '',
     ringingCall: null,
     ringingCallLabel: '',
+    // Who the number belongs to, resolved while it rings. See lookupCaller().
+    caller: null,
     heldCall: null,
     heldCallId: null,
     heldCallLabel: '',
@@ -497,9 +499,10 @@ function hideRowMenu() {
     const body = document.getElementById('hlphone-body');
     body.innerHTML = `
       <div style="text-align:center;padding:4px 0">
-        <div style="width:52px;height:52px;border-radius:50%;background:var(--green-bg,#e6f2ec);color:#1B7A50;font-weight:800;font-size:18px;display:flex;align-items:center;justify-content:center;margin:0 auto 8px">${escapeHtml(initials(state.activeCallLabel))}</div>
-        <div style="font-weight:800;font-size:13px">${escapeHtml(state.activeCallLabel || 'On call')}</div>
+        <div style="width:52px;height:52px;border-radius:50%;background:var(--green-bg,#e6f2ec);color:#1B7A50;font-weight:800;font-size:18px;display:flex;align-items:center;justify-content:center;margin:0 auto 8px">${escapeHtml(initials(callerLabel(state.activeCallLabel)))}</div>
+        <div style="font-weight:800;font-size:13px">${escapeHtml(callerLabel(state.activeCallLabel || 'On call'))}</div>
         <div id="hlphone-timer" style="font-family:var(--mono,monospace);font-size:11px;color:#1B7A50;font-weight:700;margin-top:4px">00:00</div>
+        ${callerStripHtml()}
       </div>
       ${state.waitingCall ? `
       <div style="margin-top:10px;padding:8px 10px;border-radius:9px;background:var(--gold-bg,#e9eff4);border:1px solid #f2ddac;font-size:11px;display:flex;align-items:center;gap:8px">
@@ -529,6 +532,7 @@ function hideRowMenu() {
         <button id="hlphone-mute" style="padding:10px 4px;border-radius:9px;border:1px solid var(--line,#dadde8);background:${state.muted ? 'var(--gold-bg,#e9eff4)' : '#fbfbfd'};font-size:10px;font-weight:700;cursor:pointer">🎙 Mute</button>
       </div>
       <button id="hlphone-end" style="width:100%;margin-top:10px;padding:11px 0;border-radius:10px;border:none;background:#c65b4e;color:#fff;font-weight:800;font-size:13px;cursor:pointer">☎ End call</button>`;
+    wireCallerStrip();
     document.getElementById('hlphone-hold').addEventListener('click', toggleHold);
     document.getElementById('hlphone-transfer').addEventListener('click', promptTransfer);
     document.getElementById('hlphone-mute').addEventListener('click', toggleMute);
@@ -586,6 +590,115 @@ function hideRowMenu() {
     }
   }
 
+  // ---- who is calling (2026-08-23) ----------------------------------------
+  //
+  // Chris: "Call > existing client phone # > question should be at the
+  // inception of the call > 'New Lead?' > clicking yes should open a prefilled
+  // New Lead Form by the recognized phone number and pulled existing client's
+  // info."
+  //
+  // The lookup fires the moment the call starts RINGING, not when it is
+  // answered, so the name is on screen while deciding whether to pick up --
+  // "inception of the call" is the whole point. Everything here degrades to
+  // the raw number: a caller lookup that fails must never delay or block
+  // answering a phone call.
+  //
+  // state.caller: null while unknown, then
+  //   { e164, matches: [...], knownName, status: 'looking'|'done'|'failed' }
+  function resetCaller() { state.caller = null; }
+
+  function lookupCaller(rawFrom) {
+    const from = String(rawFrom || '');
+    // Extension-to-extension calls arrive as `client:ext-4` and have no
+    // customer behind them. Asking about a lead there is noise.
+    if (!from || !/^\+?\d[\d\s().-]{6,}$/.test(from)) { resetCaller(); return; }
+    state.caller = { e164: from, matches: [], knownName: null, status: 'looking' };
+    renderBody();
+    api('?resource=caller&e164=' + encodeURIComponent(from)).then((r) => {
+      // A newer call may have started ringing while this was in flight.
+      if (!state.caller || state.caller.e164 !== from) return;
+      if (r.ok && r.data && r.data.ok) {
+        state.caller = { e164: from, matches: r.data.matches || [], knownName: r.data.knownName || null, status: 'done' };
+      } else {
+        state.caller = { e164: from, matches: [], knownName: null, status: 'failed' };
+      }
+      renderBody();
+    }).catch(() => {
+      if (!state.caller || state.caller.e164 !== from) return;
+      // Never silently show "no match" when the lookup never happened -- that
+      // reads as "we don't know them" and sends the office off to make a
+      // duplicate client.
+      state.caller = { e164: from, matches: [], knownName: null, status: 'failed' };
+      renderBody();
+    });
+  }
+
+  // The name to put on the ringing card, in place of the raw number.
+  function callerLabel(fallback) {
+    const c = state.caller;
+    if (!c || c.status !== 'done') return fallback;
+    if (c.matches.length === 1) return c.matches[0].name;
+    if (c.matches.length > 1) return c.matches.length + ' clients share this number';
+    if (c.knownName) return c.knownName;
+    return fallback;
+  }
+
+  // The strip under the caller's name: who we think it is, and the button
+  // that starts a lead from the call.
+  function callerStripHtml() {
+    const c = state.caller;
+    if (!c) return '';
+    if (c.status === 'looking') {
+      return '<div style="margin-top:8px;font-size:10.5px;color:var(--mut,#69748a);font-weight:700">Checking who this is…</div>';
+    }
+    if (c.status === 'failed') {
+      // Honest about not knowing, rather than showing "new caller" -- those
+      // are different facts and only one of them is true here.
+      return '<div style="margin-top:8px;font-size:10.5px;color:#a9772e;font-weight:700">Could not check who this is</div>' +
+        newLeadButtonHtml('New lead?');
+    }
+    let line;
+    if (c.matches.length === 1) {
+      const m = c.matches[0];
+      const bits = [];
+      if (m.isArchived) bits.push('archived');
+      if (m.isLead) bits.push('still a lead');
+      if (m.balance > 0) bits.push('$' + Math.round(m.balance).toLocaleString() + ' owed');
+      line = '<div style="margin-top:8px;font-size:10.5px;color:#1B7A50;font-weight:700">✓ Existing client' +
+        (bits.length ? ' · ' + escapeHtml(bits.join(' · ')) : '') + '</div>';
+    } else if (c.matches.length > 1) {
+      line = '<div style="margin-top:8px;font-size:10.5px;color:#a9772e;font-weight:700">' +
+        c.matches.length + ' clients share this number — you pick which</div>';
+    } else if (c.knownName) {
+      line = '<div style="margin-top:8px;font-size:10.5px;color:var(--mut,#69748a);font-weight:700">Known number, not linked to a client</div>';
+    } else {
+      line = '<div style="margin-top:8px;font-size:10.5px;color:var(--mut,#69748a);font-weight:700">Not a client we have on file</div>';
+    }
+    return line + newLeadButtonHtml(c.matches.length ? 'New lead for them?' : 'New lead?');
+  }
+
+  function newLeadButtonHtml(label) {
+    // Only offered where it can actually do something. The New Lead form lives
+    // in index.html, and the popup is loaded on pages that do not have it.
+    if (typeof window.hlNewLeadFromCall !== 'function') return '';
+    return '<button id="hlphone-newlead" style="margin-top:10px;padding:8px 14px;border-radius:9px;border:1px solid #6444B8;background:#6444B8;color:#fff;font-weight:800;font-size:11px;cursor:pointer">✚ ' + escapeHtml(label) + '</button>';
+  }
+
+  // Called after any render that may have drawn the strip.
+  function wireCallerStrip() {
+    const btn = document.getElementById('hlphone-newlead');
+    if (btn) btn.onclick = startLeadFromCall;
+  }
+
+  function startLeadFromCall() {
+    const c = state.caller;
+    if (!c || typeof window.hlNewLeadFromCall !== 'function') return;
+    // Get out of the way -- the form is the thing to look at now, and the
+    // popup floats over it.
+    setOpen(false);
+    window.hlNewLeadFromCall({ phone: c.e164, matches: c.matches || [], knownName: c.knownName || null });
+  }
+
   // ---- incoming-call ringing (2026-07-26): ring, never auto-answer ----
   let ringCtx = null, ringTimer = null;
   function startRingtone() {
@@ -619,15 +732,20 @@ function hideRowMenu() {
     if (!body) return;
     const tabs = document.getElementById('hlphone-tabs'); if (tabs) tabs.style.display = 'none';
     body.innerHTML = '<div style="text-align:center;padding:14px 0 6px">' +
-      '<div style="width:58px;height:58px;border-radius:50%;background:var(--green-bg,#e6f2ec);color:#1B7A50;font-weight:800;font-size:19px;display:flex;align-items:center;justify-content:center;margin:0 auto 10px">' + escapeHtml(initials(state.ringingCallLabel)) + '</div>' +
-      '<div style="font-weight:800;font-size:14px">' + escapeHtml(state.ringingCallLabel || 'Incoming call') + '</div>' +
+      '<div style="width:58px;height:58px;border-radius:50%;background:var(--green-bg,#e6f2ec);color:#1B7A50;font-weight:800;font-size:19px;display:flex;align-items:center;justify-content:center;margin:0 auto 10px">' + escapeHtml(initials(callerLabel(state.ringingCallLabel))) + '</div>' +
+      '<div style="font-weight:800;font-size:14px">' + escapeHtml(callerLabel(state.ringingCallLabel || 'Incoming call')) + '</div>' +
       '<div style="font-size:11px;color:#1B7A50;font-weight:700;margin-top:4px">\uD83D\uDCDE Incoming call\u2026</div>' +
+      // The raw number stays on screen even once a name is over it. The name
+      // is a lookup, and a lookup can be wrong about who is holding the phone.
+      (state.caller ? '<div style="font-size:10.5px;color:var(--mut,#69748a);font-weight:700;margin-top:2px">' + escapeHtml(state.caller.e164) + '</div>' : '') +
+      callerStripHtml() +
       '<div style="display:flex;gap:10px;justify-content:center;margin-top:16px">' +
       '<button id="hlphone-ring-answer" style="flex:1;max-width:130px;padding:12px 0;border-radius:10px;border:none;background:#1B7A50;color:#fff;font-weight:800;font-size:12.5px;cursor:pointer">\u2713 Answer</button>' +
       '<button id="hlphone-ring-decline" style="flex:1;max-width:130px;padding:12px 0;border-radius:10px;border:none;background:#c65b4e;color:#fff;font-weight:800;font-size:12.5px;cursor:pointer">\u2715 Decline</button>' +
       '</div></div>';
     document.getElementById('hlphone-ring-answer').onclick = answerRinging;
     document.getElementById('hlphone-ring-decline').onclick = declineRinging;
+    wireCallerStrip();
   }
   function answerRinging() {
     const call = state.ringingCall;
@@ -646,6 +764,7 @@ function hideRowMenu() {
     if (!call) return;
     stopRingtone();
     state.ringingCall = null; state.ringingCallLabel = '';
+    resetCaller();
     try { call.reject(); } catch (e) {}
     renderBody();
   }
@@ -653,7 +772,7 @@ function hideRowMenu() {
     call.on('accept', () => { if (window.hlSfx) { hlSfx.stopLoop(); hlSfx.play('connect'); } renderBody(); });
     call.on('disconnect', () => {
       if (state.heldCall === call) { state.heldCall = null; state.heldCallId = null; state.heldCallLabel = ''; renderBody(); return; }
-      if (window.hlSfx) { hlSfx.stopLoop(); hlSfx.play('hangup'); } clearInterval(timerInterval); state.activeCall = null; state.activeCallId = null; state.held = false; state.muted = false; state.showKeypad = false; state.keypadDigits = ''; state.activeCallStartedAt = null; renderBody(); refreshCalls(); refreshVoicemails();
+      if (window.hlSfx) { hlSfx.stopLoop(); hlSfx.play('hangup'); } clearInterval(timerInterval); state.activeCall = null; state.activeCallId = null; state.held = false; state.muted = false; state.showKeypad = false; state.keypadDigits = ''; state.activeCallStartedAt = null; resetCaller(); renderBody(); refreshCalls(); refreshVoicemails();
     });
     call.on('cancel', () => {
       if (state.waitingCall === call) { state.waitingCall = null; renderBody(); return; }
@@ -888,6 +1007,10 @@ function hideRowMenu() {
       state.device = new window.Twilio.Device(tokenRes.data.token, { codecPreferences: ['opus', 'pcmu'] });
       state.device.on('incoming', (call) => {
         const from = (call.parameters && call.parameters.From) || 'Incoming call';
+        // "at the inception of the call" -- the lookup starts here, before the
+        // ring card is even drawn, so the name is on screen while it rings
+        // rather than after somebody has already picked up.
+        lookupCaller((call.parameters && call.parameters.From) || '');
         if (state.activeCall) {
           // Already on a call -- honor this extension's call waiting
           // setting (Settings > Extensions > Edit) instead of silently
@@ -912,7 +1035,7 @@ function hideRowMenu() {
         // immediately, silently picking up extension calls.
         state.ringingCall = call;
         state.ringingCallLabel = from;
-        call.on('cancel', () => { if (state.ringingCall === call) { state.ringingCall = null; stopRingtone(); hlToast('Missed call from ' + from); renderBody(); } });
+        call.on('cancel', () => { if (state.ringingCall === call) { state.ringingCall = null; stopRingtone(); resetCaller(); hlToast('Missed call from ' + from); renderBody(); } });
         call.on('disconnect', () => { if (state.ringingCall === call) { state.ringingCall = null; stopRingtone(); renderBody(); } });
         call.on('error', (e) => { if (state.ringingCall === call) { state.ringingCall = null; stopRingtone(); renderBody(); } hlToast('Call error: ' + (e && e.message || e)); });
         ensureDom(); setOpen(true);

@@ -12,6 +12,7 @@ import {
   buildEnvelope,
   renderPlainText as renderServerPlainText,
 } from '../api/_lib/reina/evidence-envelope.js';
+import { SERVER_DEADLINE } from '../api/_lib/reina/pilot-server-deadline.js';
 
 const {
   createReinaPilotClient,
@@ -1169,4 +1170,29 @@ test('the diagnostic beacon is not silenced by the failure it exists to report',
   // false rather than rejecting -- reporting a failure must never raise one.
   assert.equal(await report, false);
   assert.equal(posted, 0);
+});
+
+// Two independent clocks decide whether Reina answers: the server's turn budget
+// and the browser's abort timer. If the browser one is shorter, the panel gives
+// up on a turn the server is still working on and shows a failure for an answer
+// that arrives moments later -- indistinguishable, to the person reading it,
+// from Reina being broken.
+test('the browser waits at least as long as the server is allowed to take', async () => {
+  const timers = [];
+  const client = createReinaPilotClient({
+    fetchFn: () => new Promise(() => {}),
+    getAccessToken: async () => 'session-token',
+    hashFn: async (input) => sha256(input),
+    setTimeoutFn: (fn, ms) => { timers.push({ fn, ms }); return timers.length; },
+    clearTimeoutFn: () => {},
+  });
+
+  client.submitTurn('How should I plan the week?').catch(() => {});
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  const requestTimer = timers.find((timer) => timer.ms >= SERVER_DEADLINE.totalMs);
+  assert.ok(
+    requestTimer,
+    `no browser timer outlives the ${SERVER_DEADLINE.totalMs}ms server budget; saw ${JSON.stringify(timers.map((timer) => timer.ms))}`,
+  );
 });

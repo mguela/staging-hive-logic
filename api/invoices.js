@@ -11,6 +11,7 @@
 import { supabaseRequest } from './_lib/jobber.js';
 import { requireUser } from './_lib/auth.js';
 import { checkCronSecret } from './_lib/guard.js';
+import { deriveInvoiceBalance } from './_lib/invoice-balance.js';
 
 const PAGE_SIZE = 50;
 
@@ -49,7 +50,11 @@ export async function getInvoicesData({ limit } = {}) {
     const payments = Number(i.payments) || 0;
     const deposit = Number(i.deposit) || 0;
     const discount = Number(i.discount) || 0;
-    const balance = Math.max(0, Math.round((total - payments - deposit - discount) * 100) / 100);
+    // Derived here on purpose, not read from invoices.balance: this is what a
+    // person and a client are shown, and it must keep matching the figures
+    // beside it on the same screen. api/_lib/invoice-balance.js owns the sum
+    // so the four copies of it cannot drift apart again.
+    const balance = deriveInvoiceBalance({ total, payments, deposit, discount });
     return {
       id: i.jobber_id,
       clientId: i.client_id,

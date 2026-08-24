@@ -57,6 +57,13 @@ test('a stale Documents folder/page request cannot overwrite a newer selection',
     hlEsc: String,
     hlDocRenderPagination() {},
     hlDocRenderCurrentPage() {},
+    // hlDocRenderList now routes client folders and typed searches to
+    // /api/hivedoc. This test is about the OTHER path -- the plain documents
+    // read -- so these stubs hold it there deliberately: no matching folder
+    // means no client, and no search box means no search text.
+    hlDocFolders: () => [],
+    hlDocFolderClient: () => null,
+    hlDocRenderUnified() { throw new Error('this test must exercise the documents path, not the unified one'); },
   };
   vm.createContext(sandbox);
   vm.runInContext(extractFunction(raw, 'async function hlDocRenderList(){'), sandbox, { filename: SRC_PATH });
@@ -174,10 +181,84 @@ test('metadata failure reports an orphan cleanup failure instead of hiding it', 
     hlEsc: String,
   };
   vm.createContext(sandbox);
-  vm.runInContext(extractFunction(raw, 'async function hlDocConfirmUpload(){'), sandbox, { filename: SRC_PATH });
+  // hlDocConfirmUpload now stamps category/client/job, so it needs the helpers
+  // that work those out. What this test is about is unchanged: the failure path
+  // when the metadata insert is rejected after the file has reached storage.
+  vm.runInContext(
+    [
+      'var HLDOC_CATEGORIES = ' + JSON.stringify(['Contract', 'Permit', 'Photo', 'Invoice', 'Receipt', 'Estimate', 'Payroll', 'Other']) + ';',
+      'var HLDOC_CATEGORY_TO_DOC_TYPE = ' + JSON.stringify({
+        Contract: 'contract', Permit: 'permit', Photo: 'photo', Invoice: 'invoice',
+        Estimate: 'estimate', Payroll: 'payroll', Receipt: 'other', Other: 'other',
+      }) + ';',
+      extractFunction(raw, 'function hlDocFolders(){'),
+      extractFunction(raw, 'function hlDocCanonicalCategory(value){'),
+      extractFunction(raw, 'function hlDocFolderContext(folderId){'),
+      extractFunction(raw, 'async function hlDocConfirmUpload(){'),
+    ].join('\n'),
+    sandbox, { filename: SRC_PATH },
+  );
   await sandbox.hlDocConfirmUpload();
 
   assert.equal(errors.length, 1);
   assert.match(toasts[0], /could not be cleaned up automatically/);
   assert.equal(window.HL_PENDING_UPLOAD, pending, 'failed metadata remains available for a deliberate retry');
+});
+
+// --- HiveDoc unification (2026-08-21) ---
+
+test('a client folder is read through /api/hivedoc, not the documents table', async () => {
+  const sbCalls = [];
+  const sandbox = {
+    HLDOC: {
+      folders: [], docs: [], activeFolder: 'folder-smith', viewMode: 'folder',
+      docPage: 0, docPageSize: 50, docTotal: null, docRequestToken: 0,
+    },
+    document: { getElementById: () => ({ innerHTML: '', style: {}, value: '' }) },
+    // If the client path ever falls back to querying `documents` directly, the
+    // client's photos vanish again -- which is the bug this whole change exists
+    // to fix. So a Supabase call here is a failure, not an alternative route.
+    sb: { from(table) { sbCalls.push(table); throw new Error('must not query ' + table + ' for a client folder'); } },
+    hlEsc: String,
+    hlDocRenderPagination() {},
+    hlDocRenderCurrentPage() {},
+    hlDocFolders: () => [{ id: 'folder-smith', name: 'John Smith', client_id: 'c-1', client_name: 'John Smith' }],
+    hlDocFolderClient: (f) => (f && f.client_id ? { client_id: f.client_id } : null),
+    unifiedArgs: null,
+    hlDocRenderUnified(folder, searchText, token) { sandbox.unifiedArgs = { folder, searchText, token }; },
+  };
+  vm.createContext(sandbox);
+  vm.runInContext(extractFunction(raw, 'async function hlDocRenderList(){'), sandbox, { filename: SRC_PATH });
+
+  await sandbox.hlDocRenderList();
+
+  assert.equal(sbCalls.length, 0, 'a client folder must not hit the documents table directly');
+  assert.ok(sandbox.unifiedArgs, 'a client folder goes to the unified reader');
+  assert.equal(sandbox.unifiedArgs.folder.client_id, 'c-1');
+});
+
+test('typing a search leaves the page-local path even outside a client folder', async () => {
+  const sandbox = {
+    HLDOC: {
+      folders: [], docs: [], activeFolder: null, viewMode: 'folder',
+      docPage: 0, docPageSize: 50, docTotal: null, docRequestToken: 0,
+    },
+    // The search box has text in it; every other element is inert.
+    document: { getElementById: (id) => (id === 'hldoc-search' ? { value: '  permit  ' } : { innerHTML: '', style: {} }) },
+    sb: { from(table) { throw new Error('must not query ' + table + ' when searching'); } },
+    hlEsc: String,
+    hlDocRenderPagination() {},
+    hlDocRenderCurrentPage() {},
+    hlDocFolders: () => [],
+    hlDocFolderClient: () => null,
+    unifiedArgs: null,
+    hlDocRenderUnified(folder, searchText, token) { sandbox.unifiedArgs = { folder, searchText, token }; },
+  };
+  vm.createContext(sandbox);
+  vm.runInContext(extractFunction(raw, 'async function hlDocRenderList(){'), sandbox, { filename: SRC_PATH });
+
+  await sandbox.hlDocRenderList();
+
+  assert.ok(sandbox.unifiedArgs, 'a typed search is served by the search engine, not by filtering one page');
+  assert.equal(sandbox.unifiedArgs.searchText, 'permit', 'and the term is trimmed before it is sent');
 });

@@ -162,7 +162,9 @@ test('something he already handled at his desk never pings his laptop', async ()
 test('a backlog is capped, because eleven Windows toasts is the old bug louder', async () => {
   // "im getting a bunch of email notifications" was the in-app popup firing
   // the whole queue. The same mistake through the OS is worse, not better.
-  const rows = Array.from({ length: 11 }, (_, i) => row({ message_id: '<m' + i + '@mail>' }));
+  // Eleven DIFFERENT emails. Varying only the message id would now be eleven
+  // copies of one email, which collapses to a single toast by design.
+  const rows = Array.from({ length: 11 }, (_, i) => row({ message_id: '<m' + i + '@mail>', subject: 'Quote ' + i }));
   const { deps, pushed } = makeDeps({ rows });
   const out = await sweepOwner(OWNER, deps);
   assert.equal(MAX_TOASTS_PER_SWEEP, 3);
@@ -173,7 +175,7 @@ test('a backlog is capped, because eleven Windows toasts is the old bug louder',
 
 test('the "+N more" rides on the last toast only', async () => {
   // Putting the same count on all three is three lies of one number.
-  const rows = Array.from({ length: 5 }, (_, i) => row({ message_id: '<m' + i + '@mail>' }));
+  const rows = Array.from({ length: 5 }, (_, i) => row({ message_id: '<m' + i + '@mail>', subject: 'Quote ' + i }));
   const { deps, pushed } = makeDeps({ rows });
   await sweepOwner(OWNER, deps);
   const withMore = pushed.filter((p) => /more waiting/.test(p.body.body));
@@ -310,14 +312,22 @@ test('the worker never intercepts fetch', () => {
   assert.ok(!/addEventListener\(\s*'fetch'/.test(sw));
 });
 
-test('the toast waits for him instead of evaporating', () => {
-  assert.match(sw, /requireInteraction: true/);
+test('the toast behaves like a toast', () => {
+  // It used to set requireInteraction: true, so every notification sat on his
+  // screen until pressed. Chris, 2026-08-23, looking at a stack of them: "they
+  // dont ever go away?" Chrome allows only two action buttons, and Open and
+  // the mute already use both, so there was no room to add a Dismiss -- and a
+  // toast that fades into the Action Center IS the dismiss button.
+  assert.doesNotMatch(sw, /requireInteraction:\s*true/);
 });
 
-test('"Not this sender" is on the toast itself', () => {
+test('the mute is on the toast itself', () => {
+  // This test used to assert `action=mute` and `credentials: 'include'` --
+  // the exact mechanism that could never work. It passed every run while the
+  // feature was refused at the edge on every single press. Pinning HOW
+  // something is done says nothing about whether it does it.
   assert.match(sw, /event\.action === 'mute'/);
-  assert.match(sw, /action=mute/);
-  assert.match(sw, /credentials: 'include'/, 'there is no page to read a token from');
+  assert.match(sw, /data\.fromAddress/, 'the sender is what gets silenced');
 });
 
 test('a failed mute says so, instead of letting him think it worked', () => {
@@ -334,3 +344,256 @@ test('clicking it focuses the tab he already has open', () => {
 });
 
 Object.assign(process.env, origEnv);
+
+// Chris, 2026-08-21, with the VAPID keys correctly set in Vercel, the page
+// still said "Desktop notifications are not set up on the server yet."
+//
+// GET /api/reina/push?action=key came back
+//   {"ok":false,"error":"Authentication required."}
+// from the EDGE MIDDLEWARE, which gates /api/* wholesale and never ran the
+// handler. The first cut answered `key` above requireApiAuth on the theory
+// that a public key needs no session -- true of the key, irrelevant to the
+// middleware sitting in front of it. And because that refusal is JSON with no
+// `configured` field, the page read it as "not configured" and sent him to
+// Vercel to hunt for keys that were already there.
+
+const pushApi = readFileSync(new URL('../api/reina/push.js', import.meta.url), 'utf-8');
+const pushClient = readFileSync(new URL('../public/reina-push.js', import.meta.url), 'utf-8');
+
+test('the key is served behind the session, not in front of it', () => {
+  const authAt = pushApi.indexOf('await requireApiAuth');
+  const keyAt = pushApi.indexOf("if (action === 'key')");
+  assert.ok(authAt > 0 && keyAt > authAt,
+    'answering before the auth check is pointless -- the middleware refuses it first');
+});
+
+test('the page sends its session when asking for the key', () => {
+  const fn = pushClient.slice(pushClient.indexOf('function getKey()'));
+  assert.match(fn.slice(0, 900), /hlRequireSession/);
+  assert.match(fn.slice(0, 900), /Authorization.*Bearer/);
+  assert.match(fn.slice(0, 900), /cache: 'no-store'/,
+    'and uncached, or adding the keys in Vercel would not take effect until a hard refresh');
+});
+
+test('"could not ask" is never reported as "not set up"', () => {
+  // These send him to two completely different places. Conflating them cost an
+  // evening once already.
+  const block = pushClient.slice(pushClient.indexOf('return getKey()'));
+  const authBranch = block.indexOf('d.ok === false');
+  const unknown = block.indexOf("state: 'unknown'");
+  const unconfigured = block.indexOf("state: 'unconfigured'");
+  assert.ok(authBranch > -1, 'the refusal is detected at all');
+  assert.ok(unknown > authBranch && unknown < unconfigured,
+    'and it returns its own answer BEFORE the not-configured branch can claim it');
+  assert.match(block.slice(unknown - 120, unknown + 200), /Could not check with HiveLogic/);
+});
+
+test('no new public API route was opened to make this work', () => {
+  // The only caller is a signed-in page, so a hole in the guard would buy
+  // nothing and cost surface area.
+  const guard = readFileSync(new URL('../api/_lib/guard.js', import.meta.url), 'utf-8');
+  const publicList = guard.slice(guard.indexOf('const PUBLIC_RESOURCE_PATHS'), guard.indexOf('export function isPublicApiPath'));
+  assert.ok(!/reina\/push/.test(publicList));
+});
+
+test('a state that came with a reason shows the reason, never a bare "Off"', () => {
+  // Falling through to "Off. Reina only tells you about mail while HiveLogic
+  // is open." is how the 401 got read as "the keys are missing" -- the panel
+  // said the one thing that was not true and hid the one thing that was.
+  const index = readFileSync(new URL('../public/index.html', import.meta.url), 'utf-8');
+  const paint = index.slice(index.indexOf('window.hlNotifySettings'));
+  assert.match(paint.slice(0, 9000), /\} else if \(s\.detail\) \{/);
+  assert.ok(!/s\.state === 'blocked' \|\| s\.state === 'unsupported'/.test(paint),
+    'an allowlist of known-bad states cannot cover the one nobody predicted');
+});
+
+// ---- the morning two identical toasts arrived ------------------------------
+//
+// 2026-08-23, 12:01:39.626: two Windows toasts, same words, same second.
+// Gusto sends the payroll reminder to more than one of Chris's mailboxes, so
+// the same email was two rows with two Graph ids -- both real, both correctly
+// judged worth telling him about. The push tag is built from message_id, so
+// neither Chrome nor the tag could collapse them.
+
+test('one email in two mailboxes raises one toast', async () => {
+  const rows = [
+    row({ message_id: 'AAQkAGRmODBhMDc2', from_address: 'automated@gusto.com', subject: 'Time to run payroll for GH Electrical Solutions LLC' }),
+    row({ message_id: 'AAQkAGQxY2U1ZTUw', from_address: 'automated@gusto.com', subject: 'Time to run payroll for GH Electrical Solutions LLC' }),
+  ];
+  const { deps, pushed } = makeDeps({ rows });
+  const out = await sweepOwner(OWNER, deps);
+
+  assert.equal(pushed.length, 1, 'one interruption for one email');
+  assert.equal(out.sent, 1);
+  assert.equal(out.emails, 1, 'one distinct email');
+  assert.equal(out.collapsed, 1, 'and one copy suppressed, reported rather than silent');
+});
+
+test('the suppressed copy is stamped, or it comes back on the next sweep', async () => {
+  // Leaving it unstamped would hand the next sweep the same email to raise
+  // again -- the duplicate arriving ten minutes late instead of alongside,
+  // which is worse than arriving twice at once.
+  const rows = [
+    row({ message_id: 'AAQkAGRmODBhMDc2', from_address: 'automated@gusto.com', subject: 'Time to run payroll' }),
+    row({ message_id: 'AAQkAGQxY2U1ZTUw', from_address: 'automated@gusto.com', subject: 'Time to run payroll' }),
+  ];
+  const { deps, writes } = makeDeps({ rows });
+  await sweepOwner(OWNER, deps);
+
+  const stamped = writes.filter((w) => w.method === 'PATCH' && /notified_at/.test(w.body || ''));
+  assert.equal(stamped.length, 2, 'both copies are marked as dealt with');
+  for (const id of ['AAQkAGRmODBhMDc2', 'AAQkAGQxY2U1ZTUw']) {
+    assert.ok(stamped.some((w) => w.path.includes(encodeURIComponent(id))), `${id} was stamped`);
+  }
+});
+
+test('nothing is stamped when the push never left', async () => {
+  // The existing rule, which the duplicate stamping must not quietly break:
+  // one bad minute at Google must not cost him the email forever.
+  const rows = [
+    row({ message_id: 'a', from_address: 'automated@gusto.com', subject: 'Payroll' }),
+    row({ message_id: 'b', from_address: 'automated@gusto.com', subject: 'Payroll' }),
+  ];
+  const { deps, writes } = makeDeps({
+    rows,
+    sendNotification: async () => { const e = new Error('service unavailable'); e.statusCode = 500; throw e; },
+  });
+  const out = await sweepOwner(OWNER, deps);
+
+  assert.equal(out.sent, 0);
+  assert.equal(writes.filter((w) => /notified_at/.test(w.body || '')).length, 0,
+    'a failed send leaves every copy available to try again');
+});
+
+test('the per-sweep cap counts emails, not copies of one email', async () => {
+  // Four distinct emails, each landing in two mailboxes. The cap is three, so
+  // he should get three toasts and be told one more is waiting -- not three
+  // toasts covering one and a half emails.
+  const rows = [];
+  for (let i = 0; i < 4; i++) {
+    rows.push(row({ message_id: 'graph-' + i, from_address: 'sam@vendor.com', subject: 'Job ' + i }));
+    rows.push(row({ message_id: 'rfc-' + i, from_address: 'sam@vendor.com', subject: 'Job ' + i }));
+  }
+  const { deps, pushed } = makeDeps({ rows });
+  const out = await sweepOwner(OWNER, deps);
+
+  assert.equal(out.emails, 4);
+  assert.equal(pushed.length, 3);
+  assert.equal(out.overflow, 1, '+1 more waiting, counted in emails');
+  assert.match(pushed[2].body.body, /\+1 more waiting/);
+});
+
+// ---- in-app only, without starving the in-app ------------------------------
+//
+// "just notifications on the bottom of hivelogic not windows." The scan has to
+// keep running for that to be possible at all: the in-app nudge reads
+// reina_mail_triage, and the only thing that fills it with new mail is
+// scanMailboxes inside this sweep. Suppressing the push here rather than
+// deleting his subscription is the whole point -- ownersToSweep picks owners
+// FROM the subscription table, so no subscription means no sweep at all.
+
+const DESKTOP_OFF = [{ match_kind: 'channel', match_value: 'desktop', notify: false }];
+
+test('desktop off sends no toast', async () => {
+  const { deps, pushed } = makeDeps({ rows: [row({})], rules: DESKTOP_OFF });
+  const out = await sweepOwner(OWNER, deps);
+  assert.equal(pushed.length, 0);
+  assert.equal(out.sent, 0);
+  assert.equal(out.desktopOff, true, 'reported, not silently zero');
+});
+
+test('the mailbox is read before the channel is consulted', () => {
+  // If the desktop check short-circuited above scanMailboxes, turning toasts
+  // off would stop the mailbox read -- and the in-app nudge he asked to KEEP
+  // reads reina_mail_triage, which only this sweep fills with new mail. He
+  // would have switched off the thing he wanted.
+  const src = readFileSync(new URL('../api/reina/mail-sweep.js', import.meta.url), 'utf-8');
+  const scanAt = src.indexOf('await scanMailboxes(');
+  const checkAt = src.indexOf('if (!desktopPushEnabled(rules))');
+  assert.ok(scanAt > 0 && checkAt > 0);
+  assert.ok(scanAt < checkAt, 'the scan must not be behind the desktop preference');
+});
+
+test('desktop off leaves the mail unstamped', async () => {
+  // Nothing was sent, so nothing is marked sent. Turning toasts back on must
+  // not find every email already burned.
+  const { deps, writes } = makeDeps({ rows: [row({})], rules: DESKTOP_OFF });
+  await sweepOwner(OWNER, deps);
+  assert.equal(writes.filter((w) => /notified_at/.test(w.body || '')).length, 0);
+});
+
+test('desktop on is the default, and a muted sender does not turn the channel off', async () => {
+  const { deps, pushed } = makeDeps({
+    rows: [row({})],
+    rules: [{ match_kind: 'sender', match_value: 'someone-else@nowhere.com', notify: false }],
+  });
+  const out = await sweepOwner(OWNER, deps);
+  assert.equal(out.desktopOff, undefined);
+  assert.equal(pushed.length, 1);
+});
+
+// ---- the mute that never worked and said it had -----------------------------
+//
+// reina_notify_rules was empty. Not because Chris never pressed the button --
+// because pressing it could not possibly have worked, and told him it had.
+//
+// The worker posted with credentials:'include' and no Authorization header,
+// having no page to read a token from. requireApiAuth reads only the
+// Authorization header, nothing in this app sets an auth cookie, and
+// /api/reina/push is deliberately off the edge guard's public allowlist. Every
+// mute was 401'd before the handler ran.
+//
+// And fetch() RESOLVES on a 401 -- it rejects only on network failure -- so the
+// .then() ran and drew "Silenced <sender>" over a request that had just been
+// refused. The .catch() meant to say otherwise never fired.
+
+// Comments in this file quote the code they replaced, so asserting on the raw
+// text finds the explanation and calls it the bug.
+const swCode = sw.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+
+test('the worker no longer posts the mute itself', () => {
+  assert.ok(!/\bfetch\s*\(/.test(swCode),
+    'the worker makes no calls at all now -- it has nothing to authenticate with');
+  assert.ok(!/credentials/.test(swCode),
+    'there was never an auth cookie to include; it only looked like authentication');
+});
+
+test('the press is handed to a signed-in page instead', () => {
+  assert.match(sw, /postMessage\(\{ type: 'reina-mute'/);
+  const client = readFileSync(new URL('../public/reina-push.js', import.meta.url), 'utf-8');
+  assert.match(client, /msg\.type === 'reina-mute'/);
+  assert.match(client, /api\('mute', \{ fromAddress: fromAddress, scope: scope \|\| 'sender' \}\)/,
+    'the page holds the token, so the page makes the call');
+});
+
+test('a press with every tab shut is kept, not dropped', () => {
+  // This is the case the notification exists for. Losing it here would be the
+  // original bug with better manners.
+  assert.match(sw, /function queueMute\(/);
+  assert.match(sw, /indexedDB\.open\(MUTE_DB/, 'a worker has no localStorage, and Chrome stops it between pushes');
+  assert.match(sw, /keyPath: 'fromAddress'/, 'two toasts from one sender is one pending mute');
+});
+
+test('the queue is drained on load, and only cleared once the server took it', () => {
+  const client = readFileSync(new URL('../public/reina-push.js', import.meta.url), 'utf-8');
+  assert.match(client, /drainQueuedMutes\(\);/);
+  assert.match(client, /if \(!done\) return;/,
+    'a failed drain must be retried next load, not swallowed');
+});
+
+test('the toast promises only what happened', () => {
+  // Three different outcomes, three different sentences. The old code had one
+  // sentence for all of them, and it was the optimistic one.
+  assert.match(sw, /'Silencing ' \+ data\.fromAddress/, 'a tab is open: it is being applied now');
+  assert.match(sw, /will be silenced next time you open HiveLogic/, 'no tab: it is pending');
+  assert.match(sw, /Could not silence that from here/, 'the queue itself failed');
+  assert.ok(!/body: 'Silenced ' \+ data\.fromAddress/.test(sw),
+    'the flat past-tense claim is what made this a lie');
+});
+
+test('the panel names the button that exists', () => {
+  const index = readFileSync(new URL('../public/index.html', import.meta.url), 'utf-8');
+  assert.ok(index.includes('Press “Mute sender” on a notification'));
+  assert.ok(!index.includes('Press “Not this sender” on a notification'),
+    'the button was renamed in #537 and this copy was missed');
+});

@@ -11,6 +11,8 @@ import {
   createBoundedReviewIntentStore,
   createPilotServerDeadline,
   isReinaPilotDeadlineError,
+  resolveServerDeadline,
+  boundedDeadlineMs,
 } from '../api/_lib/reina/pilot-server-deadline.js';
 
 function assertFixedDeadlineError(error) {
@@ -28,14 +30,20 @@ function never() {
   return new Promise(() => {});
 }
 
-test('default root deadline is exactly bounded at twelve seconds and closes idempotently', () => {
+test('default root deadline is exactly bounded at forty seconds and closes idempotently', () => {
   const before = Date.now();
   const deadline = createPilotServerDeadline();
   const after = Date.now();
-  assert.equal(SERVER_DEADLINE.totalMs, 12_000);
-  assert.equal(deadline.deadlineAt >= before + 12_000, true);
-  assert.equal(deadline.deadlineAt <= after + 12_000, true);
-  assert.equal(deadline.remainingMs() <= 12_000, true);
+  // Was 12s with a 5s composer. Measured turns completed in 2.8-4.2s against
+  // that composer budget with almost no context loaded, so it was already at
+  // its limit before the full business read existed; with the read switched
+  // on it went over and the turn failed outright.
+  assert.equal(SERVER_DEADLINE.totalMs, 40_000);
+  assert.equal(SERVER_DEADLINE.composerMs, 30_000);
+  assert.equal(SERVER_DEADLINE.contextMs, 2_500);
+  assert.equal(deadline.deadlineAt >= before + 40_000, true);
+  assert.equal(deadline.deadlineAt <= after + 40_000, true);
+  assert.equal(deadline.remainingMs() <= 40_000, true);
   assert.equal(deadline.signal.aborted, false);
   assert.equal(deadline.closed, false);
   deadline.close();
@@ -256,7 +264,7 @@ test('review issue and consume independently time out with the fixed server erro
   deadline.close();
 });
 
-test('bounded store separates the exact 4 second RPC fence from the 12 second attempt lease', async () => {
+test('bounded store separates the exact 4 second RPC fence from the full attempt lease', async () => {
   const timers = [];
   const receivedDeadlines = [];
   const deadline = createPilotServerDeadline({
@@ -283,11 +291,11 @@ test('bounded store separates the exact 4 second RPC fence from the 12 second at
   assert.ok(bounded);
   await bounded.claimTurn(Object.freeze({ marker: 'stage-fence' }));
 
-  assert.equal(deadline.deadlineAt, 22_000);
-  assert.deepEqual(receivedDeadlines, [{ deadlineAt: 14_000, attemptDeadlineAt: 22_000 }]);
+  assert.equal(deadline.deadlineAt, 50_000);
+  assert.deepEqual(receivedDeadlines, [{ deadlineAt: 14_000, attemptDeadlineAt: 50_000 }]);
   assert.notEqual(receivedDeadlines[0].deadlineAt, deadline.deadlineAt);
   assert.equal(receivedDeadlines[0].attemptDeadlineAt, deadline.deadlineAt);
-  assert.equal(timers[0].delay, 12_000, 'root timer retains the total request budget');
+  assert.equal(timers[0].delay, 40_000, 'root timer retains the total request budget');
   assert.equal(timers[1].delay, 4_000, 'stage timer matches the store deadline metadata');
   assert.equal(timers[1].delay, receivedDeadlines[0].deadlineAt - 10_000);
   deadline.close();
@@ -443,4 +451,42 @@ test('captureDataMethod never evaluates accessors and preserves the receiver', (
   });
   assert.equal(captureDataMethod(hostile, 'method'), null);
   assert.equal(accessorReads, 0);
+});
+
+// ---- going back must not require shipping code -------------------------------
+// The 2026-08-21 incident: turning on the full business read pushed the
+// composer past its 5s budget and every turn came back "Reina's synthetic
+// read-only preview is unavailable right now". Raising the budget is the fix,
+// but a timing change that can only be undone by a revert PR is a bad trade
+// when what it governs is whether Reina answers at all. Every value is
+// settable from the environment, so any earlier shape is a dashboard edit.
+
+test('the whole budget can be dialled back to what it was, from the environment', () => {
+  const previous = resolveServerDeadline({
+    REINA_PILOT_TOTAL_MS: '12000',
+    REINA_PILOT_COMPOSER_MS: '5000',
+  });
+  assert.equal(previous.totalMs, 12_000);
+  assert.equal(previous.composerMs, 5_000);
+  assert.equal(previous.maximumTotalMs, 12_000, 'the clamp follows the total, or nothing is really reverted');
+});
+
+test('a typo in a dashboard field falls back to the default instead of taking the route down', () => {
+  for (const bad of ['', 'true', 'soon', '-1', '0', '999999999', null, undefined, {}, []]) {
+    const resolved = resolveServerDeadline({ REINA_PILOT_TOTAL_MS: bad });
+    assert.equal(resolved.totalMs, 40_000, `REINA_PILOT_TOTAL_MS=${JSON.stringify(bad)}`);
+  }
+  assert.equal(boundedDeadlineMs('7500', 1, 1_000, 10_000), 7_500);
+  assert.equal(boundedDeadlineMs('7500.9', 1, 1_000, 10_000), 7_500, 'truncated, not rounded up past a bound');
+});
+
+test('a stage can never be given longer than the request it belongs to', () => {
+  const resolved = resolveServerDeadline({
+    REINA_PILOT_TOTAL_MS: '6000',
+    REINA_PILOT_COMPOSER_MS: '30000',
+    REINA_PILOT_CONTEXT_MS: '30000',
+  });
+  assert.equal(resolved.totalMs, 6_000);
+  assert.equal(resolved.composerMs, 30_000, 'out of range for this total, so the default stands');
+  assert.ok(resolved.contextMs <= resolved.composerMs);
 });

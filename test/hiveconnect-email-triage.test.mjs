@@ -28,12 +28,22 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
-const app = readFileSync(new URL('../public/hiveconnect/app.js', import.meta.url), 'utf-8');
-const index = readFileSync(new URL('../public/index.html', import.meta.url), 'utf-8');
-const css = readFileSync(new URL('../public/hiveconnect/styles-scoped.css', import.meta.url), 'utf-8');
-const hcIndex = readFileSync(new URL('../public/hiveconnect/index.html', import.meta.url), 'utf-8');
-const triage = readFileSync(new URL('../api/reina/mail-triage.js', import.meta.url), 'utf-8');
-const triageLib = readFileSync(new URL('../api/_lib/mail-triage.js', import.meta.url), 'utf-8');
+// These tests search the source as TEXT, and several needles below span a line
+// break. core.autocrlf checks these files out CRLF on Windows and LF in CI, so
+// a needle written with \n silently stops matching on a Windows working copy --
+// indexOf returns -1, slice(-1, ...) hands back '', and the assertion fails
+// against an empty string with nothing to say about why. (One did: 'the login
+// scan never delays the first paint'. Another, in reina-lab-read-bridge, went
+// the other way and passed vacuously.) Read line endings normalized so the
+// needles mean the same thing on either checkout.
+const read = (rel) => readFileSync(new URL(rel, import.meta.url), 'utf-8').replace(/\r\n/g, '\n');
+
+const app = read('../public/hiveconnect/app.js');
+const index = read('../public/index.html');
+const css = read('../public/hiveconnect/styles-scoped.css');
+const hcIndex = read('../public/hiveconnect/index.html');
+const triage = read('../api/reina/mail-triage.js');
+const triageLib = read('../api/_lib/mail-triage.js');
 
 // The Reina block, with comments stripped — these tests must never read the
 // prose explaining why something was removed as evidence that it is still here.

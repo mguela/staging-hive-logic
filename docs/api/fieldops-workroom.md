@@ -352,10 +352,19 @@ Notes: 10-minute TTL; the code itself is never returned in the response.
 
 **Response:**
 ```json
-{ "ok": true, "uploaded": true }
+{ "ok": true, "stored": true, "document_id": "<uuid>", "flagged_for_review": true, "note": null }
 ```
 
-Notes: uploads to a private `onboarding-licenses` bucket, capped at 5MB, with no OCR — every upload is flagged for manual office review.
+Notes: the photo goes into the private `docs` bucket under
+`onboarding/licenses/{session_id}/`, and gets a `public.documents` row marked
+`sensitive` — so it is admin-only inside the company and never client- or
+sub-visible. Capped at 5 MB, no OCR: every upload is flagged for manual office
+review. On failure the response is `502` with `stored: false` and a plain-English
+`note`; the technical reason is written to the onboarding step for the office, not
+returned to the hire.
+
+Until 2026-08-22 this wrote to a bucket named `onboarding-licenses` that has never
+existed on the production project, so every upload failed.
 
 ### `POST /api/invites?resource=finish`
 **Auth:** Public — session-scoped.

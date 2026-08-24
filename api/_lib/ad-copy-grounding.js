@@ -14,7 +14,7 @@ const KNOWN_DIVISIONS = ['HVAC', 'Electric', 'Plumbing', 'Design|Build', 'Outdoo
 const PAGE_SIZE = 1000;
 const MAX_PAGES = 10;
 
-async function fetchAllRows(table, query, supabaseRequest) {
+export async function fetchAllRows(table, query, supabaseRequest) {
   let all = [];
   for (let page = 0; page < MAX_PAGES; page++) {
     const offset = page * PAGE_SIZE;
@@ -33,7 +33,7 @@ async function fetchAllRows(table, query, supabaseRequest) {
   return all;
 }
 
-function jobDivision(title) {
+export function jobDivision(title) {
   const t = String(title || '').toLowerCase();
   if (/hvac|heat pump|furnace|boiler|air condition|mini.?split|condenser|thermostat/.test(t)) return 'HVAC';
   if (/electric|panel upgrade|outlet|wiring|lighting|generator|ev charger|breaker|recessed/.test(t)) return 'Electric';

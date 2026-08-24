@@ -171,6 +171,9 @@ export const CRON_EVIDENCE = {
   '/api/reina/mail-sweep': {
     unverifiable: 'Writes only when new mail is worth a notification, so a quiet inbox looks exactly like a dead sweep.',
   },
+  // The ops-event sweep writes a row per detector per run, so "did it run" is
+  // answerable even on a quiet day when it found nothing worth raising.
+  '/api/ops-events?resource=sweep': { probe: { table: 'ops_detector_runs', column: 'ran_at' } },
   '/api/track1?resource=monitor_prune': {
     unverifiable: 'Retention prune deletes rows; nothing is written to prove it ran. (guard.js records that every 08:00 run died at the edge until 2026-08-15.)',
   },
@@ -219,6 +222,9 @@ export const CRON_EVIDENCE = {
   // --- Deliberately switched off. Must NOT alarm, or the report gets ------
   // ignored and we are back where we started. guard.js verified each of these
   // is independently disabled behind the guard.
+  '/api/growth?resource=growth_scan': {
+    probe: { table: 'growth_suggestions', column: 'created_at' },
+  },
   '/api/social-posts?resource=process_scheduled_posts': {
     offByDesign: 'No social surface is connected (ad_platform_connections and social_posts are empty), so there is nothing to publish.',
   },
@@ -318,6 +324,7 @@ export const CRON_SCHEDULES = {
   "/api/track1?resource=workforce_sweep_gone": "* * * * *",
   "/api/jobber/webhook?cleanup=1": "0 4 * * *",
   "/api/reina/scan-change-requests?days=2": "0 */2 * * *",
+  "/api/growth?resource=growth_scan": "0 12 * * 1",
   "/api/social-posts?resource=process_scheduled_posts": "*/15 * * * *",
   "/api/marketing?resource=process_review_request_autosend": "0 15 * * *",
   "/api/marketing?resource=process_post_job_thank_you_autosend": "0 12 * * *",
@@ -331,6 +338,7 @@ export const CRON_SCHEDULES = {
   "/api/automations?resource=invoice_overdue_nudge": "0 14 * * *",
   "/api/schedule/outbox?resource=process": "*/10 * * * *",
   "/api/reina/mail-sweep": "*/10 * * * *",
+  "/api/ops-events?resource=sweep": "*/20 * * * *",
 };
 
 /** Every scheduled job, as signals ready for evaluateSignals(). */

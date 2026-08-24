@@ -75,7 +75,7 @@ function makeSandbox({ hidden = false, curView = 'cc', accessToken = 'tok' } = {
   const names = [
     'map', 'jobsBoard', 'jobHealth', 'jobsAttention', 'watching', 'financials',
     'leads', 'clients', 'dispatchAlerts', 'schedule', 'todaySchedule', 'teamTodo',
-    'dailyBrief', 'pulse', 'recentPhotos',
+    'dailyBrief', 'pulse', 'recentPhotos', 'opsFeed',
   ];
   const loaders = {
     loadMapLive: () => calls.push('map'),
@@ -90,6 +90,9 @@ function makeSandbox({ hidden = false, curView = 'cc', accessToken = 'tok' } = {
     loadScheduleLive: () => calls.push('schedule'),
     loadTodaySchedule: () => calls.push('todaySchedule'),
     teamTodoLoad: () => calls.push('teamTodo'),
+    // The ops event feed rides the SAME shared tick rather than owning a timer
+    // of its own -- which is the whole point of this test file.
+    hlOpsLoad: () => calls.push('opsFeed'),
   };
   let syncedCalls = 0;
   const sandbox = {
@@ -111,7 +114,7 @@ function makeSandbox({ hidden = false, curView = 'cc', accessToken = 'tok' } = {
   return { sandbox, calls, names, syncedCalls: () => syncedCalls };
 }
 
-test('a tick on the cc view refreshes all 15 widget groups exactly once each', () => {
+test('a tick on the cc view refreshes all 16 widget groups exactly once each', () => {
   const { sandbox, calls, names, syncedCalls } = makeSandbox({ curView: 'cc' });
   sandbox.ccPollTick();
   assert.deepEqual([...calls].sort(), [...names].sort());
@@ -133,9 +136,9 @@ test('a tick before auth restoration or after sign-out is a complete no-op', () 
 });
 
 test('a tick with __HL_CUR_VIEW unset (initial page load, before any showView call) still runs', () => {
-  const { sandbox, calls } = makeSandbox({ curView: undefined });
+  const { sandbox, calls, names } = makeSandbox({ curView: undefined });
   sandbox.ccPollTick();
-  assert.equal(calls.length, 15, 'an unset current view must be treated as cc, matching schedVehPollStart\'s own idiom');
+  assert.equal(calls.length, names.length, 'an unset current view must be treated as cc, matching schedVehPollStart\'s own idiom');
 });
 
 test('a tick while the tab is hidden is a complete no-op', () => {

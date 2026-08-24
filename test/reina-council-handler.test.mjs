@@ -112,6 +112,24 @@ test('workspace returns only this owner projects and Boardroom conversations', a
   ]);
 });
 
+// Regression: Supabase's `Prefer: return=representation` can come back 2xx
+// with no row (an RLS policy that doesn't grant SELECT back to the inserting
+// role, for one), so store.createProject() can resolve to undefined even
+// though nothing threw. Unguarded, the client took that as success, unshifted
+// `undefined` into its in-memory project list, and crashed on the NEXT
+// history render at a completely different line
+// (workspaceProjects.find(...).id @app-reina-council.js:537) rather than here,
+// which is why the crawler flagged the symptom, not the cause. The handler
+// must fail loudly instead of returning a fake success with no project.
+test('create_project fails loudly rather than returning ok:true with no project', async () => {
+  const store = { createProject: async () => undefined };
+  const res = response();
+  await handler(store)({ method: 'POST', body: { action: 'create_project', name: 'HiveLogic' } }, res);
+  assert.equal(res.statusCode, 500);
+  assert.equal(res.payload.ok, false);
+  assert.equal(res.payload.project, undefined);
+});
+
 test('project creation and run pinning remain owner-scoped', async () => {
   const projectId = '00000000-0000-4000-8000-000000000010';
   const runId = '00000000-0000-4000-8000-000000000020';

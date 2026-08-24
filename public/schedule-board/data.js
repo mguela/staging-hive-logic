@@ -144,7 +144,13 @@
       // Service areas, for the map's opening camera. Optional in the strongest
       // sense: if this fails the board still loads and the map falls back to
       // the shop coordinate below.
-      fetchJSON('/api/company?resource=get', token).catch(function(){ return null; })
+      fetchJSON('/api/company?resource=get', token).catch(function(){ return null; }),
+      // Open jobs with nowhere to be. This is what the unscheduled rail
+      // renders; before it existed the rail's `demands` array was the literal
+      // [] a few hundred lines below, so the panel said "No unscheduled work"
+      // to a company with 18 jobs waiting for a slot. Optional like the rest:
+      // a failure leaves the rail empty rather than taking the board down.
+      fetchJSON('/api/track1?resource=schedule_unscheduled', token).catch(function(){ return null; })
     ]).then(function(res){
       var roster = (res[0] && res[0].roster) || [];
       var rawVisits = (res[1] && res[1].visits) || [];
@@ -245,6 +251,10 @@
       // row so dispatch can't double-book someone who looks free but isn't.
       // Office/admin assignees are already excluded (no row), so they get no card.
       var visits = [], unmatched = 0;
+      // clientId -> contact, so a HiveLogic-native appointment booked for a
+      // client who also has a Jobber visit in view can show the same details
+      // without a second round trip.
+      var contactByClient = {};
       rawVisits.forEach(function(v){
         if(!v.startAt || !v.endAt) return;
         var matched = [];
@@ -264,7 +274,14 @@
         var crew = matched.map(function(id){ return { id:id, n: techById[id]?techById[id].n:'', ini: techById[id]?techById[id].ini:'', pc: techById[id]?techById[id].pc:'#888', jid: techById[id]?techById[id].jid:null, lead: id===leadId }; });
         var lat = (v.lat!=null ? Number(v.lat) : null), lng = (v.lng!=null ? Number(v.lng) : null);
         var leadTech = techById[leadId];
-        visits.push({
+        // Real contact details, straight from the clients table via
+        // schedule_range. Null where the client genuinely has none on file --
+        // the job sheet says so rather than inventing one, which is what it
+        // used to do.
+        var contact = { clientId: v.clientId || null, clientPhone: v.clientPhone || null,
+          clientEmail: v.clientEmail || null, clientAddr: v.clientAddress || null };
+        if(contact.clientId) contactByClient[contact.clientId] = contact;
+        visits.push(Object.assign({
           id: 'v_'+v.visitId+'_'+leadId, vid: v.visitId,
           t: leadId, date: es.date, s: es.dec, e: e,
           client: v.clientName || ttl, city: v.city || '', type: ttl,
@@ -275,11 +292,11 @@
           jid: v.jobberId || null, lat: lat, lng: lng,
           crew: crew, lead: true, crewSize: crew.length,
           assignedJid: (leadTech && leadTech.jid) || null
-        });
+        }, contact));
         // chained secondaries: one muted marker each, on their own row
         matched.forEach(function(id){
           if(id===leadId) return;
-          visits.push({
+          visits.push(Object.assign({
             id: 'v_'+v.visitId+'_'+id+'_chained', vid: v.visitId, t: id,
             date: es.date, s: es.dec, e: e,
             client: v.clientName || ttl, city: v.city || '', type: ttl,
@@ -290,7 +307,7 @@
             chained: true, chainedTo: leadId,
             chainedToName: leadTech ? leadTech.n : 'lead',
             assignedJid: (techById[id] && techById[id].jid) || null
-          });
+          }, contact));
         });
       });
 
@@ -305,9 +322,17 @@
         var crew = ids.map(function(id){ return { id:id, n:techById[id]?techById[id].n:'', ini:techById[id]?techById[id].ini:'', pc:techById[id]?techById[id].pc:'#888', jid:techById[id]?techById[id].jid:null, lead:id===leadId }; });
         var kindL = (KINDS[a.kind] && KINDS[a.kind].l) || 'Appointment';
         var leadTech = techById[leadId];
+        // A native appointment carries whatever was typed on the booking form
+        // in details{}; failing that, the client record it was booked against.
+        var det = a.details || {};
+        var known = (a.client_ref && contactByClient[a.client_ref]) || {};
         var base = {
           vid:'hl_'+a.id, apptId:a.id, date:es.date, s:es.dec, e:e,
           client:a.client || a.title || kindL, city:'', type:a.title || kindL,
+          clientId: a.client_ref || null,
+          clientPhone: det.phone || known.clientPhone || null,
+          clientEmail: det.email || known.clientEmail || null,
+          clientAddr: det.address || det.addr || known.clientAddr || null,
           jobNo:a.job_no || null,
           status:(a.status==='done'?'done':'scheduled'), kind:a.kind || 'field',
           // The real state, not a hardcoded 'confirmed'. This was pinned to
@@ -318,7 +343,13 @@
           confirm:(a.confirm_state || 'unconfirmed'),
           lifecycle:(a.confirm_state || 'unconfirmed'), pinned:false,
           lat:(a.lat!=null?Number(a.lat):null), lng:(a.lng!=null?Number(a.lng):null),
-          crew:crew, crewSize:crew.length, native:true
+          crew:crew, crewSize:crew.length, native:true,
+          // Where this appointment came from. A site visit booked off a lead
+          // keeps the link, which is what lets the board offer "write the
+          // estimate" once the visit is done instead of sending the estimator
+          // back to the Leads tab to find the same card again.
+          sourceLeadId:a.source_lead_id || null,
+          clientRef:a.client_ref || null
         };
         visits.push(Object.assign({}, base, {
           id:'hl_'+a.id+'_'+leadId, t:leadId, lead:true,
@@ -399,6 +430,10 @@
       // one would put fake deadlines on a dispatch board. money likewise has no
       // per-job open-invoice source wired yet.
       var LENS = { materials:materials, money:{}, compliance:[], assets:assets, weather:weather };
+
+      // ---- unscheduled rail: REAL, from jobs with no slot ----
+      var unsched = (res[7] && res[7].ok && res[7].jobs) || [];
+      var unscheduledDemands = unsched.map(demandFromJob);
       window.HL_LENS_SOURCES = {
         materials: (matsRes && matsRes.ok) ? 'live' : 'unavailable',
         weather: wx ? 'live' : 'unavailable',
@@ -406,7 +441,13 @@
       };
 
       window.LAB = {
-        techs: techs, visits: visits, projects: [], unassigned: [], demands: [],
+        techs: techs, visits: visits, projects: [], unassigned: [],
+        // REAL, from schedule_unscheduled. Only the fields a job actually has
+        // are set: a job carries no required skill, no promised window and no
+        // priority, and inventing those would put made-up urgency on a
+        // dispatch board. The card renders whatever is present and skips the
+        // rest.
+        demands: unscheduledDemands,
         // Where the map opens. This used to be these coordinates hardcoded, with
         // a hardcoded zoom in app.js to match -- so the board opened on a fixed
         // point at a fixed scale regardless of where the company actually works.
@@ -441,14 +482,107 @@
 
   // Follow HiveLogic's light/dark: parent sends 'theme' with the token and on toggle.
   // Setting data-theme swaps the CSS variables live; sl_theme keeps app.js's restore in sync.
+  //
+  // sl_theme is NOT a per-device setting that escaped the rule in CLAUDE.md.
+  // This board's own theme toggle is hidden and the theme is pushed down from
+  // HiveLogic by postMessage; sl_theme is only a local mirror of that, so the
+  // board can paint before the parent's message arrives. The preference it
+  // mirrors follows the user one level up.
   function applyTheme(th){ if(th!=='light'&&th!=='dark') return; try{ document.documentElement.setAttribute('data-theme', th); localStorage.setItem('sl_theme', th); }catch(e){} }
+  // ---- asking the parent for a live token -----------------------------------
+  // This board is an iframe, so it does not inherit HiveLogic's authenticated-
+  // fetch shim and cannot heal its own 401s the way the parent page does. It
+  // was handed a token once, on load, and Supabase access tokens die after an
+  // hour -- so a HiveLogic session left open longer than that left this
+  // document polling GPS every 60 seconds with a dead token and no path back
+  // except navigating away and returning. Chris, 2026-08-23: his console was
+  // filling with `GET /api/track1?resource=crew_schedule 401` on repeat.
+  // The parent pushes each refreshed token down now; this is what asks when a
+  // request 401s anyway. It resolves with whatever arrives, so a caller can
+  // simply retry with window.HL_BOARD_TOKEN.
+  var _tokenWaiters = [], _tokenPending = null;
+  function deliverToken(t){
+    var ws = _tokenWaiters; _tokenWaiters = []; _tokenPending = null;
+    ws.forEach(function(fn){ try{ fn(t); }catch(e){} });
+  }
+  window.hlFreshToken = function(){
+    if(_tokenPending) return _tokenPending;                       // one ask, however many callers
+    if(window.parent === window) return Promise.resolve(window.HL_BOARD_TOKEN || '');
+    var mine = new Promise(function(resolve){
+      _tokenWaiters.push(resolve);
+      // A parent that never answers must fail the request, not freeze the poll
+      // loop that would have retried a minute later.
+      setTimeout(function(){ if(_tokenPending === mine) deliverToken(window.HL_BOARD_TOKEN || ''); }, 4000);
+      try { window.parent.postMessage({ type:'hl-crewboard-need-token' }, location.origin); }
+      catch(e){ deliverToken(window.HL_BOARD_TOKEN || ''); }
+    });
+    _tokenPending = mine;
+    return mine;
+  };
+
+  // One mapper for both the boot fetch and the refresh below, so the two
+  // cannot drift into showing different cards for the same job.
+  function demandFromJob(j){
+    return {
+      id: j.jobRef, jobRef: j.jobRef, jobNo: j.jobNo,
+      title: j.title, client: j.client, city: j.city,
+      div: j.division, total: j.total,
+      // Deliberately absent rather than guessed: dur, skill, window, priority
+      // and ready have no source on a job row, and made-up urgency on a
+      // dispatch board is worse than a card with fewer chips.
+      dur: null, skill: null, window: null, priority: null, ready: null
+    };
+  }
+
+  // Re-read the rail. The board loads its data once at boot, so a job created
+  // AFTER that -- which is exactly the case when HiveLogic sends you here
+  // straight from the job form -- would not be in the list yet. Opening the
+  // panel on stale data is how "it didn't show in the unassigned jobs layer"
+  // happens a second time.
+  //
+  // Mutates the existing array rather than replacing it: app.js destructured
+  // `demands` at load and holds a reference to that same array.
+  window.hlRefreshUnscheduled = function(){
+    var tok = window.HL_BOARD_TOKEN;
+    return fetchJSON('/api/track1?resource=schedule_unscheduled', tok).then(function(r){
+      if(!(r && r.ok && r.jobs) || !window.LAB || !window.LAB.demands) return false;
+      var arr = window.LAB.demands;
+      arr.length = 0;
+      r.jobs.forEach(function(j){ arr.push(demandFromJob(j)); });
+      return true;
+    }).catch(function(){ return false; });
+  };
+
   // token arrival: parent postMessage (preferred) OR shared session storage (fallback)
   window.addEventListener('message', function(ev){
     if(ev.origin !== location.origin) return;
     var d = ev.data || {};
-    if(d.type === 'hl-crewboard-token'){ if(d.theme) applyTheme(d.theme); if(d.token){ window.HL_BOARD_TOKEN = d.token; boot(d.token); } } // always refresh the write token, even after boot
+    if(d.type === 'hl-crewboard-token'){ if(d.theme) applyTheme(d.theme); if(d.token){ window.HL_BOARD_TOKEN = d.token; deliverToken(d.token); boot(d.token); } } // always refresh the write token, even after boot
     else if(d.type === 'hl-crewboard-theme'){ applyTheme(d.theme); }
+    // A job was just created from a lead and has no slot yet. HiveLogic sends
+    // this as it switches to the Schedule tab, so he lands looking at the
+    // unscheduled rail with the new job in it, ready to drag onto a crew --
+    // rather than on a board that looks unchanged and leaves him hunting.
+    //
+    // Retried by the sender, because a board that is still booting has no
+    // toggleUnassigned yet and dropping the request silently is how this
+    // becomes "it did nothing again".
+    else if(d.type === 'hl-crewboard-show-unscheduled'){
+      if(typeof window.toggleUnassigned === 'function'){
+        var after = function(){
+          try{ window.toggleUnassigned(true); }catch(e){}
+          try{ window.parent.postMessage({ type:'hl-crewboard-unscheduled-shown' }, location.origin); }catch(e){}
+        };
+        // Refresh FIRST. The job that sent us here was created seconds ago and
+        // is not in the list the board loaded at boot.
+        if(typeof window.hlRefreshUnscheduled === 'function') window.hlRefreshUnscheduled().then(after, after);
+        else after();
+      }
+    }
   });
+  // Ask straight away rather than only waiting to be told. The parent sends on
+  // iframe load, but a board mounted from a cached frame gets no load event.
+  try { if(window.parent !== window) window.parent.postMessage({ type:'hl-crewboard-need-token' }, location.origin); } catch(e){}
   // Prefer the parent's fresh (auto-refreshed) token; fall back to the shared session
   // token after a short wait, then a URL param, so we don't boot on a stale token.
   setTimeout(function(){ if(!boot._done){ var lt = tokenFromStorage(); if(lt) boot(lt); } }, 400);

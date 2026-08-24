@@ -203,6 +203,8 @@ test('replaying the real 2026-08 production timestamps, the outages are detected
   const POST_SNAPSHOT = [
     '/api/automations?resource=missed_call_textback',
     '/api/automations?resource=invoice_overdue_nudge',
+    '/api/ops-events?resource=sweep',
+    '/api/growth?resource=growth_scan',
   ];
   const asOfSnapshot = alarmKeys.filter((k) => !POST_SNAPSHOT.includes(k));
 

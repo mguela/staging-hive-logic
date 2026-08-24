@@ -266,26 +266,34 @@ export async function handleAdCampaignsGet(req, res, supabaseRequest = defaultSu
   const campaigns = await listRes.json();
   res.status(200).json({ ok: true, campaigns });
 }
-export async function handleAdCampaignDraftPost(req, res, deps = {}) {
+// The pure core of drafting an ad campaign, extracted so it has exactly one
+// implementation. api/growth.js accepts a growth suggestion by calling this
+// directly rather than re-deriving grounding facts or re-implementing the
+// copy-generation fallback -- an accepted suggestion and a hand-drafted
+// campaign must produce an identical row.
+//
+// Returns { ok: true, campaign } or { ok: false, status, error }. Refusals
+// are returned, not thrown, because "AI copy is not configured" and "that
+// division does not exist" are ordinary answers, not exceptions.
+export async function createAdCampaignDraft(input, deps = {}) {
   const supabaseRequest = deps.supabaseRequest || defaultSupabaseRequest;
-  const b = req.body || {};
-  const platform = String(b.platform || '').trim();
-  const objective = String(b.objective || '').trim();
-  const division = String(b.division || '').trim();
-  const dailyBudgetCents = Number.isFinite(Number(b.dailyBudgetCents)) ? Math.round(Number(b.dailyBudgetCents)) : null;
-  const manualCopy = (b.adCopy && typeof b.adCopy === 'object') ? b.adCopy : null;
+  const platform = String(input.platform || '').trim();
+  const objective = String(input.objective || '').trim();
+  const division = String(input.division || '').trim();
+  const dailyBudgetCents = Number.isFinite(Number(input.dailyBudgetCents)) ? Math.round(Number(input.dailyBudgetCents)) : null;
+  const manualCopy = (input.adCopy && typeof input.adCopy === 'object') ? input.adCopy : null;
 
   if (!AD_PLATFORMS.has(platform)) {
-    return res.status(400).json({ ok: false, error: 'platform must be one of: ' + [...AD_PLATFORMS].join(', ') + '.' });
+    return { ok: false, status: 400, error: 'platform must be one of: ' + [...AD_PLATFORMS].join(', ') + '.' };
   }
   if (!AD_OBJECTIVES.has(objective)) {
-    return res.status(400).json({ ok: false, error: 'objective must be one of: ' + [...AD_OBJECTIVES].join(', ') + '.' });
+    return { ok: false, status: 400, error: 'objective must be one of: ' + [...AD_OBJECTIVES].join(', ') + '.' };
   }
   if (!KNOWN_DIVISIONS.includes(division)) {
-    return res.status(400).json({ ok: false, error: 'division must be one of: ' + KNOWN_DIVISIONS.join(', ') + '.' });
+    return { ok: false, status: 400, error: 'division must be one of: ' + KNOWN_DIVISIONS.join(', ') + '.' };
   }
   if (dailyBudgetCents === null || dailyBudgetCents < 0) {
-    return res.status(400).json({ ok: false, error: 'dailyBudgetCents must be a non-negative number.' });
+    return { ok: false, status: 400, error: 'dailyBudgetCents must be a non-negative number.' };
   }
 
   const [divisionFacts, territoryFacts] = await Promise.all([
@@ -298,7 +306,7 @@ export async function handleAdCampaignDraftPost(req, res, deps = {}) {
     const requiredKeys = ['headline', 'primaryText', 'description', 'cta'];
     for (const k of requiredKeys) {
       if (typeof manualCopy[k] !== 'string' || !manualCopy[k].trim()) {
-        return res.status(400).json({ ok: false, error: 'adCopy.' + k + ' is required when providing manual copy.' });
+        return { ok: false, status: 400, error: 'adCopy.' + k + ' is required when providing manual copy.' };
       }
     }
     adCopy = {
@@ -311,11 +319,11 @@ export async function handleAdCampaignDraftPost(req, res, deps = {}) {
     try {
       adCopy = await generateAdCopy({ platform, objective, division, divisionFacts, territoryFacts }, deps);
     } catch (e) {
-      if (e.notConfigured) return res.status(409).json({ ok: false, error: e.message });
-      return res.status(502).json({ ok: false, error: e.message });
+      if (e.notConfigured) return { ok: false, status: 409, error: e.message };
+      return { ok: false, status: 502, error: e.message };
     }
   } else {
-    return res.status(409).json({ ok: false, error: 'ANTHROPIC_API_KEY is not set for this deployment -- provide adCopy manually or configure AI generation.' });
+    return { ok: false, status: 409, error: 'ANTHROPIC_API_KEY is not set for this deployment -- provide adCopy manually or configure AI generation.' };
   }
 
   const name = division + ' ' + objective.replace('_', ' ') + ' -- ' + platform;
@@ -328,15 +336,21 @@ export async function handleAdCampaignDraftPost(req, res, deps = {}) {
     daily_budget_cents: dailyBudgetCents,
     targeting_summary: { division, divisionFacts, territoryFacts },
     ad_copy: adCopy,
-    created_by: 'reina',
+    created_by: input.createdBy || 'reina',
   };
   const insertRes = await supabaseRequest('ad_campaigns', {
     method: 'POST', headers: { Prefer: 'return=representation' },
     body: JSON.stringify([payload]),
   });
-  if (!insertRes.ok) return res.status(500).json({ ok: false, error: await insertRes.text() });
+  if (!insertRes.ok) return { ok: false, status: 500, error: await insertRes.text() };
   const [inserted] = await insertRes.json();
-  res.status(200).json({ ok: true, campaign: inserted });
+  return { ok: true, campaign: inserted };
+}
+
+export async function handleAdCampaignDraftPost(req, res, deps = {}) {
+  const result = await createAdCampaignDraft(req.body || {}, deps);
+  if (!result.ok) return res.status(result.status).json({ ok: false, error: result.error });
+  res.status(200).json({ ok: true, campaign: result.campaign });
 }
 export async function handleAdCampaignReviewPost(req, res, supabaseRequest = defaultSupabaseRequest) {
   const b = req.body || {};

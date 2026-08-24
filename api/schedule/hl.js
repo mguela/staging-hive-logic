@@ -230,8 +230,22 @@ export default async function handler(req, res) {
         if (!a.division) a.division = job.division_code || null;
       }
 
+      // client_ref makes the client pick REAL: `client` is the label the board
+      // renders, client_ref is the record it was booked for. Validated against
+      // the clients table rather than trusted, so a bad id becomes a clear
+      // error instead of a dangling reference nothing will ever resolve.
+      let clientRef = null;
+      if (a.client_ref) {
+        const cr = await sb(`clients?jobber_id=eq.${enc(a.client_ref)}&select=jobber_id,name&limit=1`);
+        const cli = (Array.isArray(cr.json) ? cr.json : [])[0];
+        if (!cli) return res.status(404).json({ ok: false, error: 'That client no longer exists.' });
+        clientRef = cli.jobber_id;
+        if (!a.client) a.client = cli.name || null;
+      }
+
       const row = {
         kind: a.kind || 'field', title: a.title || null, client: a.client || null,
+        client_ref: clientRef,
         crew_jids: a.crew_jids || [], lead_jid: a.lead_jid || null,
         start_at: a.start_at, end_at: a.end_at, division: a.division || null,
         job_no: jobLink.job_no, job_ref: jobLink.job_ref,

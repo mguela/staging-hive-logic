@@ -570,6 +570,11 @@
     showError('');
     try {
       var result = await api('/api/reina-council', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'create_project', name: name.trim() }) });
+      // The server now fails loudly if it has no project row to return, but
+      // guard here too rather than trust that forever -- an unguarded unshift
+      // of `undefined` here is exactly what corrupted workspaceProjects and
+      // crashed the next history render at a completely different line.
+      if (!result.project) { showError('Boardroom project could not be created.'); return; }
       workspaceProjects.unshift(result.project);
       selectedProjectId = result.project.id;
       renderProjects();

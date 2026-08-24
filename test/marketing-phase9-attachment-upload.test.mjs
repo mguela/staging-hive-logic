@@ -20,11 +20,11 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, '..');
 const apiPath = path.join(repoRoot, 'api', 'marketing.js');
 const frontendPath = path.join(repoRoot, 'public', 'marketing-command-center', 'index.html');
-const subportalPath = path.join(repoRoot, 'api', 'subportal.js');
+const sharedFilesPath = path.join(repoRoot, 'api', '_lib', 'hivedoc-files.js');
 
 const api = fs.readFileSync(apiPath, 'utf8');
 const frontend = fs.readFileSync(frontendPath, 'utf8');
-const subportal = fs.readFileSync(subportalPath, 'utf8');
+const sharedFiles = fs.readFileSync(sharedFilesPath, 'utf8');
 
 const checks = [];
 function check(name, fn) { checks.push({ name, fn }); }
@@ -61,13 +61,23 @@ check('handleIdeasPost no longer hard-rejects non-text inputMode -- rawText is r
   assert.match(api, /if \(inputMode === 'text' && !rawText\) return res\.status\(400\)\.json\(\{ ok: false, error: 'rawText is required\.' \}\);/);
 });
 
-check('uploadDataUrl mirrors api/subportal.js\'s established data-URL-to-Supabase-Storage pattern (same regex, same service-key POST, same x-upsert convention)', () => {
+check('uploadDataUrl still does data-URL-to-Supabase-Storage the established way (same regex, same service-key POST, same x-upsert convention)', () => {
   assert.match(api, /async function uploadDataUrl\(bucket, path, dataUrl\)/);
   assert.match(api, /const match = \/\^data:\(\[\^;\]\+\);base64,\(\.\+\)\$\/\.exec\(dataUrl \|\| ''\);/);
   assert.match(api, /apikey: process\.env\.SUPABASE_SERVICE_KEY,/);
   assert.match(api, /'x-upsert': 'true',/);
-  // subportal.js really does define the precedent this mirrors
-  assert.match(subportal, /uploadDataUrl/);
+  // This used to assert that api/subportal.js defined the precedent. It no
+  // longer does: on 2026-08-22 subportal's copy was deleted and its uploads
+  // moved to api/_lib/hivedoc-files.js, because the buckets it named
+  // (`sub-documents`, `sub-invoices`) have never existed on production. So
+  // this points at where the precedent actually lives now.
+  //
+  // api/marketing.js is the last hand-rolled uploader. It is NOT broken --
+  // `marketing-attachments` is a real bucket -- but it has no size cap, no
+  // content-type allowlist and no path sanitising, all of which the shared
+  // module does. Folding it in is a follow-up, deliberately not done here.
+  assert.match(sharedFiles, /export async function storeFiledDocument/);
+  assert.match(sharedFiles, /'x-upsert': 'true'/);
 });
 
 check('handleIdeaAttachmentsGet and handleIdeaAttachmentsPost are defined and dispatched for resource=idea_attachments', () => {

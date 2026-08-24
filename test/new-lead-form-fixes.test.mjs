@@ -109,13 +109,17 @@ test('the lookup needs a client', async () => {
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const source = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf-8');
-const saveLead = source.slice(source.indexOf('function saveLead()'), source.indexOf('function saveLead()') + 2200);
+// The body every save sends now lives in nlSaveLeadCore -- saveLead and the
+// five destination buttons all go through it, so the title is built once
+// rather than once per entry point.
+const saveLead = source.slice(source.indexOf('function nlSaveLeadCore(extra)'),
+                              source.indexOf('function nlSaveLeadCore(extra)') + 2600);
 
 test('saveLead sends a title, so the card is identifiable', () => {
   // Without this every hand-entered lead is headlined with the customer's name
   // and two leads for one customer look identical.
-  assert.match(saveLead, /title:/, 'saveLead must send a title');
-  assert.match(saveLead, /var title = need\.trim\(\)/, 'the title comes from what they asked for');
+  assert.match(saveLead, /title:/, 'the save must send a title');
+  assert.match(saveLead, /title: f\.need\.trim\(\) \|\| null/, 'the title comes from what they asked for');
 });
 
 test('the client-pick note no longer claims the address is unavailable', () => {
@@ -124,6 +128,14 @@ test('the client-pick note no longer claims the address is unavailable', () => {
     'that claim was wrong for address on 6,407 of 8,689 clients');
   assert.match(pick, /client_location&clientId=/, 'it must look the address up');
   assert.match(pick, /!addrEl\.value\.trim\(\)/, 'never overwrite what the user already typed');
-  // The phone half was accurate and must survive.
-  assert.match(pick, /[Pp]hone isn&#8217;t part of the Jobber sync/);
+  // The phone half of that warning was ALSO wrong, and was corrected on
+  // 2026-08-23 when the caller-ID prefill went in: /api/clients returns
+  // phone_e164 as `phone`, and the Jobber sync fills it for 7,434 of 8,690
+  // clients. The note told the user to ask the client for something HiveLogic
+  // already had, six times out of seven -- exactly the address mistake, one
+  // field over. It now fills the phone in and only claims one is missing when
+  // one actually is.
+  assert.doesNotMatch(pick, /[Pp]hone isn&#8217;t part of the Jobber sync/);
+  assert.match(pick, /phoneEl\.value = hlPrettyPhone\(c\.phone\)/);
+  assert.match(pick, /!phoneEl\.value\.trim\(\)/, 'never overwrite what the user already typed');
 });

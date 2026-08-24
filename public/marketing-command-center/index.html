@@ -179,6 +179,24 @@
       .then(function(r){ return r.json(); });
   }
 
+  function apiGrowth(resource, opts){
+    opts = opts || {};
+    var h = opts.headers ? Object.assign({}, opts.headers) : {};
+    var t = hlTokenSync();
+    if (t) h.Authorization = 'Bearer ' + t;
+    if (opts.body) h['Content-Type'] = 'application/json';
+    return fetch('/api/growth?resource=' + resource, Object.assign({}, opts, {headers:h}))
+      .then(function(r){ return r.json(); });
+  }
+  function apiAds(resource, opts){
+    opts = opts || {};
+    var h = opts.headers ? Object.assign({}, opts.headers) : {};
+    var t = hlTokenSync();
+    if (t) h.Authorization = 'Bearer ' + t;
+    if (opts.body) h['Content-Type'] = 'application/json';
+    return fetch('/api/ads?resource=' + resource, Object.assign({}, opts, {headers:h}))
+      .then(function(r){ return r.json(); });
+  }
   function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
   function money(n){ return '$' + Math.round(Number(n)||0).toLocaleString('en-US'); }
 
@@ -212,6 +230,8 @@
   var NAV = [
     {key:'home', label:'Home', icon:'home'},
     {key:'plan', label:'Plan', icon:'doc'},
+    {key:'growth', label:'Growth', icon:'chart'},
+    {key:'paid_ads', label:'Paid Ads', icon:'dollar'},
     {key:'ready_for_you', label:'Ready for You', icon:'rocket'},
     {key:'content_approval', label:'Content Approval', icon:'chat'},
     {key:'ideas', label:'Ideas', icon:'idea'},
@@ -1821,6 +1841,8 @@ function renderBudget(data){
     if (route === 'plan') return renderPlan(data);
     if (route === 'budget') return renderBudget(data);
     if (route === 'connections') return renderConnections(data);
+    if (route === 'growth') return renderGrowth();
+    if (route === 'paid_ads') return renderPaidAds();
     if (route === 'ready_for_you') return renderReadyForYou(data);
     if (route === 'content_approval') return renderContentApproval();
     if (route === 'calendar') return renderCalendar(data);
@@ -1852,6 +1874,8 @@ function renderBudget(data){
       {key:'home', out: renderHome(data)},
       {key:'content_approval', out: renderContentApproval()},
       {key:'plan', out: renderPlan(data)},
+      {key:'growth', out: renderGrowth()},
+      {key:'paid_ads', out: renderPaidAds()},
       {key:'ready_for_you', out: renderReadyForYou(data)},
       {key:'calendar', out: renderCalendar(data)},
       {key:'results', out: renderResults(data)},
@@ -1883,6 +1907,137 @@ function renderBudget(data){
       render();
     }).catch(function(){
       document.getElementById('cc-main').innerHTML = '<div class="cc-empty">Could not reach the server. Check your connection and refresh.</div>';
+    });
+  }
+
+  // ---------- Growth (Reina's ranked next steps) ----------
+  // Every card here was computed from real synced numbers by the weekly scan
+  // in api/growth.js and carries the evidence it came from. Accepting one
+  // creates a DRAFT -- it never launches an ad, sends an email, or spends.
+  function growthPriorityChip(p){
+    if (p <= 1) return '<span class="cc-status ready">Do this first</span>';
+    if (p === 2) return '<span class="cc-status pending">High value</span>';
+    return '';
+  }
+
+  // Evidence is rendered from whatever scalar keys the suggestion carries
+  // rather than a fixed list, because each rule contributes different fields
+  // and a hardcoded template would silently drop the ones that matter most.
+  function growthEvidenceHtml(evidence){
+    return Object.keys(evidence || {}).map(function(k){
+      var v = evidence[k];
+      if (v == null || typeof v === 'object') return '';
+      var label = k.replace(/([A-Z])/g, ' $1').replace(/^./, function(c){ return c.toUpperCase(); });
+      var isMoney = /Cents$/.test(k);
+      return '<div class="cc-ready-sub">' + esc(label.replace(/ Cents$/, '')) + ': ' +
+        esc(isMoney ? money(Number(v) / 100) : String(v)) + '</div>';
+    }).join('');
+  }
+
+  function growthCard(sug){
+    return '<div class="cc-ready-card" data-growth-id="' + esc(sug.id) + '">' +
+      '<div class="cc-icon-circle">' + icon('rocket') + '</div>' +
+      growthPriorityChip(sug.priority) +
+      '<div class="cc-ready-title">' + esc(sug.title) + '</div>' +
+      '<div class="cc-ready-sub">' + esc(sug.rationale) + '</div>' +
+      growthEvidenceHtml(sug.evidence) +
+      '<button class="cc-btn cc-btn-primary" data-growth-act="accept">Do it</button>' +
+      '<button class="cc-btn cc-btn-secondary" style="margin-top:8px;margin-left:8px;" data-growth-act="dismiss">Not now</button>' +
+    '</div>';
+  }
+
+  function renderGrowth(){
+    return apiGrowth('growth_suggestions&status=open').then(function(r){
+      if (!r || !r.ok) {
+        return '<h1 class="cc-h1">Growth</h1><div class="cc-card cc-empty">' + esc((r && r.error) || 'Could not load growth suggestions.') + '</div>';
+      }
+      var items = r.suggestions || [];
+      var body = items.length
+        ? '<div class="cc-ready-row">' + items.map(growthCard).join('') + '</div>'
+        : '<div class="cc-card cc-empty">Nothing to recommend right now. Reina re-checks the numbers every Monday morning, and you can re-run the check below any time.</div>';
+      return '<h1 class="cc-h1">Growth</h1>' +
+        '<p class="cc-sub">What Reina thinks you should do next to grow, worked out from your real jobs, quotes, customers and ad spend &mdash; ranked by the money actually at stake. Accepting one creates a draft; nothing here spends money or reaches a customer on its own.</p>' +
+        body +
+        '<div style="margin-top:16px"><button class="cc-btn cc-btn-secondary" id="cc-growth-rescan">Re-check the numbers now</button></div>';
+    });
+  }
+
+  // ---------- Paid Ads ----------
+  // The paid-ads engine (api/ads.js) was complete and had no screen at all,
+  // which is why no campaign was ever drafted in it. This is that screen:
+  // connection state, real spend against the real cap, and the
+  // draft -> approve -> launch -> pause path for real campaigns.
+  var AD_NEXT_STATE = {
+    not_connected: {to:'setup_incomplete', label:'Start connecting'},
+    setup_incomplete: {to:'reporting_verified', label:'Reporting verified'},
+    reporting_verified: {to:'draft_validated', label:'Drafts validated'},
+    draft_validated: {to:'launch_enabled', label:'Enable launching'}
+  };
+
+  function adConnectionRow(c){
+    var next = AD_NEXT_STATE[c.state];
+    var status;
+    if (c.state === 'launch_enabled') {
+      status = '<span class="cc-status ready">' + icon('check') + ' Ready to launch</span>';
+    } else if (c.isIssue) {
+      status = '<span class="cc-status off">' + esc(c.state.replace(/_/g, ' ')) +
+        (c.lastError ? '<span class="cc-status-sub">' + esc(c.lastError) + '</span>' : '') + '</span>';
+    } else {
+      status = '<span class="cc-status pending">' + esc(c.state.replace(/_/g, ' ')) + '</span>';
+    }
+    return '<div class="cc-conn-row" data-ad-platform="' + esc(c.platform) + '">' +
+      '<div class="cc-conn-name">' + esc(c.label) + '</div>' +
+      '<div class="cc-conn-state">' + status + '</div>' +
+      (next ? '<button class="cc-btn cc-btn-secondary" data-ad-transition="' + esc(next.to) + '">' + esc(next.label) + '</button>' : '') +
+    '</div>';
+  }
+
+  // One row of buttons per status, because the actions a campaign can take
+  // are exactly the transitions its state machine allows -- offering the rest
+  // greyed out would suggest the launch gate is softer than it is.
+  function adCampaignActions(status){
+    if (status === 'draft') {
+      return '<button class="cc-btn cc-btn-primary" data-ad-camp="approve">Approve</button>' +
+        '<button class="cc-btn cc-btn-secondary" style="margin-left:8px" data-ad-camp="reject">Reject</button>';
+    }
+    if (status === 'pending_review') return '<button class="cc-btn cc-btn-primary" data-ad-camp="launch">Launch for real</button>';
+    if (status === 'active') {
+      return '<button class="cc-btn cc-btn-secondary" data-ad-camp="pause">Pause</button>' +
+        '<button class="cc-btn cc-btn-secondary" style="margin-left:8px" data-ad-camp="spend">Sync spend</button>';
+    }
+    return '';
+  }
+
+  function adCampaignCard(c){
+    var copy = c.ad_copy || {};
+    return '<div class="cc-card" data-ad-campaign="' + esc(c.id) + '" style="margin-bottom:12px">' +
+      '<div class="cc-ready-title">' + esc(c.name) + '</div>' +
+      '<div class="cc-ready-sub">' + esc(String(c.status).replace(/_/g, ' ')) + ' &middot; ' + money((c.daily_budget_cents || 0) / 100) + '/day</div>' +
+      (copy.headline ? '<div class="cc-ready-sub" style="margin-top:8px"><b>' + esc(copy.headline) + '</b><br>' + esc(copy.primaryText || '') + '</div>' : '') +
+      '<div style="margin-top:10px">' + adCampaignActions(c.status) + '</div>' +
+    '</div>';
+  }
+
+  function renderPaidAds(){
+    return Promise.all([apiAds('ad_connections'), apiAds('ad_campaigns')]).then(function(r){
+      var connRes = r[0], campRes = r[1];
+      if (!connRes || !connRes.ok) {
+        return '<h1 class="cc-h1">Paid Ads</h1><div class="cc-card cc-empty">' + esc((connRes && connRes.error) || 'Could not load ad connections.') + '</div>';
+      }
+      var conns = connRes.connections || [];
+      var camps = (campRes && campRes.ok && campRes.campaigns) || [];
+      var live = conns.filter(function(c){ return c.state === 'launch_enabled'; }).length;
+      var campHtml = camps.length
+        ? camps.map(adCampaignCard).join('')
+        : '<div class="cc-card cc-empty">No ad campaign has been drafted yet. Connect a platform above, then accept a Growth suggestion &mdash; Reina drafts the campaign for you.</div>';
+
+      return '<h1 class="cc-h1">Paid Ads</h1>' +
+        '<p class="cc-sub">Google Ads, Meta and TikTok. Every campaign is checked against your real monthly budget cap before it can be approved, and nothing goes live until you press Launch.</p>' +
+        '<div class="cc-card"><h2 style="font-size:15px;margin:0 0 12px;color:var(--navy)">Ad accounts</h2>' +
+          (live ? '' : '<div class="cc-empty" style="margin-bottom:10px">No ad account is connected yet, so no campaign can run. Connecting happens in your Google Ads and Meta accounts &mdash; mark each step here as you complete it.</div>') +
+          conns.map(adConnectionRow).join('') +
+        '</div>' +
+        '<h2 style="font-size:15px;margin:26px 0 12px;color:var(--navy)">Campaigns</h2>' + campHtml;
     });
   }
 
@@ -1920,9 +2075,78 @@ function renderBudget(data){
       }).catch(function(e){ window.alert('Could not publish this post: ' + e.message); });
   }
 
+  function ccGrowthDecide(id, decision){
+    var reason = decision === 'dismiss' ? (window.prompt('Optional: why not now?') || '').trim() : null;
+    return apiGrowth('growth_suggestion_decide', {method:'POST', body: JSON.stringify({suggestionId:id, decision:decision, reason: reason || undefined})})
+      .then(function(r){
+        if (!r || !r.ok) { window.alert((r && r.error) || 'Could not record that.'); return; }
+        if (r.note) window.alert(r.note);
+        render();
+      }).catch(function(e){ window.alert('Could not record that: ' + e.message); });
+  }
+
+  function ccAdCampaignAction(campaignId, act){
+    function done(r, failMsg){
+      if (!r || !r.ok) { window.alert((r && r.error) || failMsg); return; }
+      render();
+    }
+    if (act === 'approve' || act === 'reject') {
+      var reason = act === 'reject' ? (window.prompt('Optional: why reject it?') || '').trim() : null;
+      return apiAds('ad_campaign_review', {method:'POST', body: JSON.stringify({campaignId:campaignId, decision:act, reason: reason || undefined})})
+        .then(function(r){ done(r, 'Could not update that campaign.'); });
+    }
+    if (act === 'launch') {
+      if (!window.confirm('Launch this campaign for real? It will start spending money on the ad platform.')) return Promise.resolve();
+      return apiAds('ad_campaign_launch', {method:'POST', body: JSON.stringify({campaignId:campaignId})})
+        .then(function(r){ done(r, 'Could not launch that campaign.'); });
+    }
+    if (act === 'pause') {
+      return apiAds('ad_campaign_pause', {method:'POST', body: JSON.stringify({campaignId:campaignId})})
+        .then(function(r){ done(r, 'Could not pause that campaign.'); });
+    }
+    if (act === 'spend') {
+      return apiAds('ad_spend_sync', {method:'POST', body: JSON.stringify({campaignId:campaignId})})
+        .then(function(r){ done(r, 'Could not sync spend.'); });
+    }
+    return Promise.resolve();
+  }
+
   document.addEventListener('click', function(e){
     var connectTrigger = e.target.closest && e.target.closest('.cc-connect-trigger');
     if (connectTrigger) { ccOpenConnectModal(connectTrigger.getAttribute('data-channel-key')); return; }
+    var growthBtn = e.target.closest && e.target.closest('[data-growth-act]');
+    if (growthBtn) {
+      growthBtn.disabled = true;
+      ccGrowthDecide(growthBtn.closest('[data-growth-id]').getAttribute('data-growth-id'), growthBtn.getAttribute('data-growth-act'));
+      return;
+    }
+    if (e.target.id === 'cc-growth-rescan') {
+      e.target.disabled = true;
+      e.target.textContent = 'Checking the numbers...';
+      apiGrowth('growth_scan').then(function(r){
+        if (!r || !r.ok) window.alert((r && r.error) || 'Could not re-check the numbers.');
+        render();
+      });
+      return;
+    }
+    var adTrans = e.target.closest && e.target.closest('[data-ad-transition]');
+    if (adTrans) {
+      adTrans.disabled = true;
+      apiAds('ad_connection_transition', {method:'POST', body: JSON.stringify({
+        platform: adTrans.closest('[data-ad-platform]').getAttribute('data-ad-platform'),
+        toState: adTrans.getAttribute('data-ad-transition')
+      })}).then(function(r){
+        if (!r || !r.ok) window.alert((r && r.error) || 'Could not update that connection.');
+        render();
+      });
+      return;
+    }
+    var adCamp = e.target.closest && e.target.closest('[data-ad-camp]');
+    if (adCamp) {
+      adCamp.disabled = true;
+      ccAdCampaignAction(adCamp.closest('[data-ad-campaign]').getAttribute('data-ad-campaign'), adCamp.getAttribute('data-ad-camp'));
+      return;
+    }
     var btn = e.target.closest && e.target.closest('.cc-social-action');
     if (!btn) return;
     var action = btn.getAttribute('data-action');

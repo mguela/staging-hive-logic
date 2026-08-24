@@ -208,7 +208,10 @@ export const leafletBundle = () => tryResolve('leaflet/dist/leaflet.js');
  * lets the app dismiss that overlay through its own hlTrySilentLogin path
  * rather than the harness reaching in and deleting an element.
  */
-const SUPABASE_STUB = `
+// Exported so a test that only needs a signed-in page -- not the whole
+// Command Center -- can stub the auth client without copying it. Without it the
+// page throws on supabase.createClient at load and sits in a half-booted state.
+export const SUPABASE_STUB = `
 window.supabase = {
   createClient: function(){
     var noRows = { data: [], error: null };

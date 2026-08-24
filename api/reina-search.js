@@ -91,6 +91,35 @@ const SEARCH_SOURCES = Object.freeze([
       navigation: { view: 'rqx', recordType: 'request', recordId: String(row.jobber_id) },
     }),
   },
+  {
+    // Files, so a search for a client or a job also turns up their paperwork.
+    //
+    // This reads `documents` -- HiveDoc's own metadata table -- and not `media`.
+    // That is deliberate. A media row's only text is its storage path, which is
+    // a job ref plus a generated filename, so a name typed into this bar could
+    // never match one; and an ilike across 40,939 rows on every keystroke is a
+    // sequential scan in front of a type-ahead. Photos are found the way they
+    // are actually identified -- by their client and job -- through
+    // /api/hivedoc, which resolves client -> jobs -> media properly. Selecting
+    // the CLIENT or JOB hit here lands on the record whose file list is that
+    // same endpoint.
+    kind: 'DOCUMENT',
+    table: 'documents',
+    select: 'id,filename,doc_type,client_name,job_title,uploaded_at',
+    fields: ['filename', 'client_name', 'job_title'],
+    order: 'uploaded_at.desc.nullslast',
+    map: (row) => ({
+      kind: 'DOCUMENT',
+      id: String(row.id),
+      title: row.filename || 'Untitled file',
+      // Context, not a bare filename: the spec is explicit that a result has to
+      // say which client and job it belongs to.
+      subtitle: [row.doc_type, row.client_name, row.job_title].filter(Boolean).join(' · ') || 'File',
+      status: row.doc_type || null,
+      updatedAt: row.uploaded_at || null,
+      navigation: { view: 'docs', recordType: 'document', recordId: String(row.id) },
+    }),
+  },
 ]);
 
 function finiteMoney(value) {
@@ -131,7 +160,10 @@ async function exactAdminProfile(userId, request) {
 function sourcePath(source, term) {
   const encoded = encodeURIComponent(`*${term}*`);
   const filters = source.fields.map((field) => `${field}.ilike.${encoded}`).join(',');
-  return `${source.table}?select=${source.select}&or=(${filters})&order=jobber_updated_at.desc.nullslast&limit=${SEARCH_LIMIT}`;
+  // Most sources are Jobber mirrors and sort by jobber_updated_at; tables that
+  // are ours (documents) carry their own timestamp, so the order is per-source.
+  const order = source.order || 'jobber_updated_at.desc.nullslast';
+  return `${source.table}?select=${source.select}&or=(${filters})&order=${order}&limit=${SEARCH_LIMIT}`;
 }
 
 export async function searchHiveLogic(query, dependencies = {}) {

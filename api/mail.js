@@ -215,6 +215,49 @@ function hasAttachments(struct) {
   return walk(struct);
 }
 
+// ---------- IMAP search ----------
+// Graph answers $search from a server-side index. IMAP has SEARCH, which is
+// the real equivalent: the server reads every message in the folder, so a hit
+// is a hit no matter how old, and body text counts -- something the envelope
+// list here can never do, since bodyPreview comes back empty over IMAP.
+const SEARCH_BUDGET_MS = 15000; // stop opening folders after this and say so
+const SEARCH_MAX_FOLDERS = 8;
+// Which folders a mailbox-wide search covers. Gmail-style accounts expose an
+// \\All folder that already holds every message, so one SELECT is the whole
+// mailbox. Everyone else gets Inbox, Sent, Archive, then whatever else fits --
+// minus Trash and Junk, which are noise in a search for real mail.
+function searchFolderPaths(folders) {
+  const selectable = (folders || []).filter(f => !(f.flags && f.flags.has && f.flags.has('\\Noselect')));
+  const all = selectable.find(f => (f.specialUse || '') === '\\All');
+  if (all) return [all.path];
+  const rank = (f) => {
+    if (String(f.path).toUpperCase() === 'INBOX') return 0;
+    const su = f.specialUse || '';
+    return su === '\\Sent' ? 1 : (su === '\\Archive' ? 2 : 3);
+  };
+  return selectable
+    .filter(f => ['\\Trash', '\\Junk'].indexOf(f.specialUse || '') === -1)
+    .sort((a, b) => rank(a) - rank(b))
+    .slice(0, SEARCH_MAX_FOLDERS)
+    .map(f => f.path);
+}
+// SUBJECT/FROM/TO/BODY rather than IMAP TEXT: TEXT matches the raw MIME, so a
+// base64 attachment "contains" almost any word you care to search for.
+async function searchFolder(client, path, q, top) {
+  const lock = await client.getMailboxLock(path);
+  try {
+    const uids = await client.search({ or: [{ subject: q }, { from: q }, { to: q }, { body: q }] }, { uid: true });
+    if (!uids || !uids.length) return [];
+    const newest = uids.slice(-top); // UIDs ascend with arrival, so the tail is the newest
+    const out = [];
+    for await (const msg of client.fetch(newest.join(','), { uid: true, envelope: true, flags: true, internalDate: true, bodyStructure: true }, { uid: true })) {
+      out.push(envToMessage(path, msg));
+    }
+    return out;
+  } finally { lock.release(); }
+}
+
+
 // ---------- the Graph-shape adapter ----------
 // Translates a subset of Microsoft Graph mail paths into IMAP/SMTP operations.
 async function graphAdapter(acct, creds, path, method, body) {
@@ -243,6 +286,30 @@ async function graphAdapter(acct, creds, path, method, body) {
         value.push({ id: gid, displayName: f.name || f.path, wellKnownName: gid.startsWith('imf_') ? null : gid, totalItemCount: total, unreadItemCount: unread });
       }
       return { value };
+    }
+
+
+    // GET /me/messages?$search="q"                    -> search the mailbox
+    // GET /me/mailFolders/{id}/messages?$search="q"   -> search one folder
+    // Must be tested before the plain listing routes below, which share these
+    // paths and would otherwise answer a search with the folder's newest page.
+    const rawSearch = qp.get('$search');
+    if (method === 'GET' && rawSearch && /\/me\/(messages|mailFolders\/[^/]+\/messages)$/.test(clean)) {
+      const q = String(rawSearch).replace(/^"|"$/g, '').trim();
+      const top = Math.min(parseInt(qp.get('$top') || '30', 10) || 30, 50);
+      if (!q) return { value: [] };
+      const fm = clean.match(/\/me\/mailFolders\/([^/]+)\/messages$/);
+      const paths = fm ? [resolveFolderPath(decodeURIComponent(fm[1]), folders)] : searchFolderPaths(folders);
+      const deadline = Date.now() + SEARCH_BUDGET_MS;
+      let hits = [], searched = 0, partial = false;
+      for (const p of paths) {
+        if (Date.now() > deadline) { partial = true; break; }
+        // One folder that refuses to open must not lose the folders that did.
+        try { hits = hits.concat(await searchFolder(client, p, q, top)); searched++; }
+        catch (e) { partial = true; }
+      }
+      hits.sort((a, b) => new Date(b.receivedDateTime || 0) - new Date(a.receivedDateTime || 0));
+      return { value: hits.slice(0, top), __search: { folders: searched, of: paths.length, partial } };
     }
 
     // GET /me/mailFolders/{id}/messages  -> newest N envelopes in that folder
@@ -564,3 +631,44 @@ module.exports = async (req, res) => {
     return res.status(500).json({ error: String(e.message || e).slice(0, 300) });
   }
 };
+
+// ---------- one mailbox send, for callers that are not this route ----------
+//
+// Reina needs to send from the signed-in person's own mailbox after they have
+// approved a draft (api/reina-action.js). She goes through the SAME account
+// lookup, credential decryption and SMTP transport as the mail UI does -- she
+// gets no private path to a mailbox, and no way to send from an address the
+// user has not actually connected.
+//
+// Callers must have already checked that a human approved this send. Nothing
+// here can tell an approved send from an unapproved one; that is the point of
+// keeping the approval in the database and consuming it before calling this.
+module.exports.sendMailForUser = async function sendMailForUser({ uid, realm, from, message }) {
+  if (!uid || !realm || !message) return { ok: false, error: 'invalid request' };
+  const wanted = String(from || '').trim().toLowerCase();
+  const rows = await dbFetch(realm, `/rest/v1/hc_mail_accounts?owner_id=eq.${uid}&select=*`) || [];
+  if (!rows.length) return { ok: false, error: 'no mailbox connected' };
+  // An explicit from must be one of THEIR mailboxes. Falling back to the first
+  // connected account when the requested address is not theirs would let a
+  // wrong-but-plausible address quietly send as someone else.
+  const acct = wanted ? rows.find(r => String(r.email_address || '').toLowerCase() === wanted) : rows[0];
+  if (!acct) return { ok: false, error: 'that mailbox is not connected' };
+  try {
+    const creds = await resolveCreds(acct);
+    await sendMail(acct, creds, message);
+    return { ok: true, from: acct.email_address };
+  } catch (e) {
+    return { ok: false, error: errText(e) };
+  }
+};
+
+// The addresses this person can legitimately send from, for the approval popup.
+module.exports.mailboxesForUser = async function mailboxesForUser({ uid, realm }) {
+  if (!uid || !realm) return [];
+  const rows = await dbFetch(realm, `/rest/v1/hc_mail_accounts?owner_id=eq.${uid}&select=email_address,display_name`) || [];
+  return rows.map(r => ({ address: r.email_address, name: r.display_name || '' })).filter(r => r.address);
+};
+
+// Same bearer-to-user resolution the mail UI uses, so a caller acting for a
+// person resolves them exactly as this route would, against the same realms.
+module.exports.resolveMailUser = requireUser;

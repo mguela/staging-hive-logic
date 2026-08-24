@@ -15,16 +15,38 @@
 import { supabaseRequest } from './_lib/jobber.js';
 import crypto from 'node:crypto';
 
+// The key that signs unsubscribe links. FAILS CLOSED: no fallback chain.
+//
+// This used to fall back to SUPABASE_SERVICE_KEY and then, failing that, to the
+// literal string 'dev-only-insecure-fallback' -- a signing key published in a
+// public repository. Nobody could reach it while the real variable was set (and
+// it is set in production), but a fallback that cannot fail is a fallback
+// nobody notices has engaged.
+//
+// The middle rung was its own problem: SUPABASE_SERVICE_KEY is the master
+// database key, and pointing an HMAC at it reuses one secret for two unrelated
+// purposes. A signing oracle should never be aimed at the most privileged
+// credential in the system.
+//
+// Returning null makes every signature check below fail, which is the correct
+// behaviour for a misconfigured deployment: unsubscribe links stop working and
+// somebody notices, rather than every link being forgeable and nobody noticing.
 function unsubscribeSecret() {
-  return process.env.MARKETING_UNSUBSCRIBE_SECRET || process.env.SUPABASE_SERVICE_KEY || 'dev-only-insecure-fallback';
+  return process.env.MARKETING_UNSUBSCRIBE_SECRET || null;
 }
 
 function signUnsubscribe(clientId, channel) {
+  const secret = unsubscribeSecret();
+  // No key, no signature -- and null can never equal a presented token, so an
+  // unconfigured deployment rejects every link instead of accepting any.
+  if (!secret) return null;
   const payload = String(clientId) + ':' + String(channel);
-  return crypto.createHmac('sha256', unsubscribeSecret()).update(payload).digest('base64url');
+  return crypto.createHmac('sha256', secret).update(payload).digest('base64url');
 }
 
 function safeEqual(a, b) {
+  // A null expected signature (no key configured) matches nothing.
+  if (a == null || b == null) return false;
   const bufA = Buffer.from(String(a));
   const bufB = Buffer.from(String(b));
   if (bufA.length !== bufB.length) return false;

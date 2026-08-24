@@ -357,6 +357,15 @@ export function createCouncilHandler(dependencies = {}) {
       const repository = typeof body.repository === 'string' ? body.repository.trim().slice(0, 500) : '';
       if (!name) return res.status(400).json({ ok: false, error: 'A project name is required.' });
       const project = await store.createProject({ ownerId: staff.id, name, repository: repository || null });
+      // Supabase's `Prefer: return=representation` can come back 2xx with no
+      // row (e.g. a policy that doesn't grant SELECT back to the inserting
+      // role) -- store.createProject()/responseValue() then hands back
+      // undefined even though nothing failed. Left unguarded, the client
+      // treated that as success, unshifted `undefined` into its in-memory
+      // project list, and crashed on the very next history render
+      // (workspaceProjects.find(...).id) rather than at the point of the
+      // actual problem. Fail loudly here instead of returning a fake success.
+      if (!project) return res.status(500).json({ ok: false, error: 'Boardroom project could not be created.' });
       return res.status(201).json({ ok: true, project });
     }
     if (body.action === 'update_run_metadata') {

@@ -1,12 +1,65 @@
 import { types as utilTypes } from 'node:util';
 
-export const SERVER_DEADLINE = Object.freeze({
-  totalMs: 12_000,
-  stageMs: 4_000,
-  composerMs: 5_000,
-  minimumMs: 5,
-  maximumTotalMs: 12_000,
-});
+// HOW LONG A TURN IS ALLOWED TO TAKE.
+//
+// These were 12s total and 5s for the composer, and they were already too
+// tight before anyone noticed: measured turns on 2026-08-21 completed in
+// 2.8, 3.2, 3.3 and 4.2 seconds against a 5s composer budget, with almost no
+// business context loaded. Switching REINA_LAB_FULL_READ_ENABLED on added
+// about twenty database reads and a much larger prompt, the composer went
+// past 5s, and the deadline fired: state failed_retryable, stage 'model',
+// MODEL_GENERATION_FAILED, and a panel that said Reina was unavailable.
+//
+// 2026-08-23: 15s/9s was still not enough, for a reason the earlier numbers
+// never had to account for. reasoningEffort() in the intelligence composer
+// promotes any question containing plan/why/risk/analyse/strategy/recommend
+// to reasoning effort 'high' with a 1,200-token answer. That is the model
+// thinking for tens of seconds, not the two-to-four it takes on a short
+// question -- so the questions most worth asking her were precisely the ones
+// that blew the composer budget and came back as 'preview is unavailable'.
+// 30s of composer inside a 40s turn covers a high-effort answer with the
+// business read in front of it. api/reina-pilot.js carries maxDuration 60 in
+// vercel.json so the platform outlives this budget rather than hard-killing
+// the function mid-answer, and the browser client waits 45s, which has to
+// stay above totalMs or the panel gives up before the server ever replies.
+//
+// EVERY VALUE HERE IS OVERRIDABLE FROM THE ENVIRONMENT, deliberately. A
+// timing change that can only be undone by shipping a revert is a bad trade
+// when the thing it protects is whether Reina answers at all. Set
+// REINA_PILOT_TOTAL_MS / REINA_PILOT_COMPOSER_MS / REINA_PILOT_CONTEXT_MS in
+// the Vercel dashboard and redeploy to go back to any earlier shape without
+// touching the code. Out-of-range or unparseable values fall back to the
+// default rather than failing, because a typo in a dashboard field must not
+// be able to take the route down.
+//
+// Earlier shapes, for the record: TOTAL 12000 / COMPOSER 5000 before
+// 2026-08-21, TOTAL 15000 / COMPOSER 9000 between then and 2026-08-23.
+export function boundedDeadlineMs(value, fallback, minimum, maximum) {
+  const parsed = typeof value === 'string' || typeof value === 'number' ? Number(value) : NaN;
+  if (!Number.isFinite(parsed)) return fallback;
+  const whole = Math.floor(parsed);
+  return whole >= minimum && whole <= maximum ? whole : fallback;
+}
+
+const DEADLINE_ENV = typeof process !== 'undefined' && process.env ? process.env : {};
+
+export function resolveServerDeadline(env = DEADLINE_ENV) {
+  const source = env && typeof env === 'object' ? env : {};
+  const totalMs = boundedDeadlineMs(source.REINA_PILOT_TOTAL_MS, 40_000, 3_000, 60_000);
+  const composerMs = boundedDeadlineMs(source.REINA_PILOT_COMPOSER_MS, 30_000, 500, totalMs);
+  return Object.freeze({
+    totalMs,
+    stageMs: boundedDeadlineMs(source.REINA_PILOT_STAGE_MS, 4_000, 250, totalMs),
+    composerMs,
+    // What the business read alone may take before the turn gives up on it
+    // and answers without it. Read by the composer, not by this module.
+    contextMs: boundedDeadlineMs(source.REINA_PILOT_CONTEXT_MS, 2_500, 250, composerMs),
+    minimumMs: 5,
+    maximumTotalMs: totalMs,
+  });
+}
+
+export const SERVER_DEADLINE = resolveServerDeadline();
 
 export const DURABLE_STORE_METHODS = Object.freeze([
   'loadConversation',

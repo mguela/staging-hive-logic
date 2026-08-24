@@ -22,6 +22,7 @@
 // POST /api/voice?resource=contact_create          -> { e164, name } (label an unknown number)
 // POST /api/voice?resource=contact_link            -> { e164, jobberClientId } (link a number to an existing Jobber client)
 // POST /api/voice?resource=sms                     -> { to, body } (send a one-off SMS via Twilio)
+// GET  /api/voice?resource=caller&e164=...        -> { matches[], knownName } (who is calling)
 // GET  /api/voice?resource=calls                   -> call log, paginated
 // GET  /api/voice?resource=voicemails               -> voicemail list (own extension by default)
 // POST /api/voice?resource=voicemail_read           -> { id, read }
@@ -334,6 +335,99 @@ async function handleSms(req, res) {
   if (!send.ok) return res.status(400).json({ ok: false, error: payload.message || 'Twilio could not send the message.' });
   await supabaseRequest('voice_messages', { method: 'POST', body: JSON.stringify({ direction: 'outbound', from_number: mainNumber.e164, to_number: to, body: text, provider_sid: payload.sid || null, status: payload.status || 'queued' }) }).catch(() => {});
   res.status(200).json({ ok: true, sid: payload.sid || null });
+}
+
+// ---- who is calling -------------------------------------------------------
+//
+// Chris, 2026-08-23: "Call > existing client phone # > question should be at
+// the inception of the call > 'New Lead?' > clicking yes should open a
+// prefilled New Lead Form by the recognized phone number and pulled existing
+// client's info."
+//
+// The phone popup asks this the moment a call starts RINGING, so the caller's
+// name is on screen while it rings rather than after somebody types it in --
+// and so "New lead?" can open the form already filled from the client's own
+// record.
+//
+// Resolution order is the same one handleCallsGet uses, deliberately: the
+// label on the ringing card and the label in the call log must never
+// disagree about who a number belongs to.
+//   1. clients.phone_e164   -- 7,434 of 8,690 clients have one
+//   2. voice_known_numbers  -- what Create Contact / Add to Existing Contact write
+//
+// It returns EVERY match, not the first. 171 numbers in production belong to
+// more than one client (up to four) -- a shared house line, a landlord, a
+// property manager who books for several addresses. Silently picking one
+// attaches the lead to the wrong person, and nothing downstream would ever
+// reveal that a choice had been made.
+async function handleCallerGet(req, res) {
+  const e164 = normalizeToE164(req.query.e164 || '');
+  if (!e164) return res.status(400).json({ ok: false, error: 'A phone number is required.' });
+
+  const enc = encodeURIComponent(e164);
+  const SELECT = 'jobber_id,name,first_name,last_name,company_name,email,phone,phone_e164,balance,is_lead,is_archived';
+
+  // Archived clients are included on purpose. Someone calling back years later
+  // is still the same person, and hiding the match would send the office off
+  // to create a duplicate.
+  const [byPhoneRes, knownRes] = await Promise.all([
+    supabaseRequest(`clients?phone_e164=eq.${enc}&select=${SELECT}&limit=25`).then(r => r.ok ? r.json() : []).catch(() => []),
+    supabaseRequest(`voice_known_numbers?e164=eq.${enc}&select=e164,display_name,jobber_client_id&limit=5`).then(r => r.ok ? r.json() : []).catch(() => []),
+  ]);
+
+  let rows = byPhoneRes;
+  const known = knownRes[0] || null;
+
+  // A number linked by hand ("Add to Existing Contact") counts as a match even
+  // when it is not the number on the client's record -- that is the entire
+  // reason someone linked it. A customer ringing from a personal cell is the
+  // case this exists for.
+  const knownClientId = known && known.jobber_client_id ? String(known.jobber_client_id) : null;
+  if (knownClientId && !rows.some(c => String(c.jobber_id) === knownClientId)) {
+    const extra = await supabaseRequest(
+      `clients?jobber_id=eq.${encodeURIComponent(knownClientId)}&select=${SELECT}&limit=1`
+    ).then(r => r.ok ? r.json() : []).catch(() => []);
+    rows = rows.concat(extra);
+  }
+
+  // The service address, so the form does not ask for something HiveLogic
+  // already knows. Non-fatal: a match with no address still beats no match.
+  const addressById = new Map();
+  if (rows.length) {
+    try {
+      const ids = rows.map(c => encodeURIComponent(`"${c.jobber_id}"`)).join(',');
+      const lr = await supabaseRequest(`client_locations?jobber_id=in.(${ids})&select=jobber_id,street,city,province`);
+      if (lr.ok) {
+        for (const l of await lr.json()) {
+          const line = [l.street, l.city, l.province].filter(Boolean).join(', ');
+          if (l.jobber_id && line && !addressById.has(l.jobber_id)) addressById.set(l.jobber_id, line);
+        }
+      }
+    } catch { /* an address is a convenience here, never the answer */ }
+  }
+
+  const matches = rows.map(c => ({
+    clientId: c.jobber_id,
+    name: c.name || [c.first_name, c.last_name].filter(Boolean).join(' ') || c.company_name || 'Unnamed client',
+    firstName: c.first_name || null,
+    lastName: c.last_name || null,
+    companyName: c.company_name || null,
+    email: c.email || null,
+    phone: c.phone_e164 || c.phone || null,
+    address: addressById.get(c.jobber_id) || null,
+    balance: c.balance != null ? Number(c.balance) : null,
+    isLead: !!c.is_lead,
+    isArchived: !!c.is_archived,
+  }));
+
+  res.status(200).json({
+    ok: true,
+    e164,
+    matches,
+    // A hand-typed label for a number nobody has linked to a client. Worth
+    // showing on the ringing card even though it cannot prefill a client.
+    knownName: known && !knownClientId ? (known.display_name || null) : null,
+  });
 }
 
 async function handleDirectoryGet(req, res) {
@@ -954,6 +1048,7 @@ const GET_HANDLERS = {
   calls: handleCallsGet,
   voicemails: handleVoicemailsGet,
   directory: handleDirectoryGet,
+  caller: handleCallerGet,
   call_flow: handleCallFlowGet,
   queues: handleQueuesGet,
   queue_status: handleQueueStatusGet,

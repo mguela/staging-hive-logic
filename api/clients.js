@@ -9,7 +9,7 @@ const PAGE_SIZE = 50;
 // Extracted so api/chat.js can call this directly in-process instead of
 // self-fetching this file's own /api/clients route over HTTP. Same shape,
 // same defaults/caps -- just callable without a network hop.
-export async function getClientsData({ limit, offset, order } = {}) {
+export async function getClientsData({ limit, offset, order, search } = {}) {
   // Bug fix (2026-07-23): Number(limit) || PAGE_SIZE treated any non-zero
   // number as valid, including negative ones -- ?limit=-5 passed a literal
   // &limit=-5 straight to Supabase's PostgREST endpoint, which rejects it
@@ -22,6 +22,22 @@ export async function getClientsData({ limit, offset, order } = {}) {
   // offset + order support so the frontend can page past PostgREST's
   // 1000-row-per-request cap (HiveDocs' alphabetical Clients dropdown).
   const orderClause = order === 'name' ? 'name.asc.nullslast' : 'jobber_updated_at.desc';
+
+  // Typeahead support for the Schedule board's client picker. With 8,600+
+  // clients a dropdown of everything is not a picker, it is a scroll -- so the
+  // board sends what the dispatcher typed and gets back only matches. Archived
+  // clients are excluded because you cannot schedule work for one.
+  // PostgREST's or= takes a bare comma list; the term is escaped so a name
+  // containing a comma or paren cannot break out of the filter it sits in.
+  const term = String(search == null ? '' : search).trim();
+  let searchClause = '';
+  if (term) {
+    const safe = term.replace(/[,()\*]/g, ' ').trim();
+    if (safe) {
+      const pat = `*${safe}*`;
+      searchClause = `&is_archived=not.is.true&or=(name.ilike.${encodeURIComponent(pat)},company_name.ilike.${encodeURIComponent(pat)},email.ilike.${encodeURIComponent(pat)})`;
+    }
+  }
 
   // Bug fix (2026-07-23): PostgREST enforces its own hard per-request row
   // cap (1000 in this project -- same limit api/jobs.js's
@@ -37,7 +53,7 @@ export async function getClientsData({ limit, offset, order } = {}) {
   let pageOffset = safeOffset;
   while (rows.length < cappedLimit) {
     const pageLimit = Math.min(SUPABASE_PAGE_CAP, cappedLimit - rows.length);
-    const r = await supabaseRequest(`clients?select=*&order=${orderClause}&limit=${pageLimit}&offset=${pageOffset}`, {
+    const r = await supabaseRequest(`clients?select=*&order=${orderClause}&limit=${pageLimit}&offset=${pageOffset}${searchClause}`, {
       headers: { Prefer: 'count=exact' }
     });
     if (!r.ok) throw new Error(await r.text());
@@ -53,11 +69,40 @@ export async function getClientsData({ limit, offset, order } = {}) {
   }
   if (totalCount === null) totalCount = rows.length;
 
+  // Service addresses, so the client pickers can find someone by where the work
+  // is. Chris, 2026-08-23, on search priority: "name / address / number /
+  // email / everything else." Address is the only one of those four not already
+  // on the clients row -- it lives one table over, 1:1 on jobber_id, and 6,409
+  // of 8,690 clients have one.
+  //
+  // Non-fatal by design: a client book with no addresses is worth far more than
+  // no client book, and this route is what every picker in the app waits on.
+  const addressById = new Map();
+  try {
+    let locOffset = 0;
+    for (;;) {
+      const lr = await supabaseRequest(
+        `client_locations?select=jobber_id,street,city,province&limit=${SUPABASE_PAGE_CAP}&offset=${locOffset}`
+      );
+      if (!lr.ok) break;
+      const locs = await lr.json();
+      for (const l of locs) {
+        if (!l.jobber_id) continue;
+        const line = [l.street, l.city, l.province].filter(Boolean).join(', ');
+        if (line && !addressById.has(l.jobber_id)) addressById.set(l.jobber_id, line);
+      }
+      if (locs.length < SUPABASE_PAGE_CAP) break;
+      locOffset += locs.length;
+    }
+  } catch (e) { /* addresses are a search aid, never a reason to fail the book */ }
+
   const clients = rows.map(c => ({
     id: c.jobber_id,
     name: c.name || [c.first_name, c.last_name].filter(Boolean).join(' ') || c.company_name || 'Unnamed client',
     companyName: c.company_name,
     email: c.email,
+    phone: c.phone_e164 || c.phone || null,
+    address: addressById.get(c.jobber_id) || null,
     balance: c.balance,
     isLead: c.is_lead,
     isArchived: c.is_archived,
@@ -147,7 +192,7 @@ export default async function handler(req, res) {
       res.status(200).json({ ok: true, source: 'Jobber via Supabase', ...data });
       return;
     }
-    const data = await getClientsData({ limit: req.query.limit, offset: req.query.offset, order: req.query.order });
+    const data = await getClientsData({ limit: req.query.limit, offset: req.query.offset, order: req.query.order, search: req.query.search });
     res.status(200).json({ ok: true, source: 'Jobber via Supabase', ...data });
   } catch (e) {
     res.status(500).json({ ok: false, error: e.message });

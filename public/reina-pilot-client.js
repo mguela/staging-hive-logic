@@ -72,8 +72,12 @@
   var MAX_LIST = 64;
   var MAX_SOURCE_LIST = 16;
   var MAX_BINDINGS = 2048;
-  var DEFAULT_TIMEOUT_MS = 15000;
-  var MAX_TIMEOUT_MS = 30000;
+  // Must stay above SERVER_DEADLINE.totalMs (40s). The server can now spend
+  // 30s on a high reasoning-effort answer; if the browser gave up first the
+  // turn would still be persisted server-side and the panel would show a
+  // failure for an answer that actually arrived.
+  var DEFAULT_TIMEOUT_MS = 45000;
+  var MAX_TIMEOUT_MS = 60000;
   var SAFE_NORMALIZED_KEY_RE = /^rt\.[0-9a-f]{64}$/;
   var SAFE_REVIEW_INTENT_RE = /^rui\.[A-Za-z0-9._:-]{1,124}$/;
   var CANONICAL_UTC_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/;

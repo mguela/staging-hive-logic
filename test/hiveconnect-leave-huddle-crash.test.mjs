@@ -53,9 +53,16 @@ test('leaveHuddle no longer dereferences hd-frame unconditionally', () => {
   assert.match(fn, /const frame = \$\('hd-frame'\);\s*\n\s*if \(frame\) frame\.innerHTML = '';/);
 });
 
-test('huddleChannel.untrack() is guarded, so a Supabase realtime hiccup cannot abort cleanup either', () => {
-  assert.doesNotMatch(fn, /(?<!try \{ )if \(huddleChannel && huddleChannel\.untrack\) huddleChannel\.untrack\(\);/);
-  assert.match(fn, /try \{ if \(huddleChannel && huddleChannel\.untrack\) huddleChannel\.untrack\(\); \} catch \(e\) \{\}/);
+test('a Supabase realtime hiccup still cannot abort cleanup', () => {
+  // The original guard here was `try { huddleChannel.untrack(); } catch (e) {}`,
+  // which protected the REST of leaveHuddle and nothing else -- see
+  // hiveconnect-leave-huddle-presence.test.mjs for why that was not enough.
+  // What this test has always been about is the invariant: nothing in the
+  // untrack path may throw synchronously through leaveHuddle.
+  assert.doesNotMatch(fn, /^\s*(await )?huddleChannel\.untrack\(\);/m,
+    'a bare untrack() in the cleanup path throws when the channel is not joined');
+  assert.match(fn, /clearMyHuddlePresence\(\)/,
+    'leaving goes through the helper that catches that throw and checks the result');
 });
 
 test('activeHuddle is still cleared and the room still disconnected regardless of dock findability', () => {

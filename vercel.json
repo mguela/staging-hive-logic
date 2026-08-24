@@ -94,6 +94,12 @@
     "api/qbo/index.js": {
       "maxDuration": 90
     },
+    "api/growth.js": {
+      "maxDuration": 300
+    },
+    "api/content-studio.js": {
+      "maxDuration": 120
+    },
     "api/track1.js": {
       "maxDuration": 120
     },
@@ -123,6 +129,9 @@
     },
     "api/reina-neural-speech.js": {
       "maxDuration": 30
+    },
+    "api/reina-pilot.js": {
+      "maxDuration": 60
     },
     "api/voice-webhook.js": {
       "maxDuration": 30
@@ -228,6 +237,10 @@
       "schedule": "0 */2 * * *"
     },
     {
+      "path": "/api/growth?resource=growth_scan",
+      "schedule": "0 12 * * 1"
+    },
+    {
       "path": "/api/social-posts?resource=process_scheduled_posts",
       "schedule": "*/15 * * * *"
     },
@@ -278,6 +291,10 @@
     {
       "path": "/api/reina/mail-sweep",
       "schedule": "*/10 * * * *"
+    },
+    {
+      "path": "/api/ops-events?resource=sweep",
+      "schedule": "*/20 * * * *"
     }
   ]
 }

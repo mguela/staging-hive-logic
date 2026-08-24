@@ -124,3 +124,55 @@ test('non-GET requests are rejected before feature gating and authentication', a
   assert.equal(res.headers.Allow, 'GET');
   assert.equal(authenticated, false);
 });
+
+// --- files in Global Search (HiveDoc, 2026-08-21) ---
+
+test('a file turns up in Global Search with the client and job it belongs to', async () => {
+  const paths = [];
+  const data = await searchHiveLogic('kitchen', {
+    supabaseRequest: adminRequest(paths, {
+      documents: [{
+        id: 'd1',
+        filename: 'kitchen-permit.pdf',
+        doc_type: 'permit',
+        client_name: 'John Smith',
+        job_title: 'Kitchen Renovation',
+        uploaded_at: '2026-07-14T12:00:00Z',
+      }],
+    }),
+  });
+
+  const doc = data.results.find((r) => r.kind === 'DOCUMENT');
+  assert.ok(doc, 'files are searchable alongside clients, jobs and invoices');
+  assert.equal(doc.title, 'kitchen-permit.pdf');
+  // The spec is explicit: never a bare filename with no context.
+  assert.match(doc.subtitle, /John Smith/);
+  assert.match(doc.subtitle, /Kitchen Renovation/);
+  assert.equal(doc.navigation.view, 'docs');
+});
+
+test('the documents source orders by its own timestamp, not a Jobber one', async () => {
+  const paths = [];
+  await searchHiveLogic('kitchen', { supabaseRequest: adminRequest(paths, {}) });
+
+  const docPath = paths.find((p) => p.startsWith('documents?'));
+  assert.ok(docPath, 'documents is queried');
+  // `documents` has no jobber_updated_at; ordering by it would 400 the request
+  // and silently drop every file from the results.
+  assert.ok(docPath.includes('order=uploaded_at.desc'), docPath);
+  assert.ok(!docPath.includes('jobber_updated_at'), docPath);
+});
+
+test('a file result carries no storage path a caller could fetch directly', async () => {
+  const paths = [];
+  const data = await searchHiveLogic('kitchen', {
+    supabaseRequest: adminRequest(paths, {
+      documents: [{ id: 'd1', filename: 'k.pdf', doc_type: 'permit', client_name: 'X', job_title: 'Y', uploaded_at: '2026-07-14T12:00:00Z' }],
+    }),
+  });
+  const doc = data.results.find((r) => r.kind === 'DOCUMENT');
+  assert.equal(doc.storage_path, undefined);
+  // Files are opened through HiveDoc's signing route, never by handing out a
+  // bucket path -- both buckets are private.
+  assert.ok(!paths.some((p) => p.includes('storage_path')));
+});

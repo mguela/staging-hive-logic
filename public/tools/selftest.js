@@ -166,6 +166,29 @@
     var beforeUnload = function (e) { e.preventDefault(); e.returnValue = ''; return ''; };
     win.addEventListener('beforeunload', beforeUnload, true);
 
+    // Found 2026-08-22 investigating prx's "Ask anything" comment button
+    // (separately fixed -- an over-escaped apostrophe broke its onclick
+    // attribute's own JS syntax). That specific case turned out to raise no
+    // `error` event at all in this browser -- confirmed by listening on both
+    // the outer window and this iframe's own and seeing neither fire -- but
+    // chasing it surfaced a real, broader gap: a genuine runtime error
+    // (ReferenceError/TypeError) thrown from an onclick handler that DOES
+    // compile fires its `error` event on the ELEMENT'S OWN window only, never
+    // the outer page's, live-confirmed with a real ReferenceError injected
+    // into this exact iframe. This listener used to be registered ONCE,
+    // hardcoded to the outer page's `window`, right after Self-Test's
+    // pre-flight check -- every iframe-embedded view's own runtime errors
+    // (the vast majority of the app) were invisible to THREW detection
+    // entirely. Installing it here instead means every installShield() call
+    // -- the outer page's own plus every per-iframe one already made in
+    // crawlCurrent -- wires it up. Uses the outer `performance.now()` (via
+    // closure, same as every other SHIELD.calls/errs timestamp in this
+    // function) rather than win.performance.now(), which starts counting
+    // from THAT window's own navigation and would be incomparable to the
+    // outer page's t0 in since().
+    var onError = function (e) { if (!/chrome-extension/.test(e.filename || '')) SHIELD.errs.push({ t: performance.now(), m: ((e.message || '') + ' @' + (e.filename || '').split('/').pop() + ':' + e.lineno).slice(0, 160) }); };
+    win.addEventListener('error', onError);
+
     win.__hlShielded = true;
     return function restore() {
       win.fetch = REAL.fetch; win.XMLHttpRequest.prototype.open = REAL.xhrOpen; win.XMLHttpRequest.prototype.send = REAL.xhrSend;
@@ -178,6 +201,7 @@
       d.removeEventListener('submit', submitBlocker, true);
       d.removeEventListener('click', navBlocker, true);
       win.removeEventListener('beforeunload', beforeUnload, true);
+      win.removeEventListener('error', onError);
       win.__hlShielded = false;
     };
   }
@@ -192,12 +216,21 @@
   SHIELD.active = true;
   say('Shield verified ✓ — starting (writes/sends/nav all intercepted)…');
 
-  window.addEventListener('error', function (e) { if (!/chrome-extension/.test(e.filename || '')) SHIELD.errs.push({ t: performance.now(), m: ((e.message || '') + ' @' + (e.filename || '').split('/').pop() + ':' + e.lineno).slice(0, 160) }); });
   var oce = console.error; console.error = function () { try { SHIELD.errs.push({ t: performance.now(), m: [].join.call(arguments, ' ').slice(0, 160) }); } catch (x) {} return oce.apply(this, arguments); };
   var since = function (t) { return { f: SHIELD.calls.filter(function (x) { return x.t >= t; }), e: SHIELD.errs.filter(function (x) { return x.t >= t; }) }; };
 
   // ======================= CRAWLER =======================
-  var SETTLE = 120, CLICK_TIMEOUT = 700, NAV_WAIT = 600, MAX_ELS = 90, MAX_KIDS = 12;
+  // Found 2026-08-22 investigating csx: "SAVE HOURS"/"SAVE NUMBERING"/etc.
+  // read NO_OUTCOME -- live-confirmed the buttons' click listeners are not
+  // attached until the settings fetch resolves (`$('save-hours').
+  // addEventListener(...)` sits inside the same async block that renders the
+  // real settings data), which measured at ~850-900ms after navigation on
+  // this connection. NAV_WAIT=600 was clicking before the listeners existed
+  // at all -- not a flaky race, a deterministic miss every time. 1200ms
+  // gives real margin over the measured floor; the added cost is one-time
+  // per view (this fires once after showView(), not per click), so a full
+  // 47-view crawl costs ~28s more, not 28s per view.
+  var SETTLE = 120, CLICK_TIMEOUT = 700, NAV_WAIT = 1200, MAX_ELS = 90, MAX_KIDS = 12;
   // Found 2026-08-19: the Sub Portal's mic button (aria-label="Dictate with
   // voice", title "Click to talk to Reina") starts real browser speech
   // recognition -- the same category as a call/record button (the crawler
@@ -240,9 +273,7 @@
     // inside it) -- reported as "Unnamed control", which was the tell.
     var oc0 = el.getAttribute && el.getAttribute('onclick');
     if (t !== 'BUTTON' && t !== 'A' && oc0 && /^event\.stopPropagation\(\);?$/.test(oc0.trim())) return false;
-    if (t === 'BUTTON' || t === 'A' || el.hasAttribute('onclick') || el.getAttribute('role') === 'button' || el.getAttribute('role') === 'tab' || el.getAttribute('role') === 'menuitem') return true;
-    var c = (typeof el.className === 'string') ? el.className : '';
-    if (!/(^|\s)(tab|ptab|chip|navbtn|filter|job-card|board-card|meas-btn|payment-option|menu-item|dropdown-item|accordion|chevron|toggle|caret)(\s|$)/.test(c)) return false;
+    if (t === 'BUTTON' || t === 'A' || el.getAttribute('role') === 'button' || el.getAttribute('role') === 'tab' || el.getAttribute('role') === 'menuitem') return true;
     // Found 2026-08-19: Command Center's map legend is a <div class="toggle">
     // wrapping three independently-clickable <span onclick="mapView(...)">
     // options (Active Jobs / Tech Locations / All) -- "toggle" names the
@@ -255,7 +286,19 @@
     // walks and clicks on its own via the onclick check above, so skipping
     // a wrapper whose only "click behavior" belongs to its children loses no
     // coverage -- it just stops testing an element nothing is wired to.
+    //
+    // Found 2026-08-22: this exclusion only ever ran for the CLASS-NAME path
+    // below -- HiveGrid's .wbcanvasbox wraps its entire ~20-button .wbtools
+    // toolbar (plus the canvas) under a literal onclick="void(0)" (a
+    // vestigial no-op), which used to short-circuit straight to `true` one
+    // line down before this check ever ran, live-confirmed producing one
+    // NO_OUTCOME finding whose label ran every tool's own label together
+    // ("✋V ◉C ╱L ▭A ▣R..."). Moved above the raw onclick-attribute check so
+    // it applies regardless of how the parent qualified.
     if ([].slice.call(el.children).some(function (child) { return child.hasAttribute('onclick'); })) return false;
+    if (el.hasAttribute('onclick')) return true;
+    var c = (typeof el.className === 'string') ? el.className : '';
+    if (!/(^|\s)(tab|ptab|chip|navbtn|filter|job-card|board-card|meas-btn|payment-option|menu-item|dropdown-item|accordion|chevron|toggle|caret)(\s|$)/.test(c)) return false;
     return true;
   }
   // Found 2026-08-19 investigating a batch spanning tox/pnlx/vcx: FOUR
@@ -318,7 +361,31 @@
   // the outer document for everything else, with no special-casing needed.
   function overlays(doc) { return (doc || document).querySelectorAll('#hldevpop,[class*="modal"],[role="dialog"],[role="menu"],[style*="position: fixed"],[style*="z-index"]').length; }
   function overlayNodes(doc) { return [].slice.call((doc || document).querySelectorAll('[class*="modal"],[role="dialog"],[role="menu"],[class*="dropdown"],[class*="popover"],[class*="sheet"]')).filter(function (n) { return n.offsetHeight > 0; }); }
-  function toastText(doc) { var d = doc || document; var t = d.getElementById('hlToast') || d.querySelector('[class*="toast"]'); return t ? t.textContent.trim() : ''; }
+  // Found 2026-08-22: the app's actual hlToast() (public/index.html and ~24
+  // standalone iframe views that each carry their own copy, e.g. vcx's
+  // "Hold cart"/"Update book"/Home Depot search) creates a bare
+  // `document.createElement('div')` with NO id and NO class -- appended
+  // straight to <body>. `getElementById('hlToast')` and `[class*="toast"]`
+  // can never match it, so every toast-only action in those views read as
+  // NO_OUTCOME even though the toast genuinely appeared. Only one view in
+  // the whole app (`id="toast" class="toast"`) was ever reachable by the old
+  // selectors. Fall back to the actual construction pattern: a direct child
+  // of <body>, position:fixed, with the pill-shaped border-radius unique to
+  // this component (ordinary rounded corners top out well under 40px here;
+  // the other common big-radius shape, 50% circular avatars/icons, is never
+  // position:fixed nor a direct child of body).
+  function toastText(doc) { var d = doc || document; var t = d.getElementById('hlToast') || d.querySelector('[class*="toast"]');
+    if (!t && d.body) {
+      var kids = d.body.children;
+      for (var i = 0; i < kids.length; i++) {
+        var k = kids[i];
+        if (k.id || k.className) continue;
+        var cs = getComputedStyle(k);
+        if (cs.position === 'fixed' && parseInt(cs.borderRadius, 10) >= 40) { t = k; break; }
+      }
+    }
+    return t ? t.textContent.trim() : '';
+  }
   function docFp(doc) { return (doc || document).body.getElementsByTagName('*').length; }
   // Found 2026-08-19 investigating council: the history carousel's Previous/
   // Next buttons call host.scrollBy(...) -- a real, correct action, confirmed
@@ -374,6 +441,29 @@
     }
     return false;
   }
+  // Found 2026-08-22 investigating vcx: clicking "Search" with an empty
+  // query box swaps the results panel's ONE child <div> for a different
+  // <div> with different wording ("Type a material above and hit Search..."
+  // -> "Type a material to search.") -- a real, deliberate message the app
+  // shows on purpose, live-confirmed via the Claude Browser tools. That's
+  // exactly one childList mutation record: docFp (element COUNT) is
+  // unchanged (one div swapped for one div) and muts=1 sits nowhere near the
+  // >3 threshold, which exists specifically so a busy live-updating view
+  // doesn't false-positive on an inert click -- raising it, as noted
+  // elsewhere in this file, was already tried and rejected. Comparing the
+  // removed vs. added nodes' own text (not a page-wide snapshot, so no risk
+  // from an unrelated background ticker drifting between the before/after
+  // reads) catches exactly this: same node count, different words.
+  function textAmongMutations(mutRecords) {
+    for (var i = 0; i < mutRecords.length; i++) {
+      var r = mutRecords[i];
+      if (r.type !== 'childList') continue;
+      var removed = [].slice.call(r.removedNodes).map(function (n) { return n.textContent || ''; }).join('');
+      var added = [].slice.call(r.addedNodes).map(function (n) { return n.textContent || ''; }).join('');
+      if (removed !== added) return true;
+    }
+    return false;
+  }
   // WHICH elements currently look "selected" (by text content, not by DOM
   // reference), not just how many. A tab/card swapping which sibling is
   // selected leaves the raw COUNT of .active/.on/.sel/[aria-selected]
@@ -386,6 +476,36 @@
   // long you wait. Re-querying by content on both sides sidesteps both
   // problems at once.
   function selectedKeys(doc) { return [].slice.call((doc || document).querySelectorAll('.active,.on,.sel,[aria-selected="true"]')).map(function (n) { return (n.textContent || '').trim().slice(0, 60); }).sort().join('|'); }
+  // Found 2026-08-21 investigating csx: a role-less on/off switch (Company
+  // Setup's "dormant client reengage" toggle) genuinely flips state -- live-
+  // confirmed the click handler toggles an `off` class token and `aria-checked`
+  // -- but neither is covered by selectedKeys() above (that selector is
+  // `.active,.on,.sel,[aria-selected]`, not `.off`/`[aria-checked]`), and the
+  // whole flip is only 2 mutation records, under the muts > 3 fallback. Every
+  // view names its switch differently, so matching class tokens is the same
+  // whack-a-mole overlayAmongMutations() was written to avoid -- aria-checked
+  // is the one thing a real toggle can't skip without breaking accessibility.
+  function switchState(doc) { return [].slice.call((doc || document).querySelectorAll('[aria-checked],[role="switch"]')).map(function (n) { return (n.textContent || n.getAttribute('aria-label') || '').trim().slice(0, 40) + ':' + n.getAttribute('aria-checked'); }).sort().join('|'); }
+  // Found 2026-08-21 investigating ajx: a sortable table header rebuilds the
+  // WHOLE table via innerHTML on every click -- live-confirmed clicking
+  // "Client" genuinely reorders every row and moves the sort arrow to a
+  // different header -- but row count (docFp) is unchanged, no .active/.on/
+  // .sel/[aria-selected] class is involved, and a full-table replace
+  // collapses into a small handful of top-level MutationRecords (measured: 3,
+  // one under the muts > 3 fallback) no matter how much content actually
+  // moved, because MutationObserver reports at the mutated parent's boundary,
+  // not per descendant. Every existing signal here looks at element COUNT or
+  // specific classes/attributes; none look at rendered text order. Capped at
+  // 200 rows to bound cost on a large table, matching canvasFp/scrollFp's
+  // full-document-scan overhead elsewhere in this file.
+  function rowOrderFp(doc) {
+    var rows = (doc || document).querySelectorAll('tr'), out = '';
+    for (var i = 0; i < rows.length && i < 200; i++) {
+      var cell = rows[i].querySelector('td,th');
+      out += (cell ? cell.textContent.trim().slice(0, 20) : '') + '|';
+    }
+    return out;
+  }
   // Found 2026-08-19: a HiveConnect "Settings" menu (class="settings-menu",
   // position:absolute via a stylesheet rule) and an estimate's "+ New RFI"
   // modal (class="jcv open", position:fixed via a stylesheet rule) both
@@ -409,6 +529,25 @@
       var cs;
       try { cs = getComputedStyle(t); } catch (e) { continue; }
       if ((cs.position === 'fixed' || cs.position === 'absolute') && parseInt(cs.zIndex, 10) > 0) return true;
+    }
+    return false;
+  }
+  // Found 2026-08-21 investigating docs/cc: a modal's own Cancel button and
+  // Command Center's shared detail overlay's Close button both genuinely
+  // dismiss a real, visibly-open panel -- live-confirmed each toggles an
+  // `open` class that CSS maps to display:none -- but overlayAmongMutations()
+  // above only ever looks for something newly appearing (offsetHeight <= 0
+  // is skipped, line ~408), so a panel that WAS open and collapses to
+  // offsetHeight:0 produces no positive signal at all: overlays()'s static
+  // count doesn't drop (the closed node still matches the class selector),
+  // and the mutation is a `class` attribute change, not `style`, so
+  // styleAmongMutations() misses it too. Closing is just as real an outcome
+  // as opening, so this takes an explicit "was visible before" snapshot and
+  // checks whether any of those specific nodes collapsed or left the DOM.
+  function overlayClosed(beforeNodes) {
+    for (var i = 0; i < beforeNodes.length; i++) {
+      var n = beforeNodes[i];
+      if (!n.isConnected || n.offsetHeight <= 0) return true;
     }
     return false;
   }
@@ -442,6 +581,20 @@
     if (seen[key]) return; seen[key] = 1;
     var kind = classify(el);
     if (kind === 'input') return;
+    // Found 2026-08-21 investigating council: crawlCurrent() snapshots every
+    // testable element ONCE via querySelectorAll before clicking any of
+    // them. An earlier click in that same pass (e.g. a history list's own
+    // "Refresh" button, which sits before the history rows in DOM order)
+    // can rebuild its container via innerHTML -- live-confirmed
+    // renderHistory() replaces #rc-history's entire subtree -- which
+    // detaches every row/button already captured in the snapshot. Calling
+    // .click() on a detached node still fires the event, but it has no live
+    // ancestor chain to bubble through, so a delegated listener on the
+    // (now-replaced) parent never runs it: no fetch, no mutation, nothing.
+    // That is not the same thing as a genuinely inert control -- it is this
+    // crawler invalidating its own reference mid-run -- so it gets its own
+    // verdict rather than being counted as NO_OUTCOME.
+    if (!el.isConnected) { results.push({ view: CUR, depth: depth, label: lab, kind: kind, verdict: 'SKIPPED_DETACHED', note: 'an earlier click rebuilt this element\'s container — this reference is stale' }); return; }
     // Found 2026-08-19: a `disabled` button (a bookkeeping "Submit for
     // review" gated behind its own validation checklist, doc-list pagination
     // with only one page) is correctly a no-op when clicked -- disabled
@@ -449,6 +602,16 @@
     // reporting NO_OUTCOME mischaracterized working, intentional guards as
     // broken controls.
     if (el.disabled) { results.push({ view: CUR, depth: depth, label: lab, kind: kind, verdict: 'SKIPPED_DISABLED', note: 'element is disabled — not clicked' }); return; }
+    // Found 2026-08-22: the Boardroom's "Send question" is a
+    // type="submit" button whose <textarea> is required and starts empty.
+    // Live-confirmed: clicking it fires the textarea's `invalid` event, and
+    // the browser's own constraint validation blocks the `submit` event from
+    // ever dispatching -- no navigation, no fetch, no DOM mutation this
+    // crawler's own click causes (the mutations observed in one live test
+    // turned out to be unrelated background UI, not caused by the click at
+    // all). Exactly the same shape as the disabled-button case just above:
+    // a control correctly refusing to act by design, not a broken one.
+    if (el.type === 'submit' && el.form && typeof el.form.checkValidity === 'function' && !el.form.checkValidity()) { results.push({ view: CUR, depth: depth, label: lab, kind: kind, verdict: 'SKIPPED_INVALID_FORM', note: 'a required field is empty — the browser blocks submit before it can fire, not clicked' }); return; }
     // Found 2026-08-19: a capacity-planning day-range tab ("30 days") that
     // is already the default-selected tab produces no change when clicked
     // again -- correctly, since it's already in the state the click would
@@ -468,6 +631,7 @@
     var sdoc = (el.ownerDocument) || document;
     var t0 = performance.now();
     var bFp = docFp(sdoc), bOv = overlays(sdoc), bAct = sdoc.querySelectorAll('.active,.on,.sel,[aria-selected="true"]').length, bToast = toastText(sdoc), bScroll = scrollFp(sdoc), bCanvas = canvasFp(sdoc);
+    var bVisibleOverlays = overlayNodes(sdoc), bSwitch = switchState(sdoc), bRowOrder = rowOrderFp(sdoc);
     // Found 2026-08-18: a tab/card swapping which sibling is selected
     // leaves bAct === aAct -- the COUNT of "something selected" elements
     // never changes, only which one. muts > 3 was meant to catch exactly
@@ -490,12 +654,14 @@
     var d = since(t0);
     var aFp = docFp(sdoc), aOv = overlays(sdoc), aAct = sdoc.querySelectorAll('.active,.on,.sel,[aria-selected="true"]').length, aToast = toastText(sdoc), aScroll = scrollFp(sdoc), aCanvas = canvasFp(sdoc);
     var aSelKeys = selectedKeys(sdoc);
+    var aSwitch = switchState(sdoc), aRowOrder = rowOrderFp(sdoc);
     var reads = d.f.filter(function (x) { return x.decision === 'pass'; });
     var badRead = reads.filter(function (x) { return x.s >= 400 || x.s === -1; });
     var writes = d.f.filter(function (x) { return x.decision === 'stub-write' || x.decision === 'blocked-external'; });
     var wrote = writes.length > 0;
     var opened = aOv > bOv || overlayAmongMutations(mutRecords), toastChanged = aToast && aToast !== bToast, selectionChanged = aSelKeys !== bSelKeys, scrolled = aScroll !== bScroll, canvasChanged = aCanvas !== bCanvas, styled = styleAmongMutations(mutRecords);
-    var moved = aFp !== bFp || aAct !== bAct || muts > 3 || d.f.length > 0 || opened || toastChanged || selectionChanged || scrolled || canvasChanged || styled;
+    var closed = overlayClosed(bVisibleOverlays), switched = aSwitch !== bSwitch, reordered = aRowOrder !== bRowOrder, textSwapped = textAmongMutations(mutRecords);
+    var moved = aFp !== bFp || aAct !== bAct || muts > 3 || d.f.length > 0 || opened || toastChanged || selectionChanged || scrolled || canvasChanged || styled || closed || switched || reordered || textSwapped;
     var verdict = 'PASS', note = '';
     if (threw && threw !== 'click-timeout') { verdict = 'THREW'; note = threw; }
     else if (threw === 'click-timeout') { verdict = 'SLOW_BLOCKING'; note = 'froze >' + CLICK_TIMEOUT + 'ms (heavy sync work)'; }
@@ -512,7 +678,18 @@
       var panels = overlayNodes(sdoc);
       var panel = panels[panels.length - 1];
       if (panel) {
-        var kids = [].slice.call(panel.querySelectorAll('*')).filter(function (e) { return isTestable(e) && e.offsetHeight > 0 && e.offsetWidth > 0; });
+        // Found 2026-08-22 investigating docs: New Folder's "Cancel" sits
+        // before "Create" in DOM order. Testing Cancel first (live-confirmed)
+        // closes the modal and clears its confirm callback
+        // (HLDOC.modalOnConfirm = null), so the very next click on "Create"
+        // -- itself correctly wired and confirmed working in isolation --
+        // fires against a callback that no longer exists: a silent no-op
+        // caused by this loop's own ordering, not a broken button. The same
+        // regex closeAny() already uses to find a panel's own dismiss
+        // control (proven safe to identify one this way) says which kids to
+        // leave for closeAny() to handle afterward instead of clicking here.
+        var CLOSEISH = /close|cancel|not now|stay|got it|dismiss|×|✕|back/i;
+        var kids = [].slice.call(panel.querySelectorAll('*')).filter(function (e) { return isTestable(e) && e.offsetHeight > 0 && e.offsetWidth > 0 && !CLOSEISH.test(label(e)); });
         for (var j = 0; j < kids.length && j < MAX_KIDS; j++) { if (performance.now() - VIEWSTART > VIEWCAP) break; await tryClick(kids[j], panel, depth + 1); }
       }
     }

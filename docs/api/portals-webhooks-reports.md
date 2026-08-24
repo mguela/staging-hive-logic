@@ -38,6 +38,17 @@ Notes: `invoices`' `mapInvoice()` returns real field names taken verbatim from t
 
 Notes: the `banking` write path's validation response shape is `{ ok, banking: { id, sub_id, accepts_ach, updated_at } }`.
 
+File uploads (`documents`, `invoice_submit`) take a base64 `data:` URL, capped at
+5 MB, restricted to PDF and photo types. They go into the private `docs` bucket
+under `subs/documents/{sub_id}/` and `subs/invoices/{sub_id}/` and get a
+`public.documents` row; `file_url` on `sub_documents` / `sub_invoices` holds the
+bare storage path, which is the join back to that row. Compliance documents are
+marked `sensitive` (a W9 carries a taxpayer ID); invoices are not.
+
+Until 2026-08-22 these wrote to buckets named `sub-documents` and `sub-invoices`
+that have never existed on the production project, so every sub upload failed
+with a 502 that quoted the raw storage error back to the subcontractor.
+
 ## Payment & Email Webhooks
 
 ### `POST /api/authnet-webhook`

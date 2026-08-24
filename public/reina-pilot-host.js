@@ -850,6 +850,8 @@
     var NEURAL_VOICE_STORAGE_KEY = 'hivelogic-reina-neural-voice-v1';
     var VOICE_RATE_STORAGE_KEY = 'hivelogic-reina-voice-rate-v1';
     var PANEL_AUTO_CLOSE_MS = 20000;
+    // undefined = not looked for yet, null = not available on this page.
+    var approvalUi;
 
     function storedAudioInput() {
       try {
@@ -2208,7 +2210,7 @@
               }
               return client.voiceServerTransport(request);
             },
-            timeoutMs: 15000,
+            timeoutMs: 45000,
           }));
           if (!transport || !isFunction(transport.submitTurn)) return false;
           var nativeWakeRecognitionFactory = createCapturedNativeWakeRecognitionFactory(function () {
@@ -2975,6 +2977,42 @@
       return pending.promise;
     }
 
+    // A spoken request has a voice turn open around it: the button says
+    // "thinking" and a reply is owed out loud. An approval popup answers it,
+    // so say one short line and release the button rather than leaving it
+    // spinning for an answer that is never coming.
+    function beginActionApproval(utterance) {
+      var approvals = actionApprovalUi();
+      if (!approvals) return { accepted: false, reason: 'actions_unavailable' };
+      appendMessage('user', utterance);
+      try { page.input.value = ''; } catch (_) {}
+      if (view) text(view.status, 'Writing that draft for you to check…');
+      revokeReview('turn_replaced', true);
+
+      function settle(message) {
+        if (disposed) return;
+        if (view) text(view.status, '');
+        if (message) appendMessage('assistant', message);
+        if (spokenReplyPending) finishSpokenTurn(message || '');
+        else if (voicePhase === 'thinking') setVoicePhase('off');
+        normalInput(true);
+      }
+
+      Promise.resolve()
+        .then(function () {
+          return approvals.propose(utterance, sessionId || 'rp.action', 't.' + Date.now().toString(36));
+        })
+        .then(function (outcome) {
+          if (outcome && outcome.ok === true) {
+            settle('I have drafted it. Have a look before it sends.');
+            return;
+          }
+          settle((outcome && outcome.message) || 'That did not go through.');
+        }, function () { settle('That did not go through.'); });
+
+      return { accepted: true, action: 'approval_requested' };
+    }
+
     function submitTyped(value) {
       // This refused silently: no message in the feed, no console line, and the
       // typed text left sitting in the box. Pressing Send simply did nothing,
@@ -2994,6 +3032,17 @@
       if (!normalized || CONTROL_RE.test(normalized)) {
         fixedFailure('invalid_input');
         return { accepted: false, reason: 'invalid_input' };
+      }
+
+      // Asking her to DO something is not a question, and it must not reach
+      // the read-only route -- that route is built to refuse, and refusing is
+      // exactly what it did to every "email this to Andy" Chris ever said.
+      // This is the one place both the keyboard and the microphone pass
+      // through, which is why the check lives here and not at either door.
+      var approvals = actionApprovalUi();
+      if (approvals && isFunction(approvals.looksLikeEmailRequest)
+        && approvals.looksLikeEmailRequest(normalized)) {
+        return beginActionApproval(normalized);
       }
       var outcome;
       revokeReview('turn_replaced', true);
@@ -3016,6 +3065,32 @@
       appendMessage('user', normalized);
       try { page.input.value = ''; } catch (_) { /* inert */ }
       return { accepted: true, turnId: outcome.turnId };
+    }
+
+    // Reina's answers are read-only. An action request is a different thing
+    // entirely: it goes to /api/reina-action, which drafts it and asks a
+    // person before anything happens. Routing it here rather than through the
+    // pilot keeps the read-only route read-only -- it stays incapable of
+    // acting, instead of being trusted not to.
+    function actionApprovalUi() {
+      if (approvalUi !== undefined) return approvalUi;
+      approvalUi = null;
+      try {
+        var factory = root && root.ReinaActionApproval;
+        if (factory && isFunction(factory.createApprovalUi)) {
+          approvalUi = factory.createApprovalUi({
+            documentRef: documentRef,
+            onResolved: function (outcome) {
+              if (disposed || !view) return;
+              if (outcome && typeof outcome.message === 'string') {
+                appendMessage('assistant', outcome.message);
+              }
+              normalInput(true);
+            },
+          });
+        }
+      } catch (_) { approvalUi = null; }
+      return approvalUi;
     }
 
     function submitFromInput() {

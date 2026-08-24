@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import test from 'node:test';
 
 import { createSupabaseConversationStore } from '../api/_lib/reina/supabase-conversation-store.js';
+import { SERVER_DEADLINE } from '../api/_lib/reina/pilot-server-deadline.js';
 
 const OWNER = '11111111-1111-4111-8111-111111111111';
 const CONVERSATION = `rp.${'a'.repeat(64)}`;
@@ -707,4 +708,35 @@ test('configuration and fetch identities are snapshotted at construction', async
   });
   assert.deepEqual(result, { status: 'not_found' });
   assert.equal(originalCalls, 1);
+});
+
+// The route hands its own root deadline down as the turn's attempt lease. When
+// the store's ceiling for that lease sat below SERVER_DEADLINE.totalMs, every
+// RPC came back unconfigured and the turn 503'd with an empty call list -- no
+// timeout, no error, just a route that had quietly stopped working. Raising the
+// composer budget is the thing that trips it, so the invariant is pinned here
+// rather than left to be rediscovered.
+test('the attempt lease ceiling covers the whole route budget', async () => {
+  const calls = [];
+  const store = createSupabaseConversationStore({
+    env: ENV,
+    fetchImpl: async (url, init) => {
+      calls.push({ url, body: JSON.parse(init.body) });
+      return mockResponse({ status: 'conflict' });
+    },
+  });
+  const attemptDeadlineAt = new Date(Date.now() + SERVER_DEADLINE.totalMs).toISOString();
+  const result = await store.claimTurn(Object.freeze({
+    ownerPrincipalId: OWNER,
+    conversationId: CONVERSATION,
+    idempotencyKey: KEY,
+    inputDigest: INPUT_DIGEST,
+    appendPolicyReference: policy('reina.conversation.append'),
+    replayReadPolicyReference: policy('reina.conversation.read'),
+  }), Object.freeze({ attemptDeadlineAt }));
+  // 'invalid' is what an unconfigured store returns without calling anything,
+  // which is exactly the failure this pins.
+  assert.notEqual(result.status, 'invalid', 'a lease the length of the route budget must reach the database');
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].body.p_attempt_deadline_at, attemptDeadlineAt);
 });

@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>HiveDoc has moved into HiveLogic</title>
+<style>
+  :root {
+    --bg: #f7f7f9;
+    --card: #ffffff;
+    --ink: #1c2030;
+    --mut: #6b7180;
+    --line: #e4e6ee;
+    --gold: #c8a04a;
+    --gold-deep: #8a6d24;
+    --gold-bg: #fbf5e6;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #14161d;
+      --card: #1c1f28;
+      --ink: #e9ebf2;
+      --mut: #9aa0b0;
+      --line: #2b2f3b;
+      --gold: #c8a04a;
+      --gold-deep: #e3c078;
+      --gold-bg: #241f14;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    background: var(--bg);
+    color: var(--ink);
+    font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 32px;
+    max-width: 560px;
+    width: 100%;
+    box-shadow: 0 1px 2px rgba(0,0,0,.04), 0 8px 24px rgba(0,0,0,.06);
+  }
+  .badge {
+    display: inline-block;
+    background: var(--gold-bg);
+    color: var(--gold-deep);
+    border: 1px solid var(--gold);
+    border-radius: 999px;
+    padding: 3px 12px;
+    font-size: 11.5px;
+    font-weight: 700;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+  }
+  h1 { font-size: 22px; margin: 16px 0 10px; line-height: 1.3; }
+  p { margin: 0 0 14px; }
+  .mut { color: var(--mut); font-size: 13.5px; }
+  .btn {
+    display: inline-block;
+    margin-top: 8px;
+    background: var(--gold);
+    color: #1c2030;
+    text-decoration: none;
+    font-weight: 700;
+    font-size: 14px;
+    padding: 11px 20px;
+    border-radius: 9px;
+  }
+  .btn:hover { filter: brightness(1.06); }
+  hr { border: 0; border-top: 1px solid var(--line); margin: 22px 0 16px; }
+</style>
+</head>
+<body>
+  <main class="card">
+    <span class="badge">Retired</span>
+    <h1>HiveDoc now lives inside HiveLogic</h1>
+
+    <p>
+      This standalone HiveDoc app has been retired. Documents are no longer stored or
+      managed here &mdash; they live in the <strong>Documents</strong> tab of HiveLogic,
+      alongside the clients and jobs they belong to.
+    </p>
+
+    <p>
+      That is the point of the move: a file now sits with its client and its job, so
+      searching for a client shows their contracts, permits, invoices and job-site
+      photos together, instead of being split across two systems.
+    </p>
+
+    <a class="btn" href="https://hivelogic-live-chris-projects-bc5d8fbb.vercel.app/#/docs">
+      Open Documents in HiveLogic
+    </a>
+
+    <hr>
+
+    <p class="mut">
+      <strong>Nothing was lost.</strong> This app never held any files &mdash; every
+      document and photo has always been stored in HiveLogic. This page is here so the
+      old link still explains where things went, rather than failing silently.
+    </p>
+    <p class="mut">Retired 21 August 2026.</p>
+  </main>
+</body>
+</html>

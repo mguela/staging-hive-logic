@@ -3,6 +3,50 @@
 
 const sb = window.supabase.createClient(window.HIVE_CONFIG.url, window.HIVE_CONFIG.anonKey);
 
+/* ============ Preferences follow the user, not this browser ============
+ *
+ * Chris, 2026-08-23, as a standing rule (CLAUDE.md): "settings changed should
+ * follow the user not the device. for every part of Hivelogic".
+ *
+ * HiveConnect is injected into the HiveLogic document -- no iframe -- so
+ * window.hlUserSettings is right there, backed by profiles.settings and keyed
+ * to the signed-in HiveLogic user. Theme set on the office desktop is now set
+ * on the laptop; email templates written once are not stranded on one machine.
+ *
+ * localStorage stays as the CACHE, and the legacy key keeps being written, so
+ * a first load before the server answers still paints what he last chose
+ * rather than flashing a default at him.
+ *
+ * NOT here: hive_mic and hive_speaker. Which microphone is genuinely about the
+ * machine -- carrying that choice across would name a device that is not
+ * plugged in.
+ */
+function hcPref(key, legacyKey, fallback) {
+  try {
+    if (window.hlUserSettings) {
+      const v = window.hlUserSettings.get(key, undefined);
+      if (v !== undefined) return v;
+    }
+  } catch (e) {}
+  try {
+    const raw = localStorage.getItem(legacyKey);
+    if (raw !== null) return raw;
+  } catch (e) {}
+  return fallback;
+}
+function hcPrefSet(key, legacyKey, value) {
+  try { localStorage.setItem(legacyKey, typeof value === 'string' ? value : JSON.stringify(value)); } catch (e) {}
+  try { if (window.hlUserSettings) window.hlUserSettings.set(key, value).catch(() => {}); } catch (e) {}
+}
+function hcPrefJson(key, legacyKey, fallback) {
+  const v = hcPref(key, legacyKey, undefined);
+  if (v === undefined) return fallback;
+  if (typeof v !== 'string') return v;
+  try { return JSON.parse(v); } catch (e) { return fallback; }
+}
+
+
+
 // ---------- State ----------
 let me = null;                    // my profile row
 window.me = null;                 // mirrored for tasks.js/voip-panel.js: those are classic
@@ -16,7 +60,11 @@ window.me = null;                 // mirrored for tasks.js/voip-panel.js: those 
                                    // `me` reference in tasks.js keeps working in both contexts.
 let loadEverythingStarted = false;   // guards against double-boot (bridged-session flow can call loadEverything twice concurrently, which double-subscribes realtime channels and crashes with 'cannot add postgres_changes callbacks ... after subscribe()')
 let profiles = new Map();         // user_id -> profile
+window.profiles = profiles;       // mirrored for the same reason as `me` (see above) -- never
+                                   // reassigned wholesale below, only mutated via .set()/.delete(),
+                                   // so this one early mirror stays valid for the object's whole life.
 let channels = new Map();         // channel_id -> channel row
+window.channels = channels;       // same as profiles -- mutated in place, never reassigned.
 let memberships = new Map();      // channel_id -> membership row (mine)
 let unreads = new Map();          // channel_id -> count
 let notifications = [];           // my notifications (newest first)
@@ -26,12 +74,24 @@ let messagesCache = new Map();    // message_id -> message row (current channel 
 let reactionsCache = new Map();   // message_id -> [{user_id, emoji}]
 let mentionSel = 0;
 let onlineUsers = new Set();       // user_ids currently online (realtime presence)
-let notifsEnabled = localStorage.getItem('hive_notifs') !== 'off';
+let notifsEnabled = hcPref('hcNotifs', 'hive_notifs', 'on') !== 'off';
 
 const EMOJIS = ['👍','❤️','😂','🎉','🔥','👀','✅','🙏','😅','💯','😮','😢','🚀','🐝','💪','👌','🤝','⭐','☕','🍺','😎','🤔','😴','🫡','⚡','🛠️','📸','🏠','💰','🌧️','☀️','🥶'];
 
 // ---------- DOM ----------
 const $ = id => document.getElementById(id);
+// Found 2026-08-22: openTaskDetail() in tasks.js -- the same function the
+// TASK_STATUSES mirror above was fixing -- goes on to call bare `$(...)`
+// several lines further in, throwing "$ is not defined @tasks.js:255" in
+// the mounted context once TASK_STATUSES stopped being the first thing it
+// hit. Unlike `sb` (deliberately NOT mirrored -- collides with HiveLogic's
+// own global `var sb`, the whole reason app.js loads as a module here) and
+// `esc` (also NOT mirrored -- HiveLogic's own index.html defines its own
+// top-level global `esc` for unrelated HTML-escaping; overwriting it would
+// silently corrupt escaping everywhere else in the Command Center once
+// HiveConnect mounts), `$` has no such collision -- confirmed no top-level
+// `$` exists anywhere in HiveLogic's own index.html.
+window.$ = $;
 const authScreen = $('auth-screen'), app = $('app');
 const messagesEl = $('messages'), composerInput = $('composer-input');
 const threadPanel = $('thread-panel'), threadMessagesEl = $('thread-messages'), threadInput = $('thread-input');
@@ -190,7 +250,16 @@ async function boot() {
   }
 
   const { data: { session } } = await sb.auth.getSession();
-  if (!session) { authScreen.classList.remove('hidden'); return; }
+  if (!session) {
+    // Mounted inside HiveLogic, a missing session is a hand-off still in
+    // flight or one that failed -- never an invitation to log in, because
+    // these are different accounts on a different project. The bridge
+    // reports its own failure.
+    if (!window.__hiveconnectBridging && !window.__hiveconnectBridgedSession) {
+      authScreen.classList.remove('hidden');
+    }
+    return;
+  }
   sb.realtime.setAuth(session.access_token);
   await loadEverything(session.user.id);
   authScreen.classList.add('hidden');
@@ -366,8 +435,104 @@ const DIVISIONS = [
   { key: 'team',     label: 'Team',     icon: '🧰', color: '#10b981' },
   { key: 'channels', label: 'Channels', icon: '💬', color: '#8b5cf6' },
 ];
-const collapsed = new Set(JSON.parse(localStorage.getItem('hive_collapsed') || '[]'));
-function saveCollapsed() { localStorage.setItem('hive_collapsed', JSON.stringify([...collapsed])); }
+const collapsed = new Set(hcPrefJson('hcCollapsed', 'hive_collapsed', []));
+function saveCollapsed() { hcPrefSet('hcCollapsed', 'hive_collapsed', [...collapsed]); }
+
+// ---------- Channel archive (creator or owner/admin) ----------
+let archivedOpen = false; // Archived section starts collapsed/hidden by default
+function canArchiveChannel(c) {
+  return !!(c && c.type !== 'dm' && me && (me.role === 'owner' || me.role === 'admin' || c.created_by === me.id));
+}
+function hcEnsureArchiveCss() {
+  if (document.getElementById('hc-archive-css')) return;
+  const s = document.createElement('style'); s.id = 'hc-archive-css';
+  s.textContent =
+    '.division .channel-list li .ch-gear{position:absolute;right:5px;top:50%;transform:translateY(-50%);border:none;background:transparent;color:#c3cbdb;font-size:15px;line-height:1;padding:0 5px;border-radius:6px;cursor:pointer;opacity:0;transition:opacity .12s,background .12s}' +
+    '.division .channel-list li:hover .ch-gear{opacity:.85}' +
+    '.division .channel-list li:hover .unread{display:none}' +
+    '.division .channel-list li .ch-gear:hover{opacity:1;color:#fff;background:rgba(255,255,255,.16)}' +
+    '.archived-division .div-badge{background:rgba(138,146,164,.18);color:#aeb6c6}' +
+    '.archived-division .div-label{opacity:.85}' +
+    '.hc-ch-menu{position:fixed;z-index:9600;min-width:172px;background:#fff;border:1px solid #e3e5ec;border-radius:10px;box-shadow:0 14px 40px rgba(22,30,46,.22);padding:5px}' +
+    '.hc-ch-menu-item{display:block;width:100%;text-align:left;border:none;background:transparent;padding:8px 11px;font-size:13px;color:#172030;border-radius:7px;cursor:pointer;font-family:inherit}' +
+    '.hc-ch-menu-item:hover{background:#f0f2f7}' +
+    '.hc-arch-banner{display:flex;align-items:center;gap:10px;justify-content:space-between;margin:0 0 10px;padding:9px 13px;background:rgba(138,146,164,.12);border:1px solid rgba(138,146,164,.30);border-radius:9px;font-size:12.5px;color:#5c6578}' +
+    '.hc-arch-banner b{color:#172030}' +
+    '.hc-arch-banner button{border:1px solid #748a9e;background:#fff;color:#172030;font-weight:700;font-size:12px;padding:5px 12px;border-radius:8px;cursor:pointer;font-family:inherit;flex:none}' +
+    '.hc-arch-banner button:hover{background:#f4f6fa}';
+  document.head.appendChild(s);
+}
+function closeChannelMenu() { document.querySelectorAll('.hc-ch-menu').forEach(m => m.remove()); }
+function openChannelMenu(anchor, c, ev) {
+  hcEnsureArchiveCss();
+  closeChannelMenu();
+  const menu = document.createElement('div'); menu.className = 'hc-ch-menu';
+  const item = document.createElement('button'); item.type = 'button'; item.className = 'hc-ch-menu-item';
+  item.textContent = c.archived ? 'Unarchive channel' : 'Archive channel';
+  item.onclick = (e) => { e.stopPropagation(); closeChannelMenu(); archiveChannel(c, !c.archived); };
+  menu.appendChild(item);
+  document.body.appendChild(menu);
+  const r = (anchor && anchor.getBoundingClientRect) ? anchor.getBoundingClientRect() : null;
+  let x = (ev && ev.clientX) ? ev.clientX : (r ? r.right : 40);
+  let y = (ev && ev.clientY) ? ev.clientY : (r ? r.bottom : 40);
+  x = Math.min(x, window.innerWidth - 190);
+  y = Math.min(y + 4, window.innerHeight - 60);
+  menu.style.left = Math.max(8, x) + 'px';
+  menu.style.top = Math.max(8, y) + 'px';
+  setTimeout(() => document.addEventListener('click', function h() { closeChannelMenu(); document.removeEventListener('click', h); }), 0);
+}
+async function archiveChannel(c, makeArchived) {
+  if (!canArchiveChannel(c)) { alert('Only the channel creator or an admin can archive this channel.'); return; }
+  if (makeArchived && !confirm('Archive #' + c.name + '?\n\nIt moves to the Archived section at the bottom of the sidebar. Messages and members are kept — you can unarchive it anytime.')) return;
+  const { error } = await sb.rpc('archive_channel', { cid: c.id, is_archived: makeArchived });
+  if (error) { alert(error.message || 'Could not update the channel.'); return; }
+  c.archived = makeArchived;
+  if (makeArchived) archivedOpen = true; // reveal the Archived section so it's clear where the channel went
+  renderSidebar();
+  if (currentChannelId === c.id) updateArchivedBanner();
+}
+function updateArchivedBanner() {
+  let banner = document.getElementById('hc-arch-banner');
+  const c = channels.get(currentChannelId);
+  const show = !!(c && c.type !== 'dm' && c.archived);
+  if (!show) { if (banner) banner.remove(); return; }
+  hcEnsureArchiveCss();
+  if (!banner) {
+    banner = document.createElement('div'); banner.id = 'hc-arch-banner'; banner.className = 'hc-arch-banner';
+    if (messagesEl && messagesEl.parentNode) messagesEl.parentNode.insertBefore(banner, messagesEl);
+  }
+  banner.innerHTML = '';
+  const txt = document.createElement('span');
+  txt.innerHTML = '<b>#' + esc(c.name) + '</b> is archived — hidden from the channel list.';
+  banner.appendChild(txt);
+  if (canArchiveChannel(c)) {
+    const btn = document.createElement('button'); btn.type = 'button'; btn.textContent = 'Unarchive';
+    btn.onclick = () => archiveChannel(c, false);
+    banner.appendChild(btn);
+  }
+}
+function renderArchivedSection(wrap) {
+  const archived = [...channels.values()].filter(c => c.type !== 'dm' && c.archived)
+    .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+  if (!archived.length) return;
+  const el = document.createElement('div');
+  el.className = 'division archived-division' + (archivedOpen ? '' : ' collapsed');
+  el.style.setProperty('--cat', '#8a92a4');
+  const head = document.createElement('button'); head.className = 'div-head archived-head';
+  head.innerHTML =
+    '<span class="div-badge">🗄️</span>' +
+    '<span class="div-label">Archived</span>' +
+    '<span class="div-count">' + archived.length + '</span>' +
+    '<span class="div-chev">▾</span>';
+  head.onclick = () => { archivedOpen = !archivedOpen; renderSidebar(); };
+  el.appendChild(head);
+  const body = document.createElement('div'); body.className = 'div-body';
+  const ul = document.createElement('ul'); ul.className = 'channel-list';
+  archived.forEach(c => ul.appendChild(channelRow(c)));
+  body.appendChild(ul);
+  el.appendChild(body);
+  wrap.appendChild(el);
+}
 
 function channelRow(c) {
   const li = document.createElement('li');
@@ -384,6 +549,15 @@ function channelRow(c) {
   if (huddleParticipants(c.id).length) {
     const h = document.createElement('span'); h.className = 'huddle-badge'; h.textContent = '🎧';
     h.title = 'HiveVideo in progress'; li.appendChild(h);
+  }
+  if (canArchiveChannel(c)) {
+    hcEnsureArchiveCss();
+    const gear = document.createElement('button');
+    gear.type = 'button'; gear.className = 'ch-gear';
+    gear.textContent = '⋯'; gear.title = 'Channel options'; gear.setAttribute('aria-label', 'Channel options');
+    gear.onclick = (e) => { e.stopPropagation(); openChannelMenu(gear, c); };
+    li.appendChild(gear);
+    li.oncontextmenu = (e) => { e.preventDefault(); openChannelMenu(gear, c, e); };
   }
   li.onclick = () => openChannel(c.id);
   return li;
@@ -425,6 +599,7 @@ function renderSidebar() {
     wrap.appendChild(el);
   }
   enableFolderDrag(wrap, '.div-head', '.division', 'key', 'hcDivOrder');
+  renderArchivedSection(wrap);
 
   renderMessagesPanel();
   if (typeof navTab !== 'undefined' && navTab === 'huddles') renderHuddlesPanel();
@@ -538,6 +713,7 @@ async function openChannel(channelId) {
   renderMessages();
   markRead(channelId);
   renderSidebar();
+  updateArchivedBanner();
   refreshPinCount();
   $('pinned-panel').classList.add('hidden');
   renderHuddleUI();
@@ -1053,6 +1229,13 @@ $('modal-backdrop').addEventListener('click', e => { if (e.target === e.currentT
 $('nc-create').addEventListener('click', async () => {
   const name = $('nc-name').value.trim().toLowerCase().replace(/\s+/g, '-').replace(/[^\w-]/g, '');
   if (!name) return;
+  // Disable + label the button so a submit gives immediate feedback instead of
+  // looking dead until the modal closes a beat later.
+  const btn = $('nc-create');
+  if (btn.disabled) return; // guard double-submit
+  const btnLabel = btn.textContent;
+  btn.disabled = true; btn.style.opacity = '.6'; btn.style.cursor = 'default'; btn.textContent = 'Creating…';
+  const restore = () => { btn.disabled = false; btn.style.opacity = ''; btn.style.cursor = ''; btn.textContent = btnLabel; };
   const { data, error } = await sb.from('channels').insert({
     name, description: $('nc-desc').value.trim() || null,
     type: $('nc-private').checked ? 'private' : 'public',
@@ -1060,12 +1243,13 @@ $('nc-create').addEventListener('click', async () => {
     created_by: me.id,
   }).select().single();
   if (error) {
-    const el = $('nc-error'); el.textContent = error.message; el.classList.remove('hidden'); return;
+    const el = $('nc-error'); el.textContent = error.message; el.classList.remove('hidden'); restore(); return;
   }
   channels.set(data.id, data);
   const { data: mem } = await sb.from('channel_members')
     .insert({ channel_id: data.id, user_id: me.id }).select().single();
   if (mem) memberships.set(data.id, mem);
+  restore();
   $('modal-backdrop').classList.add('hidden');
   renderSidebar();
   openChannel(data.id);
@@ -1172,6 +1356,7 @@ function subscribeHuddles() {
       }
     }
     huddleState = map;
+    reconcileMyHuddlePresence(map);
     renderHuddleUI();
     renderSidebar();
     updateIncomingCalls();
@@ -1180,10 +1365,69 @@ function subscribeHuddles() {
 
 function huddleParticipants(cid) { return huddleState.get(cid) || []; }
 
+/* ---- leaving a call has to actually reach the server ----
+   Chris, 2026-08-23: "when i click LEAVE the popup goes away but the call is
+   still active and if i hit JOIN it pulls it back up".
+
+   Leaving was written as one unchecked push:
+
+       try { if (huddleChannel && huddleChannel.untrack) huddleChannel.untrack(); } catch (e) {}
+
+   which cannot fail loudly, in two separate ways:
+
+     - untrack() is send({type:'presence'}), and that RESOLVES to 'error' or
+       'timed out' when the socket is down. Nothing awaited it, so a refusal
+       looked exactly like success -- the same shape of bug as fetch() resolving
+       on a 4xx.
+     - when the channel is not joined, channelAdapter.push() THROWS, which
+       rejects the promise. A synchronous try/catch around a call nobody awaits
+       never sees that rejection.
+
+   Either way the dock hid, `activeHuddle` went null, and the server kept
+   announcing him in the huddle he had just left. His own stale presence is what
+   held the header at "Join (1)", and Join walked him back into it.
+
+   The fix is to stop depending on one push landing: drop myself locally so the
+   UI is right immediately, untrack with the result actually checked, and say it
+   again on any later sync that still shows me in a call I'm not in. */
+let untrackTries = 0;
+
+async function clearMyHuddlePresence() {
+  if (!huddleChannel || !huddleChannel.untrack) return false;
+  try {
+    return (await huddleChannel.untrack()) === 'ok';
+  } catch (e) {
+    return false;            // push() throws outright when the channel isn't joined
+  }
+}
+
+// Leaving is a local fact the moment he clicks it. Don't make the UI wait for a
+// round-trip that may never come back.
+function dropMeFromHuddleState() {
+  for (const [cid, parts] of [...huddleState]) {
+    const rest = parts.filter(p => p.user_id !== me.id);
+    if (rest.length) huddleState.set(cid, rest);
+    else huddleState.delete(cid);
+  }
+}
+
+// Only ever untracks -- never edits huddleState. A second tab where he really IS
+// in the call presents under this same key, and presence is per-socket, so
+// untracking here cannot take that one down; hiding it locally would.
+function reconcileMyHuddlePresence(map) {
+  let ghost = false;
+  for (const parts of map.values()) if (parts.some(p => p.user_id === me.id)) { ghost = true; break; }
+  if (!ghost || activeHuddle) { untrackTries = 0; return; }
+  if (untrackTries >= 5) return;      // a server that won't let go must not spin us
+  untrackTries++;
+  clearMyHuddlePresence();
+}
+
 /* ---- incoming-call ring: alert people when a huddle starts in a channel they're in ---- */
 let ringSeen = new Set();       // channel_ids currently showing an incoming-call card
 let ringDismissed = new Set();  // channel_ids the user dismissed (until the huddle ends)
 let ringCtx = null, ringTimer = null;
+let ringNotifs = new Map();     // channel_id -> the desktop notification raised for it
 
 function updateIncomingCalls() {
   for (const [cid, parts] of huddleState) {
@@ -1241,12 +1485,63 @@ function showIncomingCall(cid, caller, c) {
   act.appendChild(join); act.appendChild(dis); card.appendChild(act);
   stack.appendChild(card);
   ringTone();
+  ringNotify(cid, who, where);
   setTimeout(() => { if (document.getElementById('inc-' + cid)) { ringDismissed.add(cid); clearRing(cid); } }, 35000);
+}
+
+/* A call that only exists inside the tab is a call nobody answers.
+ *
+ * Chris, 2026-08-23: "why did it ask me the select a person to call and then
+ * make me again try to invite someone once the HiveVideo window opened?"
+ *
+ * The ring itself was never missing -- the card, the Join button and the tone
+ * have been here since the embed. What was missing is any way for it to leave
+ * the page. The card is appended to document.body and the tone is WebAudio, so
+ * if the person he called had HiveConnect in a background tab they saw and
+ * heard nothing (an unfocused tab draws a card nobody is looking at, and
+ * Chrome will not start audio in one without a prior gesture). He waited,
+ * nothing happened, and the invite panel was the only way left to reach them.
+ *
+ * A desktop notification is what crosses that boundary. Not shown when the tab
+ * is focused -- the card is right there, and a second alert for the same call
+ * is noise.
+ *
+ * THE REMAINING LIMIT, WRITTEN DOWN SO IT IS NOT REDISCOVERED: this reaches a
+ * BACKGROUND tab, not a closed one. Ringing someone who does not have
+ * HiveConnect open needs a server-side Web Push, which lives in HiveLogic's
+ * own project (api/reina/push.js) against a different subscription table.
+ */
+function ringNotify(cid, who, where) {
+  try {
+    if (!notifsEnabled) return;
+    if (!('Notification' in window) || Notification.permission !== 'granted') return;
+    if (document.hasFocus()) return;
+    const n = new Notification(who + ' — HiveVideo', {
+      body: who + ' ' + where.replace(/^🎧\s*/, ''),
+      icon: "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><polygon points='50,5 90,27 90,73 50,95 10,73 10,27' fill='%23ffc94b'/></svg>",
+      tag: 'hv-ring-' + cid,
+      // A call waits for you. Unlike a message, it is worth holding the screen
+      // -- and it is cleared the moment the call is answered, dismissed or
+      // ends, so it cannot outlive the thing it is announcing.
+      requireInteraction: true,
+    });
+    n.onclick = async () => {
+      window.focus();
+      clearRing(cid);
+      if (currentChannelId !== cid) await openChannel(cid);
+      joinHuddle(cid);
+    };
+    ringNotifs.set(cid, n);
+  } catch (e) { /* a notification must never break the call itself */ }
 }
 
 function clearRing(cid) {
   if (window.hlSfx) hlSfx.stopLoop();
   ringSeen.delete(cid);
+  // requireInteraction means it sits there until something closes it, and a
+  // notification for a call that already ended is worse than none.
+  const n = ringNotifs.get(cid);
+  if (n) { try { n.close(); } catch (e) {} ringNotifs.delete(cid); }
   const card = document.getElementById('inc-' + cid);
   if (card) card.remove();
   const stack = $('incoming-calls');
@@ -1308,15 +1603,137 @@ function renderHuddleUI() {
 
   // dock participant strip (if I'm in a huddle)
   if (iAmIn) {
+    const parts2 = huddleParticipants(activeHuddle);
     const hp = $('hd-parts'); hp.innerHTML = '';
-    hp.appendChild(partStrip(huddleParticipants(activeHuddle), 6));
-    const sub = $('hd-sub');
-    const n = huddleParticipants(activeHuddle).length;
-    sub.textContent = n <= 1 ? 'Waiting for others…' : `${n} people`;
+    // One face -- mine -- is not a participant strip, it is a stray thumbnail
+    // wedged against the window controls. Show it only once it means something.
+    if (parts2.length > 1) hp.appendChild(partStrip(parts2, 6));
+
+    /* The subtitle used to be written here TOO:
+         sub.textContent = n <= 1 ? 'Waiting for others…' : `${n} people`;
+       which is a second author for the one line hudStatus() exists to own.
+       Presence syncs several times during a call, and each one would stamp
+       "Waiting for others…" over "Calling Allan…" -- reintroducing exactly the
+       ambiguity ("am I calling him, or waiting for him?") this was built to
+       remove. There is one writer now. */
+    renderHuddleStatus();
   }
 }
 
-function startHuddle() { joinHuddle(currentChannelId); }
+// ---- "Start HiveVideo" with nothing open ----
+// This used to be a dead click: startHuddle() called joinHuddle(currentChannelId)
+// and joinHuddle bails on `if (!cid) return`. HiveConnect lands on Messages with
+// no channel selected, so that was the DEFAULT state -- the header HiveVideo
+// button did nothing at all, and the Huddles CTA only flashed a small toast.
+// Now, with no conversation open, every entry point asks WHERE to call.
+let hvPickerQ = '';
+function closeHvPicker() { const o = document.getElementById('hv-picker'); if (o) o.remove(); }
+function openHvPicker() {
+  closeHvPicker();
+  hvPickerQ = '';
+  const ov = document.createElement('div');
+  ov.id = 'hv-picker'; ov.className = 'modal-backdrop';
+  ov.innerHTML =
+    '<div class="modal" style="width:420px;padding:22px;display:flex;flex-direction:column;max-height:72vh">' +
+      '<h2>Start HiveVideo</h2>' +
+      '<input id="hvp-q" type="text" placeholder="Search people and channels…" autocomplete="off">' +
+      '<div id="hvp-list" style="flex:1;overflow:auto;margin-top:14px;min-height:140px"></div>' +
+      '<div class="modal-actions"><button class="text-btn" id="hvp-cancel">Cancel</button></div>' +
+    '</div>';
+  document.body.appendChild(ov);
+  ov.addEventListener('click', e => { if (e.target === ov) closeHvPicker(); });
+  ov.querySelector('#hvp-cancel').onclick = closeHvPicker;
+  const q = ov.querySelector('#hvp-q');
+  q.oninput = () => { hvPickerQ = q.value.trim().toLowerCase(); renderHvPicker(); };
+  q.onkeydown = e => {
+    if (e.key === 'Escape') { closeHvPicker(); return; }
+    if (e.key === 'Enter') { const first = ov.querySelector('.hvp-row'); if (first) first.click(); }
+  };
+  renderHvPicker();
+  q.focus();
+}
+function renderHvPicker() {
+  const list = document.getElementById('hvp-list'); if (!list) return;
+  list.innerHTML = '';
+  const hit = s => !hvPickerQ || (s || '').toLowerCase().includes(hvPickerQ);
+
+  const row = (avatar, name, sub, onPick) => {
+    const b = document.createElement('button');
+    b.className = 'hvp-row';
+    b.style.cssText = 'display:flex;align-items:center;gap:10px;width:100%;padding:8px 10px;border:none;' +
+      'background:none;border-radius:9px;cursor:pointer;text-align:left;font-family:inherit';
+    b.onmouseenter = () => { b.style.background = 'rgba(127,140,170,.14)'; };
+    b.onmouseleave = () => { b.style.background = 'none'; };
+    if (avatar) b.appendChild(avatar);
+    const t = document.createElement('span');
+    t.style.cssText = 'flex:1;min-width:0;font-size:12.5px;font-weight:700;color:var(--ink);' +
+      'white-space:nowrap;overflow:hidden;text-overflow:ellipsis';
+    t.textContent = name;
+    b.appendChild(t);
+    if (sub) {
+      const s = document.createElement('span');
+      s.style.cssText = 'font-size:10.5px;font-weight:700;color:var(--mut)';
+      s.textContent = sub;
+      b.appendChild(s);
+    }
+    b.onclick = onPick;
+    return b;
+  };
+  const head = text => {
+    const h = document.createElement('div');
+    h.style.cssText = 'font-family:var(--mono);font-size:9px;font-weight:800;letter-spacing:.1em;' +
+      'text-transform:uppercase;color:var(--mut);margin:10px 0 4px;padding:0 10px';
+    h.textContent = text;
+    return h;
+  };
+
+  // People -> a DM call (creates/opens the DM, then rings the room)
+  const people = [...profiles.values()]
+    .filter(p => p.id !== me.id && p.username !== 'slackarchive' && p.active !== false && hit(p.display_name || p.username))
+    .sort((a, b) => (a.display_name || '').localeCompare(b.display_name || ''))
+    .slice(0, 8);
+  if (people.length) {
+    list.appendChild(head('People'));
+    people.forEach(p => {
+      const av = avatarEl(p);
+      av.style.width = av.style.height = '26px'; av.style.fontSize = '10px'; av.style.borderRadius = '8px';
+      list.appendChild(row(av, p.display_name || p.username, '', async () => {
+        closeHvPicker();
+        await startDM(p.id);
+        if (currentChannelId) joinHuddle(currentChannelId);
+      }));
+    });
+  }
+
+  // Channels -> a call in that channel
+  const chans = [...channels.values()]
+    .filter(c => c.type !== 'dm' && !c.archived && hit(c.name))
+    .sort((a, b) => (a.name || '').localeCompare(b.name || ''))
+    .slice(0, 20);
+  if (chans.length) {
+    list.appendChild(head('Channels'));
+    chans.forEach(c => {
+      const n = huddleParticipants(c.id).length;
+      list.appendChild(row(null, '# ' + c.name, n ? '🎧 ' + n : '', async () => {
+        closeHvPicker();
+        if (currentChannelId !== c.id) await openChannel(c.id);
+        joinHuddle(c.id);
+      }));
+    });
+  }
+
+  if (!people.length && !chans.length) {
+    const e = document.createElement('div');
+    e.style.cssText = 'padding:24px 10px;text-align:center;font-size:12px;font-weight:600;color:var(--mut)';
+    e.textContent = 'Nothing matches “' + hvPickerQ + '”';
+    list.appendChild(e);
+  }
+}
+
+function startHuddle() {
+  if (currentChannelId) joinHuddle(currentChannelId);
+  else openHvPicker();
+}
 
 async function joinHuddle(cid) {
   if (!cid) return;
@@ -1351,10 +1768,17 @@ async function joinHuddle(cid) {
   $('hd-title').textContent = c ? (c.type === 'dm' ? channelLabel(c) : '#' + c.name) : 'HiveVideo';
   $('hd-sub').textContent = 'connecting…';
   connectLiveKit(cid);
-  // Fresh call (nobody else here yet) → prompt to invite people. Joining a live one → don't nag.
+  // Calling one named person is not the same as opening an empty room. On a DM
+  // the callee is implied, so the window says "Calling Allan..." and the invite
+  // form stays behind the + -- putting it on screen unprompted is what made
+  // this read as "you must now invite him". A channel huddle has no implied
+  // callee, so there the prompt still earns its place.
   ensureHvInviteUI();
   const othersHere = huddleParticipants(cid).filter(p => p.user_id !== me.id).length;
-  if (!othersHere) openHvInvite(); else closeHvInvite();
+  if (!othersHere && !hudCallTarget(cid)) openHvInvite(); else closeHvInvite();
+  hudRingStart = Date.now();
+  renderHuddleStatus();
+  hvLogCallStart(cid);
   renderHuddleUI();
 }
 
@@ -1398,18 +1822,17 @@ async function connectLiveKit(cid) {
       renderHuddleTiles();
     })
     .on(RE.TrackUnsubscribed, (track) => { track.detach().forEach(el => el.remove()); renderHuddleTiles(); })
-    .on(RE.ParticipantConnected, renderHuddleTiles)
-    .on(RE.ParticipantDisconnected, renderHuddleTiles)
+    .on(RE.ParticipantConnected, () => {
+      const wasRinging = hvRingbackOn;
+      renderHuddleTiles(); stopRingClock(); renderHuddleStatus();
+      if (wasRinging) { try { if (window.hlSfx) hlSfx.play('connect'); } catch (e) {} }
+    })
+    .on(RE.ParticipantDisconnected, () => { renderHuddleTiles(); renderHuddleStatus(); })
     .on(RE.LocalTrackPublished, renderHuddleTiles)
     .on(RE.LocalTrackUnpublished, renderHuddleTiles)
     .on(RE.TrackMuted, renderHuddleTiles)
     .on(RE.TrackUnmuted, renderHuddleTiles)
-    .on(RE.ConnectionStateChanged, (st) => {
-      const sub = $('hd-sub'); if (!sub) return;
-      const S = LivekitClient.ConnectionState;
-      if (st === S.Reconnecting) sub.textContent = 'reconnecting…';
-      else if (st === S.Connected) sub.textContent = 'live';
-    })
+    .on(RE.ConnectionStateChanged, () => renderHuddleStatus())
     .on(RE.MediaDevicesError, (e) => hudError(deviceMsg(e, 'camera')))
     .on(RE.DataReceived, (payload) => {
       try { const d = JSON.parse(new TextDecoder().decode(payload)); if (d && d.t === 'cc' && d.text) addTranscriptLine(d.name, d.uid, d.text, true); } catch (e) {}
@@ -1445,7 +1868,8 @@ async function connectLiveKit(cid) {
                 r.left > window.innerWidth - 40 || r.top > window.innerHeight - 40;
     if (off) { d.style.left = ''; d.style.top = ''; d.style.right = ''; d.style.bottom = ''; d.style.width = ''; d.style.height = ''; }
   })();
-  $('hd-sub').textContent = 'live';
+  startRingClock();
+  renderHuddleStatus();
   hudMic = true; hudCam = false; hudScreen = false;
   try { await room.localParticipant.setMicrophoneEnabled(true); }
   catch (e) { hudMic = false; hudError(deviceMsg(e, 'microphone')); }  // mic denied/absent → join muted (surfaced), still connected
@@ -1455,6 +1879,248 @@ async function connectLiveKit(cid) {
   // Cowork markup layer (additive, isolated) — annotation/pointer/cursors +
   // camera background blur over the live call. Any failure here is swallowed.
   try { if (window.CoworkMarkup) window.CoworkMarkup.attach(room, { frame: $('hd-frame'), name: (me && (me.display_name || me.username)) || 'You' }); } catch (e) {}
+}
+
+/* ==================== WHAT IS THIS CALL DOING RIGHT NOW ====================
+   Chris, 2026-08-23, watching himself start a call to Allan: "its unclear if
+   I'm calling allan or if I needed to invite him to the call?"
+
+   Fair question, because the window never said. The header read
+   "Allan Amit / live" from the instant LiveKit connected -- `live` described MY
+   socket, not the call -- and the only other thing on screen was an empty
+   "Invite to this call" form, which reads as an instruction. So the one fact he
+   needed, "Allan is being rung and hasn't picked up", was the one fact absent.
+
+   Everything below derives from the room itself rather than being set once at
+   connect time: remoteParticipants is who is actually here, and it is already
+   re-rendered on ParticipantConnected/Disconnected. */
+
+const HUD_RING_MS = 45000;   // how long we call someone before saying nobody picked up
+let hudRingStart = 0;        // when the current outgoing call started ringing
+let hudRingTimer = null;
+
+// Who am I calling? For a DM that is a person, and naming them is the whole
+// point. For a channel there is nobody specific -- it's an open room.
+function hudCallTarget(cid) {
+  const c = channels.get(cid || activeHuddle);
+  if (!c || c.type !== 'dm' || isGroupDM(c)) return null;
+  return dmOther(c) || null;
+}
+
+function hudRemoteCount() {
+  return lkRoom && lkRoom.remoteParticipants ? lkRoom.remoteParticipants.size : 0;
+}
+
+// The single source of the subtitle. Returns { text, state } -- state drives the
+// dot colour, so "calling" cannot look identical to "connected" the way it did.
+function hudStatus() {
+  if (hudConnecting) return { text: 'Connecting…', state: 'connecting' };
+  if (!lkRoom) return { text: 'Not connected', state: 'off' };
+  const S = LivekitClient && LivekitClient.ConnectionState;
+  if (S && lkRoom.state === S.Reconnecting) return { text: 'Reconnecting…', state: 'connecting' };
+
+  const others = hudRemoteCount();
+  if (others > 0) {
+    const target = hudCallTarget();
+    if (others === 1) {
+      const only = [...lkRoom.remoteParticipants.values()][0];
+      const name = (only && only.name) || (target && target.display_name) || 'someone';
+      return { text: 'In call with ' + name.split(' ')[0], state: 'live' };
+    }
+    return { text: (others + 1) + ' people in this call', state: 'live' };
+  }
+
+  // Alone. This is the case that used to lie.
+  const target = hudCallTarget();
+  const rungFor = hudRingStart ? Date.now() - hudRingStart : 0;
+  if (target) {
+    if (rungFor > HUD_RING_MS) return { text: 'No answer from ' + target.display_name.split(' ')[0], state: 'noanswer' };
+    return { text: 'Calling ' + target.display_name.split(' ')[0] + '…', state: 'ringing' };
+  }
+  return { text: 'Waiting for others to join', state: 'waiting' };
+}
+
+function renderHuddleStatus() {
+  const sub = $('hd-sub'); if (!sub) return;
+  const { text, state } = hudStatus();
+  if (sub.textContent !== text) sub.textContent = text;
+  const dot = document.querySelector('.hd-live-dot');
+  if (dot) dot.dataset.state = state;
+  const dock = $('huddle-dock');
+  if (dock) dock.dataset.callState = state;
+  renderHuddleTiles();
+}
+
+/* The person being called gets a TILE, not a hero panel.
+
+   Chris, 2026-08-24: "my video, after i turn it on is a tiny thumbnail at the
+   bottom, the caller and the called should ahve the same size squares" -- and
+   "the popup opens with no contorls visable, i have to enlarge it to access
+   the controls".
+
+   Both came from the same mistake. The first version gave the callee a big
+   centred panel and squeezed my own camera into an 84px strip under it, which
+   (a) made the two people in the call wildly different sizes and (b) ate so
+   much height that the control bar was pushed out of a 328px dock entirely.
+
+   So there is no separate stage any more. While a named person is being rung
+   and has not arrived, they are simply a tile in the grid alongside mine --
+   same square, same size, dimmed, captioned with what is happening. The grid
+   already sizes N squares to fit, so two people ringing looks exactly like two
+   people talking, and the controls keep their room. */
+function hudPendingTile(grid, target, state) {
+  let el = document.getElementById('hd-pending');
+  if (!target) { if (el) el.remove(); return; }
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'hd-pending'; el.className = 'hd-tile hd-pending';
+    el.innerHTML = '<div class="hd-media hd-tile-av"></div><div class="hd-tile-name"></div>';
+    grid.appendChild(el);
+  }
+  if (el.parentNode !== grid) grid.appendChild(el);
+  const av = el.querySelector('.hd-media');
+  if (av.dataset.for !== target.id) {
+    av.innerHTML = ''; av.appendChild(avatarEl(target, 'avatar')); av.dataset.for = target.id;
+  }
+  el.dataset.state = state;
+  const label = (state === 'noanswer' ? 'No answer — ' : 'Calling… ') + (target.display_name || 'Someone');
+  const nm = el.querySelector('.hd-tile-name');
+  if (nm.textContent !== label) nm.textContent = label;
+}
+
+// "Calling…" has to become "No answer" on its own, without a participant event
+// to hang it off -- nobody arriving is exactly the case being reported.
+function startRingClock() {
+  hudRingStart = Date.now();
+  clearInterval(hudRingTimer);
+  // A silent outgoing call gives you nothing to tell "it's ringing" from "it's
+  // broken" -- Chris, 2026-08-23: "its strange not hearing someting to indicate
+  // it ringing". Only ring when there is someone specific being rung; an open
+  // channel room isn't waiting on anyone in particular. Starting a call is a
+  // click, so the AudioContext resumes without an autoplay fight.
+  if (hudCallTarget()) startHvRingback();
+  hudRingTimer = setInterval(() => {
+    if (!activeHuddle) { stopRingClock(); return; }
+    renderHuddleStatus();
+    if (hudRemoteCount() > 0 || Date.now() - hudRingStart > HUD_RING_MS + 1000) stopRingClock();
+  }, 1000);
+}
+function stopRingClock() { clearInterval(hudRingTimer); hudRingTimer = null; stopHvRingback(); }
+
+/* The ringback belongs to THIS call, so it must never outlive it: it stops when
+   they answer, when the call is abandoned, and when we give up. hlSfx keeps one
+   loop at a time, so only stop it if we are the one still ringing -- otherwise
+   leaving one call would silence an incoming ring for another. */
+let hvRingbackOn = false;
+function startHvRingback() {
+  if (hvRingbackOn || !window.hlSfx) return;
+  hvRingbackOn = true;
+  try { hlSfx.startLoop('hvring', 3400); } catch (e) { hvRingbackOn = false; }
+}
+function stopHvRingback() {
+  if (!hvRingbackOn) return;
+  hvRingbackOn = false;
+  try { if (window.hlSfx) hlSfx.stopLoop(); } catch (e) {}
+}
+
+/* ==================== CALL LOG ====================
+   Chris, 2026-08-23: "we need a call log and AI summary and a transcription."
+
+   The transcript and the AI summary already existed -- live captions feeding
+   generateAINotes(), which posts Reina's write-up into the channel. The LOG did
+   not: there was no HiveVideo table of any kind, so a call left no trace. Who
+   called whom, when, how long, whether anyone picked up -- all of it lived in
+   realtime presence, which is in-memory and gone the instant the socket closes.
+
+   hv_calls fixes that, and the transcript now lands ON the call rather than
+   only in a chat message, so the log row is the whole record of the call.
+
+   Every write here is best-effort: a call must never fail to start, or refuse
+   to end, because the log could not be written. */
+
+let hvCallRowId = null;      // the hv_calls row for the call I am in
+let hvCallLog = [];          // recent calls, newest first
+let hvCallLogAt = 0;         // when the cache was filled
+
+async function hvLogCallStart(cid) {
+  hvCallRowId = null;
+  if (!cid || !me) return;
+  const mine = {
+    user_id: me.id,
+    display_name: me.display_name || me.username || 'Someone',
+    joined_at: new Date().toISOString(),
+  };
+  try {
+    const { data, error } = await sb.from('hv_calls')
+      .insert({ channel_id: cid, started_by: me.id, participants: [mine] })
+      .select('id').single();
+    if (!error && data) { hvCallRowId = data.id; return; }
+    // The unique partial index rejected it, which means somebody else opened
+    // this call a moment ago. Join THEIR row instead of forking the log into
+    // two half-calls -- that is what the index is there to force.
+    const { data: open } = await sb.from('hv_calls')
+      .select('id, participants').eq('channel_id', cid).is('ended_at', null)
+      .order('started_at', { ascending: false }).limit(1);
+    const row = open && open[0];
+    if (!row) return;
+    hvCallRowId = row.id;
+    const parts = Array.isArray(row.participants) ? row.participants : [];
+    if (!parts.some(p => p && p.user_id === me.id)) {
+      await sb.from('hv_calls').update({ participants: parts.concat([mine]) }).eq('id', row.id);
+    }
+  } catch (e) { hvCallRowId = null; }
+}
+
+// Closing the call is the last person's job, not the starter's -- whoever
+// leaves while nobody else is left stamps ended_at.
+async function hvLogCallEnd(lastOut, transcript) {
+  const id = hvCallRowId;
+  hvCallRowId = null;
+  if (!id) return;
+  const patch = {};
+  if (lastOut) patch.ended_at = new Date().toISOString();
+  if (transcript) patch.transcript = transcript.slice(0, 100000);
+  if (!Object.keys(patch).length) return;
+  try { await sb.from('hv_calls').update(patch).eq('id', id); } catch (e) {}
+  hvCallLogAt = 0;   // the log the panel is showing is now stale
+}
+
+function hvCallDuration(row) {
+  if (!row.started_at) return '';
+  const end = row.ended_at ? new Date(row.ended_at) : null;
+  if (!end) return 'in progress';
+  const secs = Math.max(0, Math.round((end - new Date(row.started_at)) / 1000));
+  // A call nobody picked up is a real outcome and reads better as words than
+  // as "0:04" -- the log should say what happened, not just how long it took.
+  if (secs < 8 && (row.participants || []).length < 2) return 'no answer';
+  if (secs < 60) return secs + 's';
+  const m = Math.floor(secs / 60), sRem = secs % 60;
+  if (m < 60) return m + 'm ' + String(sRem).padStart(2, '0') + 's';
+  return Math.floor(m / 60) + 'h ' + String(m % 60).padStart(2, '0') + 'm';
+}
+
+function hvCallWhen(row) {
+  const d = new Date(row.started_at);
+  const now = new Date();
+  const sameDay = d.toDateString() === now.toDateString();
+  const t = d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  if (sameDay) return t;
+  const yest = new Date(now); yest.setDate(now.getDate() - 1);
+  if (d.toDateString() === yest.toDateString()) return 'Yesterday ' + t;
+  return d.toLocaleDateString([], { month: 'short', day: 'numeric' }) + ' ' + t;
+}
+
+async function loadCallLog(force) {
+  if (!force && hvCallLogAt && Date.now() - hvCallLogAt < 30000) return hvCallLog;
+  try {
+    const { data, error } = await sb.from('hv_calls')
+      .select('id, channel_id, started_by, started_at, ended_at, participants, transcript, summary')
+      .order('started_at', { ascending: false }).limit(40);
+    if (error) throw error;
+    hvCallLog = data || [];
+    hvCallLogAt = Date.now();
+  } catch (e) { /* keep whatever we last had rather than blanking the panel */ }
+  return hvCallLog;
 }
 
 let hudTiles = new Map();   // participant.sid -> { tile, media, name, attachedSid }
@@ -1474,7 +2140,17 @@ function renderHuddleTiles() {
     if (stageSid) break;
   }
   grid.classList.toggle('hd-spotlight', !!stageSid);
-  grid.style.setProperty('--cols', Math.max(1, Math.ceil(Math.sqrt(parts.length))));
+  // The tiles are squares sized off the cell, so the CSS needs both counts --
+  // knowing the columns alone cannot tell it how tall a cell is.
+  // Somebody being rung occupies a square exactly like somebody who answered --
+  // that is the whole point of putting them in this grid rather than above it.
+  const ringState = ($('huddle-dock') || {}).dataset ? $('huddle-dock').dataset.callState : '';
+  const pendingWho = (!lkRoom.remoteParticipants.size && (ringState === 'ringing' || ringState === 'noanswer'))
+    ? hudCallTarget() : null;
+  const count = parts.length + (pendingWho ? 1 : 0);
+  const cols = Math.max(1, Math.ceil(Math.sqrt(count)));
+  grid.style.setProperty('--cols', cols);
+  grid.style.setProperty('--rows', Math.max(1, Math.ceil(count / cols)));
   const seen = new Set();
   for (const p of parts) {
     seen.add(p.sid);
@@ -1515,6 +2191,7 @@ function renderHuddleTiles() {
     if (e.name.textContent !== label) e.name.textContent = label;
   }
   for (const [sid, e] of hudTiles) { if (!seen.has(sid)) { e.tile.remove(); hudTiles.delete(sid); } }
+  hudPendingTile(grid, pendingWho, ringState);
 }
 
 function hudError(msg) {
@@ -1533,11 +2210,11 @@ function deviceMsg(e, dev) {
 
 // Clean line-icons for the huddle controls (replaces the emoji).
 const HUD_ICONS = {
-  mic: '<svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0"/><line x1="12" y1="19" x2="12" y2="22"/></svg>',
-  micOff: '<svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="2" y1="2" x2="22" y2="22"/><path d="M9 9v3a3 3 0 0 0 5.12 2.12"/><path d="M15 9.34V5a3 3 0 0 0-5.94-.6"/><path d="M17 16.95A7 7 0 0 1 5 12"/><line x1="12" y1="19" x2="12" y2="22"/></svg>',
-  cam: '<svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>',
-  camOff: '<svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="2" y1="2" x2="22" y2="22"/><path d="M16 16v2a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h2"/><path d="M10 6h4a2 2 0 0 1 2 2v3l5-3v9"/></svg>',
-  screen: '<svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>',
+  mic: '<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0"/><line x1="12" y1="19" x2="12" y2="22"/></svg>',
+  micOff: '<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="2" y1="2" x2="22" y2="22"/><path d="M9 9v3a3 3 0 0 0 5.12 2.12"/><path d="M15 9.34V5a3 3 0 0 0-5.94-.6"/><path d="M17 16.95A7 7 0 0 1 5 12"/><line x1="12" y1="19" x2="12" y2="22"/></svg>',
+  cam: '<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>',
+  camOff: '<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="2" y1="2" x2="22" y2="22"/><path d="M16 16v2a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h2"/><path d="M10 6h4a2 2 0 0 1 2 2v3l5-3v9"/></svg>',
+  screen: '<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>',
   chevron: '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 15 12 9 18 15"/></svg>',
   check: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>',
   cc: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="3"/><path d="M9.5 10a2.5 2.5 0 100 4M16.5 10a2.5 2.5 0 100 4"/></svg>',
@@ -1643,7 +2320,13 @@ function restoreFromPip() {
   hudPipWindow = null;
   updatePopoutBtn(false);
 }
-function updatePopoutBtn(on) { const b = $('hd-popout'); if (b) b.classList.toggle('on', !!on); }
+function updatePopoutBtn(on) {
+  for (const id of ['hd-popout', 'hd-popout-top']) {
+    const b = $(id); if (b) b.classList.toggle('on', !!on);
+  }
+  const t = $('hd-popout-top');
+  if (t) t.title = on ? 'Put the call back in HiveLogic' : 'Open in its own window — float the call over HiveLogic and any other app';
+}
 
 function updateHuddleControls() {
   const mic = $('hd-mic'); if (mic) { mic.innerHTML = hudMic ? HUD_ICONS.mic : HUD_ICONS.micOff; if (mic.parentElement) mic.parentElement.classList.toggle('off', !hudMic); }
@@ -1860,6 +2543,14 @@ function teardownHuddleExtras() {
 }
 
 function leaveHuddle(silent) {
+  // Snapshot what the call log needs FIRST. teardownHuddleExtras() below empties
+  // hudTranscript, and the LiveKit disconnect empties the room -- both a few
+  // lines from here. Reading either after that point logs an empty call.
+  const logTranscript = hudTranscript.length
+    ? hudTranscript.map(l => l.name + ': ' + l.text).join('\n') : null;
+  const logLastOut = !activeHuddle
+    || huddleParticipants(activeHuddle).filter(p => p.user_id !== me.id).length === 0;
+
   // null lkRoom BEFORE disconnecting so the room's own Disconnected handler
   // (which checks lkRoom === room) treats this as an intentional leave and
   // does NOT pop the "call dropped — rejoin?" UI.
@@ -1875,8 +2566,15 @@ function leaveHuddle(silent) {
   // Deliberately leaving must not re-ring you for this same call; the
   // suppression auto-clears when the huddle actually ends (see ringCheck).
   if (activeHuddle) { try { ringDismissed.add(activeHuddle); clearRing(activeHuddle); } catch (e) {} }
-  try { if (huddleChannel && huddleChannel.untrack) huddleChannel.untrack(); } catch (e) {}
+  stopRingClock(); stopHvRingback(); hudRingStart = 0;
+  hvLogCallEnd(logLastOut, logTranscript);
+  { const st = document.getElementById('hd-pending'); if (st) st.remove(); }
+  dropMeFromHuddleState();
   activeHuddle = null;
+  untrackTries = 0;
+  // Checked, and retried once on the spot; reconcileMyHuddlePresence() covers
+  // anything still stuck after that.
+  clearMyHuddlePresence().then(ok => { if (!ok) clearMyHuddlePresence(); });
   // Found 2026-08-19 (a real call that "wouldn't end"): hudPipWindow.close()
   // above queues that window's `pagehide` -> restoreFromPip() asynchronously
   // -- it does not move the dock back into this document before this line
@@ -1927,7 +2625,7 @@ function huddleDropped(reason, cid) {
 
 // dock controls
 $('huddle-btn').addEventListener('click', startHuddle);
-{ const _hv = $('hv-start-btn'); if (_hv) _hv.addEventListener('click', () => { if (currentChannelId) startHuddle(); else setNavTab('huddles'); }); }
+{ const _hv = $('hv-start-btn'); if (_hv) _hv.addEventListener('click', () => startHuddle()); }
 $('hd-leave').addEventListener('click', () => leaveHuddle());
 { const _iv = $('hd-invite-btn'); if (_iv) _iv.addEventListener('click', () => { const b = $('hd-invite'); if (b && !b.classList.contains('hidden')) closeHvInvite(); else openHvInvite(); }); }
 { const _n = $('hd-cc-notes'); if (_n) _n.addEventListener('click', () => generateAINotes()); }
@@ -1950,7 +2648,7 @@ function setNavTab(tab) {
   if (tab === 'huddles') renderHuddlesPanel();
   if (tab === 'people') { renderPeoplePanel(); loadContacts().then(renderPeoplePanel); }
   if (tab === 'chirp') openChirpTab();
-  if (tab === 'email') openEmailTab();
+  if (tab === 'email') { evUserPickedMailbox = false; evAcctMenuOpen = false; openEmailTab(); }
   if (tab === 'tasks') openTasksTabNative();
   if (tab === 'calendar') openCalendarTab();
   if (tab === 'voip') openVoipTab();
@@ -1988,10 +2686,12 @@ function railToast(text) {
   t.textContent = text; t.classList.add('show');
   clearTimeout(railToastT); railToastT = setTimeout(() => t.classList.remove('show'), 2600);
 }
+window.railToast = railToast; // same reason as $/profiles/channels above -- no HiveLogic collision.
 
 // ---- customizable folder order (drag headers to reorder; persisted per panel) ----
 function applyStoredOrder(items, keyOf, storeKey) {
-  let order = []; try { order = JSON.parse(localStorage.getItem(storeKey) || '[]'); } catch (e) {}
+  // Dragged into an order once, on any machine -- see hcPref above.
+  const order = hcPrefJson('order:' + storeKey, storeKey, []) || [];
   if (!order || !order.length) return items;
   const idx = k => { const i = order.indexOf(k); return i < 0 ? 999 : i; };
   return [...items].sort((a, b) => idx(keyOf(a)) - idx(keyOf(b)));
@@ -2006,7 +2706,7 @@ function enableFolderDrag(container, headerSel, folderSel, keyAttr, storeKey) {
     h.addEventListener('dragend', () => {
       folder.classList.remove('drag-ghost'); drag = null;
       const order = [...container.querySelectorAll(folderSel)].map(x => x.dataset[keyAttr]).filter(Boolean);
-      try { localStorage.setItem(storeKey, JSON.stringify(order)); } catch (e) {}
+      hcPrefSet('order:' + storeKey, storeKey, order);
     });
     folder.addEventListener('dragover', e => {
       e.preventDefault(); if (!drag || drag === folder) return;
@@ -2017,13 +2717,85 @@ function enableFolderDrag(container, headerSel, folderSel, keyAttr, storeKey) {
   });
 }
 
+function renderCallLog() {
+  const body = $('hv-log-body'); if (!body) return;
+  body.innerHTML = '';
+  const rows = hvCallLog.filter(r => channels.get(r.channel_id));
+  if (!rows.length) {
+    const e = document.createElement('div'); e.className = 'hv-log-empty';
+    e.textContent = 'No calls yet.';
+    body.appendChild(e); return;
+  }
+  for (const r of rows.slice(0, 20)) {
+    const c = channels.get(r.channel_id);
+    const row = document.createElement('button'); row.className = 'hv-log-row';
+    if (!r.ended_at) row.classList.add('live');
+
+    const who = document.createElement('span'); who.className = 'hv-log-who';
+    who.textContent = c.type === 'dm' ? channelLabel(c) : '#' + c.name;
+
+    const meta = document.createElement('span'); meta.className = 'hv-log-meta';
+    const dur = hvCallDuration(r);
+    meta.textContent = hvCallWhen(r) + ' · ' + dur;
+    if (dur === 'no answer') meta.classList.add('missed');
+
+    const left = document.createElement('span'); left.className = 'hv-log-left';
+    left.appendChild(who); left.appendChild(meta);
+    row.appendChild(left);
+
+    // A transcript is the difference between "a call happened" and "here is
+    // what was said", so say which one this row is.
+    if (r.transcript) {
+      const t = document.createElement('span'); t.className = 'hv-log-tag'; t.textContent = 'transcript';
+      row.appendChild(t);
+    }
+    row.title = r.transcript ? 'Open the channel — this call has a transcript' : 'Open the channel';
+    row.onclick = async () => {
+      setNavTab('messages');
+      if (currentChannelId !== r.channel_id) await openChannel(r.channel_id);
+      if (r.transcript) showCallTranscript(r);
+    };
+    body.appendChild(row);
+  }
+}
+
+// The transcript is already stored on the call; this just reads it back, with
+// the same "send it to Reina" action the live captions panel offers.
+function showCallTranscript(row) {
+  const c = channels.get(row.channel_id);
+  const where = c ? (c.type === 'dm' ? channelLabel(c) : '#' + c.name) : 'call';
+  const ov = document.createElement('div'); ov.className = 'hv-tx-overlay';
+  const box = document.createElement('div'); box.className = 'hv-tx-box';
+  const head = document.createElement('div'); head.className = 'hv-tx-head';
+  head.innerHTML = '<span>' + esc(where) + ' — ' + esc(hvCallWhen(row)) + ' · ' + esc(hvCallDuration(row)) + '</span>';
+  const x = document.createElement('button'); x.className = 'hv-tx-x'; x.textContent = '✕';
+  x.onclick = () => ov.remove(); head.appendChild(x);
+  const bodyEl = document.createElement('pre'); bodyEl.className = 'hv-tx-body'; bodyEl.textContent = row.transcript;
+  const foot = document.createElement('div'); foot.className = 'hv-tx-foot';
+  const ai = document.createElement('button'); ai.className = 'hv-tx-ai'; ai.textContent = '✨ Summarize with Reina';
+  ai.onclick = async () => {
+    ai.disabled = true; ai.textContent = 'Sending…';
+    const prompt = '@reina Please write up notes for this ' + where +
+      ' — a short summary, key decisions, and action items (with owners if mentioned):\n\n' + row.transcript;
+    try {
+      await sb.from('messages').insert({ channel_id: row.channel_id, user_id: me.id, content: prompt.slice(0, 6000) });
+      ai.textContent = 'Sent to Reina 🐝';
+    } catch (e) { ai.disabled = false; ai.textContent = "Couldn't send — try again"; }
+  };
+  foot.appendChild(ai);
+  box.appendChild(head); box.appendChild(bodyEl); box.appendChild(foot);
+  ov.appendChild(box);
+  ov.addEventListener('click', e => { if (e.target === ov) ov.remove(); });
+  document.body.appendChild(ov);
+}
+
 let hvCollapsed = new Set();
 function renderHuddlesPanel() {
   const el = $('panel-huddles'); if (!el) return; el.innerHTML = '';
   // Start HiveVideo CTA
   const cta = document.createElement('button'); cta.className = 'hv-cta';
   cta.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg> Start HiveVideo';
-  cta.onclick = () => { if (currentChannelId) startHuddle(); else railToast('Pick a channel below to start'); };
+  cta.onclick = () => startHuddle();
   el.appendChild(cta);
   // Active now
   const active = [...huddleState.entries()].filter(([cid, parts]) => (parts || []).length && channels.get(cid));
@@ -2041,6 +2813,18 @@ function renderHuddlesPanel() {
     });
     el.appendChild(secA);
   }
+  // Recent calls. Before this there was no record of a call at all -- the panel
+  // could only ever show what was happening right now.
+  const secL = document.createElement('div'); secL.className = 'hp-sec'; secL.id = 'hv-log-sec';
+  const hL = document.createElement('div'); hL.className = 'hp-head';
+  hL.textContent = 'Recent calls';
+  secL.appendChild(hL);
+  const logBody = document.createElement('div'); logBody.id = 'hv-log-body';
+  logBody.innerHTML = '<div class="hv-log-empty">Loading…</div>';
+  secL.appendChild(logBody);
+  el.appendChild(secL);
+  loadCallLog().then(renderCallLog);
+
   // Channel folders — click a channel to start HiveVideo there (drag headers to reorder)
   const wrap = document.createElement('div'); el.appendChild(wrap);
   const allChans = [...channels.values()].filter(c => c.type !== 'dm' && !c.archived);
@@ -2215,6 +2999,25 @@ function openContactCard(c) {
     const cb = document.getElementById('help-close'); if (cb) cb.onclick = close;
   });
 }
+/* Pop-out lived only as an unlabelled icon in the second row of the in-call
+   control bar, which is not where anyone looks for it.
+
+   Chris, 2026-08-23: "its still locked into the view of HiveLogic, it needs to
+   be a window on its own that can be pull out of the view of hive logic" -- it
+   already could; he just had no way to know that. Window controls belong in
+   the title bar next to minimize and expand, which is where every other app
+   puts them. The control-bar button stays, so muscle memory keeps working. */
+{
+  const top = $('hd-popout-top');
+  if (top) {
+    if ('documentPictureInPicture' in window) {
+      top.classList.remove('hidden');
+      top.addEventListener('click', () => togglePopout());
+    }
+    // Left hidden on a browser that can't do it, rather than offering a button
+    // that silently does nothing (requestWindow() rejects and we swallow it).
+  }
+}
 $('hd-min').addEventListener('click', () => {
   const d = $('huddle-dock');
   d.style.width = ''; d.style.height = '';   // drop any manual resize so the class controls size
@@ -2321,7 +3124,7 @@ $('sm-password').addEventListener('click', () => {
 $('sm-admin').addEventListener('click', () => { settingsMenu.classList.add('hidden'); openAdmin(); });
 $('sm-notif').addEventListener('click', () => {
   notifsEnabled = !notifsEnabled;
-  localStorage.setItem('hive_notifs', notifsEnabled ? 'on' : 'off');
+  hcPrefSet('hcNotifs', 'hive_notifs', notifsEnabled ? 'on' : 'off');
   $('sm-notif-state').textContent = notifsEnabled ? 'On' : 'Off';
   if (notifsEnabled && 'Notification' in window && Notification.permission === 'default') Notification.requestPermission();
 });
@@ -2335,19 +3138,26 @@ function applyTheme(theme) {
   $('sm-theme-ic').textContent = dark ? '☀️' : '🌙';
   $('sm-theme-label').textContent = dark ? 'Light mode' : 'Dark mode';
 }
-applyTheme(localStorage.getItem('hive_theme') === 'dark' ? 'dark' : 'light');
+applyTheme(hcPref('hcTheme', 'hive_theme', 'light') === 'dark' ? 'dark' : 'light');
+// The cache painted the last known theme above. When the record lands a moment
+// later it may disagree -- he changed it on another machine -- and the record
+// is the one that is right.
+try { if (window.hlUserSettings) window.hlUserSettings.ready(() => applyTheme(hcPref('hcTheme', 'hive_theme', 'light') === 'dark' ? 'dark' : 'light')); } catch (e) {}
 $('sm-theme').addEventListener('click', () => {
-  const next = (localStorage.getItem('hive_theme') === 'dark') ? 'light' : 'dark';
-  localStorage.setItem('hive_theme', next);
+  const next = (hcPref('hcTheme', 'hive_theme', 'light') === 'dark') ? 'light' : 'dark';
+  hcPrefSet('hcTheme', 'hive_theme', next);
   applyTheme(next);
 });
 
 // ================= Audio & mic settings (shared by Chirp + HiveVideo) =================
 // One saved mic / speaker / volume, applied everywhere audio plays or is captured.
 function audioPrefs() {
-  let v = parseFloat(localStorage.getItem('hive_vol'));
+  let v = parseFloat(hcPref('hcVolume', 'hive_vol', ''));
   if (isNaN(v)) v = 1;
   return {
+    // Deliberately NOT hcPref: which mic and which speaker are about this
+    // machine. Carrying the choice across would name a device that is not
+    // plugged into the next one. See CLAUDE.md, exception 1.
     mic: localStorage.getItem('hive_mic') || '',
     speaker: localStorage.getItem('hive_speaker') || '',
     vol: Math.max(0, Math.min(1, v)),
@@ -2449,7 +3259,7 @@ function closeAudioSettings() { stopMicTest(); const bd = $('audio-backdrop'); i
   const vol = $('aud-vol');
   if (vol) vol.addEventListener('input', () => {
     const v = (parseInt(vol.value, 10) || 0) / 100;
-    localStorage.setItem('hive_vol', String(v));
+    hcPrefSet('hcVolume', 'hive_vol', String(v));
     const vl = $('aud-vol-val'); if (vl) vl.textContent = Math.round(v * 100) + '%';
     applyAudioPrefsLive();
   });
@@ -3645,6 +4455,8 @@ let evCustomFolders = [];     // user-created folders (beyond the standard six)
    also drop the inferenceClassification filter below, or the Inbox would stay
    stuck on Focused with nothing left to switch it back. */
 let evAllInboxes = false;     // unified 'All Inboxes' view across every signed-in mailbox
+let evUserPickedMailbox = false; // user chose a specific mailbox this visit (resets on tab entry)
+let evAcctMenuOpen = false;   // mailbox dropdown open? (collapsed by default so the sidebar stays clean)
 let evGroup = true;           // group the list by conversation (thread view)
 // Outlook default preset categories (name → color). Applying these "just works" in most mailboxes.
 const EV_CATS = [
@@ -3657,8 +4469,8 @@ const EV_CATS = [
 ];
 function evCatColor(name) { const c = EV_CATS.find(x => x.name === name); return c ? c.color : '#8b92a8'; }
 // email templates (saved locally)
-function evTemplates() { try { return JSON.parse(localStorage.getItem('hcEmailTpls') || '[]'); } catch (e) { return []; } }
-function evSaveTemplates(t) { try { localStorage.setItem('hcEmailTpls', JSON.stringify(t)); } catch (e) {} }
+function evTemplates() { return hcPrefJson('hcEmailTemplates', 'hcEmailTpls', []) || []; }
+function evSaveTemplates(t) { hcPrefSet('hcEmailTemplates', 'hcEmailTpls', t); }
 
 function emailConfigured() { const g = (window.HIVE_CONFIG || {}).msGraph; return !!(g && g.clientId); }
 function emailActiveLabel() { return evActive ? (evActive.username || '') : ''; }
@@ -3789,7 +4601,7 @@ async function hcGoogleConnect(bd, showErr, gBtn) {
   if (gBtn) gBtn.disabled = false;
   await hcRefreshImapAccounts();
   const acc = (evImapAccounts || []).find(a => email && a.username === email);
-  if (acc) { evActive = acc; evAllInboxes = false; try { bd.remove(); } catch (e) {} openEmailTab(); evToast('Gmail connected ✓'); }
+  if (acc) { evActive = acc; evAllInboxes = false; evUserPickedMailbox = true; try { bd.remove(); } catch (e) {} openEmailTab(); evToast('Gmail connected ✓'); }
   else if (email) { try { bd.remove(); } catch (e) {} openEmailTab(); evToast('Gmail connected ✓'); }
   else { showErr('Sign-in window closed before finishing — try again.'); }
 }
@@ -3829,6 +4641,9 @@ function openEmailTab() {
   evAccounts = evListAccounts();
   if (evActive && !evAccounts.some(a => a.homeAccountId === evActive.homeAccountId)) evActive = null;
   if (!evActive) evActive = evAccounts[0] || null;
+  // Email opens on the unified All Inboxes view every time; a mailbox the user
+  // picks from the switcher sticks until they leave the tab and come back.
+  if (!evUserPickedMailbox) evApplyDefaultMailbox();
   // Always paint the sidebar so the second column is never blank.
   renderEmailSidebar();
   const note = $('ev-setup-note'), btn = $('ev-signin');
@@ -3852,7 +4667,7 @@ async function emailSignIn() {
   const app = ensureMsal(); if (!app) return;
   try {
     const r = await app.loginPopup({ scopes: EV_SCOPES, prompt: 'select_account' });
-    if (r && r.account) { evActive = r.account; await hcLinkMailbox(r.account); }
+    if (r && r.account) { evActive = r.account; evAllInboxes = false; evUserPickedMailbox = true; await hcLinkMailbox(r.account); }
     evAccounts = app.getAllAccounts();
     openEmailTab();
   } catch (e) { evToast('Sign-in cancelled or failed.'); }
@@ -3972,11 +4787,24 @@ function hcAddImapMailbox() {
     try {
       const j = await evMailApi('add_account', payload);
       await hcRefreshImapAccounts();
-      if (j.account) { evActive = j.account; evAllInboxes = false; }
+      if (j.account) { evActive = j.account; evAllInboxes = false; evUserPickedMailbox = true; }
       close(); openEmailTab(); evToast('Mailbox connected ✓');
     } catch (e) { showErr(e.message || 'Could not connect that mailbox.'); btn.disabled = false; btn.textContent = 'Connect mailbox'; }
   };
 }
+
+// Default mailbox scope for the Email tab: All Inboxes whenever more than one
+// mailbox is connected. Keeps the folder you were in unless it was a per-mailbox
+// custom folder, which doesn't exist in the unified view.
+function evApplyDefaultMailbox() {
+  if (evAccounts.length < 2 || evAllInboxes) return;
+  evAllInboxes = true;
+  const std = EV_FOLDERS.find(f => f.id === evFolderId);
+  if (!std) { evFolderId = 'inbox'; evFolderName = 'All Inboxes'; }
+  else evFolderName = std.id === 'inbox' ? 'All Inboxes' : std.name;
+}
+
+function evCloseAcctMenu() { if (!evAcctMenuOpen) return; evAcctMenuOpen = false; renderEmailSidebar(); }
 
 // ---- sidebar: mailbox switcher + folders ----
 function renderEmailSidebar() {
@@ -3985,23 +4813,62 @@ function renderEmailSidebar() {
   // account switcher
   const accWrap = document.createElement('div'); accWrap.className = 'ev-accts';
   const lbl = document.createElement('div'); lbl.className = 'ev-accts-lbl'; lbl.textContent = 'MAILBOXES'; accWrap.appendChild(lbl);
-  if (evAccounts.length > 1) {
-    const all = document.createElement('button'); all.className = 'ev-acct ev-acct-all' + (evAllInboxes ? ' active' : '');
-    const adot = document.createElement('span'); adot.className = 'ev-acct-dot'; adot.textContent = '\u2709'; all.appendChild(adot);
-    const at = document.createElement('span'); at.className = 'ev-acct-name'; at.textContent = 'All Inboxes'; all.appendChild(at);
-    all.onclick = () => { evAllInboxes = true; renderEmailSidebar(); selectFolder('inbox', 'All Inboxes'); };
-    accWrap.appendChild(all);
+  // One collapsed picker instead of a row per mailbox: the sidebar shows the
+  // current scope (All Inboxes by default) and the individual accounts live in
+  // a dropdown that stays shut until you ask for it.
+  if (evAccounts.length) {
+    const multi = evAccounts.length > 1;
+    const onAll = multi && evAllInboxes;
+    const cur = onAll ? null : evActive;
+    const initial = (a) => (a && (a.name || a.username || '?') || '?').trim().charAt(0).toUpperCase();
+    const pick = document.createElement('div'); pick.className = 'ev-acct-pick' + (evAcctMenuOpen ? ' open' : '');
+
+    const trig = document.createElement('button'); trig.type = 'button';
+    trig.className = 'ev-acct ev-acct-trigger' + (onAll ? ' ev-acct-all' : '');
+    const tdot = document.createElement('span'); tdot.className = 'ev-acct-dot';
+    tdot.textContent = onAll ? '\u2709' : initial(cur); trig.appendChild(tdot);
+    const tnm = document.createElement('span'); tnm.className = 'ev-acct-name';
+    tnm.textContent = onAll ? 'All Inboxes' : ((cur && (cur.username || cur.name)) || 'All Inboxes');
+    trig.appendChild(tnm);
+    if (multi) { const car = document.createElement('span'); car.className = 'ev-acct-caret'; car.textContent = '\u25BE'; trig.appendChild(car); }
+    trig.title = multi ? 'Switch mailbox' : (tnm.textContent || '');
+    trig.onclick = (e) => { e.stopPropagation(); if (!multi) return; evAcctMenuOpen = !evAcctMenuOpen; renderEmailSidebar(); };
+    pick.appendChild(trig);
+
+    if (multi && evAcctMenuOpen) {
+      const menu = document.createElement('div'); menu.className = 'ev-acct-menu';
+      const all = document.createElement('button'); all.type = 'button';
+      all.className = 'ev-acct ev-acct-all' + (evAllInboxes ? ' active' : '');
+      const adot = document.createElement('span'); adot.className = 'ev-acct-dot'; adot.textContent = '\u2709'; all.appendChild(adot);
+      const at = document.createElement('span'); at.className = 'ev-acct-name'; at.textContent = 'All Inboxes'; all.appendChild(at);
+      all.onclick = (e) => {
+        e.stopPropagation();
+        evAllInboxes = true; evUserPickedMailbox = true; evAcctMenuOpen = false;
+        renderEmailSidebar(); selectFolder('inbox', 'All Inboxes');
+      };
+      menu.appendChild(all);
+      const sep = document.createElement('div'); sep.className = 'ev-acct-sep'; menu.appendChild(sep);
+      evAccounts.forEach(a => {
+        const row = document.createElement('button'); row.type = 'button';
+        row.className = 'ev-acct' + (!evAllInboxes && evActive && a.homeAccountId === evActive.homeAccountId ? ' active' : '');
+        const dot = document.createElement('span'); dot.className = 'ev-acct-dot'; dot.textContent = initial(a); row.appendChild(dot);
+        const t = document.createElement('span'); t.className = 'ev-acct-name'; t.textContent = a.username || a.name; row.appendChild(t);
+        const x = document.createElement('span'); x.className = 'ev-acct-x'; x.textContent = '\u2715'; x.title = 'Remove mailbox';
+        x.onclick = (e) => { e.stopPropagation(); evAcctMenuOpen = false; emailRemoveAccount(a); };
+        row.appendChild(x);
+        row.onclick = (e) => {
+          e.stopPropagation();
+          evAllInboxes = false; evActive = a; evUserPickedMailbox = true; evAcctMenuOpen = false;
+          renderEmailSidebar(); selectFolder('inbox', 'Inbox');
+        };
+        menu.appendChild(row);
+      });
+      pick.appendChild(menu);
+      // click anywhere else closes it
+      setTimeout(() => { document.addEventListener('click', evCloseAcctMenu, { once: true }); }, 0);
+    }
+    accWrap.appendChild(pick);
   }
-  evAccounts.forEach(a => {
-    const row = document.createElement('button'); row.className = 'ev-acct' + (!evAllInboxes && evActive && a.homeAccountId === evActive.homeAccountId ? ' active' : '');
-    const dot = document.createElement('span'); dot.className = 'ev-acct-dot'; dot.textContent = (a.name || a.username || '?').trim().charAt(0).toUpperCase(); row.appendChild(dot);
-    const t = document.createElement('span'); t.className = 'ev-acct-name'; t.textContent = a.username || a.name; row.appendChild(t);
-    const x = document.createElement('span'); x.className = 'ev-acct-x'; x.textContent = '✕'; x.title = 'Remove mailbox';
-    x.onclick = (e) => { e.stopPropagation(); emailRemoveAccount(a); };
-    row.appendChild(x);
-    row.onclick = () => { evAllInboxes = false; evActive = a; renderEmailSidebar(); selectFolder('inbox', 'Inbox'); };
-    accWrap.appendChild(row);
-  });
   // Adding mailboxes lives in Settings (Outlook-style). Only when NOTHING is
   // connected do we show a first-run "Add a mailbox" here so new users aren't
   // stranded; once a mailbox exists this disappears and Settings is the home.
@@ -5429,8 +6296,11 @@ async function evAiImproveDraft() {
 // ---- compose / reply / forward ----
 // ---- signatures (per mailbox, saved locally) ----
 function evSigKey() { return 'hcSig_' + (evActive ? (evActive.username || '').toLowerCase() : 'default'); }
-function evGetSig() { try { return localStorage.getItem(evSigKey()) || ''; } catch (e) { return ''; } }
-function evSetSig(s) { try { localStorage.setItem(evSigKey(), s); } catch (e) {} }
+// An email signature is the clearest case of all: it is who he is, not which
+// laptop he opened. Keyed per mailbox, because two mailboxes sign off
+// differently.
+function evGetSig() { return hcPref('sig:' + evSigKey(), evSigKey(), '') || ''; }
+function evSetSig(s) { hcPrefSet('sig:' + evSigKey(), evSigKey(), s); }
 function evSigHtml() { const s = evGetSig(); return s ? '<br><br><span style="color:#667">--</span><br>' + esc(s).replace(/\n/g, '<br>') : ''; }
 function nl2br(s) { return esc(s).replace(/\n/g, '<br>'); }
 
@@ -5599,16 +6469,58 @@ function evToast(text) {
     }
     e.target.value = ''; renderComposeAttachments();
   }); }
+// ---- search ----
+// Search has to answer for whatever mailbox is open, not just Microsoft ones:
+//  * Microsoft mailboxes use Graph $search -- server-side, whole mailbox.
+//  * IMAP mailboxes (Gmail/iCloud/Yahoo/custom) send the same $search path to
+//    /api/mail, which runs a real IMAP SEARCH over subject/from/to/body across
+//    the mailbox. If that route isn't deployed yet the adapter answers
+//    { __unsupported }, and rather than show an empty list we match the newest
+//    50 envelopes of the open folder and say so in the header.
+//  * In All Inboxes mode every mailbox is searched, and each hit carries the
+//    _acct tag openEmailMessage() needs to open it against the right account.
+const EV_SEARCH_SELECT = '$select=id,subject,from,receivedDateTime,isRead,bodyPreview,hasAttachments,flag,conversationId,categories,inferenceClassification';
+function evSearchHaystack(m) {
+  const f = (m.from && m.from.emailAddress) || {};
+  return [m.subject, f.name, f.address, m.bodyPreview].join(' ').toLowerCase();
+}
+async function evSearchAccount(acct, q) {
+  const imap = !!(acct && acct.provider === 'imap');
+  const j = await evGraph(`/me/messages?$search="${encodeURIComponent(q)}"&${EV_SEARCH_SELECT}&$top=${imap ? 50 : 30}`, { account: acct });
+  let rows = j.value || [], degraded = false;
+  if (imap && j && j.__unsupported) {
+    const f = await evGraph(`/me/mailFolders/${evFolderId}/messages?${EV_SEARCH_SELECT}&$top=50`, { account: acct });
+    const needle = q.toLowerCase();
+    rows = (f.value || []).filter(m => evSearchHaystack(m).includes(needle));
+    degraded = true;
+  }
+  rows.forEach(m => { m._acct = acct.homeAccountId; m._acctName = acct.username || acct.name || ''; });
+  return { rows, degraded, partial: !!(j && j.__search && j.__search.partial) };
+}
 { const s = $('ev-search'); if (s) s.addEventListener('keydown', async (e) => {
+    const list = $('ev-list');
+    if (e.key === 'Escape') { s.value = ''; selectFolder(evFolderId, evFolderName); return; }
     if (e.key !== 'Enter') return;
     const q = s.value.trim();
-    const list = $('ev-list');
     if (!q) return selectFolder(evFolderId, evFolderName);
+    const targets = (evAllInboxes && evAccounts.length > 1) ? evAccounts.slice() : (evActive ? [evActive] : []);
+    if (!targets.length) { if (list) list.innerHTML = '<div class="ev-loading">Connect a mailbox first.</div>'; return; }
     if (list) list.innerHTML = '<div class="ev-loading">Searching…</div>';
     try {
-      const j = await evGraph(`/me/messages?$search="${encodeURIComponent(q)}"&$select=id,subject,from,receivedDateTime,isRead,bodyPreview,hasAttachments,flag&$top=30`);
-      evMessages = j.value || []; evOpenId = null; renderMessageList();
-      const fn = $('ev-folder-name'); if (fn) fn.textContent = 'Search: ' + q;
+      const settled = await Promise.allSettled(targets.map(a => evSearchAccount(a, q)));
+      const ok = settled.filter(r => r.status === 'fulfilled').map(r => r.value);
+      if (!ok.length) throw ((settled[0] && settled[0].reason) || new Error('search failed'));
+      evMessages = ok.reduce((acc, r) => acc.concat(r.rows), [])
+        .sort((x, y) => new Date(y.receivedDateTime || 0) - new Date(x.receivedDateTime || 0));
+      evOpenId = null;
+      evNextLink = null; // results are one page -- never page the old folder in underneath them
+      const read = $('ev-read'); if (read) read.innerHTML = '<div class="ev-read-empty">Select a message to read it here.</div>';
+      renderMessageList();
+      if (!evMessages.length && list) list.innerHTML = '<div class="ev-loading">Nothing matches “' + esc(q) + '”.</div>';
+      const note = ok.some(r => r.degraded) ? ' (recent mail only)'
+        : (ok.some(r => r.partial) ? ' (partial — some folders timed out)' : '');
+      const fn = $('ev-folder-name');
+      if (fn) fn.textContent = 'Search: ' + q + note;
     } catch (err) { if (list) list.innerHTML = '<div class="ev-loading">Search failed — ' + esc(err.message) + '</div>'; }
   }); }
 { const bd = $('ev-compose-backdrop'); if (bd) bd.addEventListener('click', e => { /* clicking away must NOT discard the draft — keep the compose open; use ✕ or Discard to close */ }); }
@@ -5628,6 +6540,14 @@ function evToast(text) {
 const TASK_STATUSES = ['draft', 'unassigned', 'not_started', 'in_progress', 'waiting', 'blocked', 'submitted_for_review', 'revision_required', 'approved', 'completed', 'cancelled'];
 const TASK_STATUS_LABEL = { draft: 'Draft', unassigned: 'Unassigned', not_started: 'Not Started', in_progress: 'In Progress', waiting: 'Waiting', blocked: 'Blocked', submitted_for_review: 'Submitted for Review', revision_required: 'Revision Required', approved: 'Approved', completed: 'Completed', cancelled: 'Cancelled' };
 const TASK_WAITING_REASONS = ['client', 'vendor', 'material', 'payment', 'permit', 'inspection', 'internal_approval', 'information', 'schedule'];
+// Mirrored onto window for the same reason `me` is (see line 8): tasks.js is
+// a classic script written against "app.js's top-level consts are global",
+// which breaks once hiveconnect-mount.js loads this file as a module. These
+// three are read-once-at-declaration, so unlike `me` they need no reassignment
+// tracking -- one mirror line here covers every future reference.
+window.TASK_STATUSES = TASK_STATUSES;
+window.TASK_STATUS_LABEL = TASK_STATUS_LABEL;
+window.TASK_WAITING_REASONS = TASK_WAITING_REASONS;
 
 /* ==================================================================
    TASKS (Microsoft To-Do) + CALENDAR (Outlook) — via Graph, per mailbox.
@@ -5805,18 +6725,18 @@ let chirpPeers = new Map();    // user_id -> { mode, line, name, avatar_url, ava
 let chirpConnecting = false;
 
 const CHIRP_TODAY = () => new Date().toISOString().slice(0, 10);
-function chirpClock() { try { return JSON.parse(localStorage.getItem('chirpClock') || '{}'); } catch (e) { return {}; } }
+function chirpClock() { return hcPrefJson('chirpClock', 'chirpClock', {}) || {}; }
 function chirpClockedIn() { const c = chirpClock(); return !!(c.in && c.date === CHIRP_TODAY()); }
-function chirpMode() { return localStorage.getItem('chirpMode') || 'avail'; }        // avail | quiet
+function chirpMode() { return hcPref('chirpMode', 'chirpMode', 'avail') || 'avail'; }        // avail | quiet
 function chirpEffMode() { return chirpClockedIn() ? chirpMode() : 'off'; }             // what others see
 
 function chirpSetClock(on) {
-  localStorage.setItem('chirpClock', JSON.stringify(on ? { in: true, date: CHIRP_TODAY(), since: Date.now() } : { in: false, date: CHIRP_TODAY() }));
+  hcPrefSet('chirpClock', 'chirpClock', on ? { in: true, date: CHIRP_TODAY(), since: Date.now() } : { in: false, date: CHIRP_TODAY() });
   chirpUnlockAudio();
   if (!on && chirpLineCid) chirpHangup();     // clocking out drops any live line
   chirpBroadcast(); renderChirpPanel(); chirpApplyGate(); updateMainHeader();
 }
-function chirpSetMode(m) { localStorage.setItem('chirpMode', m); chirpBroadcast(); renderChirpPanel(); }
+function chirpSetMode(m) { hcPrefSet('chirpMode', 'chirpMode', m); chirpBroadcast(); renderChirpPanel(); }
 
 // ---- tones (Nextel-ish chirps, synthesized) ----
 function chirpUnlockAudio() {
@@ -5931,14 +6851,14 @@ function renderChirpPanel() {
     .map(p => { const peer = chirpPeers.get(p.id); return { ...p, av: (peer && peer.mode) ? peer.mode : 'off' }; })
     .sort((a, b) => (rank[a.av] - rank[b.av]) || a.name.localeCompare(b.name));
   const availCount = people.filter(p => p.av !== 'off').length;
-  const collapsed = localStorage.getItem('chirpPeopleCollapsed') === '1';
+  const collapsed = hcPref('chirpPeopleCollapsed', 'chirpPeopleCollapsed', '0') === '1';
 
   const head = document.createElement('div'); head.className = 'chirp-phead chirp-fold chirp-folderhead' + (collapsed ? ' collapsed' : '');
   head.innerHTML = '<span class="chirp-chev">▾</span> 📁 Team <span class="chirp-availct">' + availCount + ' available</span>';
   host.appendChild(head);
   const listWrap = document.createElement('div'); listWrap.className = 'chirp-plist-wrap' + (collapsed ? ' hidden' : '');
   host.appendChild(listWrap);
-  head.onclick = () => { const now = !listWrap.classList.contains('hidden'); listWrap.classList.toggle('hidden', now); head.classList.toggle('collapsed', now); localStorage.setItem('chirpPeopleCollapsed', now ? '1' : '0'); };
+  head.onclick = () => { const now = !listWrap.classList.contains('hidden'); listWrap.classList.toggle('hidden', now); head.classList.toggle('collapsed', now); hcPrefSet('chirpPeopleCollapsed', 'chirpPeopleCollapsed', now ? '1' : '0'); };
 
   if (!people.length) { const e = document.createElement('div'); e.className = 'chirp-empty'; e.textContent = 'No teammates yet.'; listWrap.appendChild(e); }
   for (const p of people) {
@@ -6214,8 +7134,71 @@ window.addEventListener('beforeunload', () => { if (chirpLineCid) { try { if (ch
 // this file is ever loaded standalone again), this is a no-op and boot()
 // behaves exactly as it always did.
 (async function(){
-  if (window.__hiveconnectBridgedSession) {
-    await sb.auth.setSession(window.__hiveconnectBridgedSession).catch(function(){});
-  }
-  boot();
+  var bridged = window.__hiveconnectBridgedSession;
+  if (!bridged) { boot(); return; }   // standalone: behave exactly as before
+
+  /* Chris, 2026-08-23: "it flashes Hiveconnect, then immediately goes to the
+     sign in screen and then loads hiveconnect".
+     
+     That sign-in screen is HiveConnect's own, and it should never have been
+     reachable from inside HiveLogic. This used to be:
+     
+         await sb.auth.setSession(bridged).catch(function(){});
+         boot();
+     
+     A swallowed catch. When setSession failed, boot() looked for a session,
+     found none, and revealed the login screen -- then onAuthStateChange fired
+     a moment later and loaded the app over the top of it. Hence the flicker.
+     
+     Showing that screen is worse than ugly: HiveConnect is a SEPARATE Supabase
+     project, so his HiveLogic email and password are not credentials here. A
+     login box he cannot log into is not a fallback, it is a dead end. */
+  window.__hiveconnectBridging = true;
+  var applied = await applyBridgedSession(bridged);
+  window.__hiveconnectBridging = false;
+
+  if (applied) { boot(); return; }
+
+  // Say what happened, where he is looking, instead of a login box he cannot
+  // use. The mount leaves HiveLogic's own session alone either way.
+  if (authScreen) authScreen.classList.add('hidden');
+  bridgeFailureNotice();
 })();
+
+/* One retry, because the failure this fixes is a timing one.
+ *
+ * The session is minted through a single-use magic link (see
+ * api/hiveconnect-bridge.js and the otp_expired note in
+ * hiveconnect-mount.js), and a token that has just been spent or has just
+ * aged out fails once and succeeds on a freshly-read one. Retrying blind
+ * would be guessing; this re-reads the session afterwards and only calls it
+ * applied when the client agrees there IS one. */
+async function applyBridgedSession(bridged) {
+  for (var attempt = 0; attempt < 2; attempt++) {
+    var res = await sb.auth.setSession(bridged).catch(function (e) { return { error: e }; });
+    if (!(res && res.error)) {
+      // setSession resolving is not the same as a session existing.
+      var check = await sb.auth.getSession().catch(function () { return null; });
+      if (check && check.data && check.data.session) return true;
+    } else {
+      window.__hiveconnectBridgeError = String((res.error && res.error.message) || res.error);
+    }
+    if (attempt === 0) await new Promise(function (r) { setTimeout(r, 400); });
+  }
+  return false;
+}
+
+function bridgeFailureNotice() {
+  var host = document.getElementById('app') || document.body;
+  if (!host) return;
+  var why = window.__hiveconnectBridgeError ? (' (' + window.__hiveconnectBridgeError + ')') : '';
+  var box = document.createElement('div');
+  box.id = 'hc-bridge-failed';
+  box.style.cssText = 'padding:22px;max-width:520px;margin:40px auto;border:1px solid var(--line,#e3e8f0);'
+    + 'border-radius:12px;font:14px/1.5 system-ui,sans-serif';
+  box.innerHTML = '<div style="font-weight:700;margin-bottom:6px">HiveConnect could not open</div>'
+    + '<div style="opacity:.8">Your HiveLogic session is fine — this is the hand-off to HiveConnect that '
+    + 'failed' + escapeHtml(why) + '. Reload the page to try again.</div>';
+  host.classList.remove('hidden');
+  host.appendChild(box);
+}

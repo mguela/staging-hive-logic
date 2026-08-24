@@ -189,8 +189,24 @@ const here = dirname(fileURLToPath(import.meta.url));
 const sourcePath = join(here, '..', 'public', 'hiveconnect', 'styles.css');
 const outputPath = join(here, '..', 'public', 'hiveconnect', 'styles-scoped.css');
 
+// The line ending the SOURCE uses. transform() passes source bytes straight
+// through, but HEADER and the `,\n` selector-list joiner are synthesized here
+// with LF -- so on a Windows checkout (core.autocrlf turns styles.css CRLF)
+// the output came out MIXED, and never equalled the uniformly-CRLF committed
+// file. That is why this script's --check and its test failed on every Windows
+// working copy while passing in Linux CI, where everything is LF already.
+// Matching the source's ending makes the artifact reproducible on either
+// platform; on an LF checkout this is a no-op.
+function sourceEol(css) {
+  const crlf = (css.match(/\r\n/g) || []).length;
+  const lf = (css.match(/(?<!\r)\n/g) || []).length;
+  return crlf > lf ? '\r\n' : '\n';
+}
+
 export function generate(css) {
-  return HEADER + transform(css).replace(/^\s*\n/, '');
+  const body = HEADER + transform(css).replace(/^\s*\n/, '');
+  const eol = sourceEol(css);
+  return body.replace(/\r\n/g, '\n').replace(/\n/g, eol);
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {

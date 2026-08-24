@@ -46,7 +46,8 @@ function extractEngine(src) {
 
 const SOURCE = [
   extractEngine(html),
-  extractFunction(html, 'function ccMapMarker(gl, map, lngLat, html, popupHtml){'),
+  extractFunction(html, 'function ccAttrEsc(v){'),
+  extractFunction(html, 'function ccMapMarker(gl, map, lngLat, html, popupHtml, opts){'),
   extractFunction(html, 'function ccSetMarkersVisible(markers, on){'),
   extractFunction(html, 'function fmtVisitTime(iso){'),
   extractFunction(html, 'function loadTechLocationsLive(map){'),

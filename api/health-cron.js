@@ -364,9 +364,20 @@ export default async function handler(req, res) {
   }
 
   // ---- post to Chirp as Reina bot ----
-  const channelId = process.env.REINA_BOT_DEFAULT_CHANNEL_ID;
+  // Post to the existing "Reina's Reports" channel by its fixed id. Hardcoded
+  // (with an optional env override) so the report always lands in the same
+  // channel — no by-name lookup that could spin up a duplicate channel, and no
+  // dependence on an env var that might be unset in a deployment.
+  //
+  // The override MUST be its own var. REINA_BOT_DEFAULT_CHANNEL_ID is the
+  // shared Reina-bot catch-all (#admin-hub) that voicemail alerts, change-order
+  // scans, and track1 also post to; it is always set in prod, so reading it
+  // here made the hardcoded id below unreachable and buried every daily report
+  // in #admin-hub from 2026-08-06 to 2026-08-23.
+  const REINA_REPORTS_CHANNEL_ID = '35be9f8f-f83d-4ba2-9748-4ac05ce859a3'; // #Reina's Reports (hiveconnect)
+  const channelId = process.env.REINA_REPORTS_CHANNEL_ID || REINA_REPORTS_CHANNEL_ID;
   try {
-    if (!channelId) throw new Error('REINA_BOT_DEFAULT_CHANNEL_ID not set');
+    if (!channelId) throw new Error('No Reina Reports channel id resolved');
     await postBotMessage(channelId, report.chirp);
     delivery.chirp = { ok: true, channelId };
   } catch (e) {

@@ -315,3 +315,24 @@ test('a search for a client with no files is empty rather than falling back to e
   const out = applySearch(corpus, parseFilters({ client: 'Nobody At All' }));
   assert.equal(out.total, 0);
 });
+
+// --- the limits of deriving a source from a path (2026-08-21) ---
+
+test('a media source is derived, not recorded — and that has one known blind spot', () => {
+  // `media` has no source column and deliberately gains none: denormalising
+  // origin onto 40,939 rows would create the second source of truth this whole
+  // exercise removed. Origin is read off the storage path instead, which works
+  // because every writer in the repo uses a distinct prefix.
+  //
+  // The blind spot: HiveSight's path is supplied by the browser, and it is also
+  // the fallback. So a photo whose own filename happens to begin with another
+  // tool's marker is labelled as that tool. Pinned here so the limitation is
+  // visible in the test suite rather than discovered in a result list.
+  assert.equal(mediaSource('job-1/field-notes-from-site.jpg'), 'Field App');
+
+  // What protects this in practice is that the marker must follow a slash, so
+  // it can only ever be the start of the filename -- a photo merely mentioning
+  // one of these words is unaffected.
+  assert.equal(mediaSource('job-1/kitchen-field-shot.jpg'), 'HiveSight');
+  assert.equal(mediaSource('job-1/about-companycam.jpg'), 'HiveSight');
+});

@@ -75,6 +75,83 @@
     src.start(t0);
   }
 
+  /* ---- a room ----
+     Every sound above is bone dry, which is most of why a synthesized tone
+     reads as "computer beep" rather than "object in a space". A short
+     synthetic impulse response costs nothing (noise shaped by an exponential
+     decay) and is the single biggest difference between a chiptune blip and
+     something that sounds designed. Built once, on first use. */
+  var verb = null;
+  function reverbBus() {
+    if (verb || !ctx) return verb;
+    try {
+      var len = Math.floor(ctx.sampleRate * 1.7);
+      var buf = ctx.createBuffer(2, len, ctx.sampleRate);
+      for (var ch = 0; ch < 2; ch++) {
+        var d = buf.getChannelData(ch);
+        for (var i = 0; i < len; i++) {
+          var x = i / len;
+          // Slight per-channel difference is what stops it collapsing to a
+          // point in the middle of your head.
+          d[i] = (Math.random() * 2 - 1) * Math.pow(1 - x, 2.6 + ch * 0.25);
+        }
+      }
+      var conv = ctx.createConvolver(); conv.buffer = buf;
+      var wet = ctx.createGain(); wet.gain.value = 0.42;
+      var tame = ctx.createBiquadFilter(); tame.type = 'lowpass'; tame.frequency.value = 3200;
+      conv.connect(tame); tame.connect(wet); wet.connect(master);
+      verb = conv;
+    } catch (e) { verb = null; }
+    return verb;
+  }
+
+  /* ---- a struck bell ----
+     Chris, 2026-08-23, on the first attempt at a ring: "that ring is bullshit
+     and sounds like a broken arcade game from the 80's". He was right, and the
+     reason is in tone() above: one sine, 6ms attack, exponential decay. That
+     is literally how an arcade cabinet made sound.
+
+     What makes a struck object sound struck is that its partials decay at
+     DIFFERENT rates -- the bright ones die almost immediately and the
+     fundamental rings on. Sound that the other way round, or all at once, and
+     the ear reads "oscillator". So: inharmonic partials at bell ratios, each
+     with its own decay, a soft attack that is felt rather than heard, and the
+     whole thing fed to the room above. */
+  var BELL_PARTIALS = [
+    // ratio, level, how long it rings relative to dur
+    [1.00, 1.000, 1.00],
+    [2.02, 0.380, 0.62],   // slightly sharp of the octave -- real bells are
+    [2.99, 0.180, 0.38],
+    [4.18, 0.090, 0.22],
+    [5.42, 0.045, 0.14],
+  ];
+  function bell(opts) {
+    var c = ctx; if (!c) return;
+    var t0 = c.currentTime + (opts.t || 0);
+    var dur = opts.dur || 1.6;
+    var vol = opts.vol == null ? 0.12 : opts.vol;
+    var out = c.createGain(); out.gain.value = 1;
+    var tame = c.createBiquadFilter(); tame.type = 'lowpass';
+    tame.frequency.value = 2600; tame.Q.value = 0.6;
+    out.connect(tame);
+    tame.connect(master);
+    var room = reverbBus(); if (room) tame.connect(room);
+    for (var i = 0; i < BELL_PARTIALS.length; i++) {
+      var p = BELL_PARTIALS[i];
+      var o = c.createOscillator(); o.type = 'sine';
+      o.frequency.setValueAtTime(opts.f0 * p[0], t0);
+      var g = c.createGain();
+      var peak = Math.max(0.0002, vol * p[1]);
+      var ring = Math.max(0.05, dur * p[2]);
+      // 18ms attack, not 6 -- a mallet has a face, it does not click.
+      g.gain.setValueAtTime(0.0001, t0);
+      g.gain.linearRampToValueAtTime(peak, t0 + 0.018);
+      g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.018 + ring);
+      o.connect(g); g.connect(out);
+      o.start(t0); o.stop(t0 + 0.018 + ring + 0.05);
+    }
+  }
+
   // ---- the sound set (punchy & satisfying) -----------------------------
   var SOUNDS = {
     // Mechanical keyboard-style thock: pitch-dropping triangle + tiny noise tick
@@ -119,6 +196,24 @@
       tone({ type: 'sine', f0: 880, dur: 0.14, vol: 0.20 });
       tone({ type: 'sine', f0: 1108, t: 0.16, dur: 0.20, vol: 0.20 });
       tone({ type: 'sine', f0: 1760, t: 0.16, dur: 0.14, vol: 0.06 });
+    },
+    /* HiveVideo outgoing ringback.
+
+       Deliberately NOT the `ringback` above -- that one is the US telco dual
+       tone (440+480), correct for the VoIP phone and wrong here, because a
+       HiveVideo call to a colleague should not sound like dialling a call
+       centre.
+
+       Two soft bell strikes a fifth apart (F4 -> C5), the second landing while
+       the first is still ringing, both decaying into the room. Bells rather
+       than tones because the first attempt at this was sines with hard
+       envelopes and it sounded, correctly, like a broken arcade cabinet.
+       Quiet on purpose -- this repeats every few seconds while you wait, so it
+       has to be something you can sit next to. */
+    hvring: function () {
+      bell({ f0: 349.23, dur: 2.0, vol: 0.115 });               // F4
+      bell({ f0: 523.25, t: 0.34, dur: 2.3, vol: 0.095 });      // C5, a fifth up
+      bell({ f0: 174.61, t: 0.02, dur: 1.5, vol: 0.030 });      // an octave under, body only
     },
     // Call connected: quick rising blip
     connect: function () {

@@ -192,7 +192,13 @@ check('rlmReferredBySearch reuses the proven REAL_CLIENTS live-filter pattern an
   const start = html.indexOf('function rlmReferredBySearch');
   const end = html.indexOf('function rlmReferredByPick', start);
   const fn = html.slice(start, end);
-  assert.match(fn, /REAL_CLIENTS\[i\]/, 'must filter over the real client list, not a fabricated one');
+  // Was /REAL_CLIENTS\[i\]/, which pinned the hand-rolled scan loop rather than
+  // the property. That loop was replaced on 2026-08-23 by hlRankClients, which
+  // ranks name above company above email and scans the whole book before
+  // capping -- the flat scan surfaced everyone carrying lori@... ahead of the
+  // client actually named Lori, and stopped at 20 before ever reaching her.
+  // The property this guards is unchanged: it must read the REAL client list.
+  assert.match(fn, /hlRankClients\(REAL_CLIENTS/, 'must filter over the real client list, not a fabricated one');
   // idA/nameA must each be escaped (backslash-escape then quote-escape) before
   // being embedded in an onclick="..." HTML attribute, exactly like the
   // proven efClientSearch/efClientPick pattern this was derived from.

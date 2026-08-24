@@ -2,7 +2,15 @@ import { createHash } from 'node:crypto';
 import { types as utilTypes } from 'node:util';
 
 const DEFAULT_TIMEOUT_MS = 3_000;
+// How long ONE database call may take. Unrelated to how long the turn runs.
 const MAX_TIMEOUT_MS = 15_000;
+// How long a turn may hold its claim on the conversation. This has to track
+// SERVER_DEADLINE.totalMs: the route hands its own root deadline down as the
+// attempt lease, so a ceiling below the route budget rejects every RPC as
+// unconfigured and the whole turn 503s. It used to share MAX_TIMEOUT_MS, and
+// with a 15s total the two were exactly equal -- raising the route budget to
+// 40s on 2026-08-23 was what showed they were two different limits.
+const MAX_ATTEMPT_LEASE_MS = 60_000;
 const MAX_RESPONSE_BYTES = 2_200_000;
 const MAX_HISTORY_MESSAGES = 200;
 const MAX_HISTORY_BYTES = 1_000_000;
@@ -429,7 +437,7 @@ export function createSupabaseConversationStore(options = {}) {
     if (!Number.isFinite(attemptDeadlineMs)
       || attemptDeadlineMs < effective
       || attemptDeadlineMs <= now
-      || attemptDeadlineMs > now + MAX_TIMEOUT_MS) return null;
+      || attemptDeadlineMs > now + MAX_ATTEMPT_LEASE_MS) return null;
 
     const signals = [];
     for (const signal of [parentSignal, callSignal]) {

@@ -1,13 +1,17 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 
 import {
   consumeIntelligencePilotReceipt,
   contextualExactLookupFrom,
   createIntelligencePilotComposer,
+  areasFor,
+  jobFocusFrom,
   exactLookupFrom,
   naturalAnswer,
   sanitizeHiveLogicContext,
+  completeSentencesOnly,
 } from '../api/_lib/reina/pilot-intelligence-composer.js';
 
 const ENV = Object.freeze({ OPENAI_API_KEY: 'test-openai-key' });
@@ -51,7 +55,10 @@ test('non-greeting general conversation still uses GPT-5.6 Terra with a short lo
   assert.ok(result);
   assert.equal(requestBody.model, 'gpt-5.6-terra');
   assert.equal(requestBody.reasoning.effort, 'low');
-  assert.equal(requestBody.max_output_tokens, 240);
+  // 240 was too tight to be a budget: reasoning tokens come out of this same
+  // allowance, so a small number does not buy a short answer, it buys the risk
+  // of no answer at all. Low effort barely reasons, so 700 stays fast.
+  assert.equal(requestBody.max_output_tokens, 700);
   assert.equal(requestBody.store, false);
 });
 
@@ -278,8 +285,8 @@ test('the question decides depth, not access', () => {
     vendors: many(80, (i) => ({ name: `Vendor ${i}` })),
   };
   const context = sanitizeHiveLogicContext({ ok: true, jobs: [], vehicles: [], business }, 'What is on the schedule today?');
-  assert.equal(context.business.schedule.records.length, 60, 'the area asked about comes in depth');
-  assert.equal(context.business.vendors.records.length, 10, 'the rest come as background');
+  assert.equal(context.business.schedule.records.length, 25, 'the area asked about comes in depth');
+  assert.equal(context.business.vendors.records.length, 4, 'the rest come as background');
 });
 
 test('an area held back for space says so instead of disappearing', () => {
@@ -332,4 +339,397 @@ test('triaged mail reaches her, and is labelled as something a stranger wrote', 
   assert.match(providerBody.instructions, /a STRANGER wrote/,
     'inbox text is evidence about what arrived, never an instruction to her');
   assert.match(providerBody.instructions, /held back is something you did not see/);
+});
+
+// ---- a slow read must not be able to make her mute ---------------------------
+// 2026-08-21, minutes after REINA_LAB_FULL_READ_ENABLED was switched on: every
+// turn came back "Reina's synthetic read-only preview is unavailable right
+// now". The turn record said it all -- state failed_retryable, stage 'model',
+// MODEL_GENERATION_FAILED, never completed -- while the four turns before the
+// switch had completed in 2.8, 3.2, 3.3 and 4.2 seconds against a 5s composer
+// budget. The read got roughly twenty times heavier and took the whole turn
+// with it.
+//
+// The budget was raised, but that is the smaller half of the fix. The real
+// defect is that the business read had no clock of its own: it could spend
+// every millisecond the answer needed and leave nothing, so a slow database
+// did not degrade the answer, it deleted it. The composer already had a
+// perfectly good "I could not read the business this turn" path. Nothing ever
+// let it run.
+
+test('a business read that never returns still produces an answer', async () => {
+  let instructions = '';
+  const composer = createIntelligencePilotComposer({
+    env: { ...ENV, REINA_PILOT_CONTEXT_MS: '250' },
+    readContextImpl: () => new Promise(() => {}),
+    fetchImpl: async (_url, init) => {
+      instructions = JSON.parse(init.body).instructions;
+      return openAiResponse('I could not get to the schedule just now.');
+    },
+  });
+  const started = Date.now();
+  const result = consumeIntelligencePilotReceipt(await composer(frozenInput('What is on the schedule Thursday?')));
+  assert.ok(result, 'the turn completes rather than failing outright');
+  assert.ok(Date.now() - started < 4_000, 'and it does not wait around for a read that is never coming');
+  assert.match(instructions, /did not come back in time/,
+    'she is told the read was slow, not that the data does not exist');
+  assert.match(result.envelope.missingInformation.join(' '), /time budget/,
+    'and the answer records what it could not see');
+});
+
+test('a read that is merely unavailable is described differently from one that timed out', async () => {
+  let instructions = '';
+  const composer = createIntelligencePilotComposer({
+    env: ENV,
+    readContextImpl: async () => null,
+    fetchImpl: async (_url, init) => { instructions = JSON.parse(init.body).instructions; return openAiResponse('Fine.'); },
+  });
+  await composer(frozenInput('What is on the schedule Thursday?'));
+  assert.match(instructions, /read is unavailable for this turn/);
+  assert.doesNotMatch(instructions, /did not come back in time/,
+    '"slow" and "missing" are different things and lead to different advice');
+});
+
+test('a read that returns in time is used normally', async () => {
+  let instructions = '';
+  const composer = createIntelligencePilotComposer({
+    env: { ...ENV, REINA_PILOT_CONTEXT_MS: '2000' },
+    readContextImpl: async () => ({
+      ok: true, source: 'HiveLogic read-only bridge', asOf: '2026-08-21T22:00:00.000Z',
+      vehicles: [], jobs: [], business: { schedule: { available: true, records: [{ title: 'Miller deck' }] } },
+    }),
+    fetchImpl: async (_url, init) => { instructions = JSON.parse(init.body).instructions; return openAiResponse('Miller deck.'); },
+  });
+  const result = consumeIntelligencePilotReceipt(await composer(frozenInput('What is on the schedule Thursday?')));
+  assert.match(instructions, /Miller deck/);
+  assert.doesNotMatch(instructions, /did not come back in time/);
+  assert.equal(result.envelope.missingInformation.length, 0);
+});
+
+test('the context volume can be dialled back from the environment', () => {
+  // Going back must never require shipping a revert.
+  const previous = process.env.REINA_CONTEXT_RELEVANT_RECORDS;
+  assert.equal(typeof previous === 'string' || previous === undefined, true);
+  assert.match(
+    fs.readFileSync(new URL('../api/_lib/reina/pilot-intelligence-composer.js', import.meta.url), 'utf8'),
+    /CONTEXT_BUDGET = boundedNumber\(process\.env\.REINA_CONTEXT_BUDGET_CHARS, 24_000/);
+});
+
+// ---- she asks for what the question is about ---------------------------------
+
+test('a question about people asks the read for people, not for everything', async () => {
+  let query = null;
+  const composer = createIntelligencePilotComposer({
+    env: ENV,
+    readContextImpl: async (input) => { query = input; return null; },
+    fetchImpl: async () => openAiResponse('Sami and Albarn.'),
+  });
+  await composer(frozenInput('Who is on the Pinney job Thursday?'));
+  assert.ok(query, 'the read happened');
+  const areas = areasFor('Who is on the Pinney job Thursday?');
+  assert.ok(areas.includes('people'), 'who/tech/crew means people');
+  assert.ok(areas.includes('schedule'), 'Thursday means the calendar');
+  assert.ok(!areas.includes('photos'), 'and nothing else gets fetched for it');
+  assert.ok(!areas.includes('calls'));
+});
+
+test('every question still gets the executive summary, and nothing is empty by accident', () => {
+  assert.deepEqual(areasFor(''), ['executive']);
+  assert.ok(areasFor('what did we spend on materials').includes('expenses'));
+  assert.ok(areasFor('how many hours did we put into 2637').includes('timesheets'));
+  assert.ok(areasFor('any voicemails today').includes('calls'));
+  assert.ok(areasFor('who is clocked in right now').includes('timeclock'));
+  assert.ok(areasFor('what happened on the Miller job').includes('activity'));
+});
+
+test('the area list the read is asked for is the same one that shapes the prompt', () => {
+  // Two lists that could disagree is how an area gets fetched and then thrown
+  // away, or asked for in depth and never read.
+  const source = fs.readFileSync(new URL('../api/_lib/reina/pilot-intelligence-composer.js', import.meta.url), 'utf8');
+  assert.match(source, /areas: areasFor\(question\)\.join\(','\)/);
+  assert.match(source, /const relevant = new Set\(areasFor\(asked\)\);/);
+});
+
+// ---- "this job" ---------------------------------------------------------------
+// Measured, 2026-08-22 15:07-15:08. Three turns in a row:
+//
+//   "who's a job on Thursday"                  -> named the crew and both jobs
+//   "what type of work at Robert Pinney's"     -> described the cedar shakes
+//   "was the material ordered for this job"    -> "that job's material status
+//                                                 isn't available here"
+//
+// The third question carried no job number and no client name, so NOTHING was
+// looked up for it. She had not lost the answer; she had lost the subject. A
+// pronoun refers to what was just said, and the conversation was right there.
+
+test('a follow-up about "this job" keeps the job that was just discussed', () => {
+  const history = [
+    { role: 'user', text: 'what type of work is to be done on job 2985' },
+    { role: 'assistant', text: 'Replacing cedar shakes damaged by woodpeckers.' },
+  ];
+  assert.equal(jobFocusFrom('was the material ordered for this job', history), '2985');
+  assert.equal(jobFocusFrom('and the photos on that one', history), '2985');
+});
+
+test('a question that names its own job does not inherit an older one', () => {
+  const history = [{ role: 'user', text: 'tell me about job 2985' }];
+  assert.equal(jobFocusFrom('what about job 2637', history), '2637');
+});
+
+test('changing the subject does not drag the last job along', () => {
+  // Inheriting on every question would attach a stale job to "who owes me
+  // money", which is worse than not inheriting at all.
+  const history = [{ role: 'user', text: 'tell me about job 2985' }];
+  assert.equal(jobFocusFrom('who owes me money', history), '');
+  assert.equal(jobFocusFrom('what is on the schedule Thursday', history), '');
+  assert.equal(jobFocusFrom('anything from Pat', history), '');
+});
+
+test('with no history and no job named, nothing is inherited', () => {
+  assert.equal(jobFocusFrom('was the material ordered for this job', []), '');
+  assert.equal(jobFocusFrom('', [{ role: 'user', text: 'job 2985' }]), '');
+});
+
+test('the job in focus is what the read is asked for', async () => {
+  let query = null;
+  const composer = createIntelligencePilotComposer({
+    env: ENV,
+    readContextImpl: async (input) => { query = input; return null; },
+    fetchImpl: async () => openAiResponse('Nothing logged.'),
+  });
+  await composer(frozenInput('was the material ordered for this job', [
+    { role: 'user', text: 'what is job 2985' },
+    { role: 'assistant', text: 'Cedar shakes.' },
+  ]));
+  assert.ok(query, 'the read happened at all -- it did not, before this');
+  const source = fs.readFileSync(new URL('../api/_lib/reina/pilot-intelligence-composer.js', import.meta.url), 'utf8');
+  assert.match(source, /job_number: jobFocusFrom\(question, history\)/);
+});
+
+test('an empty dossier section is a fact about the business, not a system failure', async () => {
+  let instructions = '';
+  const composer = createIntelligencePilotComposer({
+    env: ENV,
+    readContextImpl: async () => ({
+      ok: true, source: 'HiveLogic read-only bridge', asOf: '2026-08-22T15:08:00.000Z',
+      vehicles: [], jobs: [], business: {},
+      jobDossier: {
+        available: true, jobNumber: '2985',
+        note: 'Everything HiveLogic has attached to this one job.',
+        visits: { available: true, records: [{ title: 'Cedar shakes', assignedTo: ['Alban Flood'] }] },
+        timeline: { available: true, records: [{ label: 'Photo imported from CompanyCam' }] },
+        workflow: { available: true, records: [] },
+        lineItems: { available: true, records: [] },
+      },
+    }),
+    fetchImpl: async (_url, init) => { instructions = JSON.parse(init.body).instructions; return openAiResponse('Nothing has been logged.'); },
+  });
+  await composer(frozenInput('was the material ordered for this job'));
+  assert.match(instructions, /Cedar shakes/, 'the dossier reaches her');
+  assert.match(instructions, /Alban Flood/, 'including who is on it');
+  assert.match(instructions, /NOTHING HAS BEEN RECORDED/,
+    '"no materials logged" is useful; "material status unavailable" sounds like a broken system');
+});
+
+// ---- the redaction rules have to reach all the way down -------------------
+//
+// safeRecordList filtered keys on the top level of a record and then copied
+// arrays through with `typeof item === 'string' ? item.slice(...) : item` --
+// so an object inside a list arrived whole, past every rule above it. That
+// went unnoticed while every list held flat records. The setup checklist is
+// the first one that does not: it is a list of objects, one per item, and one
+// of its fields is who ticked the box.
+
+test('an object nested in a record is filtered by the same rules as the record', () => {
+  const context = sanitizeHiveLogicContext({
+    ok: true,
+    jobDossier: {
+      available: true,
+      jobNumber: '2985',
+      workflow: {
+        available: true,
+        records: [{
+          materialsStatus: 'ordered',
+          setupChecklist: [
+            { gate: 'Materials and POs', item: 'Materials on site', done: false, checkedBy: 'jomell' },
+            { gate: 'Client confirmed', item: 'Start date confirmed with client', done: true, email: 'someone@example.com', phone: '555-0100' },
+          ],
+        }],
+      },
+    },
+  }, 'was the material ordered for this job?');
+
+  const checklist = context.jobDossier.workflow.records[0].setupChecklist;
+  assert.equal(checklist.length, 2, 'the checklist survives -- it is the answer');
+  assert.equal(checklist[0].item, 'Materials on site');
+  assert.equal(checklist[0].done, false);
+  assert.equal(checklist[0].checkedBy, 'jomell');
+  assert.equal(checklist[1].email, undefined, 'a contact detail one level down is still a contact detail');
+  assert.equal(checklist[1].phone, undefined);
+});
+
+test('a job dossier carries the purchase orders raised against that job', () => {
+  const context = sanitizeHiveLogicContext({
+    ok: true,
+    jobDossier: {
+      available: true,
+      jobNumber: '2985',
+      purchaseOrders: { available: true, records: [{ poNumber: 'PO-1041', status: 'approved', orderType: 'material' }] },
+    },
+  }, 'was the material ordered for this job?');
+  assert.equal(context.jobDossier.purchaseOrders.available, true);
+  assert.equal(context.jobDossier.purchaseOrders.records[0].poNumber, 'PO-1041');
+});
+
+// Reasoning tokens are spent out of max_output_tokens. When the model uses the
+// whole allowance thinking, the Responses API returns status 'incomplete' with
+// no output text -- and the composer used to return null, which surfaced to the
+// user as 'Reina's synthetic read-only preview is unavailable right now.'
+// A shallower answer beats no answer, every time.
+test('a model that thinks until it runs out of room still answers, at lower effort', async () => {
+  const efforts = [];
+  const composer = createIntelligencePilotComposer({
+    env: ENV,
+    readContextImpl: async () => null,
+    fetchImpl: async (_url, init) => {
+      const body = JSON.parse(init.body);
+      efforts.push(body.reasoning.effort);
+      if (efforts.length === 1) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            status: 'incomplete',
+            incomplete_details: { reason: 'max_output_tokens' },
+            output: [],
+            usage: { output_tokens: 5000, output_tokens_details: { reasoning_tokens: 5000 } },
+          }),
+        };
+      }
+      return openAiResponse('A shorter answer that actually arrived.');
+    },
+  });
+
+  const result = consumeIntelligencePilotReceipt(
+    await composer(frozenInput('Analyze our margin trend and tell me what to change.')),
+  );
+  assert.ok(result, 'an empty first answer must not fail the whole turn');
+  assert.deepEqual(efforts, ['high', 'low'], 'retry drops the thinking, not the question');
+  assert.match(result.envelope.answer, /actually arrived/);
+});
+
+test('an empty answer at low effort is a real failure and is not retried forever', async () => {
+  let calls = 0;
+  const composer = createIntelligencePilotComposer({
+    env: ENV,
+    readContextImpl: async () => null,
+    fetchImpl: async () => {
+      calls += 1;
+      return { ok: true, status: 200, json: async () => ({ status: 'incomplete', output: [] }) };
+    },
+  });
+  assert.equal(await composer(frozenInput('Explain what a GFCI outlet does.')), null);
+  assert.equal(calls, 1, 'low effort has nothing left to turn down');
+});
+
+// The words that promote a question to 'high' cost the person asking about
+// fifteen seconds of silence. Ordinary asks must not pay that.
+test('everyday wording does not buy fifteen seconds of deep reasoning', async () => {
+  const asked = [];
+  const composer = createIntelligencePilotComposer({
+    env: ENV,
+    readContextImpl: async () => null,
+    fetchImpl: async (_url, init) => {
+      asked.push(JSON.parse(init.body).reasoning.effort);
+      return openAiResponse('Answer.');
+    },
+  });
+
+  for (const question of [
+    'Can you create a plan for me to increase productivity over 25% in 60 days?',
+    'Why is this job still open?',
+    'How do I fix the invoice that is stuck?',
+  ]) {
+    await composer(frozenInput(question));
+  }
+  assert.equal(asked.includes('high'), false, `everyday questions went deep: ${JSON.stringify(asked)}`);
+
+  await composer(frozenInput('Analyze our margin trend across the last two quarters.'));
+  assert.equal(asked.at(-1), 'high', 'a question that names an analysis still gets one');
+});
+
+// ---- Answers that simply stop --------------------------------------------
+//
+// Production, 2026-08-23: an answer ended on "- Confirm the decision the
+// client". No full stop, no warning, and Reina read it aloud that way. The
+// model had hit max_output_tokens; the composer took the partial text and
+// presented it as a finished answer.
+
+test('an answer cut off by the token ceiling is asked for again, not shipped half-written', async () => {
+  const efforts = [];
+  const composer = createIntelligencePilotComposer({
+    env: ENV,
+    readContextImpl: async () => null,
+    fetchImpl: async (_url, init) => {
+      efforts.push(JSON.parse(init.body).reasoning.effort);
+      if (efforts.length === 1) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            status: 'incomplete',
+            incomplete_details: { reason: 'max_output_tokens' },
+            output: [{ content: [{ text: 'Here is the first half of a thought that just stops mid' }] }],
+          }),
+        };
+      }
+      return openAiResponse('A complete answer, ending properly.');
+    },
+  });
+
+  const result = consumeIntelligencePilotReceipt(
+    await composer(frozenInput('Analyze the quote follow-up backlog for me.')),
+  );
+  assert.ok(result);
+  assert.deepEqual(efforts, ['high', 'low']);
+  assert.match(result.envelope.answer, /ending properly/);
+});
+
+test('when both attempts are cut off, she stops at the last finished sentence', async () => {
+  const composer = createIntelligencePilotComposer({
+    env: ENV,
+    readContextImpl: async () => null,
+    fetchImpl: async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        status: 'incomplete',
+        incomplete_details: { reason: 'max_output_tokens' },
+        output: [{ content: [{ text: 'First point is settled. Second point is settled. Third point is where it stops mid' }] }],
+      }),
+    }),
+  });
+
+  const result = consumeIntelligencePilotReceipt(
+    await composer(frozenInput('Analyze the quote follow-up backlog for me.')),
+  );
+  assert.ok(result);
+  assert.match(result.envelope.answer, /Second point is settled\.$/);
+  assert.doesNotMatch(result.envelope.answer, /stops mid/);
+});
+
+test('completeSentencesOnly leaves finished answers alone and never guts a short one', () => {
+  assert.equal(completeSentencesOnly('All done here.'), 'All done here.');
+  assert.equal(completeSentencesOnly('A question? Yes.'), 'A question? Yes.');
+  assert.equal(
+    completeSentencesOnly('One finished sentence. Then a fragment that'),
+    'One finished sentence.',
+  );
+  // Trimming here would throw away almost the whole answer to buy a full stop,
+  // which is a worse trade than an untidy ending.
+  assert.equal(
+    completeSentencesOnly('Hi. This is nearly all of the answer and it runs on without ending'),
+    'Hi. This is nearly all of the answer and it runs on without ending',
+  );
+  assert.equal(completeSentencesOnly(''), '');
 });

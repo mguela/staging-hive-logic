@@ -90,6 +90,19 @@ export const PUBLIC_API_PREFIXES = [
                               //   user or HIVELOGIC_WORKROOM_AGENT_SECRET plus a
                               //   configured owner; this exemption only lets that
                               //   dedicated machine credential reach its check.
+  '/api/web-lead',            // Website enquiry form. Public by necessity, same
+                              //   as /api/schedule/confirm above: the person
+                              //   filling it in has no HiveLogic account and
+                              //   never will, so no session can exist. It is
+                              //   WRITE-ONLY and creates exactly one lead --
+                              //   it cannot read, list, or update anything,
+                              //   and its response is byte-identical whether or
+                              //   not the submitter matched an existing client,
+                              //   so it cannot be used to enumerate customers.
+                              //   Pinned to POST, honeypot-screened, every
+                              //   field length-capped, and rate limited per IP
+                              //   failing CLOSED on the same limiter as the
+                              //   portal recovery endpoints.
   '/api/marketing-unsubscribe', // public one-click unsubscribe link
   '/api/test-workflow',       // CI runner — own runner secret (Item 2)
   '/api/status-hub-ingest',   // failure-only CI/reporting intake — its handler
@@ -146,6 +159,12 @@ const CRON_WHOLE_PATHS = [
   // fleet_positions + jobs_enriched, writes only fleet_job_presence.
   // Allowlisted in the SAME change that schedules it in vercel.json.
   '/api/fleet/detect-presence',
+  // Ops event sweep (2026-08-22): runs the detectors behind the operational
+  // feed -- finished-but-uninvoiced jobs, crews over their window, work booked
+  // for a client flagged "no work". Cron-only machine route: self-gates with
+  // requireApiAuth, reads visits/invoices/clients/quotes and writes only ops_*
+  // tables. It sends nothing. Allowlisted in the SAME change that schedules it.
+  '/api/ops-events',
 ];
 // Entries may pin `method`; when omitted the entry matches any method (the
 // pre-2026-08-15 behaviour, kept so the already-live entries below are not
@@ -228,6 +247,12 @@ const CRON_RESOURCE_PATHS = [
   // remains a separate, deliberate act: set that playbook's env var, or
   // connect a social surface. GET-pinned -- Vercel Cron issues GET, and these
   // must never be reachable as a write door.
+  // Weekly growth scan. Reads real jobs/quotes/customers/ad spend and writes
+  // growth_suggestions rows plus, at most, DRAFT ad campaigns. It cannot
+  // launch an ad, send an email, or publish a post -- see the refusal list in
+  // the header of api/growth.js -- and GROWTH_AUTOPILOT_ENABLED=false reduces
+  // it to suggestions only. GET-pinned like every other cron entry here.
+  { path: '/api/growth', resource: 'growth_scan', method: 'GET' },
   { path: '/api/social-posts', resource: 'process_scheduled_posts', method: 'GET' },
   { path: '/api/marketing', resource: 'process_review_request_autosend', method: 'GET' },
   { path: '/api/marketing', resource: 'process_post_job_thank_you_autosend', method: 'GET' },

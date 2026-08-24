@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { createNeuralSpeech } from '../api/reina-neural-speech.js';
 import NeuralSpeech from '../public/reina-neural-speech.js';
 
-const { createNeuralSynthesis, createUtterance } = NeuralSpeech;
+const { createNeuralSynthesis, createUtterance, splitForSpeech } = NeuralSpeech;
 
 function tick() {
   return new Promise((resolve) => setTimeout(resolve, 0));
@@ -284,4 +284,157 @@ test('browser neural speech reports failure without creating or invoking a syste
   await tick();
   assert.equal(audioCreated, 0);
   assert.equal(error, 'neural-voice-unavailable');
+});
+
+// ---- Time-to-first-word ---------------------------------------------------
+//
+// She used to say nothing until the WHOLE answer had been synthesised. On a
+// 1,900-character answer that was 30-45 seconds of silence sitting under a
+// finished written answer -- indistinguishable from broken. What matters is not
+// total synthesis time, which is unavoidable, but that the first word does not
+// wait for the last one.
+
+function sentences(count) {
+  const out = [];
+  for (let i = 0; i < count; i += 1) {
+    out.push(`This is sentence number ${i} and it carries enough words to be worth speaking aloud.`);
+  }
+  return out.join(' ');
+}
+
+test('a long answer is cut at sentence ends, never mid-sentence', () => {
+  const text = sentences(12);
+  const chunks = splitForSpeech(text, 420, 900);
+  assert.ok(chunks.length > 1, 'a 12-sentence answer must not be one blob');
+  assert.equal(chunks.join(' '), text.replace(/\s+/g, ' ').trim(), 'no words may be lost or reordered');
+  for (const chunk of chunks) {
+    assert.match(chunk, /[.!?]$/, `chunk ends mid-sentence: ${JSON.stringify(chunk)}`);
+    assert.ok(chunk.length <= 900, `chunk over the hard maximum: ${chunk.length}`);
+  }
+});
+
+test('a single sentence longer than the maximum is broken at a word boundary', () => {
+  const long = `${'word '.repeat(400)}end.`;
+  const chunks = splitForSpeech(long, 420, 900);
+  assert.ok(chunks.length > 1);
+  for (const chunk of chunks) {
+    assert.ok(chunk.length <= 900);
+    assert.doesNotMatch(chunk, /^\s|\s$/, 'chunks are trimmed');
+  }
+  assert.equal(chunks.join(' ').replace(/\s+/g, ' '), long.replace(/\s+/g, ' ').trim());
+});
+
+test('she starts speaking after the first piece, not after the last', async () => {
+  const requested = [];
+  let released;
+  const held = new Promise((resolve) => { released = resolve; });
+  const players = [];
+  class FakeAudio {
+    constructor(url) { this.src = url || ''; this.plays = 0; players.push(this); }
+    setSinkId() { return Promise.resolve(); }
+    play() { this.plays += 1; this.onplay?.(); return Promise.resolve(); }
+    pause() {}
+  }
+  const synthesis = createNeuralSynthesis({
+    fetchFn: async (_url, options) => {
+      const body = JSON.parse(options.body);
+      requested.push(body.text);
+      // Every piece after the first hangs, standing in for slow synthesis.
+      if (requested.length > 1) await held;
+      return { status: 200, headers: { get: () => 'audio/mpeg' }, blob: async () => ({ size: 250 }) };
+    },
+    getAccessToken: async () => 'signed-token',
+    AudioCtor: FakeAudio,
+    AbortControllerCtor: AbortController,
+    createObjectURL: () => `blob:piece-${requested.length}`,
+    revokeObjectURL: () => {},
+    getVoice: () => 'marin',
+    getRate: () => 1,
+    getOutputDevice: () => '',
+  });
+
+  const utterance = createUtterance(sentences(12));
+  let started = 0;
+  utterance.onstart = () => { started += 1; };
+  synthesis.speak(utterance);
+  for (let i = 0; i < 8; i += 1) await tick();
+
+  assert.equal(started, 1, 'the first piece must play while the rest are still being made');
+  assert.ok(requested.length >= 2, 'the next piece is fetched during playback, not after it');
+  assert.ok(
+    requested.length < 12,
+    `every piece was requested before a word was spoken (${requested.length})`,
+  );
+  released();
+  synthesis.cancel();
+});
+
+test('every piece is spoken, in order, and the answer ends exactly once', async () => {
+  const spoken = [];
+  class FakeAudio {
+    constructor(url) { this.src = url || ''; }
+    setSinkId() { return Promise.resolve(); }
+    play() { this.onplay?.(); queueMicrotask(() => this.onended?.()); return Promise.resolve(); }
+    pause() {}
+  }
+  const synthesis = createNeuralSynthesis({
+    fetchFn: async (_url, options) => {
+      spoken.push(JSON.parse(options.body).text);
+      return { status: 200, headers: { get: () => 'audio/mpeg' }, blob: async () => ({ size: 250 }) };
+    },
+    getAccessToken: async () => 'signed-token',
+    AudioCtor: FakeAudio,
+    AbortControllerCtor: AbortController,
+    createObjectURL: () => 'blob:piece',
+    revokeObjectURL: () => {},
+    getVoice: () => 'marin',
+    getRate: () => 1,
+    getOutputDevice: () => '',
+  });
+
+  const text = sentences(9);
+  const utterance = createUtterance(text);
+  let starts = 0;
+  let ends = 0;
+  let errors = 0;
+  utterance.onstart = () => { starts += 1; };
+  utterance.onend = () => { ends += 1; };
+  utterance.onerror = () => { errors += 1; };
+  synthesis.speak(utterance);
+  for (let i = 0; i < 40; i += 1) await tick();
+
+  assert.equal(errors, 0);
+  assert.equal(starts, 1, 'one answer, one start');
+  assert.equal(ends, 1, 'one answer, one end -- not one per piece');
+  assert.equal(spoken.join(' '), text.replace(/\s+/g, ' ').trim(), 'the whole answer was spoken');
+});
+
+test('cancelling mid-answer releases pieces fetched ahead but never played', async () => {
+  const revoked = [];
+  let made = 0;
+  class FakeAudio {
+    constructor(url) { this.src = url || ''; }
+    setSinkId() { return Promise.resolve(); }
+    play() { this.onplay?.(); return Promise.resolve(); } // holds on the first piece
+    pause() {}
+  }
+  const synthesis = createNeuralSynthesis({
+    fetchFn: async () => ({ status: 200, headers: { get: () => 'audio/mpeg' }, blob: async () => ({ size: 250 }) }),
+    getAccessToken: async () => 'signed-token',
+    AudioCtor: FakeAudio,
+    AbortControllerCtor: AbortController,
+    createObjectURL: () => { made += 1; return `blob:piece-${made}`; },
+    revokeObjectURL: (url) => revoked.push(url),
+    getVoice: () => 'marin',
+    getRate: () => 1,
+    getOutputDevice: () => '',
+  });
+
+  synthesis.speak(createUtterance(sentences(12)));
+  for (let i = 0; i < 8; i += 1) await tick();
+  assert.ok(made >= 2, 'at least one piece was fetched ahead');
+  synthesis.cancel();
+  for (let i = 0; i < 4; i += 1) await tick();
+
+  assert.equal(revoked.length, made, `${made} pieces made, ${revoked.length} released`);
 });

@@ -29,8 +29,24 @@ import { companyForUser } from './_lib/tenant.js';
 import { sendEmail, isEmailConfigured } from './_lib/email.js';
 import { twilioRequest, isVoiceConfigured } from './_lib/voice.js';
 import { provisionEmployee } from './_lib/gusto-provision.js';
+import { DOCS_BUCKET, safeSegment, storeFiledDocument } from './_lib/hivedoc-files.js';
 
-const LICENSE_BUCKET = 'onboarding-licenses';
+// Licence photos land in the SAME private bucket as every other filed document
+// (`docs`), under an `onboarding/licenses/` prefix, and get a public.documents
+// row like any other file.
+//
+// Until 2026-08-22 this named a bucket, `onboarding-licenses`, that has never
+// existed on the production project -- production has exactly six buckets:
+// media, monitor-screenshots, voice-greetings, docs, devtodo-attachments,
+// marketing-attachments. So every upload failed, the step was written `pending`
+// with path: null, and the new hire was shown the raw storage error. `docs` is
+// the canonical file backend per REPORT.md (approved 2026-08-21), it already
+// exists in production, and reusing it means this needs no migration at all.
+//
+// A licence is personal data, so the metadata row is written `sensitive: true`
+// -- see api/_lib/hivedoc-files.js for what that gates and where.
+const LICENSE_BUCKET = DOCS_BUCKET;
+const LICENSE_PREFIX = 'onboarding/licenses';
 const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
 const CODE_TTL_MS = 10 * 60 * 1000;
 
@@ -293,30 +309,52 @@ async function uploadLicense(req, res) {
   const buf = Buffer.from(dataB64, 'base64');
   if (buf.length === 0 || buf.length > MAX_UPLOAD_BYTES) return res.status(400).json({ ok: false, error: 'Photo must be 1 byte–5 MB.' });
   const contentType = /^image\/(png|jpe?g|webp|heic)$/i.test(body.contentType || '') ? body.contentType : 'image/jpeg';
-  const safeName = String(body.filename || 'license.jpg').replace(/[^A-Za-z0-9._-]/g, '_').slice(0, 80);
-  const objectPath = `${session.id}/${Date.now()}_${safeName}`;
+  const safeName = safeSegment(body.filename || 'license.jpg', 'license.jpg');
+  const objectPath = `${LICENSE_PREFIX}/${session.id}/${Date.now()}_${safeName}`;
 
-  // Upload to a PRIVATE Supabase Storage bucket via the storage REST API with
-  // the service-role key. V1: NO OCR — the photo is stored and the step is
-  // flagged for office review; the office types the fields for now.
-  let stored = false, note = null;
+  // Upload to the PRIVATE `docs` bucket via the storage REST API with the
+  // service-role key. V1: NO OCR — the photo is stored and the step is flagged
+  // for office review; the office types the fields for now.
+  //
+  // Two writes, in this order, and the second is not optional: bytes without a
+  // documents row are unreachable (the bucket's read policy requires one) AND
+  // invisible to HiveDoc — orphaned personal data. So a failed metadata write
+  // deletes the object it would have described and reports the upload as
+  // failed, rather than leaving behind a licence photo nobody can find, review,
+  // or erase.
+  let stored = false, documentId = null;
+  let detail = null;   // engineering detail: kept for the office, never returned
   try {
-    const up = await fetch(`${process.env.SUPABASE_URL}/storage/v1/object/${LICENSE_BUCKET}/${objectPath}`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${process.env.SUPABASE_SERVICE_KEY}`,
-        apikey: process.env.SUPABASE_SERVICE_KEY,
-        'Content-Type': contentType,
-        'x-upsert': 'true',
-      },
-      body: buf,
+    const filed = await storeFiledDocument({
+      storagePath: objectPath,
+      buffer: buf,
+      contentType,
+      filename: safeName,
+      docType: 'other',
+      sensitive: true,
     });
-    if (up.ok) stored = true;
-    else note = `Storage upload failed (${up.status}). The private bucket "${LICENSE_BUCKET}" may need to be created.`;
-  } catch (e) { note = 'Storage upload error: ' + (e.message || 'unknown'); }
+    stored = filed.ok;
+    documentId = filed.documentId;
+    detail = filed.detail;
+  } catch (e) { detail = 'Storage upload error: ' + (e.message || 'unknown'); }
 
-  await upsertStep(session, 'license', { stored, path: stored ? objectPath : null, flagged_for_review: true, note }, stored ? 'complete' : 'pending');
-  return res.status(stored ? 200 : 502).json({ ok: stored, stored, flagged_for_review: true, note });
+  // What the hire is told. Somebody holding a phone has no use for a bucket
+  // name or an HTTP status, and naming our storage layout to a token holder is
+  // free reconnaissance — so the technical reason goes to the office only.
+  // Kept to one clause: public/field/onboard.html appends "You can skip and
+  // the office will follow up." to whatever comes back here.
+  const note = stored ? null : 'We could not save that photo.';
+
+  await upsertStep(session, 'license', {
+    stored,
+    path: stored ? objectPath : null,
+    bucket: stored ? LICENSE_BUCKET : null,
+    document_id: documentId,
+    sensitive: true,
+    flagged_for_review: true,
+    note: detail,
+  }, stored ? 'complete' : 'pending');
+  return res.status(stored ? 200 : 502).json({ ok: stored, stored, document_id: documentId, flagged_for_review: true, note });
 }
 
 // Onboarding complete -> auto-provision the hire into Gusto (once), using the

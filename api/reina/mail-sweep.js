@@ -22,7 +22,7 @@
 import { supabaseRequest as defaultSupabaseRequest } from '../_lib/jobber.js';
 import { requireApiAuth } from '../_lib/guard.js';
 import { scanMailboxes } from './mail-triage.js';
-import { shouldNotify, isQuietHour, notificationFor, NOTIFY_LABELS } from '../_lib/reina-notify.js';
+import { shouldNotify, isQuietHour, notificationFor, collapseDuplicates, desktopPushEnabled, NOTIFY_LABELS } from '../_lib/reina-notify.js';
 import { sendPush, vapidConfigured } from '../_lib/reina-push-send.js';
 
 function enc(v) { return encodeURIComponent(String(v)); }
@@ -132,32 +132,66 @@ export async function sweepOwner(ownerId, deps, opts) {
     };
   }
 
+  // He asked for the in-app nudge and not the desktop toast. The scan above
+  // still ran -- that is the whole point of doing this here rather than by
+  // deleting his subscription, which would have stopped the scan and starved
+  // the nudge he wanted to keep.
+  //
+  // notified_at is deliberately left null: nothing was sent, so nothing is
+  // marked sent. If he turns desktop toasts back on, the mail that arrived
+  // while they were off is still eligible, and the freshness window decides
+  // whether it is still worth interrupting him for.
+  if (!desktopPushEnabled(rules)) {
+    return {
+      ownerId, sent: 0, quiet, considered: rows.length, worth: worth.length,
+      desktopOff: true, note: 'desktop toasts are off; in-app only',
+      heldForQuietHours: held.length, backlogSkipped: stale, scanError,
+    };
+  }
+
   const subs = await subscriptionsFor(ownerId, deps);
   if (!subs.length) return { ownerId, sent: 0, note: 'no live subscription', scanError };
 
-  const batch = worth.slice(0, MAX_TOASTS_PER_SWEEP);
-  const overflow = worth.length - batch.length;
+  // One email is one interruption, however many mailboxes it arrived in.
+  // Collapsing here rather than at the browser because the copies carry
+  // different message ids, so the push tag cannot do it -- and because the
+  // per-sweep cap should be counting emails, not copies of one email.
+  const groups = collapseDuplicates(worth);
+  const batch = groups.slice(0, MAX_TOASTS_PER_SWEEP);
+  const overflow = groups.length - batch.length;
   let sent = 0;
+  let collapsed = 0;
 
   for (let i = 0; i < batch.length; i++) {
-    const row = batch[i];
+    const { row, duplicates } = batch[i];
     // The "+N more" rides on the LAST toast only. Putting it on every one of
     // three toasts is three lies of the same count.
     const extra = (i === batch.length - 1) ? overflow : 0;
     const result = await sendPush(subs, notificationFor(row, extra), deps);
     if (result.sent > 0) {
       sent += 1;
+      collapsed += duplicates.length;
       // Stamped only after a push service accepted it. Stamping first would
       // mean one bad minute at Google silently costs him that email forever.
-      await deps.supabaseRequest(
-        `reina_mail_triage?owner_id=eq.${enc(ownerId)}&message_id=eq.${enc(row.message_id)}`,
-        { method: 'PATCH', body: JSON.stringify({ notified_at: now.toISOString() }) }
-      ).catch(() => {});
+      //
+      // The suppressed copies are stamped too. They were deliberately not
+      // sent, and leaving them unstamped would hand the next sweep the same
+      // email to raise again -- the duplicate arriving ten minutes late
+      // instead of alongside, which is worse, not better.
+      for (const dup of [row, ...duplicates]) {
+        await deps.supabaseRequest(
+          `reina_mail_triage?owner_id=eq.${enc(ownerId)}&message_id=eq.${enc(dup.message_id)}`,
+          { method: 'PATCH', body: JSON.stringify({ notified_at: now.toISOString() }) }
+        ).catch(() => {});
+      }
     }
   }
 
   return {
     ownerId, sent, quiet, considered: rows.length, worth: worth.length,
+    // Reported so a run that suppressed a lot is visible rather than just
+    // looking like a quiet morning.
+    emails: groups.length, collapsed,
     overflow, heldForQuietHours: held.length, backlogSkipped: stale, scanError,
   };
 }

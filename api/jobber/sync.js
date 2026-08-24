@@ -34,6 +34,9 @@ import { checkCronSecret } from '../_lib/guard.js';
 import { dedupeRowsByConflictKey } from '../_lib/sync-dedupe.js';
 
 const PAGE_SIZE = 25;
+// Fields a query may ask for and survive without. Only these justify falling
+// back to a simpler query shape; anything else is a real failure.
+const OPTIONAL_FIELDS = ['balance'];
 const PAGE_DELAY_MS = 400; // small gap between pages so cost points can restore
 const TIME_BUDGET_MS = 260000; // stop paginating ~40s before the 300s function limit
 
@@ -91,7 +94,17 @@ const JOBS_QUERY = `
 // Field names below match Jobber's actual InvoiceAmounts type (confirmed via
 // a live schema error) - note depositAmount/discountAmount/paymentsTotal,
 // not deposit/discount/payments as the field descriptions might suggest.
-const INVOICES_QUERY = `
+// `balance` is Jobber's own figure for what is still owed. It was never
+// asked for, so invoices.balance was NULL on all 2,852 rows, and anything
+// filtering on it -- Reina's receivables read did -- matched nothing and
+// reported that nobody owed anything. The field is requested now.
+//
+// A field this sync guesses wrong would break the ENTIRE invoice sync with
+// a validation error, which is a far worse outcome than the gap it fixes.
+// So the query is built from a list of amount selections, and a validation
+// error naming a field drops to the next one: the shape that has worked all
+// along. Losing balance again is survivable; losing invoices is not.
+const invoicesQuery = (amountFields) => `
   query Invoices($cursor: String) {
       invoices(first: ${PAGE_SIZE}, after: $cursor) {
             nodes {
@@ -101,7 +114,7 @@ const INVOICES_QUERY = `
                                             jobs(first: 3) { nodes { id } }
                                             invoiceStatus
                                                     subject
-                                                            amounts { total subtotal depositAmount discountAmount paymentsTotal }
+                                                            amounts { ${amountFields} }
                                                                     dueDate
                                                                             issuedDate
                                                                                     jobberWebUri
@@ -112,6 +125,14 @@ const INVOICES_QUERY = `
                                                                                                                     }
                                                                                                                       }
                                                                                                                       `;
+
+const INVOICE_AMOUNTS_WITH_BALANCE = 'total subtotal depositAmount discountAmount paymentsTotal balance';
+const INVOICE_AMOUNTS_WITHOUT_BALANCE = 'total subtotal depositAmount discountAmount paymentsTotal';
+const INVOICES_QUERIES = [
+  invoicesQuery(INVOICE_AMOUNTS_WITH_BALANCE),
+  invoicesQuery(INVOICE_AMOUNTS_WITHOUT_BALANCE),
+];
+
 
 async function getStoredCursor(resource) {
         const res = await supabaseRequest(`sync_cursors?resource=eq.${resource}&select=cursor`);
@@ -128,16 +149,46 @@ async function saveCursor(resource, cursor) {
         });
 }
 
-async function fetchAllPages(query, key, deadline, startCursor) {
+// A GraphQL validation error naming a field we asked for -- as opposed to a
+// throttle, a network failure, or an auth problem -- means this schema does
+// not have that field. Narrow on purpose: it must both name the field AND
+// look like validation, so a transient failure never silently downgrades the
+// query and quietly stops collecting a column.
+export function isUnknownFieldError(error, field) {
+        const message = String((error && error.message) || '');
+        if (!field || !message.includes(field)) return false;
+        return /doesn't exist on type|does not exist on type|Cannot query field|undefinedField|GRAPHQL_VALIDATION_FAILED|validation/i.test(message);
+}
+
+async function fetchAllPages(queries, key, deadline, startCursor) {
+        const candidates = Array.isArray(queries) ? queries : [queries];
         const all = [];
         let cursor = startCursor || null;
         let truncated = false;
+        let queryIndex = 0;
+        let degraded = null;
         while (true) {
                   if (Date.now() >= deadline) {
                               truncated = true;
                               break;
                   }
-                  const data = await jobberGraphQL(query, { cursor });
+                  let data;
+                  try {
+                              data = await jobberGraphQL(candidates[queryIndex], { cursor });
+                  } catch (error) {
+                              // Only before the first record, and only for a field this
+                              // query actually asked for. Half a pass in one shape and half
+                              // in another would produce rows that disagree about what they
+                              // contain.
+                              const nextIndex = queryIndex + 1;
+                              if (all.length === 0 && nextIndex < candidates.length
+                                && OPTIONAL_FIELDS.some((field) => isUnknownFieldError(error, field))) {
+                                          degraded = { droppedAfter: queryIndex, reason: String(error.message || '').slice(0, 300) };
+                                          queryIndex = nextIndex;
+                                          continue;
+                              }
+                              throw error;
+                  }
                   const connection = data[key];
                   all.push(...connection.nodes);
                   if (!connection.pageInfo.hasNextPage) {
@@ -147,7 +198,7 @@ async function fetchAllPages(query, key, deadline, startCursor) {
                   cursor = connection.pageInfo.endCursor;
                   await sleep(PAGE_DELAY_MS);
         }
-        return { records: all, truncated, lastCursor: cursor };
+        return { records: all, truncated, lastCursor: cursor, degraded };
 }
 
 // return=representation added (2026-08-07, Gate 0 follow-up) so callers can
@@ -254,6 +305,11 @@ function mapInvoice(i) {
                   deposit: amounts.depositAmount,
                   discount: amounts.discountAmount,
                   payments: amounts.paymentsTotal,
+                  // Jobber's own figure, or nothing. A derived number written
+                  // here would be indistinguishable from an authoritative one
+                  // by everything downstream, and readers rely on that
+                  // distinction to say "about" instead of stating a total.
+                  balance: amounts.balance == null ? null : amounts.balance,
                   due_date: i.dueDate,
                   issued_date: i.issuedDate,
                   jobber_web_uri: i.jobberWebUri,
@@ -264,19 +320,23 @@ function mapInvoice(i) {
 }
 
 const RESOURCES = {
-        clients: { query: CLIENTS_QUERY, key: 'clients', table: 'clients', map: mapClient },
-        jobs: { query: JOBS_QUERY, key: 'jobs', table: 'jobs', map: mapJob },
-        invoices: { query: INVOICES_QUERY, key: 'invoices', table: 'invoices', map: mapInvoice },
+        clients: { queries: [CLIENTS_QUERY], key: 'clients', table: 'clients', map: mapClient },
+        jobs: { queries: [JOBS_QUERY], key: 'jobs', table: 'jobs', map: mapJob },
+        invoices: { queries: INVOICES_QUERIES, key: 'invoices', table: 'invoices', map: mapInvoice },
 };
 
 async function syncResource(name, deadline) {
         const spec = RESOURCES[name];
         const startCursor = await getStoredCursor(name);
-        const { records, truncated, lastCursor } = await fetchAllPages(spec.query, spec.key, deadline, startCursor);
+        const { records, truncated, lastCursor, degraded } = await fetchAllPages(spec.queries, spec.key, deadline, startCursor);
         const { count, rows, duplicatesDropped = 0 } = await upsert(spec.table, records.map(spec.map), 'jobber_id');
         await syncExternalRefs(name, rows);
         await saveCursor(name, truncated ? lastCursor : null);
-        return { count, truncated, duplicatesDropped };
+        // A query that had to drop a field is a fact about this data, not a
+        // detail of one run: every reader downstream is now working with a
+        // column that stopped being filled in. Say it where it can be seen.
+        if (degraded) console.warn(`[jobber-sync] ${name}: fell back to a reduced query`, degraded);
+        return { count, truncated, duplicatesDropped, degraded };
 }
 
 export default async function handler(req, res) {

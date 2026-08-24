@@ -908,14 +908,72 @@ html[data-theme="dark"] .huddle-banner {
 .huddle-badge { margin-left: auto; font-size: 11px; animation: hbFloat 2s ease-in-out infinite; }
 @keyframes hbFloat { 0%,100% { opacity: .6; } 50% { opacity: 1; } }
 
+/* ===== Call log (HiveVideo panel) =====
+   Before this a HiveVideo call left no trace anywhere, so the panel could only
+   show what was happening at this second. */
+.hv-log-empty { padding: 8px 12px; color: #6d829f; font-size: 11.5px; font-weight: 500; }
+.hv-log-row {
+  width: 100%; display: flex; align-items: center; gap: 8px;
+  padding: 7px 12px; background: none; border: none; cursor: pointer;
+  text-align: left; font-family: var(--sans); border-radius: 7px;
+}
+.hv-log-row:hover { background: rgba(255,255,255,.045); }
+.hv-log-left { display: flex; flex-direction: column; gap: 1px; min-width: 0; margin-right: auto; }
+.hv-log-who {
+  font-size: 12px; font-weight: 600; color: #dbe4f1;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.hv-log-meta { font-size: 10.5px; font-weight: 500; color: #6d829f; }
+.hv-log-meta.missed { color: #c08078; }
+.hv-log-row.live .hv-log-who { color: #8fd0a4; }
+.hv-log-tag {
+  flex: none; font-size: 9.5px; font-weight: 600; letter-spacing: .3px; text-transform: uppercase;
+  color: #8ba4c4; border: 1px solid rgba(139, 164, 196, .28); border-radius: 4px; padding: 1px 5px;
+}
+
+/* Reading a past call back */
+.hv-tx-overlay {
+  position: fixed; inset: 0; z-index: 200; display: flex; align-items: center; justify-content: center;
+  background: rgba(5, 8, 14, .72); padding: 24px;
+}
+.hv-tx-box {
+  width: min(680px, 100%); max-height: 80vh; display: flex; flex-direction: column;
+  background: #0f141d; border: 1px solid #242e42; border-radius: 12px; overflow: hidden;
+  box-shadow: 0 22px 60px rgba(4, 7, 13, .7);
+}
+.hv-tx-head {
+  display: flex; align-items: center; gap: 10px; padding: 12px 14px;
+  background: #151c29; border-bottom: 1px solid #232d42;
+  font-size: 12.5px; font-weight: 650; color: #eef3fa;
+}
+.hv-tx-head span { margin-right: auto; }
+.hv-tx-x {
+  background: none; border: none; cursor: pointer; color: #7e93b0; font-size: 13px; padding: 2px 6px;
+}
+.hv-tx-x:hover { color: #fff; }
+.hv-tx-body {
+  flex: 1 1 auto; min-height: 0; overflow: auto; margin: 0; padding: 14px 16px;
+  font-family: var(--sans); font-size: 12.5px; line-height: 1.62; color: #c3d0e2;
+  white-space: pre-wrap; word-break: break-word;
+}
+.hv-tx-foot {
+  flex: none; display: flex; justify-content: flex-end; padding: 10px 14px;
+  border-top: 1px solid #232d42; background: #121924;
+}
+.hv-tx-ai {
+  background: var(--gold-grad); color: #2a1c00; border: none; border-radius: 7px;
+  padding: 7px 14px; font-family: var(--sans); font-size: 11.5px; font-weight: 700; cursor: pointer;
+}
+.hv-tx-ai:disabled { opacity: .65; cursor: default; }
+
 /* ===== Huddle dock (floating call window) ===== */
 .huddle-dock {
   position: fixed; right: 20px; bottom: 20px; z-index: 60;
-  width: 380px; height: 320px;
+  width: 384px; height: 348px;
   max-width: calc(100vw - 24px); max-height: calc(100vh - 24px);
   display: flex; flex-direction: column;
-  background: #10151f; border: 1px solid #2a3550; border-radius: 16px; overflow: hidden;
-  box-shadow: 0 18px 50px rgba(8, 12, 20, .55);
+  background: #0f141d; border: 1px solid #242e42; border-radius: 12px; overflow: hidden;
+  box-shadow: 0 16px 44px rgba(4, 7, 13, .62), 0 0 0 1px rgba(255,255,255,.02);
   transition: width .18s, height .18s;
 }
 .huddle-dock.expanded { width: min(90vw, 820px); height: min(70vh, 540px); }
@@ -923,33 +981,74 @@ html[data-theme="dark"] .huddle-banner {
 .huddle-dock.minimized { height: 52px; }
 .huddle-dock.minimized .hd-frame { display: none; }
 .hd-bar {
-  display: flex; align-items: center; gap: 10px; padding: 9px 12px;
-  background: #161e2e; border-bottom: 1px solid #2a3550; flex: none;
+  display: flex; align-items: center; gap: 10px; padding: 10px 12px 10px 11px;
+  background: #151c29;
+  border-bottom: 1px solid #232d42; flex: none;
   cursor: move; user-select: none;
 }
 .hd-bar::before {
-  content: "⠿"; color: #4a5b78; font-size: 13px; margin-right: -2px; letter-spacing: -2px;
+  content: ""; width: 2px; height: 15px; border-radius: 2px; flex: none;
+  background: repeating-linear-gradient(180deg, #3a4761 0 2px, transparent 2px 4px);
+  margin-right: 1px;
 }
-.hd-live-dot { width: 8px; height: 8px; border-radius: 50%; background: #34c759; animation: hbPulse 1.6s infinite; flex: none; }
-.hd-titles { display: flex; flex-direction: column; min-width: 0; margin-right: auto; }
-.hd-title { font-size: 12.5px; font-weight: 800; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.hd-sub { font-size: 10.5px; font-weight: 600; color: #8ba4c4; }
+
+/* The status dot is a second channel for the same fact as the subtitle, so
+   "calling" can never be mistaken for "connected" at a glance. */
+.hd-live-dot {
+  width: 6px; height: 6px; border-radius: 50%; background: #3fa964; flex: none;
+  animation: none;
+}
+.hd-live-dot[data-state="live"]       { background: #3fa964; }
+.hd-live-dot[data-state="ringing"]    { background: #d9a441; }
+.hd-live-dot[data-state="connecting"] { background: #d9a441; }
+.hd-live-dot[data-state="waiting"]    { background: #6d829f; }
+.hd-live-dot[data-state="noanswer"]   { background: #c05a4e; }
+.hd-live-dot[data-state="off"]        { background: #45536e; }
+
+.hd-titles { display: flex; flex-direction: column; gap: 1px; min-width: 0; margin-right: auto; }
+.hd-title { font-size: 12.5px; font-weight: 650; color: #eef3fa; letter-spacing: -.1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hd-sub { font-size: 10.5px; font-weight: 500; color: #7e93b0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.huddle-dock[data-call-state="ringing"] .hd-sub  { color: #c9a765; }
+.huddle-dock[data-call-state="noanswer"] .hd-sub { color: #c98a80; }
+.huddle-dock[data-call-state="live"] .hd-sub     { color: #7fae90; }
+
+/* ===== The person being called =====
+   A tile in the grid, not a panel above it. Same square as everyone else --
+   see hudPendingTile() for why that matters more than it sounds. */
+.hd-tile.hd-pending { border-style: dashed; border-color: #2c3a54; background: #111825; }
+.hd-tile.hd-pending .avatar { filter: saturate(.5) brightness(.8); opacity: .8; }
+.hd-tile.hd-pending .hd-tile-name { color: #93a9c6; }
+.hd-tile.hd-pending[data-state="noanswer"] { border-color: #45303a; }
+.hd-tile.hd-pending[data-state="noanswer"] .hd-tile-name { color: #c08078; }
+
+/* A slow breath on the border while it rings -- enough to read as "waiting",
+   not enough to be a game HUD. Nothing on the avatar itself. */
+.hd-tile.hd-pending[data-state="ringing"] { animation: hdPend 2.4s ease-in-out infinite; }
+@keyframes hdPend {
+  0%, 100% { border-color: #2c3a54; }
+  50%      { border-color: #47597c; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .hd-tile.hd-pending[data-state="ringing"] { animation: none; }
+}
 .hd-parts { display: flex; align-items: center; }
 .hd-parts .mini-avatar { width: 22px; height: 22px; font-size: 9px; border: 2px solid #161e2e; margin-left: -7px; }
 .hd-parts .mini-avatar:first-child { margin-left: 0; }
 .hd-controls { display: flex; align-items: center; gap: 6px; }
 .hd-ctl {
-  width: 26px; height: 26px; border-radius: 7px; border: none; cursor: pointer;
-  background: rgba(255,255,255,.08); color: #cdd8ea; font-size: 13px; font-weight: 800;
+  width: 28px; height: 28px; border-radius: 8px; border: none; cursor: pointer;
+  background: rgba(255,255,255,.07); color: #cdd8ea; font-size: 13px; font-weight: 800;
   display: inline-flex; align-items: center; justify-content: center;
+  transition: background .12s, color .12s;
 }
-.hd-ctl:hover { background: rgba(255,255,255,.16); color: #fff; }
+.hd-ctl:hover { background: rgba(255,255,255,.17); color: #fff; }
 .hd-leave {
-  display: inline-flex; align-items: center; gap: 5px; padding: 6px 12px; border-radius: 8px;
-  border: none; cursor: pointer; background: #e0483b; color: #fff;
-  font-family: var(--sans); font-weight: 800; font-size: 11.5px;
+  display: inline-flex; align-items: center; gap: 6px; padding: 0 13px; height: 28px; border-radius: 8px;
+  border: none; cursor: pointer; background: #a8443c; color: #f4e6e4;
+  font-family: var(--sans); font-weight: 650; font-size: 11.5px; letter-spacing: .1px;
+  transition: background .14s;
 }
-.hd-leave:hover { filter: brightness(1.08); }
+.hd-leave:hover { background: #bf4d43; color: #fff; }
 .hd-frame { flex: 1; background: #0b0f16; position: relative; }
 .hd-frame iframe { width: 100% !important; height: 100% !important; border: 0; }
 .hd-fallback { color: #8ba4c4; font-size: 12.5px; font-weight: 600; text-align: center; padding: 40px 24px; }
@@ -963,31 +1062,57 @@ html[data-theme="dark"] .huddle-banner {
 
 /* ==================== LIVEKIT HUDDLE (self-hosted video) ==================== */
 #hd-frame { display: flex; flex-direction: column; }
+/* One square per person.
+   Chris, 2026-08-23: "the video should show a square for each caller or if its
+   only the 1". Before this the grid was `grid-auto-rows: 1fr` inside a flex
+   child, so a single caller got one tile stretched to whatever the window
+   happened to be -- a full-width letterbox slit with a face cropped into the
+   middle of it. Squares, centred, sized to whichever of width or height runs
+   out first. */
 .hd-grid {
-  flex: 1 1 0; min-height: 0; display: grid;
+  flex: 1 1 0; min-height: 0; display: grid; container-type: size;
   grid-template-columns: repeat(var(--cols, 1), 1fr);
   grid-auto-rows: 1fr;
-  gap: 6px; padding: 6px; overflow: hidden;
+  place-items: center;
+  gap: 8px; padding: 8px; overflow: hidden;
 }
 .hd-tile {
-  position: relative; background: #161e2e; border-radius: 10px; overflow: hidden;
-  min-height: 60px;
+  position: relative; background: #131a27; border: 1px solid #212b3e; border-radius: 10px; overflow: hidden;
+  /* The square is whichever of the cell's two dimensions runs out first, and
+     that has to be stated outright: `width:100%; max-height:100%` looks like it
+     would do it and does not -- max-height clamps the height and leaves the
+     width alone, so the tile just goes back to being a letterbox. Measured:
+     366x261 for one caller, which is the slit he was looking at.
+     100cqw / 100cqh are the grid's own content box, so only the gaps come off. */
+  aspect-ratio: 1 / 1;
+  width: 100%;              /* a browser without cq units keeps the old behaviour
+                               rather than collapsing the tile to nothing */
+  width: min(
+    (100cqw - (var(--cols, 1) - 1) * 8px) / var(--cols, 1),
+    (100cqh - (var(--rows, 1) - 1) * 8px) / var(--rows, 1)
+  );
+  height: auto;
   display: flex; align-items: center; justify-content: center;
 }
 .hd-video { width: 100%; height: 100%; object-fit: cover; background: #000; }
 .hd-tile-av { display: flex; align-items: center; justify-content: center; }
-.hd-tile-av .avatar { width: 64px; height: 64px; font-size: 22px; border-radius: 50%; }
+.hd-tile-av .avatar { width: 52px; height: 52px; font-size: 18px; font-weight: 700; border-radius: 50%; filter: saturate(.72) brightness(.94); }
 .hd-tile-name {
-  position: absolute; left: 6px; bottom: 6px; padding: 2px 8px; border-radius: 6px;
-  background: rgba(8,12,20,.66); color: #fff; font-size: 11px; font-weight: 700;
+  position: absolute; left: 6px; bottom: 6px; padding: 2px 8px; border-radius: 5px;
+  background: rgba(8,12,20,.72); color: #dae3f0; font-size: 10.5px; font-weight: 600;
   max-width: 88%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
+/* Sized so the eight controls fit on ONE row at the dock's default width.
+   Chris, 2026-08-24: "the popup opens with no contorls visable, i have to
+   enlarge it to access the controls". At 40px tall and 46px wide they wrapped
+   to two rows -- a 109px bar, measured, at every width up to 460 -- and that
+   height came straight out of the video area. */
 .hd-controls-bar {
-  flex: none; display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px;
-  padding: 10px 9px; background: #10151f; border-top: 1px solid #2a3550;
+  flex: none; display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 6px;
+  padding: 9px 8px; background: #10151f; border-top: 1px solid #232d42;
 }
 .hd-cbtn {
-  height: 40px; min-width: 40px; border-radius: 20px; border: none; cursor: pointer;
+  height: 36px; min-width: 36px; border-radius: 18px; border: none; cursor: pointer;
   background: rgba(255,255,255,.12); color: #fff; font-size: 13px; font-weight: 700;
   display: inline-flex; align-items: center; justify-content: center; padding: 0 12px;
   transition: background .12s, transform .06s;
@@ -1005,8 +1130,8 @@ html[data-theme="dark"] .huddle-banner {
 .hd-ctl-group:hover { background: rgba(255,255,255,.17); }
 .hd-ctl-group .hd-cbtn { background: transparent; border-radius: 0; }
 .hd-ctl-group .hd-cbtn:hover { background: rgba(255,255,255,.14); }
-.hd-ctl-group .hd-ctl { width: 46px; padding: 0; }
-.hd-ctl-group .hd-caret { width: 24px; min-width: 24px; padding: 0; color: #c9d4e6; border-left: 1px solid rgba(255,255,255,.16); }
+.hd-ctl-group .hd-ctl { width: 38px; padding: 0; }
+.hd-ctl-group .hd-caret { width: 20px; min-width: 20px; padding: 0; color: #c9d4e6; border-left: 1px solid rgba(255,255,255,.16); }
 .hd-ctl-group.off { background: #e0483b; }
 .hd-ctl-group.off .hd-caret { border-left-color: rgba(0,0,0,.2); color: #fff; }
 .hd-ctl-group.active { background: #5f83a6; }
@@ -1607,6 +1732,7 @@ html[data-theme="dark"] .chirp-folderhead { background: #1e2940; }
 /* ===== HiveVideo: screen-share spotlight + full-window mode (2026-07-26) ===== */
 .huddle-dock.hd-full { left: 0 !important; top: 0 !important; right: auto !important; bottom: auto !important; width: 100vw !important; height: 100vh !important; max-width: none !important; max-height: none !important; border-radius: 0 !important; z-index: 100000; }
 .hd-grid.hd-spotlight { display: flex; flex-wrap: wrap; align-content: stretch; }
+.hd-grid.hd-spotlight .hd-tile { aspect-ratio: auto; width: auto; height: auto; margin: 0; }
 .hd-grid.hd-spotlight .hd-tile.hd-stage { flex: 1 1 100%; width: 100%; min-height: 0; height: calc(100% - 84px); }
 .hd-grid.hd-spotlight .hd-tile.hd-stage .hd-video { object-fit: contain; }
 .hd-grid.hd-spotlight .hd-tile:not(.hd-stage) { flex: 0 0 auto; width: 118px; height: 72px; min-height: 72px; }
@@ -1660,3 +1786,17 @@ html[data-theme="dark"] .ev-folders-off .ev-folder { opacity: .8; }
 .ev-folder.active{background:#eef2fb}
 .ev-folder.active .ev-folder-nm,.ev-folder.active .ev-folder-ct,.ev-folder.active .ev-folder-ic{color:#16203a}
 
+
+/* Email: individual mailboxes collapsed into one picker (2026-08-23).
+   The sidebar shows the current scope (All Inboxes by default); the accounts
+   themselves live in a dropdown that stays shut until it's asked for. */
+.ev-acct-pick { position: relative; }
+.ev-acct-trigger { border: 1px solid var(--rail2); }
+.ev-acct-caret { flex: none; font-size: 10px; color: inherit; opacity: .65; transition: transform .15s ease; }
+.ev-acct-pick.open .ev-acct-caret { transform: rotate(180deg); }
+.ev-acct-pick.open .ev-acct-trigger { background: var(--steel-bg); color: #22314a; }
+.ev-acct-pick.open .ev-acct-trigger .ev-acct-name { color: #22314a; }
+.ev-acct-menu { position: absolute; z-index: 60; top: calc(100% + 5px); left: 0; right: 0; padding: 5px;
+  background: #1c2540; border: 1px solid #33415f; border-radius: 11px; box-shadow: 0 14px 32px rgba(0, 0, 0, .42); }
+.ev-acct-menu .ev-acct { border-radius: 8px; }
+.ev-acct-sep { height: 1px; background: #33415f; margin: 4px 6px; }

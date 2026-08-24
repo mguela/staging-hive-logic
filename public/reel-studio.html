@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Content Studio &middot; HiveLogic</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --navy:#161e2e; --navy2:#25304a; --gold:#748a9e; --gold-deep:#59718a;
+    --cream:#f0f1f6; --card:#ffffff; --ink:#484f64; --muted:#5d657b;
+    --green:#1B7A50; --amber:#7e86a0; --border:#dadde8;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;font-family:'Montserrat',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--cream);color:var(--ink);}
+  .rs-topbar{position:sticky;top:0;z-index:50;display:flex;align-items:center;gap:14px;background:var(--card);border-bottom:1px solid var(--border);padding:12px 28px;}
+  .rs-logo{display:flex;align-items:center;gap:10px;}
+  .rs-logo .hex{width:32px;height:32px;background:var(--gold);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:15px;color:#fff;font-weight:800;}
+  .rs-logo b{display:block;font-size:14px;color:var(--ink);}
+  .rs-logo span{display:block;font-size:10.5px;color:var(--muted);font-weight:700;}
+  .rs-main{max-width:1180px;margin:0 auto;padding:26px 28px 80px;}
+  .rs-h1{font-size:24px;font-weight:800;color:var(--navy);margin:0 0 6px;}
+  .rs-sub{font-size:13px;color:var(--muted);margin:0 0 22px;max-width:760px;line-height:1.55;}
+  .rs-h2{font-size:15px;font-weight:800;color:var(--navy);margin:30px 0 12px;}
+  .rs-card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:18px;margin-bottom:14px;}
+  .rs-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:14px;}
+  .rs-empty{color:var(--muted);font-size:13px;line-height:1.6;}
+  .rs-title{font-size:14.5px;font-weight:700;color:var(--navy);margin:0 0 4px;line-height:1.35;}
+  .rs-meta{font-size:11.5px;color:var(--muted);font-weight:600;margin-bottom:10px;}
+  .rs-chip{display:inline-block;font-size:10.5px;font-weight:700;padding:3px 9px;border-radius:999px;background:var(--cream);color:var(--muted);border:1px solid var(--border);margin-right:6px;}
+  .rs-chip.on{background:#e8f3ee;color:var(--green);border-color:#bfe0d0;}
+  .rs-chip.warn{background:#f4f0e6;color:#8a6d2f;border-color:#e2d7bd;}
+  .rs-btn{appearance:none;border:1px solid var(--border);background:var(--card);color:var(--ink);font-family:inherit;font-size:12.5px;font-weight:700;padding:8px 14px;border-radius:9px;cursor:pointer;margin:4px 6px 0 0;}
+  .rs-btn:hover{border-color:var(--gold);}
+  .rs-btn.primary{background:var(--navy);color:#fff;border-color:var(--navy);}
+  .rs-btn.primary:hover{background:var(--navy2);}
+  .rs-btn[disabled]{opacity:.45;cursor:not-allowed;}
+  .rs-script{background:var(--cream);border:1px solid var(--border);border-radius:10px;padding:12px;margin-top:10px;font-size:12.5px;line-height:1.6;}
+  .rs-script b{color:var(--navy);}
+  .rs-beat{padding:6px 0;border-top:1px dashed var(--border);}
+  .rs-bar{height:6px;background:var(--cream);border-radius:999px;overflow:hidden;margin-top:10px;border:1px solid var(--border);}
+  .rs-bar i{display:block;height:100%;background:var(--gold);width:0;transition:width .12s linear;}
+  .rs-status{font-size:12px;color:var(--muted);margin-top:8px;min-height:16px;}
+  video{width:100%;border-radius:10px;margin-top:10px;background:#000;}
+  audio{width:100%;margin-top:10px;}
+</style>
+</head>
+<body>
+<div class="rs-topbar">
+  <div class="rs-logo"><div class="hex">H</div><div><b>Content Studio</b><span>HIVELOGIC</span></div></div>
+</div>
+<div class="rs-main">
+  <h1 class="rs-h1">Content Studio</h1>
+  <p class="rs-sub">
+    Real job photos become narrated short-form videos here. Reina picks the jobs, writes the script from what the work
+    actually was, records a real voiceover, and your browser renders the finished file. Nothing posts anywhere &mdash;
+    a finished video is handed to the Content Approval queue, where you still have to approve it.
+  </p>
+  <div id="rs-body"><div class="rs-card rs-empty">Loading&hellip;</div></div>
+</div>
+
+<script src="/hl-shared-auth.js"></script>
+<script src="/reel-studio.js"></script>
+<script>
+(function(){
+  'use strict';
+  function token(){ return window.HL_AUTH.hlTokenSync(); }
+  function api(resource, opts){
+    opts = opts || {};
+    var h = opts.headers ? Object.assign({}, opts.headers) : {};
+    var t = token();
+    if (t) h.Authorization = 'Bearer ' + t;
+    if (opts.body) h['Content-Type'] = 'application/json';
+    return fetch('/api/content-studio?resource=' + resource, Object.assign({}, opts, {headers:h}))
+      .then(function(r){ return r.json(); });
+  }
+  function post(resource, body){ return api(resource, {method:'POST', body: JSON.stringify(body)}); }
+  function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+
+  var STATE = { reels: [], candidates: [] };
+
+  // Each status is one step of the pipeline, so the button a reel offers is
+  // always the single next thing that can be done to it. Showing every action
+  // at once and disabling most of them would read as broken rather than as
+  // sequenced.
+  var NEXT_STEP = {
+    draft:        { label:'Write the script',     action:'script'    },
+    script_ready: { label:'Record the voiceover', action:'voiceover' },
+    voice_ready:  { label:'Render the video',     action:'render'    },
+    rendered:     { label:'Send to approval',     action:'queue'     }
+  };
+
+  function statusChip(reel){
+    if (reel.status === 'queued') return '<span class="rs-chip on">In the approval queue</span>';
+    if (reel.status === 'rejected') return '<span class="rs-chip warn">Rejected</span>';
+    return '<span class="rs-chip">' + esc(reel.status.replace(/_/g,' ')) + '</span>';
+  }
+
+  function scriptHtml(script){
+    if (!script) return '';
+    var beats = (script.beats||[]).map(function(b,i){
+      return '<div class="rs-beat"><b>Shot ' + (i+1) + ':</b> ' + esc(b.onScreenText) + '<br><span style="color:var(--muted)">&ldquo;' + esc(b.say) + '&rdquo;</span></div>';
+    }).join('');
+    return '<div class="rs-script"><b>Hook:</b> ' + esc(script.hook) + beats +
+      '<div class="rs-beat"><b>Caption:</b> ' + esc(script.caption) + ' ' + esc((script.hashtags||[]).join(' ')) + '</div></div>';
+  }
+
+  function reelCard(reel){
+    var next = NEXT_STEP[reel.status];
+    return '<div class="rs-card" data-reel="' + esc(reel.id) + '">' +
+      '<div class="rs-title">' + esc(reel.title || 'Untitled') + '</div>' +
+      '<div class="rs-meta">' + esc(reel.kind === 'commercial' ? 'Commercial (16:9)' : 'Reel (9:16)') +
+        (reel.division ? ' &middot; ' + esc(reel.division) : '') +
+        ' &middot; ' + (reel.photoIds.length + reel.frameAssets.length) + ' shots</div>' +
+      statusChip(reel) +
+      scriptHtml(reel.script) +
+      (reel.voiceUrl ? '<audio controls preload="none" src="' + esc(reel.voiceUrl) + '"></audio>' : '') +
+      (reel.videoUrl ? '<video controls preload="metadata" src="' + esc(reel.videoUrl) + '"></video>' : '') +
+      '<div class="rs-bar" style="display:none"><i></i></div>' +
+      '<div class="rs-status"></div>' +
+      '<div>' +
+        (next ? '<button class="rs-btn primary" data-act="' + next.action + '">' + esc(next.label) + '</button>' : '') +
+        (reel.status !== 'rejected' && reel.status !== 'queued' ? '<button class="rs-btn" data-act="reject">Reject</button>' : '') +
+      '</div>' +
+    '</div>';
+  }
+
+  function candidateCard(c){
+    return '<div class="rs-card">' +
+      '<div class="rs-title">' + esc(c.title || 'Untitled job') + '</div>' +
+      '<div class="rs-meta">' + esc(c.division) + ' &middot; ' + c.photoCount + ' real photos</div>' +
+      '<button class="rs-btn primary" data-newreel="' + esc(c.jobId) + '">Start a reel from this job</button>' +
+    '</div>';
+  }
+
+  function render(){
+    var reelsHtml = STATE.reels.length
+      ? '<div class="rs-grid">' + STATE.reels.map(reelCard).join('') + '</div>'
+      : '<div class="rs-card rs-empty">Nothing in production yet. Start one from a job below.</div>';
+    var candHtml = STATE.candidates.length
+      ? '<div class="rs-grid">' + STATE.candidates.map(candidateCard).join('') + '</div>'
+      : '<div class="rs-card rs-empty">No job currently has enough real photos for a video. Reels need at least four photos on one completed job from the last six months.</div>';
+    document.getElementById('rs-body').innerHTML =
+      '<h2 class="rs-h2">In production</h2>' + reelsHtml +
+      '<h2 class="rs-h2">Jobs ready to become videos</h2>' + candHtml;
+  }
+
+  function load(){
+    return Promise.all([api('reels'), api('reel_candidates&limit=8')]).then(function(r){
+      STATE.reels = (r[0] && r[0].ok && r[0].reels) || [];
+      STATE.candidates = (r[1] && r[1].ok && r[1].candidates) || [];
+      render();
+    }).catch(function(){
+      document.getElementById('rs-body').innerHTML = '<div class="rs-card rs-empty">Could not reach the server. Check your connection and refresh.</div>';
+    });
+  }
+
+  function setStatus(card, msg){ card.querySelector('.rs-status').textContent = msg || ''; }
+  function setProgress(card, pct){
+    var bar = card.querySelector('.rs-bar');
+    bar.style.display = pct == null ? 'none' : '';
+    if (pct != null) bar.querySelector('i').style.width = Math.round(pct*100) + '%';
+  }
+
+  // The render is the only step that runs locally, and it runs in real time --
+  // a 3-minute film takes 3 minutes of wall clock. The warning is there so a
+  // long wait reads as expected rather than as a hang.
+  function doRender(reel, card){
+    setStatus(card, 'Loading the frames and the voiceover…');
+    return api('reel_frames&reelId=' + encodeURIComponent(reel.id)).then(function(r){
+      if (!r || !r.ok) throw new Error((r && r.error) || 'Could not load the frames.');
+      if (!r.frames.length) throw new Error('This video has no frames.');
+      setStatus(card, 'Rendering in real time — leave this tab open and in front.');
+      setProgress(card, 0);
+      return window.HLReelStudio.render({
+        kind: reel.kind,
+        frames: r.frames,
+        script: r.reel.script,
+        voiceUrl: r.voiceUrl,
+        brandName: 'Greenwich Handyman',
+        tagline: 'Run by HiveLogic',
+        onProgress: function(p){ setProgress(card, p); }
+      });
+    }).then(function(out){
+      setProgress(card, null);
+      setStatus(card, 'Uploading the finished ' + (out.mimeType === 'video/mp4' ? 'MP4' : 'WebM') + '…');
+      return window.HLReelStudio.blobToBase64(out.blob).then(function(b64){
+        return post('reel_video', { reelId: reel.id, contentType: out.mimeType, dataBase64: b64 });
+      }).then(function(r){
+        if (!r || !r.ok) throw new Error((r && r.error) || 'Could not save the video.');
+        if (out.mimeType !== 'video/mp4') {
+          setStatus(card, 'Saved as WebM. TikTok accepts it; Instagram does not — re-render in Chrome for MP4.');
+        }
+        return load();
+      });
+    });
+  }
+
+  document.addEventListener('click', function(e){
+    var newBtn = e.target.closest && e.target.closest('[data-newreel]');
+    if (newBtn) {
+      newBtn.disabled = true;
+      post('reel_draft', { jobId: newBtn.getAttribute('data-newreel') })
+        .then(function(r){ if (!r || !r.ok) window.alert((r && r.error) || 'Could not start that reel.'); return load(); })
+        .catch(function(err){ window.alert(err.message); newBtn.disabled = false; });
+      return;
+    }
+
+    var btn = e.target.closest && e.target.closest('[data-act]');
+    if (!btn) return;
+    var card = btn.closest('[data-reel]');
+    var reelId = card.getAttribute('data-reel');
+    var reel = STATE.reels.filter(function(x){ return x.id === reelId; })[0];
+    if (!reel) return;
+    var act = btn.getAttribute('data-act');
+
+    if (act === 'reject') {
+      var reason = (window.prompt('Optional: why are you rejecting this?') || '').trim();
+      if (!window.confirm('Reject this video? Reina will not take it any further.')) return;
+      btn.disabled = true;
+      post('reel_reject', { reelId: reelId, reason: reason || undefined }).then(load);
+      return;
+    }
+
+    btn.disabled = true;
+    var work;
+    if (act === 'script') { setStatus(card, 'Writing the script from the real job…'); work = post('reel_script', { reelId: reelId }); }
+    else if (act === 'voiceover') { setStatus(card, 'Recording the voiceover…'); work = post('reel_voiceover', { reelId: reelId }); }
+    else if (act === 'render') { work = doRender(reel, card); }
+    else if (act === 'queue') {
+      var surface = (window.prompt('Send to which surface? instagram, tiktok_video, or facebook_page', 'instagram') || '').trim();
+      if (!surface) { btn.disabled = false; return; }
+      setStatus(card, 'Sending to the approval queue…');
+      work = post('reel_queue', { reelId: reelId, surface: surface });
+    }
+
+    Promise.resolve(work).then(function(r){
+      if (r && r.ok === false) { setStatus(card, r.error || 'That did not work.'); btn.disabled = false; return; }
+      return load();
+    }).catch(function(err){
+      setProgress(card, null);
+      setStatus(card, err.message);
+      btn.disabled = false;
+    });
+  });
+
+  load();
+})();
+</script>
+</body>
+</html>

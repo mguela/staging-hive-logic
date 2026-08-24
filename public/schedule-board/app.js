@@ -960,10 +960,39 @@
     shown.forEach((t)=>{ const p=LIVEGPS.byTech[t.id]; if(!p) return; if(p.stale) stale++; else live++; });
     return { live, stale, untracked: Math.max(0, shown.length-live-stale), shown: shown.length };
   }
-  function loadLiveGps(){
+  // This runs every 60 seconds for as long as the board is on screen, which is
+  // what turned one expired token into a console full of 401s: the board is an
+  // iframe, it does not inherit the app's authenticated-fetch shim, and the
+  // token it was handed on load dies after an hour. So never fire this bare --
+  // a request with no Authorization header is a guaranteed 401 that teaches us
+  // nothing -- and on a rejected token, ask the parent for a live one and try
+  // again. Once: a genuinely signed-out session must settle into "unavailable"
+  // rather than doubling the request rate forever.
+  function freshBoardToken(){
+    return (typeof window.hlFreshToken === 'function')
+      ? window.hlFreshToken()
+      : Promise.resolve(window.HL_BOARD_TOKEN || '');
+  }
+  function fetchLiveGps(retried){
     const tok = window.HL_BOARD_TOKEN || '';
-    return fetch('/api/track1?resource=crew_schedule', { headers: tok ? { Authorization:'Bearer '+tok } : {} })
-      .then((r)=>r.json())
+    if(!tok){
+      if(retried) throw new Error('not signed in');
+      return freshBoardToken().then(()=>fetchLiveGps(true));
+    }
+    return fetch('/api/track1?resource=crew_schedule', { headers:{ Authorization:'Bearer '+tok } })
+      .then((r)=>{
+        if(r.status !== 401 && r.status !== 403) return r.json();
+        if(retried) throw new Error('not signed in');
+        return freshBoardToken().then((t)=>{
+          // The same token back means the parent has nothing better to give.
+          // Retrying with it would just be the same 401 at twice the rate.
+          if(!t || t === tok) throw new Error('not signed in');
+          return fetchLiveGps(true);
+        });
+      });
+  }
+  function loadLiveGps(){
+    return Promise.resolve().then(()=>fetchLiveGps(false))
       .then((d)=>{ if(!d || !d.ok) throw new Error((d && d.error) || 'unavailable'); applyLiveGps(d); updateTrucks(); renderMapLegend(); renderSummary(); })
       .catch((e)=>{ LIVEGPS.error=(e && e.message) || 'unavailable'; renderMapLegend(); renderSummary(); });
   }
@@ -1224,16 +1253,51 @@
     ['moveend','zoomend','rotateend','pitchend'].forEach((ev)=>map.on(ev, ()=>boardStateSave()));
   }
 
+
+  /* ---- Preferences follow the user, not this browser (CLAUDE.md) ----------
+   *
+   * This board is a same-origin iframe inside HiveLogic -- it already asks the
+   * parent for its auth token and its theme by postMessage -- so the parent's
+   * hlUserSettings, backed by profiles.settings, is reachable from here.
+   *
+   * Before this, pasting a Mapbox or Google key set it up on ONE browser.
+   * Open the board on the laptop and the map is a grey box asking for a key
+   * he already gave it.
+   *
+   * localStorage stays as the cache and is still written, so the map does not
+   * wait on a round trip before it can draw.
+   *
+   * NOTE: sl_theme is NOT migrated and is not a violation. This board's own
+   * theme toggle is hidden (#themeBtn{display:none!important}); the theme is
+   * pushed down from HiveLogic, and sl_theme is only a local mirror so
+   * applyTheme can restore it before the parent's message arrives. The
+   * preference it mirrors already follows the user, one level up.
+   */
+  function parentSettings(){
+    try { return (window.parent && window.parent !== window && window.parent.hlUserSettings) || null; }
+    catch(e){ return null; }   // cross-origin, which should not happen here
+  }
+  function boardPref(key, legacyKey){
+    var ps = parentSettings();
+    if(ps){ try{ var v = ps.get(key, undefined); if(v !== undefined) return v; }catch(e){} }
+    try{ return localStorage.getItem(legacyKey) || ''; }catch(e){ return ''; }
+  }
+  function boardPrefSet(key, legacyKey, value){
+    try{ if(value === null) localStorage.removeItem(legacyKey); else localStorage.setItem(legacyKey, value); }catch(e){}
+    var ps = parentSettings();
+    if(ps){ try{ ps.set(key, value).catch(function(){}); }catch(e){} }
+  }
+
   // ---- Real 3D map behind the Day board (Mapbox GL) ----
   // The user's free public token is stored ONLY in their browser (localStorage);
   // it is never sent to HiveLogic. buildCitySVG() above remains as an offline fallback.
-  function mbToken(){ try{ return (window.HL_MAPBOX_TOKEN||localStorage.getItem('hl_mapbox_token')||'').trim(); }catch(e){ return (window.HL_MAPBOX_TOKEN||'').trim(); } }
+  function mbToken(){ try{ return (window.HL_MAPBOX_TOKEN||boardPref('mapboxToken','hl_mapbox_token')||'').trim(); }catch(e){ return (window.HL_MAPBOX_TOKEN||'').trim(); } }
   function mbResetStores(){ ['mbBg','mbView','mlView','mlBg'].forEach((k)=>{ if(state[k] && state[k].map){ try{ state[k].map.remove(); }catch(e){} } state[k]={map:null,markers:{},ready:false}; }); }
   window.saveMbToken=(v)=>{ v=(v||'').trim(); if(!/^pk\./.test(v)){ const inp=document.getElementById('mbTokIn'); if(inp){ inp.classList.add('bad'); inp.placeholder='That doesn’t look like a pk. token — paste the Default public token'; } return; }
-    try{ localStorage.setItem('hl_mapbox_token',v); }catch(e){}
+    boardPrefSet('mapboxToken','hl_mapbox_token',v);
     MAPENGINE='mapbox'; MAPNOTE='';
     mbResetStores(); const bg=document.getElementById('mapbg'); if(bg) bg.innerHTML=''; render(); syncMapTimer(); };
-  window.clearMbToken=()=>{ try{ localStorage.removeItem('hl_mapbox_token'); }catch(e){} mbResetStores(); const bg=document.getElementById('mapbg'); if(bg) bg.innerHTML=''; render(); };
+  window.clearMbToken=()=>{ boardPrefSet('mapboxToken','hl_mapbox_token',null); mbResetStores(); const bg=document.getElementById('mapbg'); if(bg) bg.innerHTML=''; render(); };
   function mbTokenPrompt(bg,err){
     bg.innerHTML=`<div class="tokprompt"><div class="tp-card">
       <div class="tp-h">🗺 Real 3D map — one-time setup</div>
@@ -1321,15 +1385,120 @@
       try{ map.resize(); setTimeout(()=>{try{map.resize();}catch(_){}},60); setTimeout(()=>{try{map.resize();}catch(_){}},300); }catch(_){}
     });
   }
+  /* ---- hover detail on a map pin ------------------------------------------
+     Same discipline the Command Center map arrived at: the popup opens on hover
+     and, crucially, lets go of the pointer again. It tracks where the mouse
+     actually is rather than trusting a mouseleave, because the popup's own
+     container is a fresh DOM node every time it opens -- a node dropped under a
+     cursor that is already still never gets the hover state mouseleave needs,
+     and the popup ends up stranded with no way to dismiss it.
+     Only the interactive Map tab uses this. The Day backdrop is
+     pointer-events:none by design, so nothing there can be hovered at all. */
+  const mapEsc=(s)=>String(s==null?'':s).replace(/[&<>"']/g,(c)=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  function mapHoverPopup(store, el, mk, htmlFn){
+    const gl = store.gl || window.mapboxgl;
+    if(!gl || !gl.Popup || !store.map) return null;
+    const pop = new gl.Popup({ offset:16, maxWidth:'280px', closeButton:false, closeOnClick:false, className:'mbpop' });
+    let hideTimer=null;
+    const overIt=(node)=>{
+      if(!node || !node.nodeType) return false;
+      if(el.contains(node)) return true;
+      const pe=pop.getElement();
+      return !!(pe && pe.contains(node));
+    };
+    const onDocMove=(ev)=>{
+      if(overIt(ev.target)){ if(hideTimer){ clearTimeout(hideTimer); hideTimer=null; } return; }
+      hide();
+    };
+    const close=()=>{
+      if(hideTimer){ clearTimeout(hideTimer); hideTimer=null; }
+      document.removeEventListener('mousemove', onDocMove, true);
+      try{ pop.remove(); }catch(e){}
+    };
+    // A grace period so crossing the gap from the pin to the popup does not
+    // dismiss it. The countdown is never restarted once running, or a pointer
+    // moving steadily across the map would push it out forever.
+    const hide=()=>{
+      if(hideTimer) return;
+      hideTimer=setTimeout(()=>{ hideTimer=null; close(); }, 180);
+    };
+    const show=()=>{
+      if(hideTimer){ clearTimeout(hideTimer); hideTimer=null; }
+      if(el.style.display==='none') return;
+      const html=htmlFn(); if(!html) return;
+      pop.setHTML(html);                       // re-read on every hover: a truck moves and its status changes
+      if(pop.isOpen && pop.isOpen()) return;   // re-adding would rebuild the container under the cursor
+      try{ pop.setLngLat(mk.getLngLat()); }catch(e){}
+      pop.addTo(store.map);
+      document.addEventListener('mousemove', onDocMove, true);
+    };
+    el.addEventListener('mouseenter', show);
+    el.addEventListener('mouseleave', hide);
+    pop.on('open',()=>{
+      const pe=pop.getElement(); if(!pe) return;
+      pe.addEventListener('mouseenter', show);
+      pe.addEventListener('mouseleave', hide);
+    });
+    // Panning or leaving the map means the reader has moved on, and the pointer
+    // may never cross the popup again to say so.
+    try{
+      store.map.on('movestart', close);
+      const c=store.map.getContainer && store.map.getContainer();
+      if(c) c.addEventListener('mouseleave', close);
+    }catch(e){}
+    return close;
+  }
+  // What a job pin says. Real fields only. The street address is the client's
+  // own, from client_locations via schedule_range -- until that was wired up
+  // the pin's tooltip showed an address invented from a hash of the client's
+  // name, and a pin is no use if it names a house that does not exist.
+  function jobPinHTML(v){
+    const t=techById(effectiveTech(v))||techById(v.t);
+    const r=readinessOf(v);
+    const crew=(v.crew&&v.crew.length)
+      ? v.crew.map((c)=>mapEsc(c.n)+(c.lead?' <span style="color:var(--mut)">(lead)</span>':'')).join(', ')
+      : (t?mapEsc(t.n):'<span style="color:var(--warn)">No crew assigned</span>');
+    return '<div class="mbpop-b">'
+      + '<b>'+mapEsc(v.client||v.type||'Visit')+'</b>'
+      + ((v.clientAddr||v.city)?('<div class="mbpop-s">'+mapEsc(v.clientAddr||v.city)+'</div>'):'')
+      + '<hr>'
+      + '<div>'+cardIcon(v)+' '+(v.jobNo?('#'+mapEsc(v.jobNo)+' '):'')+mapEsc(v.type||'')+'</div>'
+      + '<div class="mbpop-s">'+mapEsc(dLabel(v.date))+' · '+mapEsc(fmt(effectiveStart(v)))+'–'+mapEsc(fmt(effectiveEnd(v)))+'</div>'
+      + '<div class="mbpop-s">'+crew+'</div>'
+      + '<div style="margin-top:5px"><span class="rpill '+r.level+'">'+RDY[r.level].l+'</span> '
+      + mapEsc(r.why||'good to start')+'</div>'
+      + '<div class="mbpop-h">Click the pin to look around this address →</div>'
+      + '</div>';
+  }
+  function truckPinHTML(t){
+    const pos=liveTruckPos(t.id);
+    if(!pos) return '';
+    const now=dayVisits(t.id).filter((v)=>v.date===state.date);
+    const mins=pos.updatedAt ? Math.round((Date.now()-new Date(pos.updatedAt).getTime())/60000) : null;
+    return '<div class="mbpop-b">'
+      + '<b>'+mapEsc(t.n)+'</b>'
+      + (pos.vehicleName?('<div class="mbpop-s">'+mapEsc(pos.vehicleName)+'</div>'):'')
+      + '<hr>'
+      + '<div>'+mapEsc(pos.status||'Unknown')
+      + (pos.speed!=null?(' · '+Math.round(pos.speed)+' mph'):'')+'</div>'
+      + '<div class="mbpop-s"'+(pos.stale?' style="color:var(--warn)"':'')+'>'
+      + (mins==null?'No timestamp on this fix':('Position '+(mins<1?'just now':(mins+' min ago'))+(pos.stale?' — stale':'')))
+      + '</div>'
+      + '<div class="mbpop-s">'+(now.length?(now.length+' job'+(now.length===1?'':'s')+' today'):'Nothing scheduled today')+'</div>'
+      + '</div>';
+  }
   function mbAddMarkers(store){
     if(!store.map) return;
     // Reconcile, don't just add: a crew that loses its GPS fix must lose its
     // truck rather than freeze at its last known spot.
     const shown={}; visibleTechs().forEach((t)=>{ if(liveTruckPos(t.id)) shown[t.id]=t; });
-    Object.keys(store.markers).forEach((id)=>{ if(shown[id]) return; try{ store.markers[id].mk.remove(); }catch(e){} delete store.markers[id]; });
+    Object.keys(store.markers).forEach((id)=>{ if(shown[id]) return; const m=store.markers[id];
+      try{ if(m.closePop) m.closePop(); }catch(e){}   // a pin's popup must not outlive the pin
+      try{ m.mk.remove(); }catch(e){} delete store.markers[id]; });
     Object.keys(shown).forEach((id)=>{ if(store.markers[id]) return; const t=shown[id]; const pos=liveTruckPos(id);
       const el=document.createElement('div'); el.className='mbtruck'; el.style.background=t.pc; el.textContent=t.ini;
-      try{ const mk=new (store.gl||window.mapboxgl).Marker({element:el}).setLngLat([pos.lng,pos.lat]).addTo(store.map); store.markers[id]={mk,el}; }
+      try{ const mk=new (store.gl||window.mapboxgl).Marker({element:el}).setLngLat([pos.lng,pos.lat]).addTo(store.map); store.markers[id]={mk,el};
+        if(store===state.mbView || store===state.mlView) store.markers[id].closePop=mapHoverPopup(store, el, mk, ()=>truckPinHTML(t)); }
       catch(e){ console.warn('truck marker failed for '+id, e); } });
   }
   // Every active job pinned at its address, readiness-colored. On the interactive Map
@@ -1372,16 +1541,22 @@
     // so the map showed a union of everywhere you'd looked rather than the
     // period you were actually on.
     const want=mapVisitIds(interactive?null:'board');
-    Object.keys(store.jobMarkers).forEach((id)=>{ if(want[id]) return; try{ store.jobMarkers[id].mk.remove(); }catch(e){} delete store.jobMarkers[id]; });
+    Object.keys(store.jobMarkers).forEach((id)=>{ if(want[id]) return; const m=store.jobMarkers[id];
+      try{ if(m.closePop) m.closePop(); }catch(e){}   // a pin's popup must not outlive the pin
+      try{ m.mk.remove(); }catch(e){} delete store.jobMarkers[id]; });
     // spread pins that share the exact same synthetic coord so they don't fully stack
     const seen={};
     jobs.forEach((v)=>{ if(store.jobMarkers[v.id]) return;
       const key=v.lat.toFixed(3)+','+v.lng.toFixed(3); const n=(seen[key]=(seen[key]||0)+1)-1;
       const ang=n*2.399, rad=n?0.0006*Math.ceil(n/6):0; const jlng=v.lng+Math.cos(ang)*rad, jlat=v.lat+Math.sin(ang)*rad;
       const r=readinessOf(v); const cc=r.level==='blocked'?'#e0564a':(r.level==='at_risk'?'#e0a12e':'#39b174');
-      const el=document.createElement('div'); el.className='mbjob'; el.style.background=cc; el.title=(synthClient(v).addr||v.type);
-      if(interactive){ el.style.cursor='pointer'; el.addEventListener('click',()=>{ openLookAround(v.lat,v.lng,(synthClient(v).addr||v.client||v.type||'')); }); }
-      try{ const mk=new (store.gl||window.mapboxgl).Marker({element:el}).setLngLat([jlng,jlat]).addTo(store.map); store.jobMarkers[v.id]={mk,el}; }
+      const el=document.createElement('div'); el.className='mbjob'; el.style.background=cc;
+      // No title attribute on the interactive map: the hover popup says all of
+      // this and more, and the browser's own tooltip would sit on top of it.
+      if(!interactive) el.title=[v.client,v.type,v.clientAddr||v.city].filter(Boolean).join(' · ');
+      if(interactive){ el.style.cursor='pointer'; el.addEventListener('click',()=>{ openLookAround(v.lat,v.lng,v.clientAddr||[v.client,v.city].filter(Boolean).join(', ')); }); }
+      try{ const mk=new (store.gl||window.mapboxgl).Marker({element:el}).setLngLat([jlng,jlat]).addTo(store.map); store.jobMarkers[v.id]={mk,el};
+        if(interactive) store.jobMarkers[v.id].closePop=mapHoverPopup(store, el, mk, ()=>jobPinHTML(v)); }
       catch(e){ console.warn('job pin failed for '+v.id, e); }
     });
     // Fit on the first build too, not only when the period changes. Without it
@@ -1399,7 +1574,7 @@
       try{ m.mk.setLngLat([pos.lng,pos.lat]); }catch(e){}
       m.el.classList.toggle('moving',pos.moving);
       m.el.style.opacity = pos.stale ? '0.55' : '1';
-      m.el.title = t.n+' \u00b7 '+(pos.vehicleName||'')+' \u00b7 '+(pos.status||'')+(pos.stale?' (stale fix)':'');
+      if(!m.closePop) m.el.title = t.n+' \u00b7 '+(pos.vehicleName||'')+' \u00b7 '+(pos.status||'')+(pos.stale?' (stale fix)':'');
     });
   }
   // Controls for the BACKGROUND map. The map surface stays pointer-events:none so
@@ -1474,7 +1649,7 @@
   // ---- "Look around" (Google Street View) — identify a house at street level ----
   // Google Maps key lives ONLY in the user's browser (localStorage); never sent to HiveLogic.
   var __gmapsLoading=false, __gmapsQueue=[];
-  function googKey(){ try{ return (window.HL_GOOGLE_KEY||localStorage.getItem('hl_google_key')||'').trim(); }catch(e){ return (window.HL_GOOGLE_KEY||'').trim(); } }
+  function googKey(){ try{ return (window.HL_GOOGLE_KEY||boardPref('googleMapsKey','hl_google_key')||'').trim(); }catch(e){ return (window.HL_GOOGLE_KEY||'').trim(); } }
   function loadGoogleMaps(cb){
     if(window.google&&window.google.maps&&window.google.maps.StreetViewPanorama){ cb(); return true; }
     __gmapsQueue.push(cb);
@@ -1499,7 +1674,7 @@
     const inp=document.getElementById('gkIn'); if(inp) inp.addEventListener('keydown',(e)=>{ if(e.key==='Enter') saveGoogKey(inp.value); });
   }
   window.saveGoogKey=(v)=>{ v=(v||'').trim(); if(v.length<20 || !/^AIza/.test(v)){ const i=document.getElementById('gkIn'); if(i){ i.classList.add('bad'); i.placeholder='That doesn’t look like a Google key (starts with AIza)'; } return; }
-    try{ localStorage.setItem('hl_google_key',v); }catch(e){}
+    boardPrefSet('googleMapsKey','hl_google_key',v);
     const p=window.__laPending; if(p) openLookAround(p.lat,p.lng,p.label); };
   // Free, no-key Street View: open Google Maps' public Street View for the address in
   // a new tab. (An embedded/in-app panorama would require a Google key with billing;
@@ -1538,14 +1713,30 @@
   function renderUnassigned(){
     document.getElementById('unpanel').classList.toggle('open', state.unOpen);
     document.getElementById('unCount').textContent=demands.length;
+    // Every field here is optional, because these are real JOBS now and a job
+    // row carries no required skill, no promised window, no priority and no
+    // readiness. The old markup printed all five unconditionally, so with real
+    // data it would have read "undefined · undefined" under every title --
+    // and inventing values to fill them would put made-up urgency on a
+    // dispatch board.
+    const esc=(v)=>String(v==null?'':v).replace(/[&<>"]/g,(c)=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
     document.getElementById('unlist').innerHTML=demands.map((u)=>{
-      const col=DIVCOLORS[u.div]||'#8b92a8'; const rl=u.ready||'ready';
-      return `<div class="uncard demandcard" data-uid="${u.id}" style="border-left-color:${col}">
-        <div style="display:flex;justify-content:space-between;gap:8px;align-items:start"><b>${u.title}</b><span class="pri">${u.priority}</span></div>
-        <div class="meta">${u.client} · ${u.city}</div>
-        <div class="dmeta"><span class="dtag">⏱ ${u.dur}h</span><span class="dtag">🎓 ${u.skill}</span><span class="dtag">📅 ${u.window}</span></div>
-        <div style="margin-bottom:7px"><span class="rpill ${rl}">${RDY[rl].l}${u.readyWhy?' · '+u.readyWhy:''}</span></div>
-        <button class="btn sm primary" style="width:100%" onclick="LabUI.scheduleThis('${u.id}')">⚡ Schedule this</button></div>`;
+      const col=DIVCOLORS[u.div]||'#8b92a8';
+      const who=[u.client,u.city].filter(Boolean).map(esc).join(' · ');
+      const tags=[];
+      if(u.jobNo) tags.push(`<span class="dtag">#${esc(u.jobNo)}</span>`);
+      if(u.div) tags.push(`<span class="dtag">${esc(u.div)}</span>`);
+      if(u.dur) tags.push(`<span class="dtag">⏱ ${esc(u.dur)}h</span>`);
+      if(u.skill) tags.push(`<span class="dtag">🎓 ${esc(u.skill)}</span>`);
+      if(u.window) tags.push(`<span class="dtag">📅 ${esc(u.window)}</span>`);
+      if(u.total) tags.push(`<span class="dtag">$${Math.round(u.total).toLocaleString()}</span>`);
+      const rl=u.ready&&RDY[u.ready]?u.ready:null;
+      return `<div class="uncard demandcard" data-uid="${esc(u.id)}" style="border-left-color:${col}">
+        <div style="display:flex;justify-content:space-between;gap:8px;align-items:start"><b>${esc(u.title)}</b>${u.priority?`<span class="pri">${esc(u.priority)}</span>`:''}</div>
+        ${who?`<div class="meta">${who}</div>`:''}
+        ${tags.length?`<div class="dmeta">${tags.join('')}</div>`:''}
+        ${rl?`<div style="margin-bottom:7px"><span class="rpill ${rl}">${RDY[rl].l}${u.readyWhy?' · '+esc(u.readyWhy):''}</span></div>`:''}
+        <button class="btn sm primary" style="width:100%" onclick="LabUI.scheduleThis('${esc(u.id)}')">⚡ Schedule this</button></div>`;
     }).join('')||'<div style="color:var(--mut);font-size:12px;padding:12px">No unscheduled work 🎉</div>';
     queueBoardViewport();   // the panel just changed width -- the map has to give way
   }
@@ -1682,11 +1873,54 @@
     return '<div class="remind">'+config.reminders.map((r)=>
       `<div class="rr ${r.on?'':'off'}"><span class="dot"></span>${r.l}<span class="st">${r.on?(stat[r.id]||'Scheduled'):'off'}</span></div>`).join('')+'</div>';
   }
-  // Synthetic client contact (lab only) + Reina conflict resolutions, for the detail popup
-  function synthClient(v){
-    const name=v.client||'Client'; const seed=[...name].reduce((a,c)=>a+c.charCodeAt(0),0);
-    const streets=['Orchard St','Maple Ave','Bedford Rd','Shore Dr','Round Hill Rd','Lake Ave','Cherry Ln'];
-    return {name, phone:'(203) 555-'+String(100+seed%900), email:name.toLowerCase().replace(/[^a-z0-9]/g,'')+'@example.com', addr:(10+seed%90)+' '+streets[seed%streets.length]+', '+(v.city||'—')};
+  // Client contact + Reina conflict resolutions, for the job detail sheet
+  /* The client's REAL details, as carried on the visit row.
+     What used to be here was synthClient(): a phone number built from
+     "(203) 555-" plus a hash of the client's name, an email of
+     theirname@example.com, and a street address picked out of a list of seven
+     by the same hash. It was honest enough when this board was a synthetic
+     lab. It has been running on real Jobber data since, so every job sheet has
+     been showing a dispatcher a phone number to call that belongs to nobody.
+     Anything missing now reads as missing. A blank is recoverable — someone
+     looks the client up. A plausible wrong number is not: it gets dialled. */
+  function clientOf(v){
+    return {
+      name: v.client || 'Client',
+      phone: v.clientPhone || null,
+      email: v.clientEmail || null,
+      addr: v.clientAddr || null,
+      city: v.city || '',
+    };
+  }
+  // +12035550134 -> (203) 555-0134. Anything that is not a plain North American
+  // number is left exactly as stored rather than reformatted into something the
+  // dialler might not reach.
+  function phoneLabel(raw){
+    const s=String(raw||'').trim(); if(!s) return '';
+    const d=s.replace(/\D/g,'');
+    const ten = d.length===11 && d[0]==='1' ? d.slice(1) : (d.length===10 ? d : null);
+    return ten ? '('+ten.slice(0,3)+') '+ten.slice(3,6)+'-'+ten.slice(6) : s;
+  }
+  // The Client card. Every line is either a real value or an explicit "none on
+  // file" -- never a placeholder that reads like a value.
+  function clientCardHTML(v){
+    const c=clientOf(v);
+    const none=(what)=>'<span style="color:var(--mut)">No '+what+' on file</span>';
+    const lines=[];
+    lines.push(c.phone
+      ? '\u{1F4DE} <a href="tel:'+mapEsc(String(c.phone).replace(/[^+0-9]/g,''))+'">'+mapEsc(phoneLabel(c.phone))+'</a>'
+      : '\u{1F4DE} '+none('phone'));
+    lines.push(c.email
+      ? '\u2709 <a href="mailto:'+mapEsc(c.email)+'">'+mapEsc(c.email)+'</a>'
+      : '\u2709 '+none('email'));
+    lines.push(c.addr
+      ? '\u{1F4CD} '+mapEsc(c.addr)
+      : '\u{1F4CD} '+(c.city ? mapEsc(c.city)+' <span style="color:var(--mut)">— no street address on file</span>' : none('address')));
+    const look = (v.lat&&v.lng)
+      ? '<button class="labtn" onclick="openLookAround('+v.lat+','+v.lng+',\''+String(c.addr||[c.name,c.city].filter(Boolean).join(', ')).replace(/['"\\]/g,'')+'\')">\u{1F3E0} Look around</button>'
+      : '';
+    return '<div class="dsec"><div class="dlabel">Client</div><div class="dval"><b>'+mapEsc(c.name)+'</b>'
+      + '<div class="dsub">'+lines.join('<br>')+'</div>'+look+'</div></div>';
   }
   function reinaResolutions(v){
     const out=[]; const r=readinessOf(v);
@@ -1699,9 +1933,9 @@
     return out;
   }
   function infoSections(v){
-    const c=synthClient(v), t=techById(effectiveTech(v))||techById(v.t), es=effectiveStart(v), ee=effectiveEnd(v), rez=reinaResolutions(v);
+    const t=techById(effectiveTech(v))||techById(v.t), es=effectiveStart(v), ee=effectiveEnd(v), rez=reinaResolutions(v);
     let h='';
-    h+=`<div class="dsec"><div class="dlabel">Client</div><div class="dval"><b>${c.name}</b><div class="dsub">📞 ${c.phone} · ✉ ${c.email}<br>📍 ${c.addr}</div>${(v.lat&&v.lng)?`<button class="labtn" onclick="openLookAround(${v.lat},${v.lng},'${(c.addr||'').replace(/['"\\]/g,'')}')">🏠 Look around</button>`:''}</div></div>`;
+    h+=clientCardHTML(v);
     h+=`<div class="dsec"><div class="dlabel">Job</div><div class="dval">${v.jobNo?'<b>#'+v.jobNo+'</b> · ':''}${cardIcon(v)} ${v.div}${v.source==='jobber'?' · <span style="color:var(--mut)">🔒 Jobber</span>':''}</div></div>`;
     h+=`<div class="dsec"><div class="dlabel">Work</div><div class="dval">${v.type} · ${outIcon(v)} ${exposureOf(v)==='outside'?'outside (weather-exposed)':'inside'}</div></div>`;
     h+=`<div class="dsec"><div class="dlabel">When</div><div class="dval">${dLabel(v.date)} · ${fmt(es)}–${fmt(ee)} · ${(ee-es)}h</div></div>`;
@@ -1725,6 +1959,16 @@
       if(clientFacing) body+=`<button class="btn sm" onclick="LabUI.sendReminderNow('${vid}')">📧 Reminder</button>`;
       body+=`<button class="btn sm" onclick="LabUI.togglePin('${vid}')">${v.pinned?'📌 Unpin':'📌 Pin'}</button><button class="btn sm" onclick="LabUI.cycleStatus('${vid}')">↻ ${STATUS[v.status].l}</button>`;
       if(clientFacing) body+=`<button class="btn sm danger" onclick="LabUI.cancelAppt('${vid}')">Cancel…</button>`;
+      // The whole point of a site visit is the estimate that follows it. The
+      // path existed -- the lead card has a "Start estimate" button -- but from
+      // here the estimator had to remember the client, leave the board, find
+      // the same lead again and press it there. Chris, 2026-08-23: "lets do all
+      // 3." Shown only once the visit is done, and only when the appointment
+      // carries the lead it was booked from, because without that id the
+      // estimate cannot record where it came from and the lead never advances.
+      if(v.kind==='sitevisit' && v.sourceLeadId && v.status==='done'){
+        body+=`<button class="btn sm primary" onclick="LabUI.estimateFromVisit('${vid}')">✎ Write the estimate</button>`;
+      }
       body+=`</div>`;
     } else {
       body+=`<div class="policybox" style="margin-top:8px"><b>${ROLE_LABELS[state.role]||state.role} — view / request only</b>Set the new time/crew above, then send it to Dispatch to approve.</div>`;
@@ -1926,6 +2170,21 @@
     jumpVisit(vid){ const v=visits.find((z)=>z.id===vid); if(!v)return; closeModal(); state.date=v.date; state.view='day'; render(); setTimeout(()=>v.locked?openLockedSheet(vid):openJobSheet(vid),60); },
     // open a visit's detail WITHOUT leaving the current view (Week/Month stay put)
     openVisitSheet(vid){ const v=visits.find((z)=>z.id===vid); if(!v)return; v.locked?openLockedSheet(vid):openJobSheet(vid); },
+    // The board is an iframe; the estimate builder lives in the parent page.
+    // Ask it to open, the same way the board asks for a fresh token. If nobody
+    // is listening -- the board opened standalone -- say so rather than
+    // appearing to work.
+    estimateFromVisit(vid){
+      const v=visits.find((z)=>z.id===vid); if(!v)return;
+      if(!v.sourceLeadId){ toast('⚠ This visit is not linked to a lead',true); return; }
+      if(window.parent===window){ toast('⚠ Open the schedule inside HiveLogic to write an estimate',true); return; }
+      closeModal();
+      try{
+        window.parent.postMessage({ type:'hl-estimate-from-lead',
+          leadId:v.sourceLeadId, clientId:v.clientRef||null, title:v.type||v.client||'' }, location.origin);
+        toast('✎ Opening the estimate…',false);
+      }catch(e){ toast('⚠ Could not open the estimate',true); }
+    },
     // click an empty Week cell → + Add for that crew + that day
     addAt(techId,date,ev){ if(ev&&ev.target&&ev.target.closest&&ev.target.closest('.wkchip'))return; if(!canEdit())return; openCreate(techId,9,date); },
     flashConflicts(){ document.querySelectorAll('.job.conflict').forEach((el)=>{ el.animate([{boxShadow:'0 0 0 0 rgba(198,91,78,.9)'},{boxShadow:'0 0 0 8px rgba(198,91,78,0)'}],{duration:900,iterations:2}); el.scrollIntoView({behavior:'smooth',inline:'center',block:'nearest'}); }); },
@@ -1950,24 +2209,118 @@
       modal({k:'Reina · weather impact',title:`${affected.length} job${affected.length>1?'s':''} at weather risk`,body,actions});
     },
     // Rule 3: Schedule This → 3 ranked options
-    scheduleThis(uid){ const u=demands.find((z)=>z.id===uid); if(!u)return;
-      const cands=techs.filter((t)=>t.lens==='crew');
-      const options=[
-        {t:cands[0], s:9,  label:'Best overall', best:true, reasons:['✓ '+u.skill+' qualified','✓ Materials '+(u.ready==='ready'?'ready':'pending'),'✓ ~12-min drive from prior job','✓ No overtime','✓ Fits customer window ('+u.window+')']},
-        {t:cands[1]||cands[0], s:8, label:'Fastest customer response', reasons:['✓ Earliest open slot','• Slightly longer drive']},
-        {t:cands[2]||cands[0], s:13, label:'Best crew continuity', reasons:['✓ Same crew as related work','• Later in the day']}
-      ];
-      modal({k:'Schedule this · '+u.dur+'h · '+u.skill,title:u.title,
-        body:`<div style="font-size:11px;color:var(--mut);margin-bottom:8px">${u.client} · ${u.city} · window: ${u.window}</div>`+
-          options.map((o)=>`<div class="optcard ${o.best?'best':''}" onclick="LabUI.pickOption('${uid}','${o.t.id}',${o.s})"><b>${o.best?'★ ':''}${o.label} — ${o.t.n} @ ${fmt(o.s)}</b><div class="rz">${o.reasons.join('<br>')}</div></div>`).join('')+
-          `<div style="font-size:10px;color:var(--mut)">Feasibility from hard rules; a solver ranks options in production. Lab preview.</div>`,
-        actions:[{label:'Cancel',cls:'',fn:closeModal}]});
+    // Chris, 2026-08-24, on the unscheduled rail once it had real jobs in it:
+    // "I like this feature, but you need the option to manually pick times and
+    // techs yoursself. techs should be list by division seleted in job setup,
+    // but an option to override to choose a tech from outside the listed
+    // division's list of techs"
+    //
+    // What was here before was a mockup, and with real jobs in the rail it
+    // showed him its seams: "★ Best overall — David @ 9a", "null qualified",
+    // "~12-min drive from prior job", "No overtime", "Fits customer window
+    // (null)". Every one of those was invented. There is no solver, no drive
+    // time, no overtime model and no customer window -- a job row carries none
+    // of it -- so the card recommended a person and an hour on the strength of
+    // nothing at all, and the nulls were the real data showing through.
+    //
+    // Picking a crew and an hour on a dispatch board is a judgement, and the
+    // person making it is the one who knows why. So this asks, rather than
+    // recommending: a date, a time, a length, and a crew.
+    scheduleThis(uid){
+      const u=demands.find((z)=>z.id===uid); if(!u)return;
+      const jobDiv=u.div||null;
+      const field=techs.filter((t)=>t.lens==='crew'||t.lens==='sub');
+      const inDiv=jobDiv?field.filter((t)=>t.div===jobDiv):[];
+      // Default to the job's own division, because that is the answer nine
+      // times in ten -- but never to an EMPTY picker. A division with nobody in
+      // it silently offering no crews is a dead end with no explanation.
+      const startAll=!jobDiv||inDiv.length===0;
+      window._schedShowAll=startAll;
+
+      const esc=(v)=>String(v==null?'':v).replace(/[&<>"]/g,(c)=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+      const who=[u.client,u.city].filter(Boolean).map(esc).join(' · ');
+      // TODAY, not etTodayYmd() -- that one is declared inside data.js's IIFE
+      // and is not reachable from this file. It would have thrown the first
+      // time state.date was unset, which is rare enough to have shipped.
+      const today=state.date||TODAY;
+
+      const crewOpts=(all)=>{
+        const list=all?field:inDiv;
+        if(!list.length) return '<option value="">No crews available</option>';
+        return list.map((t)=>`<option value="${esc(t.id)}">${esc(t.n)} · ${esc(t.crew)}${t.div&&t.div!==jobDiv?' · '+esc(t.div):''}</option>`).join('');
+      };
+      window._schedCrewOpts=crewOpts;
+
+      const note=!jobDiv
+        ? 'This job has no division set, so every crew is listed.'
+        : (inDiv.length===0
+            ? 'Nobody is set up in '+esc(jobDiv)+', so every crew is listed.'
+            : 'Showing '+esc(jobDiv)+' crews. Tick the box to pick from any division.');
+
+      modal({k:'Schedule this'+(u.jobNo?' · #'+esc(u.jobNo):''),title:u.title,
+        body:`${who?`<div style="font-size:11px;color:var(--mut);margin-bottom:10px">${who}</div>`:''}
+          <div style="display:flex;gap:8px">
+            <div class="field" style="flex:1.4;margin:0"><label>Date</label><input type="date" id="sd_date" value="${esc(today)}"></div>
+            <div class="field" style="flex:1;margin:0"><label>Start</label><select id="sd_time">${timeOptions(9)}</select></div>
+            <div class="field" style="width:78px;margin:0"><label>Hours</label><select id="sd_dur"><option>1</option><option selected>2</option><option>3</option><option>4</option><option>6</option><option>8</option></select></div>
+          </div>
+          <div class="field" style="margin:10px 0 0"><label>Crew</label><select id="sd_tech">${crewOpts(startAll)}</select></div>
+          <label style="display:flex;align-items:center;gap:7px;margin-top:8px;font-size:11.5px;cursor:pointer">
+            <input type="checkbox" id="sd_all" ${startAll?'checked':''} ${(!jobDiv||inDiv.length===0)?'disabled':''} onchange="window.LabUI.schedToggleAll(this.checked)">
+            Show crews from every division
+          </label>
+          <div id="sd_note" style="font-size:10.5px;color:var(--mut);margin-top:6px">${note}</div>`,
+        actions:[
+          {label:'Cancel',cls:'',fn:closeModal},
+          {label:'Book it',cls:'primary',fn:()=>window.LabUI.schedBook(uid)}
+        ]});
     },
-    pickOption(uid,techId,start){ const i=demands.findIndex((z)=>z.id===uid); if(i<0)return; const u=demands[i]; const dur=u.dur||2;
-      const nv={id:'d'+Date.now(),t:techId,date:state.date,s:start,e:start+dur,client:u.client,city:u.city,type:u.title,jobNo:null,div:u.div,status:'scheduled',kind:'service',source:'hivelogic',locked:false,lifecycle:'confirmed',confirm:'confirmed',vid:'lab_d'};
+
+    // The override. Re-renders the crew list in place rather than reopening the
+    // modal, so the date and time he already picked survive the toggle.
+    schedToggleAll(on){
+      window._schedShowAll=!!on;
+      const sel=document.getElementById('sd_tech');
+      if(sel&&window._schedCrewOpts) sel.innerHTML=window._schedCrewOpts(!!on);
+    },
+
+    // Books it for real. The old pickOption pushed a fabricated visit into the
+    // local array -- id 'd'+Date.now(), vid 'lab_d' -- and posted nothing, so
+    // the job looked scheduled on screen and was on nobody's calendar.
+    schedBook(uid){
+      const i=demands.findIndex((z)=>z.id===uid); if(i<0)return;
+      const u=demands[i];
+      const date=(document.getElementById('sd_date')||{}).value||'';
+      const s=parseFloat((document.getElementById('sd_time')||{}).value);
+      const dur=parseFloat((document.getElementById('sd_dur')||{}).value)||2;
+      const tid=(document.getElementById('sd_tech')||{}).value||'';
+      const tech=tid?techById(tid):null;
+      if(!date){ toast('Pick a date first',false); return; }
+      if(!tech||!tech.jid){ toast('Pick a crew member first',false); return; }
+      if(!window.hlPost||!window.hlEtToUTC){ toast('Cannot reach the schedule right now',false); return; }
+
       closeModal();
-      stageChange(`Scheduled ${u.client} → ${techById(techId).n} @ ${fmt(start)}`, ()=>{visits.push(nv);demands.splice(i,1);}, ()=>{const j=visits.findIndex((z)=>z.id===nv.id);if(j>=0)visits.splice(j,1);demands.splice(i,0,u);});
-      toast('📋 Staged from demand — publish to confirm & notify',false);
+      window.hlPost('create_appointment',{ appointment:{
+        kind:'field', title:u.title, client:u.client||null,
+        crew_jids:[tech.jid], lead_jid:tech.jid,
+        start_at:window.hlEtToUTC(date,s), end_at:window.hlEtToUTC(date,s+dur),
+        division:u.div||tech.div||null, job_ref:u.jobRef||null
+      }}).then((r)=>{
+        if(!(r&&r.ok)){ toast('Not booked: '+((r&&r.error)||'the schedule rejected it'),false); return; }
+        // Only now does it leave the rail. Removing it first would lose the job
+        // off the one list that was showing it, on a failure he cannot see.
+        const j=demands.findIndex((z)=>z.id===uid);
+        if(j>=0) demands.splice(j,1);
+        visits.push({ id:(r.appointment&&r.appointment.id)||('hl_'+Date.now()), apptId:r.appointment&&r.appointment.id,
+          t:tech.id, date:date, s:s, e:s+dur, client:u.client||'-', city:u.city||'-',
+          type:u.title, jobNo:u.jobNo||null, div:u.div||tech.div||'GH Co.',
+          status:'scheduled', kind:'field', source:'hivelogic', locked:false,
+          confirm:'confirmed', lifecycle:'confirmed', pinned:false, native:true,
+          crew:[{id:tech.id,n:tech.n,ini:tech.ini,pc:tech.pc,lead:true}], lead:true });
+        state.date=date; state.view='day';
+        render();
+        toast('Booked · '+u.title+' → '+tech.n+' @ '+fmt(s),false);
+      }).catch((e)=>toast('Not booked: '+(e&&e.message||'network error'),false));
     },
     // Rule 4: publish / discard / review the staged plan
     publishScenario(){ const n=state.scenario.changes.length; if(!n)return; state.scenario.changes=[]; render(); toast(`📣 Published ${n} change${n>1?'s':''} — ONE batch sent to clients, techs & office`,false); },
@@ -2052,87 +2405,357 @@
   // session and reused, since the list runs to a few thousand and the dialog
   // can be reopened many times in a shift.
   let _jobPickerCache=null;
-  function loadJobPicker(){
+  // ---- auth: the board's token, the same one hlPost writes with ----
+  // Every authenticated read from this file goes through here. It used to call
+  // window.hlAuthHeaders(), which was referenced once and DEFINED NOWHERE -- so
+  // /api/jobs was fetched with no Authorization header at all, answered 401,
+  // and the picker rendered that 401 body as "No jobs found". A signed-out
+  // answer and an empty answer must never look the same.
+  function hlHeaders(){
+    var t = window.HL_BOARD_TOKEN || '';
+    return t ? { Authorization: 'Bearer ' + t } : {};
+  }
+  window.hlAuthHeaders = hlHeaders;   // the name the old call site used
+
+  // ---- job picker ----
+  // `forClient` narrows to one client's jobs. A dispatcher who has already said
+  // WHO the visit is for should not then scroll 2,700 jobs to find WHICH.
+  function loadJobPicker(forClient){
     const sel=document.getElementById('cf_jobref'); if(!sel) return;
-    const paint=(jobs)=>{
+    const paint=(jobs,failed)=>{
       const cur=document.getElementById('cf_jobref'); if(!cur) return;
-      if(!jobs.length){ cur.innerHTML='<option value="">No jobs found</option>'; return; }
-      let h='<option value="">— no job (shop day, callback, estimate) —</option>';
-      jobs.forEach((j)=>{
+      if(failed){ cur.innerHTML='<option value="">Could not load jobs - try again</option>'; return; }
+      const scoped = forClient ? jobs.filter((j)=>String(j.clientId||'')===String(forClient)) : jobs;
+      let h='<option value="">- no job (shop day, callback, estimate) -</option>';
+      if(!scoped.length){
+        // Say WHICH kind of empty this is. "No jobs found" for a client who
+        // simply has none reads as a broken picker.
+        h += forClient ? '<option value="" disabled>This client has no jobs yet</option>'
+                       : '<option value="" disabled>No jobs found</option>';
+      }
+      scoped.forEach((j)=>{
         const num=j.projectRef||(j.jobNumber!=null?('#'+j.jobNumber):'');
-        const label=[num,j.title||'Untitled',j.clientName?('— '+j.clientName):''].filter(Boolean).join(' ');
+        const label=[num,j.title||'Untitled',j.clientName?('- '+j.clientName):''].filter(Boolean).join(' ');
         h+=`<option value="${String(j.id).replace(/"/g,'&quot;')}">${label.replace(/</g,'&lt;')}</option>`;
       });
       cur.innerHTML=h;
     };
     if(_jobPickerCache){ paint(_jobPickerCache); return; }
-    fetch('/api/jobs?limit=2000',{headers:window.hlAuthHeaders?window.hlAuthHeaders():{}})
-      .then((r)=>r.json())
+    fetch('/api/jobs?limit=2000',{headers:hlHeaders()})
+      .then((r)=>{ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
       .then((d)=>{
         const jobs=(d&&d.jobs)||[];
-        // Active work first — a dispatcher is almost never scheduling a closed job.
+        // Active work first - a dispatcher is almost never scheduling a closed job.
         jobs.sort((a,b)=>((a.status==='active'?0:1)-(b.status==='active'?0:1)));
         _jobPickerCache=jobs; paint(jobs);
       })
-      .catch(()=>{ const cur=document.getElementById('cf_jobref'); if(cur) cur.innerHTML='<option value="">Could not load jobs</option>'; });
+      .catch(()=>paint([],true));
   }
+
+  // ---- client picker: typeahead, because there are 8,600+ of them ----
+  // A <select> of every client is not a picker, it is a scroll. The dispatcher
+  // types, the server matches, and picking one fills in everything already
+  // known about them so nothing is retyped.
+  let _clientTimer=null, _clientChosen=null;
+
+  function clientRowHtml(c){
+    const bits=[c.phone||'', c.email||''].filter(Boolean).join(' . ');
+    const safeId=String(c.id).replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+    return `<div class="cl-hit" onclick="window.hlPickClient('${safeId}')"
+      style="padding:7px 9px;border-bottom:1px solid var(--line);cursor:pointer;font-size:12.5px">
+      <b>${(c.name||'Unnamed').replace(/</g,'&lt;')}</b>${c.isLead?' <span style="color:var(--mut);font-weight:700">. lead</span>':''}
+      ${bits?`<div style="color:var(--mut);font-size:11px">${bits.replace(/</g,'&lt;')}</div>`:''}
+    </div>`;
+  }
+
+  window.hlClientSearch=(q)=>{
+    const box=document.getElementById('c_clhits'); if(!box) return;
+    const term=String(q||'').trim();
+    if(_clientTimer) clearTimeout(_clientTimer);
+    if(term.length<2){ box.innerHTML=''; box.style.display='none'; return; }
+    box.style.display='';
+    box.innerHTML='<div style="padding:8px 9px;color:var(--mut);font-size:12px">Searching...</div>';
+    // Debounced: a dispatcher types faster than a round trip, and every
+    // keystroke firing its own request means answers arrive out of order.
+    _clientTimer=setTimeout(()=>{
+      const mine=term;
+      fetch('/api/clients?search='+encodeURIComponent(term)+'&limit=15&order=name',{headers:hlHeaders()})
+        .then((r)=>{ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
+        .then((d)=>{
+          const cur=document.getElementById('c_cl');
+          // A slower earlier request must not overwrite a later answer.
+          if(!cur || cur.value.trim()!==mine) return;
+          const box2=document.getElementById('c_clhits'); if(!box2) return;
+          const list=(d&&d.clients)||[];
+          window._clHits={}; list.forEach((c)=>{ window._clHits[c.id]=c; });
+          box2.innerHTML = list.length
+            ? list.map(clientRowHtml).join('')
+            : `<div style="padding:8px 9px;color:var(--mut);font-size:12px">No client matches "${mine.replace(/</g,'&lt;')}" - use <b>+ New client</b></div>`;
+        })
+        .catch(()=>{ const b=document.getElementById('c_clhits'); if(b) b.innerHTML='<div style="padding:8px 9px;color:var(--mut);font-size:12px">Could not search clients</div>'; });
+    },220);
+  };
+
+  // Everything known about the client, shown as a card and folded into the save.
+  function paintClientCard(){
+    const wrap=document.getElementById('c_clcard'); if(!wrap) return;
+    const c=_clientChosen;
+    if(!c){ wrap.innerHTML=''; wrap.style.display='none'; return; }
+    wrap.style.display='';
+    const lines=[c.phone,c.email,c.address].filter(Boolean);
+    wrap.innerHTML=`<div style="border:1px solid var(--line);border-radius:9px;padding:9px 10px;background:var(--panel);display:flex;gap:10px;align-items:flex-start">
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:800;font-size:13px">${(c.name||'').replace(/</g,'&lt;')}</div>
+        ${lines.length?`<div style="color:var(--mut);font-size:11.5px;margin-top:2px">${lines.map((x)=>String(x).replace(/</g,'&lt;')).join(' . ')}</div>`
+                      :'<div style="color:var(--mut);font-size:11.5px;margin-top:2px">No phone or address on file</div>'}
+      </div>
+      <button type="button" class="btn sm" onclick="window.hlClearClient()">Change</button>
+    </div>`;
+  }
+
+  window.hlPickClient=(id)=>{
+    const c=(window._clHits||{})[id]; if(!c) return;
+    _clientChosen=Object.assign({},c);
+    const box=document.getElementById('c_clhits'); if(box){ box.innerHTML=''; box.style.display='none'; }
+    const inp=document.getElementById('c_cl'); if(inp){ inp.value=''; inp.style.display='none'; }
+    const nb=document.getElementById('c_clnew'); if(nb) nb.style.display='none';
+    paintClientCard();
+    // Their jobs only, and their address - both already known, neither retyped.
+    loadJobPicker(id);
+    fetch('/api/track1?resource=client_location&clientId='+encodeURIComponent(id),{headers:hlHeaders()})
+      .then((r)=>r.json())
+      .then((d)=>{ if(d&&d.found&&d.address){ _clientChosen.address=d.address; _clientChosen.city=d.city||null; paintClientCard(); prefillAddress(d.address); } })
+      .catch(()=>{});
+  };
+
+  // The save handler and the kind-switcher both need to know who was picked.
+  window._hlChosenClient=()=>_clientChosen;
+
+  window.hlClearClient=()=>{
+    _clientChosen=null;
+    const inp=document.getElementById('c_cl'); if(inp){ inp.style.display=''; inp.value=''; inp.focus(); }
+    const nb=document.getElementById('c_clnew'); if(nb) nb.style.display='';
+    paintClientCard(); loadJobPicker(null);
+  };
+
+  // The site-visit kind has its own address field; fill it rather than making
+  // someone copy an address that is already on screen.
+  function prefillAddress(addr){
+    const el=document.getElementById('cf_addr');
+    if(el && !el.value) el.value=addr;
+  }
+
+  // ---- new client, inline ----
+  window.hlNewClient=()=>{
+    const wrap=document.getElementById('c_clnewform'); if(!wrap) return;
+    const open = wrap.style.display==='none' || !wrap.style.display;
+    wrap.style.display = open ? '' : 'none';
+    if(!open){ wrap.innerHTML=''; return; }
+    wrap.innerHTML=`<div style="border:1px solid var(--line);border-radius:9px;padding:10px;background:var(--panel)">
+      <div style="font-weight:800;font-size:12px;margin-bottom:8px">New client</div>
+      <div style="display:flex;gap:8px;margin-bottom:8px">
+        <div class="field" style="flex:1;margin:0"><label>First name</label><input id="nc_first"/></div>
+        <div class="field" style="flex:1;margin:0"><label>Last name</label><input id="nc_last"/></div>
+      </div>
+      <div class="field" style="margin-bottom:8px"><label>Company (if it is a business)</label><input id="nc_company"/></div>
+      <div style="display:flex;gap:8px;margin-bottom:8px">
+        <div class="field" style="flex:1;margin:0"><label>Phone</label><input id="nc_phone" placeholder="203-555-0142"/></div>
+        <div class="field" style="flex:1;margin:0"><label>Email</label><input id="nc_email" placeholder="name@example.com"/></div>
+      </div>
+      <div class="field" style="margin-bottom:8px"><label>Street</label><input id="nc_street" placeholder="12 Sound Beach Ave"/></div>
+      <div style="display:flex;gap:8px;margin-bottom:8px">
+        <div class="field" style="flex:2;margin:0"><label>Town</label><input id="nc_city" placeholder="Old Greenwich"/></div>
+        <div class="field" style="width:64px;margin:0"><label>State</label><input id="nc_state" value="CT"/></div>
+        <div class="field" style="width:82px;margin:0"><label>Zip</label><input id="nc_zip"/></div>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <button type="button" class="btn primary sm" onclick="window.hlSaveNewClient()">Save client</button>
+        <button type="button" class="btn sm" onclick="window.hlNewClient()">Cancel</button>
+        <span id="nc_msg" style="font-size:11.5px;color:var(--mut)"></span>
+      </div>
+    </div>`;
+    const f=document.getElementById('nc_first'); if(f) f.focus();
+  };
+
+  window.hlSaveNewClient=()=>{
+    const g=(id)=>{const e=document.getElementById(id);return e?e.value.trim():'';};
+    const msg=document.getElementById('nc_msg');
+    const first=g('nc_first'), last=g('nc_last'), company=g('nc_company');
+    if(!first && !last && !company){ if(msg) msg.textContent='Needs a name or a company.'; return; }
+    if(msg) msg.textContent='Saving...';
+    fetch('/api/track1?resource=create_client',{
+      method:'POST',
+      headers:Object.assign({'Content-Type':'application/json'},hlHeaders()),
+      body:JSON.stringify({ firstName:first, lastName:last, companyName:company,
+        phone:g('nc_phone'), email:g('nc_email'),
+        street:g('nc_street'), city:g('nc_city'), province:g('nc_state'), postalCode:g('nc_zip') })
+    })
+      .then((r)=>r.json())
+      .then((d)=>{
+        if(!d||!d.ok||!d.client){ if(msg) msg.textContent='Could not save: '+((d&&d.error)||'error'); return; }
+        const c=d.client;
+        const addr=[g('nc_street'),g('nc_city'),g('nc_state')].filter(Boolean).join(', ');
+        window._clHits=window._clHits||{};
+        window._clHits[c.jobber_id]={ id:c.jobber_id, name:c.name, phone:g('nc_phone')||null,
+          email:c.email||null, address:addr||null, isLead:true };
+        const form=document.getElementById('c_clnewform'); if(form){ form.style.display='none'; form.innerHTML=''; }
+        window.hlPickClient(c.jobber_id);
+        toast('Client added . '+c.name+(d.locationSaved?' (address saved)':''),false);
+      })
+      .catch(()=>{ if(msg) msg.textContent='Could not save (network).'; });
+  };
+
   function cfExtraHtml(kind){
     const spec=CREATE_FIELDS[kind]||CREATE_FIELDS.field; let h='', row=[];
     const flush=()=>{ if(!row.length)return; h+=`<div style="display:flex;gap:8px;margin-bottom:8px">${row.join('')}</div>`; row=[]; };
-    spec.extra.forEach((f)=>{ if(f.half){ row.push(cfField(f)); if(row.length===2) flush(); } else { flush(); h+=`<div style="margin-bottom:8px">${cfField(f)}</div>`; } });
+    spec.extra.filter((f)=>f.id!=='jobref'&&f.id!=='div').forEach((f)=>{ if(f.half){ row.push(cfField(f)); if(row.length===2) flush(); } else { flush(); h+=`<div style="margin-bottom:8px">${cfField(f)}</div>`; } });
     flush(); return h;
   }
+  // ---- "+ Add": one pass, top to bottom, filling itself in as it goes ----
+  // Order is the dispatcher's order (Chris, 2026-08-21): type, who it's for,
+  // which job, when, who's going, division, notes. Each answer narrows or
+  // fills the next, so the only things typed by hand are the ones the system
+  // genuinely does not know.
   window.openCreate=(prefTech,prefStart,prefDate)=>{
     const dOpts=weekDaysOf(prefDate||state.date), dSel=prefDate||state.date;
     const kinds=Object.keys(KINDS);
     const defTech = prefTech || ((visibleTechs()[0]||{}).id) || '';
-    window._cDefTech = defTech;
+    window._cDefTech = defTech; window._clHits={}; window._cJobGeo=null;
     const k0 = 'field';
-    const body=`<div class="field"><label>Add to schedule</label><select id="c_kind" onchange="window._ckind(this.value)">${kinds.map((k)=>`<option value="${k}" ${k===k0?'selected':''}>${KINDS[k].ic} ${KINDS[k].l}</option>`).join('')}</select></div>
-      <div class="field"><label id="c_clientlbl">Client / title</label><input id="c_client" placeholder="e.g. Winslow — bath reno"/></div>
-      <div style="display:flex;gap:8px;margin-bottom:8px"><div class="field" style="flex:1;margin:0"><label id="c_assignlbl">Assign to</label><select id="c_tech">${techOptions(defTech)}</select></div></div>
-      <div style="display:flex;gap:8px;margin-bottom:8px"><div class="field" style="flex:1;margin:0"><label>Date</label><select id="c_date">${dOpts.map((d)=>`<option value="${d}" ${d===dSel?'selected':''}>${dLabel(d)}</option>`).join('')}</select></div>
+    const sect=(n,label)=>`<div style="display:flex;align-items:center;gap:8px;margin:14px 0 7px">
+      <span style="width:18px;height:18px;border-radius:50%;background:var(--accent,#2B8CC0);color:#fff;font:800 10.5px system-ui;display:grid;place-items:center;flex:none">${n}</span>
+      <span style="font:800 11px system-ui;letter-spacing:.06em;text-transform:uppercase;color:var(--mut)">${label}</span>
+      <span style="flex:1;height:1px;background:var(--line)"></span></div>`;
+
+    const body=`
+      ${sect(1,'Type of visit')}
+      <div class="field" style="margin:0"><select id="c_kind" onchange="window._ckind(this.value)">${kinds.map((k)=>`<option value="${k}" ${k===k0?'selected':''}>${KINDS[k].ic} ${KINDS[k].l}</option>`).join('')}</select></div>
+
+      ${sect(2,'Client')}
+      <div style="position:relative">
+        <input id="c_cl" autocomplete="off" placeholder="Start typing a name, company or email..." oninput="window.hlClientSearch(this.value)"/>
+        <div id="c_clhits" style="display:none;position:absolute;z-index:40;left:0;right:0;top:100%;margin-top:3px;max-height:210px;overflow:auto;border:1px solid var(--line);border-radius:9px;background:var(--panel);box-shadow:0 8px 24px rgba(0,0,0,.16)"></div>
+      </div>
+      <div id="c_clcard" style="display:none;margin-top:7px"></div>
+      <div style="margin-top:7px"><button type="button" id="c_clnew" class="btn sm" onclick="window.hlNewClient()">+ New client</button></div>
+      <div id="c_clnewform" style="display:none;margin-top:8px"></div>
+      <div id="c_cltitle" style="margin-top:9px"><div class="field" style="margin:0"><label id="c_clientlbl">Or just a title, if there is no client yet</label><input id="c_client" placeholder="e.g. Winslow - bath reno"/></div></div>
+
+      ${sect(3,'Job')}
+      <div style="display:flex;gap:8px">
+        <div class="field" style="flex:1;margin:0"><label>Job this visit belongs to</label><select id="cf_jobref" onchange="window._cjob(this.value)"><option value="">Loading jobs...</option></select></div>
+      </div>
+      <div id="c_jobnote" style="font-size:11px;color:var(--mut);margin-top:5px">Pick a job and the visit is tied to it - the board shows its number and the hours can be costed against it.</div>
+
+      ${sect(4,'When')}
+      <div style="display:flex;gap:8px">
+        <div class="field" style="flex:1;margin:0"><label>Date</label><select id="c_date">${dOpts.map((d)=>`<option value="${d}" ${d===dSel?'selected':''}>${dLabel(d)}</option>`).join('')}</select></div>
         <div class="field" style="flex:1;margin:0"><label>Start</label><select id="c_time">${timeOptions(prefStart!=null?prefStart:9)}</select></div>
-        <div class="field" style="width:74px;margin:0"><label>Hrs</label><select id="c_dur"><option>1</option><option selected>2</option><option>3</option><option>4</option><option>6</option><option>8</option></select></div></div>
+        <div class="field" style="width:78px;margin:0"><label>Hours</label><select id="c_dur"><option>1</option><option selected>2</option><option>3</option><option>4</option><option>6</option><option>8</option></select></div>
+      </div>
+
+      ${sect(5,'Who')}
+      <div class="field" style="margin:0"><label id="c_assignlbl">Crew</label><select id="c_tech" onchange="window._ctech(this.value)">${techOptions(defTech)}</select></div>
+
+      ${sect(6,'Division / trade')}
+      <div class="field" style="margin:0"><select id="c_div">${DIVISIONS.map((d)=>`<option>${d}</option>`).join('')}</select></div>
+      <div id="c_divnote" style="font-size:11px;color:var(--mut);margin-top:5px"></div>
+
+      ${sect(7,'Notes & details')}
       <div id="c_extra">${cfExtraHtml(k0)}</div>
-      <div id="c_clientwrap"><div class="policybox"><b>On confirm</b>Client-facing types send the confirmation + reminder cadence and show the cancellation policy.</div></div>
-      <div style="font-size:10.5px;color:var(--mut);margin-top:8px">📝 Saved in HiveLogic, not in Jobber. Pick a job and the visit is tied to it, so the board shows its number and the time can be costed against it.</div>`;
+
+      <div id="c_clientwrap" style="margin-top:10px"></div>
+      <div style="font-size:10.5px;color:var(--mut);margin-top:10px">Saved in HiveLogic, not in Jobber.</div>`;
+
     modal({k:'Add to the schedule',title:'+ Add',body,actions:[
       {label:'Cancel',cls:'',fn:closeModal},
       {label:'Add',cls:'primary',fn:()=>{
-        const kind=document.getElementById('c_kind').value, client=document.getElementById('c_client').value||'New '+KINDS[kind].l,
-          t=document.getElementById('c_tech').value, date=document.getElementById('c_date').value,
+        const kind=document.getElementById('c_kind').value;
+        const chosen=window._hlChosenClient?window._hlChosenClient():null;
+        const typed=(document.getElementById('c_client')||{}).value||'';
+        const client=(chosen&&chosen.name)||typed||('New '+KINDS[kind].l);
+        const t=document.getElementById('c_tech').value, date=document.getElementById('c_date').value,
           s=parseFloat(document.getElementById('c_time').value), dur=parseFloat(document.getElementById('c_dur').value);
         const kd=KINDS[kind]; const g=(id)=>{const el=document.getElementById('cf_'+id);return el?(el.type==='checkbox'?el.checked:el.value):undefined;};
-        const tech=techById(t); const div=g('div')||(tech?tech.div:'GH Co.'); const expo=g('expo')?'outside':'inside';
-        const details={}; ((CREATE_FIELDS[kind]||CREATE_FIELDS.field).extra).forEach((f)=>{ const val=g(f.id); if(val!==undefined&&val!=='') details[f.id]=val; });
+        const tech=techById(t);
+        const div=(document.getElementById('c_div')||{}).value||(tech?tech.div:'GH Co.');
+        const expo=g('expo')?'outside':'inside';
+        const details={}; ((CREATE_FIELDS[kind]||CREATE_FIELDS.field).extra).forEach((f)=>{ if(f.id==='jobref'||f.id==='div') return; const val=g(f.id); if(val!==undefined&&val!=='') details[f.id]=val; });
+        // Everything already known about the client rides along, so the field
+        // has the address and phone without anyone retyping them.
+        if(chosen){ if(chosen.phone) details.phone=chosen.phone; if(chosen.email) details.email=chosen.email; if(chosen.address) details.address=chosen.address; }
         const crew=tech?[{id:t,n:tech.n,ini:tech.ini,pc:tech.pc,lead:true}]:[];
-        // The picker's value is the job's id; its label carries the number the
-        // board displays. The server re-derives that number from the job record
-        // rather than trusting the label, so the two can never disagree.
-        const jobRefVal=g('jobref')||null;
         const jobSel=document.getElementById('cf_jobref');
-        const jobLabel=(jobSel&&jobSel.selectedIndex>0)?(jobSel.options[jobSel.selectedIndex].text.split(' ')[0]||null):null;
-        const nv={id:'hl_new'+Date.now(),t,date,s,e:s+dur,client,city:'—',type:g('desc')||g('scope')||g('issue')||kd.l,jobNo:jobLabel,div,status:'scheduled',kind,exposure:expo,source:'hivelogic',locked:false,confirm:'confirmed',pinned:false,vid:'new',crew:crew,lead:true,native:true};
+        const jobRefVal=(jobSel&&jobSel.value)||null;
+        const jobLabel=(jobSel&&jobSel.selectedIndex>0&&jobSel.value)?(jobSel.options[jobSel.selectedIndex].text.split(' ')[0]||null):null;
+        const geo=window._cJobGeo||{};
+        const nv={id:'hl_new'+Date.now(),t,date,s,e:s+dur,client,city:geo.city||(chosen&&chosen.city)||'-',type:g('desc')||g('scope')||g('issue')||kd.l,jobNo:jobLabel,div,status:'scheduled',kind,exposure:expo,source:'hivelogic',locked:false,confirm:'confirmed',pinned:false,vid:'new',crew:crew,lead:true,native:true,lat:geo.lat||null,lng:geo.lng||null};
         visits.push(nv); state.undo={type:'assign',id:nv.id,u:null}; state.date=date; state.view='day'; closeModal(); render();
         if(window.hlPost && tech && tech.jid){
-          window.hlPost('create_appointment', { appointment:{ kind:kind, title:(g('desc')||g('scope')||g('issue')||client), client:client, crew_jids:[tech.jid], lead_jid:tech.jid, start_at:window.hlEtToUTC(date,s), end_at:window.hlEtToUTC(date,s+dur), division:div, job_ref:jobRefVal, lat:null, lng:null, details:details } })
-            .then((r)=>{ if(r&&r.ok){ nv.apptId=r.appointment&&r.appointment.id; if(r.appointment&&r.appointment.job_no) nv.jobNo=r.appointment.job_no; render(); toast(`✅ Added ${kd.l} · ${client}${(r.appointment&&r.appointment.job_no)?(' · '+r.appointment.job_no):''} — saved to HiveLogic`,false); } else { toast(`⚠ On screen, but save failed: ${(r&&r.error)||'error'}`,false); } })
-            .catch(()=>toast('⚠ On screen, but save failed (network)',false));
+          window.hlPost('create_appointment', { appointment:{ kind:kind, title:(g('desc')||g('scope')||g('issue')||client), client:client, client_ref:(chosen&&chosen.id)||null, crew_jids:[tech.jid], lead_jid:tech.jid, start_at:window.hlEtToUTC(date,s), end_at:window.hlEtToUTC(date,s+dur), division:div, job_ref:jobRefVal, lat:geo.lat||null, lng:geo.lng||null, details:details } })
+            .then((r)=>{ if(r&&r.ok){ nv.apptId=r.appointment&&r.appointment.id; if(r.appointment&&r.appointment.job_no) nv.jobNo=r.appointment.job_no; render(); toast(`Added ${kd.l} . ${client}${(r.appointment&&r.appointment.job_no)?(' . '+r.appointment.job_no):''} - saved to HiveLogic`,false); } else { toast(`On screen, but save failed: ${(r&&r.error)||'error'}`,false); } })
+            .catch(()=>toast('On screen, but save failed (network)',false));
         } else {
-          toast(`✅ Added ${kd.l} · ${client}${(tech&&tech.jid)?'':' — assign a crew member to save'}`,false);
+          toast(`Added ${kd.l} . ${client}${(tech&&tech.jid)?'':' - assign a crew member to save'}`,false);
         }
       }}]});
-    loadJobPicker();
+
+    loadJobPicker(null);
+    window._cdivnote('Set from the job, or the crew you pick.');
+    window._cconfirmnote(k0);
+
+    // Picking a job fills in what the job record already knows: its division,
+    // its title, and where it is. The job is the authority for all three, so a
+    // dispatcher never retypes them and they cannot disagree.
+    window._cjob=(val)=>{
+      const jobs=_jobPickerCache||[]; const j=jobs.filter((x)=>String(x.id)===String(val))[0];
+      if(!j){ window._cJobGeo=null; window._cdivnote('Set from the job, or the crew you pick.'); return; }
+      window._cJobGeo={ lat:j.gpsLat||null, lng:j.gpsLng||null, city:j.city||null };
+      const dv=document.getElementById('c_div');
+      if(dv && j.divisionCode && DIVISIONS.indexOf(j.divisionCode)!==-1){ dv.value=j.divisionCode; window._cdivnote('From job '+(j.projectRef||('#'+j.jobNumber))+'.'); }
+      const ti=document.getElementById('c_client');
+      if(ti && !ti.value && j.title) ti.value=j.title;
+      const desc=document.getElementById('cf_desc');
+      if(desc && !desc.value && j.title) desc.placeholder='Scope of this visit on '+j.title+'...';
+    };
+
+    // No job picked? Then the crew member's own division is the best guess.
+    window._ctech=(id)=>{
+      const jobSel=document.getElementById('cf_jobref');
+      if(jobSel && jobSel.value) return;              // the job already decided
+      const t=techById(id), dv=document.getElementById('c_div');
+      if(t && dv && t.div && DIVISIONS.indexOf(t.div)!==-1){ dv.value=t.div; window._cdivnote('From '+t.n+'. Pick a job and the job wins.'); }
+    };
+    window._ctech(defTech);
+
     window._ckind=(k)=>{
       const spec=CREATE_FIELDS[k]||CREATE_FIELDS.field;
       const ex=document.getElementById('c_extra'); if(ex) ex.innerHTML=cfExtraHtml(k);
-      const al=document.getElementById('c_assignlbl'); if(al) al.textContent=spec.assignLabel||'Assign to';
-      const cl=document.getElementById('c_clientlbl'); if(cl) cl.textContent=(k==='lead'?'Lead / name':(k==='internal'?'Meeting title':(k==='sub'?'Client / job':'Client / title')));
-      const cw=document.getElementById('c_clientwrap'); if(cw) cw.style.display=KINDS[k].clientFacing?'':'none';
-      loadJobPicker();   // the extras were just re-rendered, so any picker is empty again
+      const al=document.getElementById('c_assignlbl'); if(al) al.textContent=spec.assignLabel||'Crew';
+      const cl=document.getElementById('c_clientlbl'); if(cl) cl.textContent=(k==='lead'?'Or just a name, if there is no client record yet':(k==='internal'?'Meeting title':'Or just a title, if there is no client yet'));
+      // Internal work has no customer. Hiding the picker is more honest than
+      // showing one that must be left blank.
+      const cw=document.getElementById('c_cltitle'); if(cw) cw.style.display='';
+      window._cconfirmnote(k);
+      const chosen=window._hlChosenClient?window._hlChosenClient():null;
+      loadJobPicker(chosen?chosen.id:null);   // extras were re-rendered, so the picker is empty again
+      const c2=window._hlChosenClient?window._hlChosenClient():null;
+      if(c2 && c2.address) prefillAddress(c2.address);
     };
   };
+
+  // The old copy said client-facing types "send the confirmation + reminder
+  // cadence" full stop. With the master switch off that was simply untrue on
+  // screen. It now says which of the two it is.
+  window._cconfirmnote=(kind)=>{
+    const box=document.getElementById('c_clientwrap'); if(!box) return;
+    if(!KINDS[kind]||!KINDS[kind].clientFacing){ box.innerHTML=''; return; }
+    const live=!!(window.HL_MSG&&window.HL_MSG.enabled);
+    box.innerHTML=`<div class="policybox"><b>On confirm</b>${live
+      ? 'Messaging is LIVE - saving this queues the confirmation and the reminder cadence, and the client will be emailed.'
+      : 'Messaging is OFF - the confirmation and reminders are queued as a preview only. Nothing is sent to the client until you turn messaging on.'}</div>`;
+  };
+  window._cdivnote=(t)=>{ const n=document.getElementById('c_divnote'); if(n) n.textContent=t||''; };
 
   // ---- appointment settings: reminder cadence + cancellation policy ----
   window.openApptSettings=()=>{

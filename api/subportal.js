@@ -38,6 +38,8 @@
 import { supabaseRequest } from './_lib/jobber.js';
 import { genToken, hashToken, checkRateLimit, deliverLoginLink } from './_lib/portal-auth.js';
 import { hasAllowedRole } from './_lib/permission-roles.js';
+import { listPortalFiles, subJobIds } from './_lib/hivedoc-portal-files.js';
+import { decodeDataUrl, extensionFor, safeSegment, storeFiledDocument, discardFiledDocument } from './_lib/hivedoc-files.js';
 
 // ---------------------------------------------------------------------------
 // small helpers
@@ -162,30 +164,65 @@ async function requireSub(req, res) {
 }
 
 // ---------------------------------------------------------------------------
-// Supabase Storage upload for docs/invoices. Accepts a data: URL (what a
-// phone camera capture produces client-side) and puts it in a private
-// bucket, returning the object path. Buckets are NOT created by this code —
-// create `sub-documents` and `sub-invoices` (private) once in the Supabase
-// dashboard before this goes live; that's a one-time manual step, same as
-// every other piece of infra in this repo that isn't SQL.
+// Supabase Storage upload for sub compliance docs and sub invoices.
+//
+// This used to write to buckets named `sub-documents` and `sub-invoices`, with
+// a comment saying somebody would create them by hand in the dashboard. Nobody
+// ever did, and nothing ever checked: the 2026-08-21 audit found neither in
+// storage.buckets, re-confirmed 2026-08-22. So every sub upload since this file
+// was written threw, the outer catch turned it into a 502, and the raw Supabase
+// error — bucket name included — went back to a subcontractor, who is
+// outside the company.
+//
+// They go into the shared private `docs` bucket now, under `subs/` prefixes,
+// with a public.documents row. See api/_lib/hivedoc-files.js for why the
+// metadata row is not optional. Nothing to create; `docs` already exists.
 // ---------------------------------------------------------------------------
-async function uploadDataUrl(bucket, path, dataUrl) {
-  const match = /^data:([^;]+);base64,(.+)$/.exec(dataUrl || '');
-  if (!match) throw new Error('Expected a base64 data URL (e.g. from a camera capture).');
-  const [, contentType, b64] = match;
-  const buf = Buffer.from(b64, 'base64');
-  const res = await fetch(`${process.env.SUPABASE_URL}/storage/v1/object/${bucket}/${path}`, {
+const SUB_DOC_PREFIX = 'subs/documents';
+const SUB_INVOICE_PREFIX = 'subs/invoices';
+
+// A sub compliance folder is admin-material: a W9 carries a taxpayer ID, and
+// `doc_type` is free text the portal has never validated, so we cannot tell a
+// W9 from a COI by looking. Closed by default is the only safe reading.
+const SUB_DOC_SENSITIVE = true;
+// An invoice is ordinary AP paperwork that office and bookkeeping have to
+// process, and carries no personal identifier beyond a business name. Marking
+// it sensitive would hide it from everyone who is not `role = 'admin'`.
+const SUB_INVOICE_SENSITIVE = false;
+
+// Upload + describe, or leave nothing behind. Throws an error whose message is
+// safe to show the sub: the bucket name and HTTP status go to the log instead.
+async function storeSubFile({ prefix, subId, name, dataUrl, docType, sensitive }) {
+  const { contentType, buffer } = decodeDataUrl(dataUrl);   // already sub-safe messages
+  const base = safeSegment(name, 'file');
+  const ext = extensionFor(contentType);
+  const filename = `${base}.${ext}`;
+  const storagePath = `${prefix}/${safeSegment(subId)}/${base}-${Date.now()}.${ext}`;
+
+  const filed = await storeFiledDocument({ storagePath, buffer, contentType, filename, docType, sensitive });
+  if (!filed.ok) {
+    console.error('subportal upload failed:', filed.detail);
+    throw new Error('We could not save that file. Try again, or email it to the office.');
+  }
+  return filed;
+}
+
+// ---------------------------------------------------------------------------
+// Short-lived signed URL for a private bucket object. Returns null rather than
+// throwing so one unreachable file cannot take down a whole list.
+async function signBucketUrl(bucket, storagePath, expiresInSeconds = 3600) {
+  const r = await fetch(`${process.env.SUPABASE_URL}/storage/v1/object/sign/${bucket}/${storagePath}`, {
     method: 'POST',
     headers: {
       apikey: process.env.SUPABASE_SERVICE_KEY,
       Authorization: `Bearer ${process.env.SUPABASE_SERVICE_KEY}`,
-      'Content-Type': contentType,
-      'x-upsert': 'true',
+      'Content-Type': 'application/json',
     },
-    body: buf,
+    body: JSON.stringify({ expiresIn: expiresInSeconds }),
   });
-  if (!res.ok) throw new Error(`Storage upload failed: ${await res.text()}`);
-  return `${bucket}/${path}`;
+  if (!r.ok) return null;
+  const d = await r.json();
+  return d && d.signedURL ? `${process.env.SUPABASE_URL}/storage/v1${d.signedURL}` : null;
 }
 
 // A masked_account value is only ever allowed in the shape "****1234" (or
@@ -793,6 +830,24 @@ export default async function handler(req, res) {
       return res.status(200).json({ ok: true });
     }
 
+    // ---------------- sub: HiveDoc files shared onto their jobs ----------------
+    // Distinct from 'documents' above, which is the sub's OWN compliance
+    // paperwork. These are company documents (plans, permits, scopes) that
+    // somebody deliberately flagged sub_visible on a job this sub is actually
+    // booked to. The job list is derived from real assignment rows, never from
+    // anything the sub sends, and canSee() re-checks every row after the query.
+    if (action === 'job_files') {
+      if (req.method !== 'GET') return res.status(405).json({ ok: false, error: 'GET required' });
+      const jobIds = await subJobIds(sub, sb);
+      const files = await listPortalFiles({
+        viewer: { audience: 'subcontractor', jobIds },
+        sb,
+        sign: signBucketUrl,
+      });
+      auditLog(sub.id, 'sub', 'job_files_viewed', { type: 'documents' }, { count: files.length }, req).catch(() => {});
+      return res.status(200).json({ ok: true, files });
+    }
+
     if (action === 'documents') {
       if (req.method === 'GET') {
         const rows = await sb(`sub_documents?sub_id=eq.${sub.id}&order=uploaded_at.desc&select=*`);
@@ -801,13 +856,29 @@ export default async function handler(req, res) {
       if (req.method === 'POST') {
         const { doc_type, file_data_url, expires_at } = req.body || {};
         if (!doc_type || !file_data_url) return res.status(400).json({ ok: false, error: 'doc_type and file_data_url are required' });
-        const path = `${sub.id}/${doc_type}-${Date.now()}`;
-        const stored = await uploadDataUrl('sub-documents', path, file_data_url);
-        const created = await sb('sub_documents', {
-          method: 'POST',
-          headers: { Prefer: 'return=representation' },
-          body: JSON.stringify({ sub_id: sub.id, doc_type, file_url: stored, expires_at: expires_at || null, status: 'current' }),
+        const filed = await storeSubFile({
+          prefix: SUB_DOC_PREFIX, subId: sub.id, name: doc_type, dataUrl: file_data_url,
+          docType: 'other', sensitive: SUB_DOC_SENSITIVE,
         });
+        // file_url holds the bare storage path, matching documents.storage_path
+        // and media.storage_path — that shared value IS the join back to the
+        // documents row, which is how the bucket read policy finds it. It used
+        // to hold a bucket-prefixed string; both tables were empty on
+        // production (verified 2026-08-22), so there was nothing to convert.
+        let created;
+        try {
+          created = await sb('sub_documents', {
+            method: 'POST',
+            headers: { Prefer: 'return=representation' },
+            body: JSON.stringify({ sub_id: sub.id, doc_type, file_url: filed.storagePath, expires_at: expires_at || null, status: 'current' }),
+          });
+        } catch (e) {
+          // A file filed against a workflow row that does not exist is the same
+          // orphan by another route. Take it back out.
+          await discardFiledDocument(filed);
+          console.error('sub_documents insert failed:', e);
+          throw new Error('We could not save that file. Try again, or email it to the office.');
+        }
         await auditLog(sub.id, 'sub', 'doc_uploaded', { type: 'sub_document', id: created[0].id }, { doc_type }, req);
         return res.status(200).json({ ok: true, document: created[0] });
       }
@@ -1042,19 +1113,28 @@ export default async function handler(req, res) {
       if (req.method !== 'POST') return res.status(405).json({ ok: false, error: 'POST required' });
       const { job_ref, file_data_url, amount } = req.body || {};
       if (!file_data_url) return res.status(400).json({ ok: false, error: 'file_data_url is required' });
-      const path = `${sub.id}/invoice-${Date.now()}`;
-      const stored = await uploadDataUrl('sub-invoices', path, file_data_url);
-      const created = await sb('sub_invoices', {
-        method: 'POST',
-        headers: { Prefer: 'return=representation' },
-        body: JSON.stringify({
-          sub_id: sub.id,
-          job_ref: job_ref || null,
-          file_url: stored,
-          amount: numOrNull(amount),
-          amount_source: amount !== undefined && amount !== null && amount !== '' ? 'manual' : 'pending_ocr',
-        }),
+      const filed = await storeSubFile({
+        prefix: SUB_INVOICE_PREFIX, subId: sub.id, name: 'invoice', dataUrl: file_data_url,
+        docType: 'invoice', sensitive: SUB_INVOICE_SENSITIVE,
       });
+      let created;
+      try {
+        created = await sb('sub_invoices', {
+          method: 'POST',
+          headers: { Prefer: 'return=representation' },
+          body: JSON.stringify({
+            sub_id: sub.id,
+            job_ref: job_ref || null,
+            file_url: filed.storagePath,
+            amount: numOrNull(amount),
+            amount_source: amount !== undefined && amount !== null && amount !== '' ? 'manual' : 'pending_ocr',
+          }),
+        });
+      } catch (e) {
+        await discardFiledDocument(filed);
+        console.error('sub_invoices insert failed:', e);
+        throw new Error('We could not save that file. Try again, or email it to the office.');
+      }
       await auditLog(sub.id, 'sub', 'invoice_submitted', { type: 'sub_invoice', id: created[0].id }, { amount: numOrNull(amount) }, req);
       return res.status(200).json({ ok: true, invoice: created[0] });
     }
