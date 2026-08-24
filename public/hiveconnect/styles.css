@@ -1622,7 +1622,7 @@ html[data-theme="dark"] .huddle-banner {
    tab) switches to the light canvas card language the reading pane already
    uses, since the reference treats Email as its own light workspace rather
    than an extension of the dark nav rail. */
-.sidebar.sidebar-email-theme { background: var(--card); border-radius: 15px; overflow: hidden; }
+.sidebar.sidebar-email-theme { background: var(--card); border-radius: 15px; overflow: hidden; margin: 12px 14px 12px 0; }
 .sidebar.sidebar-email-theme .sidebar-header { background: var(--card); border-bottom: 1px solid var(--line); }
 .sidebar.sidebar-email-theme #panel-email { padding: 19px 19px 19px 32px; }
 .sidebar.sidebar-email-theme .sidebar-title { color: var(--ink); }
