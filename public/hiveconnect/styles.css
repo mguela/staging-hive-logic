@@ -1658,7 +1658,7 @@ html[data-theme="dark"] .huddle-banner {
 
 /* collapsible section headers (Favourites / Folders / Groups) — same
    chevron-rotate pattern already used for Chirp's collapsible people list */
-.ev-sec-head { display: flex; align-items: center; gap: 6px; width: 100%; background: none; border: none; cursor: pointer; padding: 4px 6px 6px; font-family: var(--sans); font-size: 10.5px; font-weight: 800; letter-spacing: .8px; text-transform: uppercase; color: var(--mut); }
+.ev-sec-head { display: flex; align-items: center; gap: 6px; width: 100%; background: none; border: none; cursor: pointer; padding: 4px 6px 6px; font-family: var(--sans); font-size: 10.5px; font-weight: 600; letter-spacing: .8px; text-transform: uppercase; color: var(--mut); }
 .sidebar.sidebar-email-theme .ev-sec-head { color: var(--mut); }
 .ev-sec-chev { display: inline-block; transition: transform .15s ease; font-size: 10px; }
 .ev-sec-head.collapsed .ev-sec-chev { transform: rotate(-90deg); }
@@ -1667,11 +1667,11 @@ html[data-theme="dark"] .huddle-banner {
 /* Groups: a real, working feature (named member lists you can compose to),
    not Outlook 365's shared-mailbox Groups — same "map the honest equivalent"
    call already made for Starred/Important elsewhere in this file. */
-.ev-group-row { display: flex; align-items: center; gap: 9px; width: 100%; background: none; border: none; cursor: pointer; color: #e9eefb; font-size: 13px; font-weight: 600; padding: 7px 9px; border-radius: 9px; text-align: left; }
+.ev-group-row { display: flex; align-items: center; gap: 9px; width: 100%; background: none; border: none; cursor: pointer; color: #e9eefb; font-size: 13px; font-weight: 400; padding: 7px 9px; border-radius: 9px; text-align: left; }
 .ev-group-row:hover { background: rgba(116,138,158,.2); }
 .ev-group-ic { width: 22px; height: 22px; border-radius: 50%; background: var(--steel-bg); color: var(--steel-deep); font-size: 10px; font-weight: 800; display: flex; align-items: center; justify-content: center; flex: none; }
 .ev-group-count { margin-left: auto; font-size: 10.5px; color: var(--mut); }
-.ev-new-group { display: block; width: 100%; background: none; border: none; cursor: pointer; text-align: left; color: #8ba4c4; font-size: 12px; font-weight: 700; padding: 6px 9px; border-radius: 9px; }
+.ev-new-group { display: block; width: 100%; background: none; border: none; cursor: pointer; text-align: left; color: #8ba4c4; font-size: 9.6px; font-weight: 400; padding: 6px 9px; border-radius: 9px; }
 .ev-new-group:hover { color: #fff; background: rgba(116,138,158,.16); }
 
 /* Safety net: every button in the Email sidebar is a plain row/link, never
@@ -1957,7 +1957,7 @@ html[data-theme="dark"] .ev-folders-off .ev-folder { opacity: .8; }
 /* Email sidebar readability v2 (2026-07-26): unconditional -- the embed is
    dark without a data-theme attribute, so the gated v1 rules never applied */
 .ev-acct, .ev-folder { color: #e9eefb; }
-.ev-folder { font-weight: 600; }
+.ev-folder { font-weight: 400; }
 .ev-acct-name { color: #e9eefb; }
 .ev-accts-lbl { color: #a7b6d4; }
 .ev-acct-add { color: #c3cfe6; }

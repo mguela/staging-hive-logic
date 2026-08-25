@@ -5090,7 +5090,7 @@ function renderEmailSidebar() {
     row.onclick = () => evGroupCompose(g);
     gBody.appendChild(row);
   });
-  const newGroup = document.createElement('button'); newGroup.type = 'button'; newGroup.className = 'ev-new-group'; newGroup.textContent = 'New group';
+  const newGroup = document.createElement('button'); newGroup.type = 'button'; newGroup.className = 'ev-new-group'; newGroup.textContent = 'Add New Group';
   newGroup.onclick = evCreateGroup;
   gBody.appendChild(newGroup);
   gSec.appendChild(gBody);

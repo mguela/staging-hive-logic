@@ -2524,7 +2524,7 @@ html[data-theme="dark"] :is(#hiveconnect-root, .hc-embed).huddle-banner {
 /* collapsible section headers (Favourites / Folders / Groups) — same
    chevron-rotate pattern already used for Chirp's collapsible people list */
 :is(#hiveconnect-root, .hc-embed) .ev-sec-head,
-:is(#hiveconnect-root, .hc-embed).ev-sec-head { display: flex; align-items: center; gap: 6px; width: 100%; background: none; border: none; cursor: pointer; padding: 4px 6px 6px; font-family: var(--sans); font-size: 10.5px; font-weight: 800; letter-spacing: .8px; text-transform: uppercase; color: var(--mut); }
+:is(#hiveconnect-root, .hc-embed).ev-sec-head { display: flex; align-items: center; gap: 6px; width: 100%; background: none; border: none; cursor: pointer; padding: 4px 6px 6px; font-family: var(--sans); font-size: 10.5px; font-weight: 600; letter-spacing: .8px; text-transform: uppercase; color: var(--mut); }
 :is(#hiveconnect-root, .hc-embed) .sidebar.sidebar-email-theme .ev-sec-head,
 :is(#hiveconnect-root, .hc-embed).sidebar.sidebar-email-theme .ev-sec-head { color: var(--mut); }
 :is(#hiveconnect-root, .hc-embed) .ev-sec-chev,
@@ -2538,7 +2538,7 @@ html[data-theme="dark"] :is(#hiveconnect-root, .hc-embed).huddle-banner {
    not Outlook 365's shared-mailbox Groups — same "map the honest equivalent"
    call already made for Starred/Important elsewhere in this file. */
 :is(#hiveconnect-root, .hc-embed) .ev-group-row,
-:is(#hiveconnect-root, .hc-embed).ev-group-row { display: flex; align-items: center; gap: 9px; width: 100%; background: none; border: none; cursor: pointer; color: #e9eefb; font-size: 13px; font-weight: 600; padding: 7px 9px; border-radius: 9px; text-align: left; }
+:is(#hiveconnect-root, .hc-embed).ev-group-row { display: flex; align-items: center; gap: 9px; width: 100%; background: none; border: none; cursor: pointer; color: #e9eefb; font-size: 13px; font-weight: 400; padding: 7px 9px; border-radius: 9px; text-align: left; }
 :is(#hiveconnect-root, .hc-embed) .ev-group-row:hover,
 :is(#hiveconnect-root, .hc-embed).ev-group-row:hover { background: rgba(116,138,158,.2); }
 :is(#hiveconnect-root, .hc-embed) .ev-group-ic,
@@ -2546,7 +2546,7 @@ html[data-theme="dark"] :is(#hiveconnect-root, .hc-embed).huddle-banner {
 :is(#hiveconnect-root, .hc-embed) .ev-group-count,
 :is(#hiveconnect-root, .hc-embed).ev-group-count { margin-left: auto; font-size: 10.5px; color: var(--mut); }
 :is(#hiveconnect-root, .hc-embed) .ev-new-group,
-:is(#hiveconnect-root, .hc-embed).ev-new-group { display: block; width: 100%; background: none; border: none; cursor: pointer; text-align: left; color: #8ba4c4; font-size: 12px; font-weight: 700; padding: 6px 9px; border-radius: 9px; }
+:is(#hiveconnect-root, .hc-embed).ev-new-group { display: block; width: 100%; background: none; border: none; cursor: pointer; text-align: left; color: #8ba4c4; font-size: 9.6px; font-weight: 400; padding: 6px 9px; border-radius: 9px; }
 :is(#hiveconnect-root, .hc-embed) .ev-new-group:hover,
 :is(#hiveconnect-root, .hc-embed).ev-new-group:hover { color: #fff; background: rgba(116,138,158,.16); }
 
@@ -3049,7 +3049,7 @@ html[data-theme="dark"] :is(#hiveconnect-root, .hc-embed).ev-folders-off .ev-fol
 :is(#hiveconnect-root, .hc-embed) .ev-folder,
 :is(#hiveconnect-root, .hc-embed).ev-folder { color: #e9eefb; }
 :is(#hiveconnect-root, .hc-embed) .ev-folder,
-:is(#hiveconnect-root, .hc-embed).ev-folder { font-weight: 600; }
+:is(#hiveconnect-root, .hc-embed).ev-folder { font-weight: 400; }
 :is(#hiveconnect-root, .hc-embed) .ev-acct-name,
 :is(#hiveconnect-root, .hc-embed).ev-acct-name { color: #e9eefb; }
 :is(#hiveconnect-root, .hc-embed) .ev-accts-lbl,
