@@ -2261,6 +2261,8 @@ html[data-theme="dark"] :is(#hiveconnect-root, .hc-embed).huddle-banner {
 :is(#hiveconnect-root, .hc-embed).ev-cmd:hover:not(:disabled) { background: var(--steel-bg); color: var(--steel-deep); }
 :is(#hiveconnect-root, .hc-embed) .ev-cmd:disabled,
 :is(#hiveconnect-root, .hc-embed).ev-cmd:disabled { opacity: .4; cursor: default; }
+:is(#hiveconnect-root, .hc-embed) .ev-cmd-ic,
+:is(#hiveconnect-root, .hc-embed).ev-cmd-ic { width: 14px; height: 14px; object-fit: contain; flex: none; }
 :is(#hiveconnect-root, .hc-embed) .ev-cmd-split,
 :is(#hiveconnect-root, .hc-embed).ev-cmd-split { display: inline-flex; align-items: center; }
 :is(#hiveconnect-root, .hc-embed) .ev-cmd-sep,
