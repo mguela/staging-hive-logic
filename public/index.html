@@ -19,7 +19,7 @@
  * monitor_my_status poll, so "is this person running current code" is a
  * question the database can answer. Do not hand-edit it -- run
  * `node scripts/stamp-page-build.mjs`. */
-var HL_PAGE_BUILD = '53118e03ca1f6804';
+var HL_PAGE_BUILD = '6ed26b76d78273d6';
 </script>
 <script>
 (function () { // HL_FETCH_DEDUPE_V1 — single wrapper: GET /api/ dedupe + 60s cache + write-invalidate
@@ -26267,7 +26267,18 @@ window.hlMonitorSettingsOpen = function(){
     var rosterSearch = roster.length > 6
       ? '<input id="hlmon-roster-search" type="text" placeholder="Search '+roster.length+' people…" oninput="hlMonitorRosterFilter(this.value)" style="'+_inp+';margin-bottom:6px"/>'
       : '';
-    hlModal('🖥️ Monitor Settings', '<span style="'+_lbl+'">Screenshot frequency</span><select id="hlmon-interval" style="'+_inp+'">'+opts+'</select><span style="'+_lbl+'">Privacy</span><div style="'+_row+'">Blur screenshots<input type="checkbox" id="hlmon-blur" '+(data.blurScreenshots?'checked':'')+' style="'+_sw+'"></div><span style="'+_lbl+'">Monitoring per person</span><div style="font-size:9px;color:#8b92a8;font-weight:600;line-height:1.5;margin:2px 0 6px"><b>Monitor</b> — on means this person is recorded while clocked in, and must approve the prompt to stay clocked in. Off means they are not monitored at all, and the idle timeout does not apply to them. Nothing is ever recorded without their yes, and nothing is recorded while they are clocked out.</div>'+rosterSearch+'<div id="hlmon-roster-list" style="max-height:260px;overflow-y:auto">'+rosterHtml+'</div><span style="'+_lbl+'">App whitelist (productivity)</span><div style="'+_row+';border-bottom:none">Classify apps as Productive / Neutral / Unproductive<button onclick="hlMonitorWhitelistOpen()" style="margin-left:auto;padding:7px 14px;border:1px solid #59718a;background:#fff;color:#59718a;border-radius:7px;font-size:9px;font-weight:800;text-transform:uppercase;cursor:pointer;font-family:Montserrat;white-space:nowrap">Manage Whitelist</button></div><button onclick="hlMonitorSettingsSave()" style="width:100%;margin-top:14px;padding:12px;border:none;border-radius:9px;background:#59718a;color:#fff;font-family:\'Montserrat\',sans-serif;font-weight:900;font-size:11px;letter-spacing:.06em;text-transform:uppercase;cursor:pointer">Save settings</button>');
+    // Pair Device (2026-08-26): self-service only -- monitor_pairing_code
+    // always mints the code for whoever is signed in and clicked it
+    // (getRequestingProfile(req).id server-side), so this can only re-pair
+    // the admin's OWN machine, never someone else's. Before this, the only
+    // way to reach the pairing screen at all was the one-time banner that
+    // fires right after logging in -- if you dismissed it, missed it, or
+    // (like Marvin, 2026-08-26) unpaired an already-set-up device, the only
+    // way back was logging out and back in. This reuses the exact same
+    // hlMonitorOpenPairingModal() the banner's "Get Pairing Code" button
+    // calls, just reachable on demand.
+    var pairDeviceHtml = '<span style="'+_lbl+'">Your device</span><div style="'+_row+'">Re-pair the HiveLogic Monitor app on this computer<button onclick="hlMonitorOpenPairingModal()" style="margin-left:auto;padding:7px 14px;border:1px solid #59718a;background:#fff;color:#59718a;border-radius:7px;font-size:9px;font-weight:800;text-transform:uppercase;cursor:pointer;font-family:Montserrat;white-space:nowrap">Pair Device</button></div>';
+    hlModal('🖥️ Monitor Settings', pairDeviceHtml + '<span style="'+_lbl+'">Screenshot frequency</span><select id="hlmon-interval" style="'+_inp+'">'+opts+'</select><span style="'+_lbl+'">Privacy</span><div style="'+_row+'">Blur screenshots<input type="checkbox" id="hlmon-blur" '+(data.blurScreenshots?'checked':'')+' style="'+_sw+'"></div><span style="'+_lbl+'">Monitoring per person</span><div style="font-size:9px;color:#8b92a8;font-weight:600;line-height:1.5;margin:2px 0 6px"><b>Monitor</b> — on means this person is recorded while clocked in, and must approve the prompt to stay clocked in. Off means they are not monitored at all, and the idle timeout does not apply to them. Nothing is ever recorded without their yes, and nothing is recorded while they are clocked out.</div>'+rosterSearch+'<div id="hlmon-roster-list" style="max-height:260px;overflow-y:auto">'+rosterHtml+'</div><span style="'+_lbl+'">App whitelist (productivity)</span><div style="'+_row+';border-bottom:none">Classify apps as Productive / Neutral / Unproductive<button onclick="hlMonitorWhitelistOpen()" style="margin-left:auto;padding:7px 14px;border:1px solid #59718a;background:#fff;color:#59718a;border-radius:7px;font-size:9px;font-weight:800;text-transform:uppercase;cursor:pointer;font-family:Montserrat;white-space:nowrap">Manage Whitelist</button></div><button onclick="hlMonitorSettingsSave()" style="width:100%;margin-top:14px;padding:12px;border:none;border-radius:9px;background:#59718a;color:#fff;font-family:\'Montserrat\',sans-serif;font-weight:900;font-size:11px;letter-spacing:.06em;text-transform:uppercase;cursor:pointer">Save settings</button>');
   }, function(){ if(window.chirpToast) chirpToast('Sign in to view this.'); });
 };
 window.hlMonitorRosterFilter = function(q){
