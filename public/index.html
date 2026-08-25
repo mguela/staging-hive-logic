@@ -19,7 +19,7 @@
  * monitor_my_status poll, so "is this person running current code" is a
  * question the database can answer. Do not hand-edit it -- run
  * `node scripts/stamp-page-build.mjs`. */
-var HL_PAGE_BUILD = '72186323f32fea19';
+var HL_PAGE_BUILD = '10536bd52bb181e5';
 </script>
 <script>
 (function () { // HL_FETCH_DEDUPE_V1 — single wrapper: GET /api/ dedupe + 60s cache + write-invalidate
@@ -6986,7 +6986,7 @@ function coCard(co){
   if(st==='draft'&&co.kind!=='invoice') acts+='<button style="'+coBtn()+'" onclick="coSend(\''+cid+'\')">Send for approval</button>';
   if(st==='sent'||st==='overdue') acts+='<button style="'+coBtn('ok')+'" onclick="coApprove(\''+cid+'\')">Approve</button><button style="'+coBtn('no')+'" onclick="coRejectForm(\''+cid+'\')">Reject</button>';
   if(st==='approved'||st==='partially_paid'||co.kind==='invoice') acts+='<button style="'+coBtn()+'" onclick="coPayForm(\''+cid+'\')">Record payment</button>';
-  return '<div style="border:1.5px solid var(--line);border-radius:14px;padding:15px 16px;background:#fff">'
+  return '<div id="corow-'+cid+'" style="border:1.5px solid var(--line);border-radius:14px;padding:15px 16px;background:#fff">'
     +'<div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start">'
     +'<div style="min-width:0"><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span style="font-family:var(--sans);font-weight:900;font-size:14px;color:#0f172a">'+coEsc(co.coNumber||'CO')+'</span>'+coBadge(st)+'</div>'
     +'<div style="color:#0f172a;font-size:13px;font-weight:700;margin-top:7px">'+coEsc(co.description||'(no description)')+'</div>'
@@ -7215,7 +7215,7 @@ function ivxCard(i){
     send='<button style="border:none;border-radius:9px;padding:8px 13px;font-family:var(--sans);font-weight:800;font-size:12px;cursor:pointer;background:#1B7A50;color:#fff" onclick="ivxSendEmail(\''+ivxEsc(i.id)+'\')" id="ivx-send-'+ivxEsc(i.id)+'">'+(i.status==='draft'?'Send to client':'Resend to client')+'</button>';
   }
   var acts=send+pay+jobber;
-  return '<div style="border:1.5px solid var(--line);border-radius:14px;padding:15px 16px;background:#fff">'
+  return '<div id="ivxrow-'+ivxEsc(i.id)+'" style="border:1.5px solid var(--line);border-radius:14px;padding:15px 16px;background:#fff">'
     +'<div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start">'
     +'<div style="min-width:0"><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span style="font-family:var(--sans);font-weight:900;font-size:14px;color:#0f172a">'+ivxEsc(i.invoiceNumber?('#'+i.invoiceNumber):'Invoice')+'</span>'+ivxBadge(i.status)+'</div>'
     +'<div style="color:#0f172a;font-size:13px;font-weight:700;margin-top:7px">'+ivxEsc(i.subject||name||'Invoice')+'</div>'
@@ -33111,6 +33111,16 @@ function ajxOpen(jobId) {
 // jobber_id at creation (handleCreateInvoiceFromJob / the Change Orders
 // form's job picker), the same key AJX.job.id already is here -- no new
 // relationship, just surfacing the one that already exists.
+//
+// 2026-08-26 follow-up: "the invoices and job order should have a title or
+// label rather than just the number... their names should be edittable...
+// also the invoices and change order should be clickable and when it is
+// clicked, it should redirect to the actual invoices page and change
+// orders page for that job." Each row now shows its subject/description,
+// an inline edit pencil, and is itself a click-through to the real
+// Invoicing/Change Orders tab, landing on that exact record via the same
+// poll-then-scroll idiom askGo() already uses for a cross-tab jump
+// (hlOpenClientWhenReady).
 function ajvLoadLinkedInvoices(jobId) {
   var host = document.getElementById('ajv-invoices'); if (!host) return;
   host.innerHTML = '<div style="font-size:11px;color:var(--mut);font-weight:700">Loading invoices…</div>';
@@ -33120,13 +33130,62 @@ function ajvLoadLinkedInvoices(jobId) {
     var label = '<label style="font-size:10px;font-weight:800;letter-spacing:.06em;color:var(--mut)">INVOICES' + (invs.length ? ' (' + invs.length + ')' : '') + '</label>';
     if (!invs.length) { host.innerHTML = label + '<div style="font-size:12px;color:var(--mut);font-weight:600;padding:4px 0">No invoices for this job yet.</div>'; return; }
     var rows = invs.map(function (i) {
-      return '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--line)">'
+      var idEsc = hlEsc(i.id);
+      return '<div onclick="ajvGoToInvoice(\'' + idEsc + '\')" style="cursor:pointer;padding:8px 0;border-bottom:1px solid var(--line)">'
+        + '<div style="display:flex;justify-content:space-between;align-items:center">'
         + '<div style="display:flex;gap:8px;align-items:center"><b style="font-size:12.5px">' + (i.invoiceNumber ? '#' + hlEsc(i.invoiceNumber) : 'Invoice') + '</b>' + ivxBadge(i.status) + '</div>'
         + '<div style="font-family:var(--mono);font-weight:800;font-size:12.5px">' + ajxMoney(i.total) + '</div>'
+        + '</div>'
+        + '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:4px">'
+        + '<div style="font-size:12px;font-weight:700;color:#0f172a">' + hlEsc(i.subject || 'Untitled invoice') + '</div>'
+        + (ivxIsLocal(i) ? ('<button onclick="event.stopPropagation();ajvEditInvoiceSubject(\'' + idEsc + '\')" title="Edit title" style="border:none;background:transparent;color:var(--mut);cursor:pointer;font-size:12px;padding:2px 4px;flex-shrink:0">&#9998;&#65039;</button>') : '')
+        + '</div>'
         + '</div>';
     }).join('');
     host.innerHTML = label + rows;
+    invs.forEach(function (i) { window._ajvInvSubjects = window._ajvInvSubjects || {}; window._ajvInvSubjects[i.id] = i.subject || ''; });
   }).catch(function () { host.innerHTML = ''; });
+}
+function ajvEditInvoiceSubject(id) {
+  var current = (window._ajvInvSubjects || {})[id] || '';
+  var body = '<div id="eis-body">'
+    + '<label style="' + _lbl + '">Title</label>'
+    + '<input id="eis-subject" type="text" placeholder="e.g. Kitchen remodel deposit" value="' + hlEsc(current) + '" style="' + _inp + ';margin-bottom:12px">'
+    + '<div id="eis-err" style="display:none;color:#c65b4e;font-size:11px;font-weight:700;margin-bottom:10px"></div>'
+    + '<div style="display:flex;gap:9px"><button onclick="_hlEisSubmit()" style="flex:1;padding:11px;border:none;border-radius:8px;background:#1B7A50;color:#fff;font-weight:900;font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;cursor:pointer;font-family:\'Montserrat\',sans-serif">Save</button><button onclick="document.getElementById(\'hlmodal\').remove()" style="flex:1;padding:11px;border:1px solid #dadde8;border-radius:8px;background:#fff;color:#5d657b;font-weight:900;font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;cursor:pointer;font-family:\'Montserrat\',sans-serif">Cancel</button></div>'
+    + '</div>';
+  hlModal('&#9998;&#65039; Edit invoice title', body);
+  window._hlEisSubmit = function () {
+    var subject = ((document.getElementById('eis-subject') || {}).value || '').trim();
+    var err = document.getElementById('eis-err');
+    if (!subject) { err.textContent = 'A title is required.'; err.style.display = 'block'; return; }
+    hlApiPost('update_invoice_subject', { id: id, subject: subject }).then(function (d) {
+      if (!d || !d.ok) { err.textContent = (d && d.error) || 'Could not save this title.'; err.style.display = 'block'; return; }
+      document.getElementById('hlmodal').remove();
+      chirpToast('&#10003; Invoice title saved');
+      if (AJX.job) ajvLoadLinkedInvoices(AJX.job.id);
+    }).catch(function (e) { err.textContent = 'Network error: ' + e.message; err.style.display = 'block'; });
+  };
+}
+function ajvFlashRow(el) {
+  if (!el) return;
+  el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  var prevBg = el.style.backgroundColor, prevTr = el.style.transition;
+  el.style.transition = 'background-color .3s';
+  el.style.backgroundColor = '#fef3c7';
+  setTimeout(function () { el.style.backgroundColor = prevBg || ''; el.style.transition = prevTr || ''; }, 1600);
+}
+function ajvGoToInvoiceWhenReady(id, attempt) {
+  var el = document.getElementById('ivxrow-' + id);
+  if (el) { ajvFlashRow(el); return; }
+  if ((attempt || 0) < 30) setTimeout(function () { ajvGoToInvoiceWhenReady(id, (attempt || 0) + 1); }, 100);
+  else chirpToast('&#9888; Could not find that invoice in the list &mdash; try "All recent."');
+}
+function ajvGoToInvoice(id) {
+  showView('invx');
+  if (typeof ivxSetMode === 'function') ivxSetMode('all');
+  if (typeof ivxLoad === 'function') ivxLoad();
+  ajvGoToInvoiceWhenReady(id, 0);
 }
 function ajvLoadLinkedChangeOrders(jobId) {
   var host = document.getElementById('ajv-cos'); if (!host) return;
@@ -33138,13 +33197,54 @@ function ajvLoadLinkedChangeOrders(jobId) {
     if (!cos.length) { host.innerHTML = label + '<div style="font-size:12px;color:var(--mut);font-weight:600;padding:4px 0">No change orders for this job yet.</div>'; return; }
     var rows = cos.map(function (c) {
       var amt = (c.totals && (c.totals.cardPrice || c.totals.price)) || 0;
-      return '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--line)">'
+      var idEsc = hlEsc(c.id);
+      var canEdit = c.lifecycleStatus === 'draft' || c.lifecycleStatus === 'sent';
+      return '<div onclick="ajvGoToChangeOrder(\'' + idEsc + '\')" style="cursor:pointer;padding:8px 0;border-bottom:1px solid var(--line)">'
+        + '<div style="display:flex;justify-content:space-between;align-items:center">'
         + '<div style="display:flex;gap:8px;align-items:center"><b style="font-size:12.5px">' + hlEsc(c.coNumber || 'Change order') + '</b><span style="font-size:11px;color:var(--mut);font-weight:700;text-transform:uppercase">' + hlEsc(String(c.displayStatus || c.lifecycleStatus || '').replace(/_/g, ' ')) + '</span></div>'
         + '<div style="font-family:var(--mono);font-weight:800;font-size:12.5px">' + ajxMoney(amt) + '</div>'
+        + '</div>'
+        + '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:4px">'
+        + '<div style="font-size:12px;font-weight:700;color:#0f172a">' + hlEsc(c.description || '(no description)') + '</div>'
+        + (canEdit ? ('<button onclick="event.stopPropagation();ajvEditCoDescription(\'' + idEsc + '\')" title="Edit description" style="border:none;background:transparent;color:var(--mut);cursor:pointer;font-size:12px;padding:2px 4px;flex-shrink:0">&#9998;&#65039;</button>') : '')
+        + '</div>'
         + '</div>';
     }).join('');
     host.innerHTML = label + rows;
+    cos.forEach(function (c) { window._ajvCoDescriptions = window._ajvCoDescriptions || {}; window._ajvCoDescriptions[c.id] = c.description || ''; });
   }).catch(function () { host.innerHTML = ''; });
+}
+function ajvEditCoDescription(id) {
+  var current = (window._ajvCoDescriptions || {})[id] || '';
+  var body = '<div id="ecd-body">'
+    + '<label style="' + _lbl + '">Description</label>'
+    + '<input id="ecd-desc" type="text" placeholder="e.g. Add recessed lighting in hallway" value="' + hlEsc(current) + '" style="' + _inp + ';margin-bottom:12px">'
+    + '<div id="ecd-err" style="display:none;color:#c65b4e;font-size:11px;font-weight:700;margin-bottom:10px"></div>'
+    + '<div style="display:flex;gap:9px"><button onclick="_hlEcdSubmit()" style="flex:1;padding:11px;border:none;border-radius:8px;background:#1B7A50;color:#fff;font-weight:900;font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;cursor:pointer;font-family:\'Montserrat\',sans-serif">Save</button><button onclick="document.getElementById(\'hlmodal\').remove()" style="flex:1;padding:11px;border:1px solid #dadde8;border-radius:8px;background:#fff;color:#5d657b;font-weight:900;font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;cursor:pointer;font-family:\'Montserrat\',sans-serif">Cancel</button></div>'
+    + '</div>';
+  hlModal('&#9998;&#65039; Edit change order description', body);
+  window._hlEcdSubmit = function () {
+    var description = ((document.getElementById('ecd-desc') || {}).value || '').trim();
+    var err = document.getElementById('ecd-err');
+    if (!description) { err.textContent = 'A description is required.'; err.style.display = 'block'; return; }
+    coApi('update-description', { id: id, description: description }).then(function (d) {
+      if (!d || !d.ok) { err.textContent = (d && d.error) || 'Could not save this description.'; err.style.display = 'block'; return; }
+      document.getElementById('hlmodal').remove();
+      chirpToast('&#10003; Change order description saved');
+      if (AJX.job) ajvLoadLinkedChangeOrders(AJX.job.id);
+    }).catch(function (e) { err.textContent = 'Network error: ' + e.message; err.style.display = 'block'; });
+  };
+}
+function ajvGoToCoWhenReady(id, attempt) {
+  var el = document.getElementById('corow-' + id);
+  if (el) { ajvFlashRow(el); return; }
+  if ((attempt || 0) < 30) setTimeout(function () { ajvGoToCoWhenReady(id, (attempt || 0) + 1); }, 100);
+  else chirpToast('&#9888; Could not find that change order in the list.');
+}
+function ajvGoToChangeOrder(id) {
+  showView('co');
+  if (typeof coLoadList === 'function') coLoadList();
+  ajvGoToCoWhenReady(id, 0);
 }
 
 // 2026-08-25: "in active jobs, when clicking on a job, there should be an

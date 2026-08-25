@@ -5331,6 +5331,35 @@ async function handleMarkInvoicePaid(req, res) {
   return res.status(200).json({ ok: true, resource: 'mark_invoice_paid', invoice: rows[0], note: 'Status only. No payment was processed and nothing was sent to the client.' });
 }
 
+// 2026-08-26, jomell: "the invoices... should have a title or label rather
+// than just the number... their names should be edittable." Same HL-INV-
+// guard as handleMarkInvoicePaid/handleSendInvoiceEmail above: a
+// Jobber-synced invoice's subject is overwritten by the Jobber sync's own
+// upsert on every run, so editing it here would just get silently reverted
+// -- only a HiveLogic-created invoice's subject is safe to edit.
+async function handleUpdateInvoiceSubject(req, res) {
+  if (req.method !== 'POST') return res.status(405).json({ ok: false, error: 'POST only' });
+  const requester = await getRequestingProfile(req);
+  if (!requester) return res.status(401).json({ ok: false, error: 'Not signed in -- log into HiveLogic first.' });
+  const b = req.body || {};
+  const id = String(b.id || '').trim();
+  if (!id) return res.status(400).json({ ok: false, error: 'Which invoice? No id given.' });
+  if (!id.startsWith('HL-INV-')) {
+    return res.status(400).json({ ok: false, error: "This invoice's title is synced from Jobber -- edit it there." });
+  }
+  const subject = String(b.subject || '').trim();
+  if (!subject) return res.status(400).json({ ok: false, error: 'A title is required.' });
+  const r = await supabaseRequest(`invoices?jobber_id=eq.${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    headers: { Prefer: 'return=representation' },
+    body: JSON.stringify({ subject, jobber_updated_at: new Date().toISOString() }),
+  });
+  if (!r.ok) return res.status(500).json({ ok: false, error: 'Update failed: ' + (await r.text()).slice(0, 300) });
+  const rows = await r.json();
+  if (!rows.length) return res.status(404).json({ ok: false, error: 'That invoice no longer exists.' });
+  return res.status(200).json({ ok: true, resource: 'update_invoice_subject', invoice: rows[0] });
+}
+
 async function handleMyJobsToday(req, res) {
   const requester = await getRequestingProfile(req);
   if (!requester) return res.status(401).json({ ok: false, error: 'Not signed in -- log into HiveLogic first.' });
@@ -8795,6 +8824,9 @@ if (resource === 'mailconnect') {
   }
   if (resource === 'mark_invoice_paid') {
     try { return await handleMarkInvoicePaid(req, res); } catch (e) { return res.status(500).json({ ok: false, error: e.message }); }
+  }
+  if (resource === 'update_invoice_subject') {
+    try { return await handleUpdateInvoiceSubject(req, res); } catch (e) { return res.status(500).json({ ok: false, error: e.message }); }
   }
   if (resource === 'my_jobs_today') {
     try { return await handleMyJobsToday(req, res); } catch (e) { return res.status(500).json({ ok: false, error: e.message }); }

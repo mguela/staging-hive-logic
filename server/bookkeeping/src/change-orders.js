@@ -258,6 +258,21 @@ export function recordApproval(co, actor, { approved, reason, now = new Date().t
   return withComputedStatus(next);
 }
 
+// draft/sent -> same status, description only. A label fix before anything
+// has been decided against the change order -- once approved/paid/rejected/
+// converted/cancelled, the description describes what was actually decided,
+// so a dispute after that point gets a NEW change order, never a silent
+// rewrite of this one's history.
+export function updateChangeOrderDescription(co, actor, { description, now = new Date().toISOString() } = {}) {
+  assertActorAuthenticated(actor);
+  requireStatus(co, ['draft', 'sent'], 'edit the description of');
+  const trimmed = String(description || '').trim();
+  if (!trimmed) throw new Error('A description of the additional work is required.');
+  if (trimmed === co.description) return withComputedStatus(co);
+  let next = appendHistory({ ...co, description: trimmed }, { type: 'description_edited', actor, now, detail: { from: co.description, to: trimmed } });
+  return withComputedStatus(next);
+}
+
 // approved -> paid (first payment) or stays "paid" while accepting further
 // partial payments. amount is the payment being recorded right now, not a
 // running total — paidTotal is accumulated here.
