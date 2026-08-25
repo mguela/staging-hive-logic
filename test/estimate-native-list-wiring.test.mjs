@@ -73,9 +73,15 @@ test('a freshly created estimate appears immediately, not just after the next po
 });
 
 test('the native loader is triggered wherever the Jobber-synced one already is', () => {
-  const quotesIdx = source.indexOf('loadQuotesLive();');
-  assert.ok(quotesIdx > -1);
-  const nearby = source.slice(quotesIdx, quotesIdx + 120);
+  // 2026-08-25: anchored on document.getElementById('ef-list').innerHTML=h,
+  // not the first bare loadQuotesLive() in the file -- a second, unrelated
+  // call was added inside the Delete Quote modal's submit handler
+  // (efOpenHardDeleteQuoteModal), which would otherwise be the first match
+  // and isn't followed by loadNativeEstimatesLive().
+  const anchorIdx = source.indexOf("document.getElementById('ef-list').innerHTML=h;");
+  assert.ok(anchorIdx > -1, 'the Estimates list render function must exist');
+  const nearby = source.slice(anchorIdx, anchorIdx + 160);
+  assert.match(nearby, /loadQuotesLive\(\);/);
   assert.match(nearby, /loadNativeEstimatesLive\(\);/,
     'both real sources must load together whenever the Estimates list is shown');
 });

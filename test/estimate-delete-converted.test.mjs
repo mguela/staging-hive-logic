@@ -1,18 +1,20 @@
 // test/estimate-delete-converted.test.mjs
-// jomell, 2026-08-25: "i want to delete the ones in the converted tab." Told
-// explicitly first that converting an estimate creates a real row in the
-// `jobs` table (the same one the crew board/scheduling reads), that staging
-// shares the live production Supabase database, and that no code anywhere
-// deletes a job today. Given the choice between a reversible archive and a
-// real hard delete (via AskUserQuestion), chose real hard delete.
+// jomell, 2026-08-25: "i want to delete the ones in the converted tab," then
+// "i just want to have the ability/button to delete these" (of any status).
+// Told explicitly first that converting an estimate creates a real row in
+// the `jobs` table (the same one the crew board/scheduling reads), that
+// staging shares the live production Supabase database, and that no code
+// anywhere deletes a job today. Given the choice between a reversible
+// archive and a real hard delete (via AskUserQuestion), chose real hard
+// delete -- for any estimate, not just converted ones.
 //
 // api/bookkeeping/estimates/delete.js is the one deliberate exception to
-// this codebase's "never a silent delete" rule (see cancel.js) -- scoped to
-// 'converted' only, since every earlier lifecycle state already has a safe,
-// reversible path (reject.js / cancel.js).
+// this codebase's "never a silent delete" rule (see cancel.js).
 //
 // What these tests pin:
-//   - only a converted estimate can be deleted this way
+//   - any estimate can be deleted this way, regardless of status
+//   - a job is only deleted (and only attempted) when the estimate is
+//     actually converted -- earlier statuses never had one
 //   - the job is deleted before the estimate (so a failed job delete never
 //     leaves the estimate gone with the job still there)
 //   - if the job delete fails, the estimate is left untouched, so it can be
@@ -114,14 +116,15 @@ test('the job delete is scoped to the actor\'s own company and this estimate', (
   })();
 });
 
-test('a non-converted estimate is refused', async () => {
+test('a non-converted estimate is deleted too, but without touching the jobs table', async () => {
   reset();
   estimateFixture.lifecycleStatus = 'approved';
   const r = await del();
-  assert.equal(r.statusCode, 409);
-  assert.equal(r.body.ok, false);
-  assert.equal(jobDeleteCalls.length, 0, 'nothing must be deleted when the status guard fails');
-  assert.equal(deletedEstimateIds.length, 0);
+  assert.equal(r.statusCode, 200);
+  assert.equal(r.body.ok, true);
+  assert.equal(jobDeleteCalls.length, 0, 'an approved estimate never had a job to delete');
+  assert.equal(deletedEstimateIds.length, 1);
+  assert.doesNotMatch(r.body.note, /job/i, 'the note must not claim a job was deleted when none existed');
 });
 
 test('if the job delete fails, the estimate is left untouched so it can be retried', async () => {
