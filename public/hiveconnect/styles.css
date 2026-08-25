@@ -1626,7 +1626,7 @@ html[data-theme="dark"] .huddle-banner {
    than an extension of the dark nav rail. */
 .sidebar.sidebar-email-theme { background: var(--card); border-radius: 15px; overflow: hidden; margin: 12px; }
 .sidebar.sidebar-email-theme .sidebar-header { background: var(--card); border-bottom: 1px solid var(--line); }
-.sidebar.sidebar-email-theme #panel-email { padding: 19px 19px 19px 32px; }
+.sidebar.sidebar-email-theme #panel-email { padding: 19px; }
 .sidebar.sidebar-email-theme .sidebar-title { color: var(--ink); }
 .sidebar.sidebar-email-theme .icon-btn { color: var(--mut); }
 .sidebar.sidebar-email-theme .icon-btn:hover { background: var(--steel-bg); color: var(--ink); }
