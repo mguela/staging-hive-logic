@@ -1327,6 +1327,32 @@ html[data-theme="dark"] .huddle-banner {
 .hdi-link-top { font-size: 11.5px; font-weight: 700; color: #eaf1fb; margin-bottom: 5px; }
 .hdi-link-url { font-size: 10.5px; color: #9fb4cf; word-break: break-all; background: rgba(0,0,0,.25); border-radius: 6px; padding: 5px 7px; margin-bottom: 7px; font-family: var(--mono); }
 
+/* ==================== MESSAGES SIDEBAR — light floating-card format ====================
+   Same technique as the Email tab: the sidebar is normally a fixed dark
+   navy rail (var(--rail)) regardless of theme; when the Messages tab is
+   active we flip it to a light floating card instead, matching Email's
+   design. Toggled by setNavTab() adding .sidebar-messages-theme. */
+.sidebar.sidebar-messages-theme { background: var(--card); border-radius: 15px; overflow: hidden; margin: 12px; }
+.sidebar.sidebar-messages-theme .sidebar-header { background: var(--card); border-bottom: 1px solid var(--line); }
+.sidebar.sidebar-messages-theme .sidebar-title { color: var(--ink); }
+.sidebar.sidebar-messages-theme .icon-btn { color: var(--mut); }
+.sidebar.sidebar-messages-theme .icon-btn:hover { background: var(--steel-bg); color: var(--ink); }
+.sidebar.sidebar-messages-theme .new-channel-cta { background: none; border-color: var(--line); color: var(--steel-deep); }
+.sidebar.sidebar-messages-theme .new-channel-cta:hover { background: var(--steel-bg); color: var(--ink); border-color: var(--steel); }
+.sidebar.sidebar-messages-theme .ct-head { color: var(--ink); }
+.sidebar.sidebar-messages-theme .ct-head:hover { background: var(--steel-bg); }
+.sidebar.sidebar-messages-theme .ct-chev { color: var(--mut); }
+.sidebar.sidebar-messages-theme .ct-fcount { color: var(--steel-deep); background: var(--steel-bg); }
+.sidebar.sidebar-messages-theme .ct-empty { color: var(--mut); }
+.sidebar.sidebar-messages-theme .channel-list li { color: var(--ink); }
+.sidebar.sidebar-messages-theme .channel-list li:hover { background: var(--steel-bg); color: var(--ink); }
+.sidebar.sidebar-messages-theme .channel-list li.active {
+  background: var(--gold-soft); color: #8a5a12; font-weight: 700;
+  border: none; padding: 6px 10px; box-shadow: none;
+}
+.sidebar.sidebar-messages-theme .channel-list li .unread { background: var(--red); color: #fff; }
+.sidebar.sidebar-messages-theme .presence-dot { border-color: var(--card); }
+
 /* ==================== EMAIL APP ==================== */
 /* sidebar: mailbox switcher + folders */
 .ev-accts { padding: 10px 10px 6px; border-bottom: 1px solid var(--line); }
