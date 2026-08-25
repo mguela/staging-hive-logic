@@ -1349,7 +1349,8 @@ html[data-theme="dark"] .huddle-banner {
   background: transparent; cursor: pointer; color: var(--ink); font-size: 13.5px; }
 .ev-folder:hover { background: var(--steel-bg); }
 .ev-folder.active { background: var(--gold-soft); font-weight: 700; }
-.ev-folder-ic { flex: none; width: 18px; font-size: 14px; text-align: center; }
+.ev-folder-ic { flex: none; width: 18px; font-size: 14px; text-align: center; display: flex; align-items: center; justify-content: center; }
+.ev-folder-ic-img { width: 16px; height: 16px; object-fit: contain; display: block; }
 .ev-folder-nm { flex: 1; text-align: left; }
 .ev-folder-ct { font-size: 11px; font-weight: 800; color: var(--steel-deep); background: var(--steel-bg); border-radius: 10px; padding: 1px 7px; min-width: 8px; text-align: center; }
 .ev-folder-ct:empty { display: none; }

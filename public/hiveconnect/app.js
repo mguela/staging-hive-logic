@@ -4433,12 +4433,11 @@ function subscribeRealtime() {
    ================================================================== */
 const EV_SCOPES = ['User.Read', 'Mail.ReadWrite', 'Mail.Send', 'Calendars.ReadWrite', 'Tasks.ReadWrite', 'offline_access'];
 const EV_FOLDERS = [
-  { id: 'inbox', name: 'Inbox', icon: '📥' },
-  { id: 'sentitems', name: 'Sent', icon: '📤' },
-  { id: 'drafts', name: 'Drafts', icon: '📝' },
-  { id: 'archive', name: 'Archive', icon: '🗄️' },
-  { id: 'junkemail', name: 'Junk', icon: '⚠️' },
-  { id: 'deleteditems', name: 'Deleted', icon: '🗑️' },
+  { id: 'inbox', name: 'Inbox', icon: '/hiveconnect/icons/Inbox.png' },
+  { id: 'sentitems', name: 'Sent', icon: '/hiveconnect/icons/Send.png' },
+  { id: 'drafts', name: 'Drafts', icon: '/hiveconnect/icons/Drafts.png' },
+  { id: 'archive', name: 'Archive', icon: '/hiveconnect/icons/Archive.png' },
+  { id: 'deleteditems', name: 'Deleted', icon: '/hiveconnect/icons/Delete.png' },
 ];
 let msalApp = null;
 let evAccounts = [];          // MSAL accounts (mailboxes)
@@ -5125,7 +5124,10 @@ function evGroupCompose(g) {
 // drag-and-drop target so a message row can be dropped onto it to move.
 function evBuildFolderRow(f, icon, active, isCustom) {
   const row = document.createElement('button'); row.className = 'ev-folder' + (isCustom ? ' custom' : '') + (active ? ' active' : ''); row.dataset.id = f.id;
-  const ic = document.createElement('span'); ic.className = 'ev-folder-ic'; ic.textContent = icon; row.appendChild(ic);
+  const ic = document.createElement('span'); ic.className = 'ev-folder-ic';
+  if (/\.(png|svg)$/i.test(icon)) { const img = document.createElement('img'); img.className = 'ev-folder-ic-img'; img.src = icon; img.alt = ''; ic.appendChild(img); }
+  else ic.textContent = icon;
+  row.appendChild(ic);
   const nm = document.createElement('span'); nm.className = 'ev-folder-nm'; nm.textContent = f.name; row.appendChild(nm);
   const favs = evFavFolders(); const pinned = favs.includes(f.id);
   const pin = document.createElement('span'); pin.textContent = pinned ? '★' : '☆';

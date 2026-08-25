@@ -1975,7 +1975,9 @@ html[data-theme="dark"] :is(#hiveconnect-root, .hc-embed).huddle-banner {
 :is(#hiveconnect-root, .hc-embed) .ev-folder.active,
 :is(#hiveconnect-root, .hc-embed).ev-folder.active { background: var(--gold-soft); font-weight: 700; }
 :is(#hiveconnect-root, .hc-embed) .ev-folder-ic,
-:is(#hiveconnect-root, .hc-embed).ev-folder-ic { flex: none; width: 18px; font-size: 14px; text-align: center; }
+:is(#hiveconnect-root, .hc-embed).ev-folder-ic { flex: none; width: 18px; font-size: 14px; text-align: center; display: flex; align-items: center; justify-content: center; }
+:is(#hiveconnect-root, .hc-embed) .ev-folder-ic-img,
+:is(#hiveconnect-root, .hc-embed).ev-folder-ic-img { width: 16px; height: 16px; object-fit: contain; display: block; }
 :is(#hiveconnect-root, .hc-embed) .ev-folder-nm,
 :is(#hiveconnect-root, .hc-embed).ev-folder-nm { flex: 1; text-align: left; }
 :is(#hiveconnect-root, .hc-embed) .ev-folder-ct,
