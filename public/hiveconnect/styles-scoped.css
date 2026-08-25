@@ -2463,7 +2463,7 @@ html[data-theme="dark"] :is(#hiveconnect-root, .hc-embed).huddle-banner {
 :is(#hiveconnect-root, .hc-embed) .sidebar.sidebar-email-theme .sidebar-header,
 :is(#hiveconnect-root, .hc-embed).sidebar.sidebar-email-theme .sidebar-header { background: var(--card); border-bottom: 1px solid var(--line); }
 :is(#hiveconnect-root, .hc-embed) .sidebar.sidebar-email-theme #panel-email,
-:is(#hiveconnect-root, .hc-embed).sidebar.sidebar-email-theme #panel-email { padding: 19px; }
+:is(#hiveconnect-root, .hc-embed).sidebar.sidebar-email-theme #panel-email { padding: 30px; }
 :is(#hiveconnect-root, .hc-embed) .sidebar.sidebar-email-theme .sidebar-title,
 :is(#hiveconnect-root, .hc-embed).sidebar.sidebar-email-theme .sidebar-title { color: var(--ink); }
 :is(#hiveconnect-root, .hc-embed) .sidebar.sidebar-email-theme .icon-btn,
