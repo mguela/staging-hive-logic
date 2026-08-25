@@ -1962,7 +1962,7 @@ html[data-theme="dark"] :is(#hiveconnect-root, .hc-embed).huddle-banner {
 :is(#hiveconnect-root, .hc-embed) .sidebar.sidebar-messages-theme .new-channel-cta:hover,
 :is(#hiveconnect-root, .hc-embed).sidebar.sidebar-messages-theme .new-channel-cta:hover { background: var(--steel-bg); color: var(--ink); border-color: var(--steel); }
 :is(#hiveconnect-root, .hc-embed) .sidebar.sidebar-messages-theme .ct-head,
-:is(#hiveconnect-root, .hc-embed).sidebar.sidebar-messages-theme .ct-head { color: var(--ink); }
+:is(#hiveconnect-root, .hc-embed).sidebar.sidebar-messages-theme .ct-head { color: var(--ink); font-weight: 600; }
 :is(#hiveconnect-root, .hc-embed) .sidebar.sidebar-messages-theme .ct-head:hover,
 :is(#hiveconnect-root, .hc-embed).sidebar.sidebar-messages-theme .ct-head:hover { background: var(--steel-bg); }
 :is(#hiveconnect-root, .hc-embed) .sidebar.sidebar-messages-theme .ct-chev,
@@ -1971,8 +1971,10 @@ html[data-theme="dark"] :is(#hiveconnect-root, .hc-embed).huddle-banner {
 :is(#hiveconnect-root, .hc-embed).sidebar.sidebar-messages-theme .ct-fcount { color: var(--steel-deep); background: var(--steel-bg); }
 :is(#hiveconnect-root, .hc-embed) .sidebar.sidebar-messages-theme .ct-empty,
 :is(#hiveconnect-root, .hc-embed).sidebar.sidebar-messages-theme .ct-empty { color: var(--mut); }
+:is(#hiveconnect-root, .hc-embed) .sidebar.sidebar-messages-theme .ct-folder,
+:is(#hiveconnect-root, .hc-embed).sidebar.sidebar-messages-theme .ct-folder { margin-bottom: 14px; }
 :is(#hiveconnect-root, .hc-embed) .sidebar.sidebar-messages-theme .channel-list li,
-:is(#hiveconnect-root, .hc-embed).sidebar.sidebar-messages-theme .channel-list li { color: var(--ink); }
+:is(#hiveconnect-root, .hc-embed).sidebar.sidebar-messages-theme .channel-list li { color: var(--ink); font-weight: 400; }
 :is(#hiveconnect-root, .hc-embed) .sidebar.sidebar-messages-theme .channel-list li:hover,
 :is(#hiveconnect-root, .hc-embed).sidebar.sidebar-messages-theme .channel-list li:hover { background: var(--steel-bg); color: var(--ink); }
 :is(#hiveconnect-root, .hc-embed) .sidebar.sidebar-messages-theme .channel-list li.active,

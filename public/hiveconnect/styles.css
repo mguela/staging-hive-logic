@@ -1342,12 +1342,13 @@ html[data-theme="dark"] .huddle-banner {
 .sidebar.sidebar-messages-theme .icon-btn:hover { background: var(--steel-bg); color: var(--ink); }
 .sidebar.sidebar-messages-theme .new-channel-cta { background: none; border-color: var(--line); color: var(--steel-deep); }
 .sidebar.sidebar-messages-theme .new-channel-cta:hover { background: var(--steel-bg); color: var(--ink); border-color: var(--steel); }
-.sidebar.sidebar-messages-theme .ct-head { color: var(--ink); }
+.sidebar.sidebar-messages-theme .ct-head { color: var(--ink); font-weight: 600; }
 .sidebar.sidebar-messages-theme .ct-head:hover { background: var(--steel-bg); }
 .sidebar.sidebar-messages-theme .ct-chev { color: var(--mut); }
 .sidebar.sidebar-messages-theme .ct-fcount { color: var(--steel-deep); background: var(--steel-bg); }
 .sidebar.sidebar-messages-theme .ct-empty { color: var(--mut); }
-.sidebar.sidebar-messages-theme .channel-list li { color: var(--ink); }
+.sidebar.sidebar-messages-theme .ct-folder { margin-bottom: 14px; }
+.sidebar.sidebar-messages-theme .channel-list li { color: var(--ink); font-weight: 400; }
 .sidebar.sidebar-messages-theme .channel-list li:hover { background: var(--steel-bg); color: var(--ink); }
 .sidebar.sidebar-messages-theme .channel-list li.active {
   background: var(--gold-soft); color: #8a5a12; font-weight: 700;
