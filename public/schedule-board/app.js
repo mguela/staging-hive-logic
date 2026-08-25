@@ -148,7 +148,8 @@
     rows.push(v.source==='jobber'?'🔒 <b>From Jobber</b> — read-only here (edit in Jobber, or make an override)':'⬡ <b>HiveLogic</b> — editable here');
     if(kd&&kd.clientFacing) rows.push(v.confirm==='confirmed'?'✓ <b>Confirmed</b> by the client':'⌛ <b>Awaiting</b> client confirmation');
     if(v.pinned) rows.push('📌 <b>Pinned</b> — do not move');
-    if(v.override) rows.push('▪ <b>Proposed change</b> — a HiveLogic override of the Jobber time');
+    if(v.override && isRemoved(v)) rows.push('🗑 <b>Proposed removal</b> — a HiveLogic plan to take this off the board, Jobber untouched until Live');
+    else if(v.override) rows.push('▪ <b>Proposed change</b> — a HiveLogic override of the Jobber time');
     rows.push(`Status: <b>${STATUS[v.status]?STATUS[v.status].l:v.status}</b> · type: <b>${kd.l}</b>`);
     return `<div class="iconkey"><div class="ikh">What the marks on this job mean</div>${rows.map((x)=>'<div>'+x+'</div>').join('')}</div>`;
   }
@@ -156,6 +157,15 @@
   function effectiveStart(v){ return (v.override && state.controlMode==='live') ? v.override.s : v.s; }
   function effectiveEnd(v){ return (v.override && state.controlMode==='live') ? v.override.e : v.e; }
   function effectiveTech(v){ return (v.override && state.controlMode==='live') ? v.override.t : v.t; }
+  // 2026-08-25: "remove the schedule" for a Jobber-mirrored job -- same
+  // proposed/effective duality as a time override (this file never writes to
+  // Jobber, see the header comment), except there is no new time/tech to
+  // show, the visit just stops existing once the crew is HiveLogic Live.
+  // isRemoved(v) alone means "proposed" (still shown, flagged); combined
+  // with controlMode==='live' it means "actually gone" (excluded from every
+  // board computation via dayVisits below, the single choke point).
+  function isRemoved(v){ return !!(v.override && v.override.removed); }
+  function isEffectivelyRemoved(v){ return isRemoved(v) && state.controlMode==='live'; }
   // Rule 4: stage a change into the scenario plan instead of firing notifications per drag
   function stageChange(label, apply, undo){
     apply(); state.scenario.changes.push({label, undo}); render();
@@ -206,7 +216,7 @@
   }
   const projectFor = (v) => v&&v.jobNo ? projects.find((p)=>p.id===String(v.jobNo)) : null;
   function visibleProjects(){ return state.division==='all' ? projects : projects.filter((p)=>p.division===state.division); }
-  const dayVisits = (id, date) => visits.filter((v)=>v.date===(date||state.date) && effectiveTech(v)===id);
+  const dayVisits = (id, date) => visits.filter((v)=>v.date===(date||state.date) && effectiveTech(v)===id && !isEffectivelyRemoved(v));
   function conflictInfo(id, date){
     const vs=dayVisits(id,date).slice().sort((a,b)=>a.s-b.s); const bad=new Set(),zones=[];
     for(let i=0;i<vs.length;i++)for(let j=i+1;j<vs.length;j++)
@@ -732,7 +742,7 @@
         const unconf=clientFacing && v.confirm==='unconfirmed' && v.source!=='jobber';
         const cf = v.source==='jobber'?'':(v.confirm==='confirmed'?'<span class="cf" title="Confirmed" style="color:var(--ok)">✓</span>':(unconf?'<span class="cf" title="Awaiting confirmation" style="color:var(--amb)">⌛</span>':''));
         const r=readinessOf(v), es=effectiveStart(v), ee=effectiveEnd(v);
-        const propText = (v.override && state.controlMode!=='live') ? 'PROPOSED CHANGE' : (v.lifecycle==='proposed' ? 'PROPOSED' : '');
+        const propText = isRemoved(v) ? 'PROPOSED REMOVAL' : ((v.override && state.controlMode!=='live') ? 'PROPOSED CHANGE' : (v.lifecycle==='proposed' ? 'PROPOSED' : ''));
         const L=Math.max(0,Math.min(SPAN-0.25,es-DAY_START)), R=Math.max(L+0.25,Math.min(SPAN,ee-DAY_START)); // clamp so early/late jobs stay on-canvas
         const offWin = es<DAY_START || ee>DAY_END;
         // Chained secondary: the job itself lives on the lead's row. All this row
@@ -742,10 +752,10 @@
                style="left:${L*HW}px;width:${(R-L)*HW}px"><small>⛓ with ${v.chainedToName}</small></div>`;
           return;
         }
-        h+=`<div class="job ${v.status==='done'?'done':''} ${ci.bad.has(v.id)?'conflict':''} ${unconf?'unconfirmed':''} ${v.source==='jobber'?'jobber':''} ${r.level!=='ready'?r.level:''}" draggable="${v.locked?'false':'true'}" data-vid="${v.id}" title="${offWin?fmt(es)+'–'+fmt(ee)+' (outside board hours)':''}"
-             style="left:${L*HW}px;width:${(R-L)*HW}px;background:linear-gradient(0deg,${pc}2e,${pc}2e),var(--panel);border-left-color:${pc}">
+        h+=`<div class="job ${v.status==='done'?'done':''} ${ci.bad.has(v.id)?'conflict':''} ${unconf?'unconfirmed':''} ${v.source==='jobber'?'jobber':''} ${r.level!=='ready'?r.level:''}" draggable="${v.locked?'false':'true'}" data-vid="${v.id}" title="${isRemoved(v)?'Proposed removal — Jobber untouched until this crew is Live':(offWin?fmt(es)+'–'+fmt(ee)+' (outside board hours)':'')}"
+             style="left:${L*HW}px;width:${(R-L)*HW}px;background:linear-gradient(0deg,${pc}2e,${pc}2e),var(--panel);border-left-color:${pc}${isRemoved(v)?';opacity:.5':''}">
              ${v.pinned?'<span class="pin">📌</span>':''}${cf}
-             <b><span class="divi" title="${v.div}">${cardIcon(v)}</span>${v.jobNo?'#'+v.jobNo+' ':''}${v.type}</b>
+             <b><span class="divi" title="${v.div}">${cardIcon(v)}</span>${v.jobNo?'#'+v.jobNo+' ':''}${isRemoved(v)?'<s>'+v.type+'</s>':v.type}</b>
              <small><span class="io" title="${exposureOf(v)==='outside'?'Outside work — weather-exposed':'Inside work'}">${outIcon(v)}</span> ${v.client} · ${fmt(es)}–${fmt(ee)}</small>
              <span class="rdy ${r.level}">${r.level==='ready'?'● Ready':(RDY[r.level].l+' — '+r.why)}</span>
              ${(v.crew&&v.crew.length>1)?`<span class="crewrow" title="${v.crew.map((c)=>c.n+(c.lead?' (lead)':'')).join(', ')}">${v.crew.map((c)=>`<span class="cwav${c.lead?' lead':''}" title="${c.n}${c.lead?' · lead':' · crew'}" style="background:${c.pc}">${c.ini}</span>`).join('')}<span class="cwn">+${v.crew.length-1}</span></span>`:''}
@@ -785,7 +795,7 @@
     const dt0=parseYMD(state.date), y=dt0.getFullYear(), m=dt0.getMonth();
     const MONTHS=['January','February','March','April','May','June','July','August','September','October','November','December'];
     const first=new Date(y,m,1), lead=first.getDay(), days=new Date(y,m+1,0).getDate();
-    const byDate={}; visits.forEach((v)=>{ if(state.hidden.has(v.t))return; (byDate[v.date]=byDate[v.date]||[]).push(v); });
+    const byDate={}; visits.forEach((v)=>{ if(state.hidden.has(v.t))return; if(isEffectivelyRemoved(v))return; (byDate[v.date]=byDate[v.date]||[]).push(v); });
     let h='<div class="mo"><div style="font-weight:800;margin:2px 0 8px">'+MONTHS[m]+' '+y+'</div><div class="modow">'+
       ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map((x)=>`<span>${x}</span>`).join('')+'</div><div class="mogrid">';
     const cells=Math.ceil((lead+days)/7)*7;
@@ -2035,16 +2045,25 @@
     let body=`<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap"><span class="srcpill jobber">🔒 Jobber source</span><span class="srcpill ${live?'hivelogic':'jobber'}">${live?'HiveLogic managed':'Jobber managed'}</span></div>`;
     body+=infoSections(v);
     body+=crewPanel(v);
-    if(hasOv) body+=`<div class="policybox" style="margin-top:8px"><b>Source history</b>Jobber: ${fmt(v.s)}–${fmt(v.e)}${live?' — now history':' — still effective'} · HiveLogic proposal: ${fmt(v.override.s)}–${fmt(v.override.e)}${live?' — effective':' — proposed'}</div>`;
+    if(hasOv && isRemoved(v)) body+=`<div class="policybox" style="margin-top:8px"><b>Source history</b>Jobber: ${fmt(v.s)}–${fmt(v.e)}${live?' — removed':' — still effective'} · HiveLogic proposal: take this off the board${live?' — effective':' — proposed'}</div>`;
+    else if(hasOv) body+=`<div class="policybox" style="margin-top:8px"><b>Source history</b>Jobber: ${fmt(v.s)}–${fmt(v.e)}${live?' — now history':' — still effective'} · HiveLogic proposal: ${fmt(v.override.s)}–${fmt(v.override.e)}${live?' — effective':' — proposed'}</div>`;
     const actions=[{label:'Close',cls:'',fn:closeModal}];
     if(!canEdit()){
       body+=`<div class="policybox" style="margin-top:8px"><b>${ROLE_LABELS[state.role]||state.role} — view / request only</b>Ask Dispatch to change this Jobber job.</div>`;
       actions.push({label:'📨 Request change',cls:'primary',fn:()=>{closeModal();openChangeRequest(vid);}});
     } else if(state.controlMode==='mirror'){
       body+=`<div class="policybox" style="margin-top:8px;color:var(--amb)"><b>Mirror-only mode</b>Jobber runs this. You can PLAN an override (scenario only) but can't publish it until this crew is HiveLogic Live.</div>`;
-      actions.push({label:hasOv?'Update plan':'Plan override (scenario)',cls:'',fn:()=>{closeModal();openOverrideCreate(vid);}});
+      if(isRemoved(v)){
+        actions.push({label:'↩ Restore to schedule',cls:'',fn:()=>{closeModal();restoreVisitScenario(vid);}});
+      } else {
+        actions.push({label:hasOv?'Update plan':'Plan override (scenario)',cls:'',fn:()=>{closeModal();openOverrideCreate(vid);}});
+        actions.push({label:'🗑 Remove from schedule (scenario)',cls:'',fn:()=>{closeModal();removeVisitScenario(vid);}});
+      }
+    } else if(isRemoved(v)){
+      actions.push({label:'↩ Restore to schedule',cls:'primary',fn:()=>{closeModal();restoreVisitScenario(vid);}});
     } else {
       actions.push({label:hasOv?'Update override':'Create override',cls:'primary',fn:()=>{closeModal();openOverrideCreate(vid);}});
+      actions.push({label:'🗑 Remove from schedule',cls:'',fn:()=>{closeModal();removeVisitScenario(vid);}});
     }
     body+=`<details class="iclps"><summary>❓ What the symbols mean</summary>${iconLegendFor(v)}</details>`;
     modal({k:'Jobber job · '+(live?'HiveLogic live':'read-only source'),title:`${v.jobNo?'#'+v.jobNo+' ':''}${v.type}`,body,actions});
@@ -2064,6 +2083,25 @@
       ()=>{ v.override={t:techId,s:start,e:start+dur,lifecycle:'proposed'}; },
       ()=>{ v.override=prev; });
     toast(state.controlMode==='live'?'📋 Staged override — effective on publish':'✎ Override staged as a proposal — Jobber untouched, one card',false);
+  }
+  // 2026-08-25: "in schedule tab when clicking a job... there should be an
+  // option or button to remove the schedule." Same shape as commitOverride
+  // above (stageChange, undoable, never touches Jobber) -- removing a
+  // Jobber-mirrored job supersedes any time/crew override on it, so this
+  // replaces v.override outright rather than layering onto it.
+  function removeVisitScenario(vid){
+    const v=visits.find((z)=>z.id===vid); if(!v)return; const prev=v.override;
+    stageChange(`Remove ${v.client} · ${v.type} from the board`,
+      ()=>{ v.override={removed:true,lifecycle:'proposed'}; },
+      ()=>{ v.override=prev; });
+    toast(state.controlMode==='live'?'🗑 Staged removal — effective on publish':'🗑 Removal staged as a proposal — Jobber untouched, one card',false);
+  }
+  function restoreVisitScenario(vid){
+    const v=visits.find((z)=>z.id===vid); if(!v)return; const prev=v.override;
+    stageChange(`Restore ${v.client} · ${v.type} to the board`,
+      ()=>{ v.override=null; },
+      ()=>{ v.override=prev; });
+    toast('↩ Restored — back on the board',false);
   }
   function openAssignSheet(uid){ const u=unassigned.find((z)=>z.id===uid); if(!u)return;
     const body=`<div style="font-size:12px;margin-bottom:8px">${u.client} · ${u.city} · ${u.div}</div>
