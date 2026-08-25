@@ -1329,7 +1329,7 @@ html[data-theme="dark"] .huddle-banner {
 
 /* ==================== EMAIL APP ==================== */
 /* sidebar: mailbox switcher + folders */
-.ev-accts { padding: 10px 10px 6px; border-bottom: 1px solid var(--line); }
+.ev-accts { padding: 10px 10px 6px; }
 .ev-acct { display: flex; align-items: center; gap: 8px; width: 100%; padding: 7px 9px; border: none; border-radius: 9px;
   background: transparent; cursor: pointer; color: var(--ink); text-align: left; }
 .ev-acct:hover { background: var(--steel-bg); }

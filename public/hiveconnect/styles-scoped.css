@@ -1940,7 +1940,7 @@ html[data-theme="dark"] :is(#hiveconnect-root, .hc-embed).huddle-banner {
 /* ==================== EMAIL APP ==================== */
 /* sidebar: mailbox switcher + folders */
 :is(#hiveconnect-root, .hc-embed) .ev-accts,
-:is(#hiveconnect-root, .hc-embed).ev-accts { padding: 10px 10px 6px; border-bottom: 1px solid var(--line); }
+:is(#hiveconnect-root, .hc-embed).ev-accts { padding: 10px 10px 6px; }
 :is(#hiveconnect-root, .hc-embed) .ev-acct,
 :is(#hiveconnect-root, .hc-embed).ev-acct { display: flex; align-items: center; gap: 8px; width: 100%; padding: 7px 9px; border: none; border-radius: 9px;
   background: transparent; cursor: pointer; color: var(--ink); text-align: left; }
