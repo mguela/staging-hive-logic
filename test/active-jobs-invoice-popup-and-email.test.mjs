@@ -132,3 +132,43 @@ test('ivxSendEmail reports the real error and re-enables the button on failure',
   assert.match(fn, /if\(d&&d\.ok\)/);
   assert.match(fn, /btn\.disabled=false; btn\.textContent='Send to client';/);
 });
+
+// ---- 2026-08-26 follow-up: customizable title + amount --------------------
+// jomell: "when creating an invoice from this job, the amount should be
+// customizable... since its going to be just a draft first. the name/label
+// should be customizable as well as the amount."
+
+test('the Create Invoice button opens the new popup instead of creating immediately', () => {
+  assert.match(HTML, /id="ajv-inv" onclick="ajvOpenCreateInvoiceModal\(\)"/);
+});
+
+test('the popup pre-fills the job\'s own title and its line-items total (or estimated value if none)', () => {
+  const fn = extractFunction(HTML, 'function ajvOpenCreateInvoiceModal() {');
+  assert.match(fn, /value="' \+ hlEsc\(AJX\.job\.title \|\| ''\) \+ '"/);
+  assert.match(fn, /var defaultAmount = \(AJX\.lines && AJX\.lines\.length\) \? ajvLinesSum\(\) : \(Number\(AJX\.job\.total\) \|\| 0\);/);
+});
+
+test('a blank title or a non-positive amount is refused before anything is created', () => {
+  const fn = extractFunction(HTML, 'function ajvOpenCreateInvoiceModal() {');
+  assert.match(fn, /if \(!subject\) \{ err\.textContent = 'A title is required\.'/);
+  assert.match(fn, /if \(!isFinite\(amount\) \|\| amount <= 0\)/);
+});
+
+test('confirming stores the custom title/amount and only then calls the real create action', () => {
+  const fn = extractFunction(HTML, 'function ajvOpenCreateInvoiceModal() {');
+  assert.match(fn, /window\._ajvPendingInvoice = \{ subject: subject, amount: amount \};/);
+  assert.match(fn, /ajvMakeInvoice\(false\);/);
+});
+
+test('ajvMakeInvoice sends the custom title/amount through to create_invoice_from_job', () => {
+  const fn = extractFunction(HTML, 'function ajvMakeInvoice(allowDuplicate) {');
+  assert.match(fn, /var pending = window\._ajvPendingInvoice \|\| \{\};/);
+  assert.match(fn, /subject: pending\.subject, amount: pending\.amount/);
+});
+
+test('a successful create clears the pending state so a later plain retry cannot reuse a stale amount', () => {
+  const fn = extractFunction(HTML, 'function ajvMakeInvoice(allowDuplicate) {');
+  const clearIdx = fn.indexOf('window._ajvPendingInvoice = null;');
+  const toastIdx = fn.indexOf("Draft invoice for");
+  assert.ok(clearIdx > -1 && clearIdx < toastIdx, 'must clear before reporting success');
+});

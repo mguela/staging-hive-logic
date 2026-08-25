@@ -5184,32 +5184,52 @@ async function handleCreateInvoiceFromJob(req, res) {
     });
   }
 
-  const jobLines = await readJobLineItems(jobRefId);
-  let lineItems = jobLines.map((l) => ({
-    description: l.description,
-    quantity: Number(l.quantity),
-    unitPrice: Number(l.unit_price),
-    lineTotal: Number(l.line_total),
-  }));
+  // 2026-08-26, jomell: "the amount should be customizable... since its
+  // going to be just a draft first. the name/label should be customizable
+  // as well as the amount." A draft invoice no longer has to bill the
+  // job's full line-item total under the job's own title -- a deposit or
+  // any other partial amount is now a real option. When a custom amount
+  // is given it replaces the line-item computation entirely with a single
+  // line under the custom title; omitting it keeps the original
+  // job-line-items behavior untouched, so any other caller of this action
+  // is unaffected.
+  const customSubject = String(b.subject || '').trim();
+  const customAmount = Number(b.amount);
+  const hasCustomAmount = isFinite(customAmount) && customAmount > 0;
 
-  // A job with no itemised lines but a priced total still has something to
-  // bill -- turn that into one line rather than refusing.
-  if (!lineItems.length) {
-    const lump = Number(job.total);
-    if (!isFinite(lump) || lump <= 0) {
-      return res.status(400).json({ ok: false, error: 'This job has no line items and no value, so there is nothing to invoice yet. Add a line item first.' });
+  let lineItems;
+  let amount;
+  if (hasCustomAmount) {
+    amount = Math.round(customAmount * 100) / 100;
+    lineItems = [{ description: customSubject || job.title || 'Work performed', quantity: 1, unitPrice: amount, lineTotal: amount }];
+  } else {
+    const jobLines = await readJobLineItems(jobRefId);
+    lineItems = jobLines.map((l) => ({
+      description: l.description,
+      quantity: Number(l.quantity),
+      unitPrice: Number(l.unit_price),
+      lineTotal: Number(l.line_total),
+    }));
+
+    // A job with no itemised lines but a priced total still has something to
+    // bill -- turn that into one line rather than refusing.
+    if (!lineItems.length) {
+      const lump = Number(job.total);
+      if (!isFinite(lump) || lump <= 0) {
+        return res.status(400).json({ ok: false, error: 'This job has no line items and no value, so there is nothing to invoice yet. Add a line item first.' });
+      }
+      lineItems = [{ description: job.title || 'Work performed', quantity: 1, unitPrice: lump, lineTotal: lump }];
     }
-    lineItems = [{ description: job.title || 'Work performed', quantity: 1, unitPrice: lump, lineTotal: lump }];
-  }
 
-  const amount = Math.round(lineItems.reduce((t, l) => t + (Number(l.lineTotal) || 0), 0) * 100) / 100;
-  if (amount <= 0) return res.status(400).json({ ok: false, error: 'Those line items add up to $0 -- nothing to invoice.' });
+    amount = Math.round(lineItems.reduce((t, l) => t + (Number(l.lineTotal) || 0), 0) * 100) / 100;
+    if (amount <= 0) return res.status(400).json({ ok: false, error: 'Those line items add up to $0 -- nothing to invoice.' });
+  }
 
   const row = {
     jobber_id: 'HL-INV-' + crypto.randomUUID(),
     invoice_number: String(Math.floor(Date.now() / 1000)),
     invoice_status: 'draft',
-    subject: job.title || null,
+    subject: customSubject || job.title || null,
     subtotal: amount,
     total: amount,
     balance: amount,
