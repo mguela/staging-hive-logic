@@ -368,7 +368,7 @@ async function loadEverything(myId) {
   // deactivated accounts can't use the app
   if (me && me.active === false) {
     await sb.auth.signOut();
-    document.body.innerHTML = '<div style="height:100vh;display:flex;align-items:center;justify-content:center;font-family:Montserrat,sans-serif;color:#8b92a8;background:#10151f">Your account has been deactivated. Contact an admin.</div>';
+    document.body.innerHTML = '<div style="height:100vh;display:flex;align-items:center;justify-content:center;font-family:Inter,sans-serif;color:#8b92a8;background:#10151f">Your account has been deactivated. Contact an admin.</div>';
     throw new Error('deactivated');
   }
 
