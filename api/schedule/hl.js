@@ -271,6 +271,21 @@ export default async function handler(req, res) {
       return res.status(r.ok ? 200 : 500).json({ ok: r.ok && rows(r) > 0, changed: rows(r) });
     }
 
+    // 2026-08-25, jomell: "in schedule, when clicking on a schedule, there
+    // should be a checkbox named 'completed'." The board's status cycle
+    // button (cycleStatus in app.js) only ever changed the local in-memory
+    // visit -- same never-actually-persisted shape as the Apply Move and
+    // Cancel bugs fixed the same day. This is the real write behind the new
+    // checkbox: just a status PATCH on HiveLogic's own table, same as
+    // cancel_appointment/move_appointment above.
+    const APPT_STATUSES = ['scheduled', 'traveling', 'onsite', 'materials', 'waiting', 'lunch', 'break', 'shop', 'problem', 'done'];
+    if (action === 'set_appointment_status') {
+      if (!body.id) return res.status(400).json({ ok: false, error: 'id required' });
+      if (APPT_STATUSES.indexOf(body.status) === -1) return res.status(400).json({ ok: false, error: 'status must be one of: ' + APPT_STATUSES.join(', ') });
+      const r = await sb(`hl_appointments?id=eq.${enc(body.id)}`, 'PATCH', { status: body.status, updated_at: new Date().toISOString() });
+      return res.status(r.ok ? 200 : 500).json({ ok: r.ok && rows(r) > 0, changed: rows(r) });
+    }
+
     if (action === 'move_appointment') {
       if (!body.id) return res.status(400).json({ ok: false, error: 'id required' });
       const patch = { updated_at: new Date().toISOString() };
