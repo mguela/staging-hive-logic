@@ -1968,6 +1968,16 @@
       if(clientFacing && v.confirm!=='confirmed') body+=`<button class="btn sm primary" onclick="LabUI.confirmAppt('${vid}')">✓ Confirm</button><button class="btn sm" onclick="LabUI.requestApproval('${vid}')">📲 Request approval</button>`;
       if(clientFacing) body+=`<button class="btn sm" onclick="LabUI.sendReminderNow('${vid}')">📧 Reminder</button>`;
       body+=`<button class="btn sm" onclick="LabUI.togglePin('${vid}')">${v.pinned?'📌 Unpin':'📌 Pin'}</button><button class="btn sm" onclick="LabUI.cycleStatus('${vid}')">↻ ${STATUS[v.status].l}</button>`;
+      // 2026-08-25: "in schedule, when clicking on a schedule, there should
+      // be a checkbox named 'completed'." A direct toggle, separate from
+      // the ↻ status-cycle button above (which still only changes the
+      // local status word, not persisted -- same pre-existing gap as the
+      // Apply Move/Cancel bugs, not touched here since it wasn't what was
+      // asked). This one is real: it PATCHes hl_appointments.status for a
+      // native appointment via the new set_appointment_status action, same
+      // reload-on-success pattern every other real write in this file uses
+      // (hlMoveNative, hlChain, hlClockCrew, ...).
+      body+=`<label style="display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:700;color:var(--ink);cursor:pointer;margin:0 2px"><input type="checkbox" ${v.status==='done'?'checked':''} onchange="LabUI.toggleCompleted('${vid}',this.checked)"> Completed</label>`;
       if(clientFacing) body+=`<button class="btn sm danger" onclick="LabUI.cancelAppt('${vid}')">Cancel…</button>`;
       // The whole point of a site visit is the estimate that follows it. The
       // path existed -- the lead card has a "Start estimate" button -- but from
@@ -2408,6 +2418,24 @@
             toast(`🚫 Cancelled — ${v.client}. Policy applied.`,false);
           }
         }}]}); },
+    // 2026-08-25: "there should be a checkbox named 'completed'." Real
+    // write for a native appointment (set_appointment_status), reload on
+    // success -- same pattern as cancelAppt just above. A still-proposed
+    // visit (no real apptId yet) keeps the old local-only status change.
+    toggleCompleted(vid,checked){
+      const v=visits.find((z)=>z.id===vid); if(!v)return;
+      const newStatus=checked?'done':'scheduled';
+      closeModal();
+      if(v.native && v.apptId){
+        window.hlPost('set_appointment_status',{id:v.apptId,status:newStatus}).then((r)=>{
+          if(r&&r.ok){ toast(checked?`✓ Marked completed — ${v.client}`:`Marked not completed — ${v.client}`,false); window.hlReload(); }
+          else toast('⚠ Could not update: '+((r&&r.error)||'error'),false);
+        });
+      } else {
+        v.status=newStatus; render();
+        toast(checked?`✓ Marked completed — ${v.client}`:`Marked not completed — ${v.client}`,false);
+      }
+    },
     sendReminderNow(vid){ const v=visits.find((z)=>z.id===vid); closeModal(); toast(`📧 Reminder email queued to ${v?v.client:'client'} (lab — no real send)`,false); },
     undo(){ const u=state.undo; if(!u)return; if(u.type==='move'){const v=visits.find((z)=>z.id===u.id);Object.assign(v,u.prev);} else if(u.type==='assign'){const i=visits.findIndex((z)=>z.id===u.id);if(i>=0)visits.splice(i,1);unassigned.unshift(u.u);} state.undo=null; render(); toast('↩️ Undone',false); },
   };
