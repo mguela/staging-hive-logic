@@ -6243,11 +6243,6 @@ function renderMessageList() {
     if (m.hasAttachments) { const clip = document.createElement('span'); clip.className = 'ev-item-clip'; clip.textContent = ' 📎'; subj.appendChild(clip); }
     mid.appendChild(subj);
     const prev = document.createElement('div'); prev.className = 'ev-item-prev'; prev.textContent = m.bodyPreview || ''; mid.appendChild(prev);
-    if (m.categories && m.categories.length) {
-      const cats = document.createElement('div'); cats.className = 'ev-item-cats';
-      m.categories.slice(0, 4).forEach(cn => { const d = document.createElement('span'); d.className = 'ev-cat-dot'; d.style.background = evCatColor(cn); d.title = cn; cats.appendChild(d); });
-      mid.appendChild(cats);
-    }
     row.appendChild(mid);
     // hover quick-actions
     const qa = document.createElement('div'); qa.className = 'ev-item-qa';
