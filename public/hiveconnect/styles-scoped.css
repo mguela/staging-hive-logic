@@ -2165,6 +2165,10 @@ html[data-theme="dark"] :is(#hiveconnect-root, .hc-embed).huddle-banner {
 :is(#hiveconnect-root, .hc-embed).ev-c-toolbar button:hover { background: var(--card); }
 :is(#hiveconnect-root, .hc-embed) .ev-tb-sep,
 :is(#hiveconnect-root, .hc-embed).ev-tb-sep { width: 1px; height: 18px; background: var(--line); margin: 0 3px; }
+:is(#hiveconnect-root, .hc-embed) .ev-c-tb-ic,
+:is(#hiveconnect-root, .hc-embed).ev-c-tb-ic,
+:is(#hiveconnect-root, .hc-embed) .ev-c-mini-ic,
+:is(#hiveconnect-root, .hc-embed).ev-c-mini-ic { width: 13px; height: 13px; object-fit: contain; vertical-align: -2px; margin-right: 5px; }
 :is(#hiveconnect-root, .hc-embed) .ev-c-rte,
 :is(#hiveconnect-root, .hc-embed).ev-c-rte { min-height: 200px; max-height: 340px; overflow-y: auto; border: 1.5px solid var(--line); border-radius: 0 0 10px 10px; padding: 12px 14px; font-size: 14px; line-height: 1.5; background: var(--canvas); color: var(--ink); }
 :is(#hiveconnect-root, .hc-embed) .ev-c-rte:focus,

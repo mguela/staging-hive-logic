@@ -1455,6 +1455,7 @@ html[data-theme="dark"] .huddle-banner {
 .ev-c-toolbar button { border: none; background: transparent; color: var(--ink); font-size: 12.5px; font-weight: 700; padding: 5px 9px; border-radius: 6px; cursor: pointer; min-width: 30px; }
 .ev-c-toolbar button:hover { background: var(--card); }
 .ev-tb-sep { width: 1px; height: 18px; background: var(--line); margin: 0 3px; }
+.ev-c-tb-ic, .ev-c-mini-ic { width: 13px; height: 13px; object-fit: contain; vertical-align: -2px; margin-right: 5px; }
 .ev-c-rte { min-height: 200px; max-height: 340px; overflow-y: auto; border: 1.5px solid var(--line); border-radius: 0 0 10px 10px; padding: 12px 14px; font-size: 14px; line-height: 1.5; background: var(--canvas); color: var(--ink); }
 .ev-c-rte:focus { outline: none; border-color: var(--gold); }
 .ev-c-rte:empty:before { content: attr(data-placeholder); color: var(--mut); }
