@@ -20,6 +20,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.join(__dirname, '..');
 const HTML = fs.readFileSync(path.join(root, 'public', 'index.html'), 'utf-8');
 const INVOICES = fs.readFileSync(path.join(root, 'api', 'invoices.js'), 'utf-8');
+const TRACK1 = fs.readFileSync(path.join(root, 'api', 'track1.js'), 'utf-8');
 
 function extractFunction(src, decl) {
   const start = src.indexOf(decl);
@@ -104,4 +105,125 @@ test('the modal shell has containers for both sections, in the body before line 
   const coContainer = HTML.indexOf('id="ajv-cos"', bodyStart);
   assert.ok(invContainer > bodyStart && invContainer < linesLabel);
   assert.ok(coContainer > bodyStart && coContainer < linesLabel);
+});
+
+// ---- 2026-08-26 follow-up: title/label, editable, click-through -----------
+// jomell: "the invoices and job order should have a title or label rather
+// than just the number... their names should be edittable... also the
+// invoices and change order should be clickable and when it is clicked, it
+// should redirect to the actual invoices page and change orders page for
+// that job."
+
+test('an invoice row shows its subject, not just the bare number', () => {
+  const fn = extractFunction(HTML, 'function ajvLoadLinkedInvoices(jobId) {');
+  assert.match(fn, /hlEsc\(i\.subject \|\| 'Untitled invoice'\)/);
+});
+
+test('a change-order row shows its description, not just the coNumber', () => {
+  const fn = extractFunction(HTML, 'function ajvLoadLinkedChangeOrders(jobId) {');
+  assert.match(fn, /hlEsc\(c\.description \|\| '\(no description\)'\)/);
+});
+
+test('the invoice edit pencil is offered only on a HiveLogic-created invoice, matching ivxIsLocal', () => {
+  const fn = extractFunction(HTML, 'function ajvLoadLinkedInvoices(jobId) {');
+  assert.match(fn, /ivxIsLocal\(i\) \?/);
+  assert.match(fn, /ajvEditInvoiceSubject\(/);
+});
+
+test('the change-order edit pencil is offered only in draft or sent status', () => {
+  const fn = extractFunction(HTML, 'function ajvLoadLinkedChangeOrders(jobId) {');
+  assert.match(fn, /c\.lifecycleStatus === 'draft' \|\| c\.lifecycleStatus === 'sent'/);
+  assert.match(fn, /ajvEditCoDescription\(/);
+});
+
+test('the edit pencil click does not also trigger the row\'s navigate-away handler', () => {
+  const invFn = extractFunction(HTML, 'function ajvLoadLinkedInvoices(jobId) {');
+  assert.match(invFn, /event\.stopPropagation\(\);ajvEditInvoiceSubject\(/);
+  const coFn = extractFunction(HTML, 'function ajvLoadLinkedChangeOrders(jobId) {');
+  assert.match(coFn, /event\.stopPropagation\(\);ajvEditCoDescription\(/);
+});
+
+test('saving an invoice title posts to update_invoice_subject and reloads this job\'s list', () => {
+  const fn = extractFunction(HTML, 'function ajvEditInvoiceSubject(id) {');
+  assert.match(fn, /hlApiPost\('update_invoice_subject', \{ id: id, subject: subject \}\)/);
+  assert.match(fn, /if \(AJX\.job\) ajvLoadLinkedInvoices\(AJX\.job\.id\);/);
+});
+
+test('saving a change-order description posts to the update-description action and reloads this job\'s list', () => {
+  const fn = extractFunction(HTML, 'function ajvEditCoDescription(id) {');
+  assert.match(fn, /coApi\('update-description', \{ id: id, description: description \}\)/);
+  assert.match(fn, /if \(AJX\.job\) ajvLoadLinkedChangeOrders\(AJX\.job\.id\);/);
+});
+
+test('an invoice row is clickable and jumps to the real Invoicing tab', () => {
+  const fn = extractFunction(HTML, 'function ajvLoadLinkedInvoices(jobId) {');
+  assert.match(fn, /onclick="ajvGoToInvoice\(/);
+});
+
+test('ajvGoToInvoice switches to the real invx view, forces "all" so a paid/older invoice still shows, and reloads', () => {
+  const fn = extractFunction(HTML, 'function ajvGoToInvoice(id) {');
+  assert.match(fn, /showView\('invx'\)/);
+  assert.match(fn, /ivxSetMode\('all'\)/);
+  assert.match(fn, /ivxLoad\(\)/);
+  assert.match(fn, /ajvGoToInvoiceWhenReady\(id, 0\)/);
+});
+
+test('a change-order row is clickable and jumps to the real Change Orders tab', () => {
+  const fn = extractFunction(HTML, 'function ajvLoadLinkedChangeOrders(jobId) {');
+  assert.match(fn, /onclick="ajvGoToChangeOrder\(/);
+});
+
+test('ajvGoToChangeOrder switches to the real co view and reloads', () => {
+  const fn = extractFunction(HTML, 'function ajvGoToChangeOrder(id) {');
+  assert.match(fn, /showView\('co'\)/);
+  assert.match(fn, /coLoadList\(\)/);
+  assert.match(fn, /ajvGoToCoWhenReady\(id, 0\)/);
+});
+
+test('the jump-to functions poll for the row instead of assuming it loaded instantly, and give up honestly', () => {
+  const invWait = extractFunction(HTML, 'function ajvGoToInvoiceWhenReady(id, attempt) {');
+  assert.match(invWait, /getElementById\('ivxrow-' \+ id\)/);
+  assert.match(invWait, /attempt \|\| 0\) < 30/);
+  assert.match(invWait, /chirpToast\(/);
+  const coWait = extractFunction(HTML, 'function ajvGoToCoWhenReady(id, attempt) {');
+  assert.match(coWait, /getElementById\('corow-' \+ id\)/);
+  assert.match(coWait, /attempt \|\| 0\) < 30/);
+});
+
+test('the real Invoicing and Change Orders tabs give each row a stable id to jump to', () => {
+  const ivxFn = extractFunction(HTML, 'function ivxCard(i){');
+  assert.match(ivxFn, /id="ivxrow-'\+ivxEsc\(i\.id\)\+'"/);
+  const coFn = extractFunction(HTML, 'function coCard(co){');
+  assert.match(coFn, /id="corow-'\+cid\+'"/);
+});
+
+// ---- backend: editing an invoice's title -----------------------------------
+
+test('the resource dispatch routes update_invoice_subject to the real handler', () => {
+  assert.match(TRACK1, /resource === 'update_invoice_subject'/);
+  assert.match(TRACK1, /handleUpdateInvoiceSubject\(req, res\)/);
+});
+
+test('updating an invoice title requires a signed-in user and a HiveLogic-created invoice', () => {
+  const fn = extractFunction(TRACK1, 'async function handleUpdateInvoiceSubject(req, res) {');
+  assert.match(fn, /getRequestingProfile\(req\)/);
+  assert.match(fn, /if \(!id\.startsWith\('HL-INV-'\)\)/);
+});
+
+test('a Jobber-synced invoice is refused with an explanation, not a silent write that the next sync would revert', () => {
+  const fn = extractFunction(TRACK1, 'async function handleUpdateInvoiceSubject(req, res) {');
+  assert.match(fn, /edit it there/);
+});
+
+test('an empty title is rejected before any database write', () => {
+  const fn = extractFunction(TRACK1, 'async function handleUpdateInvoiceSubject(req, res) {');
+  const guardIdx = fn.indexOf("if (!subject) return res.status(400)");
+  const patchIdx = fn.indexOf('supabaseRequest(');
+  assert.ok(guardIdx > -1 && patchIdx > guardIdx, 'the blank-title check must happen before the PATCH');
+});
+
+test('the update writes only invoices.subject, looked up by jobber_id like every other invoice action', () => {
+  const fn = extractFunction(TRACK1, 'async function handleUpdateInvoiceSubject(req, res) {');
+  assert.match(fn, /invoices\?jobber_id=eq\.\$\{encodeURIComponent\(id\)\}/);
+  assert.match(fn, /body: JSON\.stringify\(\{ subject, jobber_updated_at: new Date\(\)\.toISOString\(\) \}\)/);
 });
