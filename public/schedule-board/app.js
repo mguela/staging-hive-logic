@@ -2385,7 +2385,29 @@
       modal({k:'Cancel appointment',title:`${v.type} · ${v.client}`,
         body:`<div class="policybox"><b>Cancellation policy</b>${config.cancellationPolicy}</div>
           <div style="font-size:11.5px;color:var(--mut);margin-top:8px">Cancelling frees the slot and (in production) emails the client + notifies the crew. Any policy fee is flagged for the office.</div>`,
-        actions:[{label:'Keep it',cls:'',fn:closeModal},{label:'Cancel appointment',cls:'danger',fn:()=>{ v.confirm='cancelled'; v.status='problem'; closeModal(); render(); toast(`🚫 Cancelled — ${v.client}. Policy applied.`,false); }}]}); },
+        actions:[{label:'Keep it',cls:'',fn:closeModal},{label:'Cancel appointment',cls:'danger',fn:()=>{
+          closeModal();
+          // 2026-08-25: "i canceled the appointment... but its not
+          // disappearing from the schedule" -- same shape as the Apply Move
+          // bug: this only ever set v.confirm/v.status locally, never called
+          // the real cancel_appointment action, so the card stayed on the
+          // board (and would have come right back on the next reload too).
+          // api/schedule/hl.js's GET already excludes canceled=eq.false, so
+          // a real cancel + reload is what actually removes the card.
+          // A still-proposed visit (v.native false, no real apptId yet) has
+          // nothing on the server to cancel -- that case keeps the local-
+          // only behavior, same as openImpact() being kept for that case in
+          // openJobSheet's Apply Move handler.
+          if(v.native && v.apptId){
+            window.hlPost('cancel_appointment',{id:v.apptId}).then((r)=>{
+              if(r&&r.ok){ toast(`🚫 Cancelled — ${v.client}. Policy applied.`,false); window.hlReload(); }
+              else toast('⚠ Cancel failed: '+((r&&r.error)||'error'),false);
+            });
+          } else {
+            v.confirm='cancelled'; v.status='problem'; render();
+            toast(`🚫 Cancelled — ${v.client}. Policy applied.`,false);
+          }
+        }}]}); },
     sendReminderNow(vid){ const v=visits.find((z)=>z.id===vid); closeModal(); toast(`📧 Reminder email queued to ${v?v.client:'client'} (lab — no real send)`,false); },
     undo(){ const u=state.undo; if(!u)return; if(u.type==='move'){const v=visits.find((z)=>z.id===u.id);Object.assign(v,u.prev);} else if(u.type==='assign'){const i=visits.findIndex((z)=>z.id===u.id);if(i>=0)visits.splice(i,1);unassigned.unshift(u.u);} state.undo=null; render(); toast('↩️ Undone',false); },
   };
