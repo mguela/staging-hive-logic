@@ -19,7 +19,7 @@
  * monitor_my_status poll, so "is this person running current code" is a
  * question the database can answer. Do not hand-edit it -- run
  * `node scripts/stamp-page-build.mjs`. */
-var HL_PAGE_BUILD = '090838f8ae3e7fd1';
+var HL_PAGE_BUILD = '72186323f32fea19';
 </script>
 <script>
 (function () { // HL_FETCH_DEDUPE_V1 — single wrapper: GET /api/ dedupe + 60s cache + write-invalidate
@@ -6564,6 +6564,12 @@ function devTodoLoad(){
     <div class="ajv-head"><b id="ajv-title">Job</b><span class="x" onclick="ajxClose()">&#10005;</span></div>
     <div class="ajv-body">
       <div class="ajv-meta" id="ajv-meta"></div>
+      <!-- 2026-08-26: "it should show the connected invoices and change
+           orders in this window." Both filtered server-side to this one
+           job (invoices.job_id / change order jobId, the same key each
+           already carries from creation) -- filled in by ajxOpen(). -->
+      <div id="ajv-invoices" style="margin-bottom:14px"></div>
+      <div id="ajv-cos" style="margin-bottom:14px"></div>
       <label style="font-size:10px;font-weight:800;letter-spacing:.06em;color:var(--mut)">LINE ITEM ACTIVITIES</label>
       <div class="jli-head" style="margin-top:6px"><span>Description</span><span>Qty</span><span>Unit price</span><span>Total</span><span></span></div>
       <div id="ajv-lines"></div>
@@ -33074,6 +33080,9 @@ function ajxOpen(jobId) {
   var d = document.getElementById('ajv');
   if (d) d.classList.add('open');
 
+  ajvLoadLinkedInvoices(j.id);
+  ajvLoadLinkedChangeOrders(j.id);
+
   fetch('/api/track1?resource=job_line_items&jobRef=' + encodeURIComponent(j.id))
     .then(function (r) { return r.json(); })
     .then(function (res) {
@@ -33094,6 +33103,48 @@ function ajxOpen(jobId) {
       // rather than leaving it to chance.
       if (typeof hlFormForget === 'function') hlFormForget('ajv');
     });
+}
+
+// 2026-08-26: "it should show the connected invoices and change orders in
+// this window." Both filtered server-side to this one job --
+// invoices.job_id and a change order's jobId are both set to the job's own
+// jobber_id at creation (handleCreateInvoiceFromJob / the Change Orders
+// form's job picker), the same key AJX.job.id already is here -- no new
+// relationship, just surfacing the one that already exists.
+function ajvLoadLinkedInvoices(jobId) {
+  var host = document.getElementById('ajv-invoices'); if (!host) return;
+  host.innerHTML = '<div style="font-size:11px;color:var(--mut);font-weight:700">Loading invoices…</div>';
+  fetch('/api/invoices?jobRef=' + encodeURIComponent(jobId)).then(function (r) { return r.json(); }).then(function (d) {
+    if (!d || !d.ok) { host.innerHTML = ''; return; }
+    var invs = d.invoices || [];
+    var label = '<label style="font-size:10px;font-weight:800;letter-spacing:.06em;color:var(--mut)">INVOICES' + (invs.length ? ' (' + invs.length + ')' : '') + '</label>';
+    if (!invs.length) { host.innerHTML = label + '<div style="font-size:12px;color:var(--mut);font-weight:600;padding:4px 0">No invoices for this job yet.</div>'; return; }
+    var rows = invs.map(function (i) {
+      return '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--line)">'
+        + '<div style="display:flex;gap:8px;align-items:center"><b style="font-size:12.5px">' + (i.invoiceNumber ? '#' + hlEsc(i.invoiceNumber) : 'Invoice') + '</b>' + ivxBadge(i.status) + '</div>'
+        + '<div style="font-family:var(--mono);font-weight:800;font-size:12.5px">' + ajxMoney(i.total) + '</div>'
+        + '</div>';
+    }).join('');
+    host.innerHTML = label + rows;
+  }).catch(function () { host.innerHTML = ''; });
+}
+function ajvLoadLinkedChangeOrders(jobId) {
+  var host = document.getElementById('ajv-cos'); if (!host) return;
+  host.innerHTML = '<div style="font-size:11px;color:var(--mut);font-weight:700">Loading change orders…</div>';
+  fetch('/api/bookkeeping/change-orders/list?jobId=' + encodeURIComponent(jobId)).then(function (r) { return r.json(); }).then(function (d) {
+    if (!d || !d.ok) { host.innerHTML = ''; return; }
+    var cos = d.changeOrders || [];
+    var label = '<label style="font-size:10px;font-weight:800;letter-spacing:.06em;color:var(--mut)">CHANGE ORDERS' + (cos.length ? ' (' + cos.length + ')' : '') + '</label>';
+    if (!cos.length) { host.innerHTML = label + '<div style="font-size:12px;color:var(--mut);font-weight:600;padding:4px 0">No change orders for this job yet.</div>'; return; }
+    var rows = cos.map(function (c) {
+      var amt = (c.totals && (c.totals.cardPrice || c.totals.price)) || 0;
+      return '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--line)">'
+        + '<div style="display:flex;gap:8px;align-items:center"><b style="font-size:12.5px">' + hlEsc(c.coNumber || 'Change order') + '</b><span style="font-size:11px;color:var(--mut);font-weight:700;text-transform:uppercase">' + hlEsc(String(c.displayStatus || c.lifecycleStatus || '').replace(/_/g, ' ')) + '</span></div>'
+        + '<div style="font-family:var(--mono);font-weight:800;font-size:12.5px">' + ajxMoney(amt) + '</div>'
+        + '</div>';
+    }).join('');
+    host.innerHTML = label + rows;
+  }).catch(function () { host.innerHTML = ''; });
 }
 
 // 2026-08-25: "in active jobs, when clicking on a job, there should be an
