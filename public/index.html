@@ -19,7 +19,7 @@
  * monitor_my_status poll, so "is this person running current code" is a
  * question the database can answer. Do not hand-edit it -- run
  * `node scripts/stamp-page-build.mjs`. */
-var HL_PAGE_BUILD = '5650e6f26a82b711';
+var HL_PAGE_BUILD = 'aaf0973a765f22c5';
 </script>
 <script>
 (function () { // HL_FETCH_DEDUPE_V1 — single wrapper: GET /api/ dedupe + 60s cache + write-invalidate
@@ -5449,7 +5449,7 @@ function ninvSave(){ var amt = parseFloat(document.getElementById('ninv-amt').va
     </div>
     <div style="display:flex;gap:10px;flex-wrap:wrap">
       <button class="lg-btn" id="wf-clockin-btn" style="width:auto;padding:10px 20px;display:none" onclick="workforceClockIn()">Clock In</button>
-      <button class="lg-btn" id="wf-break-btn" style="width:auto;padding:10px 20px;display:none;background:var(--amber)" onclick="workforceBreakToggle()">Start Break</button>
+      <button class="lg-btn" id="wf-break-btn" style="width:auto;padding:10px 20px;display:none;background:var(--amber);align-items:center;gap:8px;" onclick="workforceBreakToggle()"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 2v2"/><path d="M14 2v2"/><path d="M6 2v2"/><path d="M18 8h1a3 3 0 0 1 0 6h-1"/><path d="M4 8h14v5a7 7 0 0 1-7 7 7 7 0 0 1-7-7Z"/><path d="M6 22h10"/></svg><span>Start Break</span></button>
       <button class="lg-btn" id="wf-clockout-btn" style="width:auto;padding:10px 20px;display:none;background:var(--red)" onclick="workforceClockOut()">Clock Out</button>
     </div>
     <div id="wf-clock-msg" style="margin-top:10px;font-size:12px;font-weight:700"></div>
@@ -5545,7 +5545,7 @@ function ninvSave(){ var amt = parseFloat(document.getElementById('ninv-amt').va
       }
 
       inBtn.style.display = 'none';
-      breakBtn.style.display = 'inline-block';
+      breakBtn.style.display = 'flex';
       outBtn.style.display = 'inline-block';
       if (statusRow) {
         statusRow.style.display = 'block';
