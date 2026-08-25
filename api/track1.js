@@ -5548,10 +5548,30 @@ async function handleWorkforceClock(req, res) {
       const sumRows = sumRes.ok ? await sumRes.json() : [];
       if (!sumRows || !sumRows[0]) return res.status(200).json({ ok: false, error: 'Please submit your End-of-Day report before clocking out.', needsEodReport: true });
     }
+    // Manual clock-out (2026-08-25): "if the employee was not able to clock
+    // out, the system must prompt the employee to input manual clock out."
+    // manualClockOutAt is an ISO timestamp the browser already resolved from
+    // a date+time the person typed (see hlWorkforceManualClockOutOpen).
+    // Validated server-side, not just in the form: cannot predate this
+    // session's own clock_in, cannot be in the future -- the server stays
+    // the source of truth for recorded work time, a typed time is not
+    // trusted blind.
+    const patch = { status: 'completed' };
+    if (req.body && req.body.manualClockOutAt) {
+      const manualMs = new Date(req.body.manualClockOutAt).getTime();
+      if (!Number.isFinite(manualMs)) return res.status(400).json({ ok: false, error: 'That clock-out time is not valid.' });
+      const clockInMs = new Date(open[0].clock_in).getTime();
+      if (manualMs < clockInMs) return res.status(400).json({ ok: false, error: 'Clock-out time cannot be before you clocked in.' });
+      if (manualMs > Date.now() + 60000) return res.status(400).json({ ok: false, error: 'Clock-out time cannot be in the future.' });
+      patch.clock_out = new Date(manualMs).toISOString();
+      patch.close_reason = 'manual_entry';
+    } else {
+      patch.clock_out = new Date().toISOString();
+    }
     const updRes = await supabaseRequest(`workforce_time_sessions?id=eq.${open[0].id}`, {
       method: 'PATCH',
       headers: { Prefer: 'return=representation' },
-      body: JSON.stringify({ clock_out: new Date().toISOString(), status: 'completed' }),
+      body: JSON.stringify(patch),
     });
     if (!updRes.ok) return res.status(500).json({ ok: false, error: 'Could not clock out: ' + (await updRes.text()) });
     const rows = await updRes.json();
@@ -6060,8 +6080,15 @@ async function handleWorkforceSettings(req, res) {
   const row = (settingsRows && settingsRows[0]) || {};
   return res.status(200).json({
     ok: true,
+    // Monitored workday window (2026-08-25): 7:00 AM - 3:00 PM. Both this
+    // and workdayEndHour/Minute are ALWAYS meant as America/New_York local
+    // time regardless of the employee's own machine timezone -- the
+    // frontend prompts (hlWorkforceArmEodPrompt) resolve "now" in ET
+    // before comparing against these, not the browser's local clock.
+    workdayStartHour: Number.isFinite(row.workday_start_hour) ? row.workday_start_hour : 7,
+    workdayStartMinute: Number.isFinite(row.workday_start_minute) ? row.workday_start_minute : 0,
     workdayEndHour: Number.isFinite(row.workday_end_hour) ? row.workday_end_hour : 15,
-    workdayEndMinute: Number.isFinite(row.workday_end_minute) ? row.workday_end_minute : 30,
+    workdayEndMinute: Number.isFinite(row.workday_end_minute) ? row.workday_end_minute : 0,
     idleWarningMinutes: Number.isFinite(row.idle_warning_minutes) ? row.idle_warning_minutes : 30,
     idleAutoClockoutGraceMinutes: Number.isFinite(row.idle_autoclockout_grace_minutes) ? row.idle_autoclockout_grace_minutes : 15,
   });

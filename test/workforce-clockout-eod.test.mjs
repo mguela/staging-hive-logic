@@ -178,10 +178,14 @@ test('the clock-out server-error path routes to the EOD form instead of dead-end
     /if \(data && \(data\.needsEodReport \|\| \/End-of-Day report\/i\.test\(String\(data\.error \|\| ''\)\)\)\) \{/,
     'a server refusal for a missing EOD report must be detected client-side',
   );
-  // Both the client-side pre-check and the server-refusal branch must call it.
+  // The client-side pre-check and the server-refusal branch must call it --
+  // plus, as of the manual clock-out form (2026-08-25), a third caller: that
+  // form's own server-refusal handling hits the identical EOD-required
+  // refusal (workforce_clock's 'out' action gates on it regardless of
+  // whether manualClockOutAt was sent) and must redirect the same way.
   assert.equal(
-    (html.match(/hlWfGoToEodForm\(\);/g) || []).length, 2,
-    'both the pre-check and the server-refusal path must show the form',
+    (html.match(/hlWfGoToEodForm\(\);/g) || []).length, 3,
+    'the pre-check, the normal clock-out server-refusal path, and the manual clock-out server-refusal path must all show the form',
   );
 });
 
