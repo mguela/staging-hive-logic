@@ -1334,6 +1334,8 @@ html[data-theme="dark"] .huddle-banner {
    design. Toggled by setNavTab() adding .sidebar-messages-theme. */
 .sidebar.sidebar-messages-theme { background: var(--card); border-radius: 15px; overflow: hidden; margin: 12px; }
 .sidebar.sidebar-messages-theme .sidebar-header { background: var(--card); border-bottom: 1px solid var(--line); }
+.sidebar.sidebar-messages-theme #panel-messages { padding: 30px; }
+#panel-messages button { appearance: none; -webkit-appearance: none; box-shadow: none; }
 .sidebar.sidebar-messages-theme .sidebar-title { color: var(--ink); }
 .sidebar.sidebar-messages-theme .icon-btn { color: var(--mut); }
 .sidebar.sidebar-messages-theme .icon-btn:hover { background: var(--steel-bg); color: var(--ink); }

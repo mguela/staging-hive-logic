@@ -1946,6 +1946,10 @@ html[data-theme="dark"] :is(#hiveconnect-root, .hc-embed).huddle-banner {
 :is(#hiveconnect-root, .hc-embed).sidebar.sidebar-messages-theme { background: var(--card); border-radius: 15px; overflow: hidden; margin: 12px; }
 :is(#hiveconnect-root, .hc-embed) .sidebar.sidebar-messages-theme .sidebar-header,
 :is(#hiveconnect-root, .hc-embed).sidebar.sidebar-messages-theme .sidebar-header { background: var(--card); border-bottom: 1px solid var(--line); }
+:is(#hiveconnect-root, .hc-embed) .sidebar.sidebar-messages-theme #panel-messages,
+:is(#hiveconnect-root, .hc-embed).sidebar.sidebar-messages-theme #panel-messages { padding: 30px; }
+:is(#hiveconnect-root, .hc-embed) #panel-messages button,
+:is(#hiveconnect-root, .hc-embed)#panel-messages button { appearance: none; -webkit-appearance: none; box-shadow: none; }
 :is(#hiveconnect-root, .hc-embed) .sidebar.sidebar-messages-theme .sidebar-title,
 :is(#hiveconnect-root, .hc-embed).sidebar.sidebar-messages-theme .sidebar-title { color: var(--ink); }
 :is(#hiveconnect-root, .hc-embed) .sidebar.sidebar-messages-theme .icon-btn,
