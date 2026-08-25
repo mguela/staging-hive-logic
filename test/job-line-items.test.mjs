@@ -17,6 +17,7 @@ let invoicesFixture = [];
 let calls = [];
 let insertedInvoice = null;
 let insertedLines = null;
+let patchedInvoice = null;
 
 mock.module('../api/_lib/jobber.js', {
   namedExports: {
@@ -38,6 +39,10 @@ mock.module('../api/_lib/jobber.js', {
         if (method === 'POST') {
           insertedInvoice = JSON.parse(opts.body);
           return { ok: true, json: async () => [insertedInvoice], text: async () => '' };
+        }
+        if (method === 'PATCH') {
+          patchedInvoice = JSON.parse(opts.body);
+          return { ok: true, json: async () => [{ ...(invoicesFixture[0] || {}), ...patchedInvoice }], text: async () => '' };
         }
         return { ok: true, json: async () => invoicesFixture, text: async () => '' };
       }
@@ -76,6 +81,7 @@ function reset() {
   calls = [];
   insertedInvoice = null;
   insertedLines = null;
+  patchedInvoice = null;
 }
 
 // ---------------------------------------------------------------- normalizing
@@ -322,4 +328,99 @@ test('a blank or zero custom amount falls back to the normal job-line-items comp
   );
   assert.equal(r.body.amount, 900);
   assert.equal(insertedInvoice.subject, 'Fence repair');
+});
+
+// ---- update_invoice: editing a draft's title and amount --------------------
+// jomell, 2026-08-26: "it should also apply to when im editting an invoice."
+
+test('editing a draft invoice updates its title, total, subtotal, and balance together', async () => {
+  reset();
+  invoicesFixture = [{
+    jobber_id: 'HL-INV-1', invoice_status: 'draft',
+    line_items: [{ description: 'Deposit', quantity: 1, unitPrice: 20800, lineTotal: 20800 }],
+  }];
+  const r = res();
+  await trackMod.default(
+    { method: 'POST', query: { resource: 'update_invoice' }, headers: { authorization: 'Bearer t' }, body: { id: 'HL-INV-1', subject: 'Deposit', amount: 6240 } },
+    r
+  );
+  assert.equal(r.statusCode, 200, JSON.stringify(r.body));
+  assert.equal(patchedInvoice.subject, 'Deposit');
+  assert.equal(patchedInvoice.total, 6240);
+  assert.equal(patchedInvoice.subtotal, 6240);
+  assert.equal(patchedInvoice.balance, 6240);
+});
+
+test('editing a draft\'s single line item re-prices it to match the new amount', async () => {
+  reset();
+  invoicesFixture = [{
+    jobber_id: 'HL-INV-1', invoice_status: 'draft',
+    line_items: [{ description: 'Deposit', quantity: 1, unitPrice: 20800, lineTotal: 20800 }],
+  }];
+  const r = res();
+  await trackMod.default(
+    { method: 'POST', query: { resource: 'update_invoice' }, headers: { authorization: 'Bearer t' }, body: { id: 'HL-INV-1', subject: 'First draw', amount: 6240 } },
+    r
+  );
+  assert.equal(patchedInvoice.line_items.length, 1);
+  assert.equal(patchedInvoice.line_items[0].description, 'First draw');
+  assert.equal(patchedInvoice.line_items[0].lineTotal, 6240);
+});
+
+test('a multi-line draft keeps its real itemization -- only the lump total moves', async () => {
+  reset();
+  invoicesFixture = [{
+    jobber_id: 'HL-INV-2', invoice_status: 'draft',
+    line_items: [
+      { description: 'Demo', quantity: 1, unitPrice: 1500, lineTotal: 1500 },
+      { description: 'Tile', quantity: 40, unitPrice: 12.5, lineTotal: 500 },
+    ],
+  }];
+  const r = res();
+  await trackMod.default(
+    { method: 'POST', query: { resource: 'update_invoice' }, headers: { authorization: 'Bearer t' }, body: { id: 'HL-INV-2', subject: 'Renamed', amount: 3000 } },
+    r
+  );
+  assert.equal(patchedInvoice.total, 3000);
+  assert.equal(patchedInvoice.line_items, undefined, 'a multi-line invoice\'s real line items must not be silently rewritten');
+});
+
+test('editing an invoice that has already been sent is refused, not silently rewritten', async () => {
+  reset();
+  invoicesFixture = [{ jobber_id: 'HL-INV-3', invoice_status: 'awaiting_payment', line_items: [] }];
+  const r = res();
+  await trackMod.default(
+    { method: 'POST', query: { resource: 'update_invoice' }, headers: { authorization: 'Bearer t' }, body: { id: 'HL-INV-3', subject: 'try to rename', amount: 100 } },
+    r
+  );
+  assert.equal(r.statusCode, 400);
+  assert.equal(r.body.ok, false);
+  assert.match(r.body.error, /already been sent/);
+  assert.equal(patchedInvoice, null);
+});
+
+test('a Jobber-synced invoice cannot be edited here at all', async () => {
+  reset();
+  const r = res();
+  await trackMod.default(
+    { method: 'POST', query: { resource: 'update_invoice' }, headers: { authorization: 'Bearer t' }, body: { id: '1787658937', subject: 'try to rename', amount: 100 } },
+    r
+  );
+  assert.equal(r.statusCode, 400);
+  assert.match(r.body.error, /edit it there/);
+  assert.equal(patchedInvoice, null);
+});
+
+test('a title-only edit (no amount) leaves total, subtotal, and balance untouched', async () => {
+  reset();
+  invoicesFixture = [{ jobber_id: 'HL-INV-4', invoice_status: 'draft', line_items: [{ description: 'x', quantity: 1, unitPrice: 500, lineTotal: 500 }] }];
+  const r = res();
+  await trackMod.default(
+    { method: 'POST', query: { resource: 'update_invoice' }, headers: { authorization: 'Bearer t' }, body: { id: 'HL-INV-4', subject: 'Renamed only' } },
+    r
+  );
+  assert.equal(r.statusCode, 200, JSON.stringify(r.body));
+  assert.equal(patchedInvoice.subject, 'Renamed only');
+  assert.equal(patchedInvoice.total, undefined);
+  assert.equal(patchedInvoice.line_items, undefined);
 });

@@ -5352,12 +5352,18 @@ async function handleMarkInvoicePaid(req, res) {
 }
 
 // 2026-08-26, jomell: "the invoices... should have a title or label rather
-// than just the number... their names should be edittable." Same HL-INV-
-// guard as handleMarkInvoicePaid/handleSendInvoiceEmail above: a
-// Jobber-synced invoice's subject is overwritten by the Jobber sync's own
-// upsert on every run, so editing it here would just get silently reverted
-// -- only a HiveLogic-created invoice's subject is safe to edit.
-async function handleUpdateInvoiceSubject(req, res) {
+// than just the number... their names should be edittable" -- then, after
+// the title-only version shipped: "it should also apply to when im
+// editting an invoice" (the amount too). Same HL-INV- guard as
+// handleMarkInvoicePaid/handleSendInvoiceEmail above: a Jobber-synced
+// invoice's subject/total is overwritten by the Jobber sync's own upsert
+// on every run, so editing either here would just get silently reverted.
+// Restricted to still-draft invoices for the same reason
+// updateChangeOrderDescription locks a change order after it's been acted
+// on -- once sent, the client has already seen a specific amount, and
+// rewriting it after the fact would silently misrepresent what was
+// actually communicated.
+async function handleUpdateInvoice(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ ok: false, error: 'POST only' });
   const requester = await getRequestingProfile(req);
   if (!requester) return res.status(401).json({ ok: false, error: 'Not signed in -- log into HiveLogic first.' });
@@ -5365,19 +5371,45 @@ async function handleUpdateInvoiceSubject(req, res) {
   const id = String(b.id || '').trim();
   if (!id) return res.status(400).json({ ok: false, error: 'Which invoice? No id given.' });
   if (!id.startsWith('HL-INV-')) {
-    return res.status(400).json({ ok: false, error: "This invoice's title is synced from Jobber -- edit it there." });
+    return res.status(400).json({ ok: false, error: "This invoice is synced from Jobber -- edit it there." });
   }
   const subject = String(b.subject || '').trim();
   if (!subject) return res.status(400).json({ ok: false, error: 'A title is required.' });
+
+  const curR = await supabaseRequest(`invoices?jobber_id=eq.${encodeURIComponent(id)}&select=invoice_status,line_items&limit=1`);
+  if (!curR.ok) return res.status(502).json({ ok: false, error: 'Could not look up that invoice.' });
+  const current = (await curR.json())[0];
+  if (!current) return res.status(404).json({ ok: false, error: 'That invoice no longer exists.' });
+  if (current.invoice_status !== 'draft') {
+    return res.status(400).json({ ok: false, error: 'This invoice has already been sent -- only a draft can still be edited.' });
+  }
+
+  const patch = { subject, jobber_updated_at: new Date().toISOString() };
+  const amount = Number(b.amount);
+  if (isFinite(amount) && amount > 0) {
+    const rounded = Math.round(amount * 100) / 100;
+    patch.total = rounded;
+    patch.subtotal = rounded;
+    patch.balance = rounded;
+    // Only re-price the invoice's line items when there is exactly one --
+    // the single custom line the "customizable amount" create flow writes.
+    // A multi-line invoice keeps its real itemization; only the lump total
+    // moves, same as every other total shown elsewhere in this app.
+    const lines = Array.isArray(current.line_items) ? current.line_items : [];
+    if (lines.length === 1) {
+      patch.line_items = [{ ...lines[0], description: subject, unitPrice: rounded, lineTotal: rounded }];
+    }
+  }
+
   const r = await supabaseRequest(`invoices?jobber_id=eq.${encodeURIComponent(id)}`, {
     method: 'PATCH',
     headers: { Prefer: 'return=representation' },
-    body: JSON.stringify({ subject, jobber_updated_at: new Date().toISOString() }),
+    body: JSON.stringify(patch),
   });
   if (!r.ok) return res.status(500).json({ ok: false, error: 'Update failed: ' + (await r.text()).slice(0, 300) });
   const rows = await r.json();
   if (!rows.length) return res.status(404).json({ ok: false, error: 'That invoice no longer exists.' });
-  return res.status(200).json({ ok: true, resource: 'update_invoice_subject', invoice: rows[0] });
+  return res.status(200).json({ ok: true, resource: 'update_invoice', invoice: rows[0] });
 }
 
 async function handleMyJobsToday(req, res) {
@@ -8845,8 +8877,8 @@ if (resource === 'mailconnect') {
   if (resource === 'mark_invoice_paid') {
     try { return await handleMarkInvoicePaid(req, res); } catch (e) { return res.status(500).json({ ok: false, error: e.message }); }
   }
-  if (resource === 'update_invoice_subject') {
-    try { return await handleUpdateInvoiceSubject(req, res); } catch (e) { return res.status(500).json({ ok: false, error: e.message }); }
+  if (resource === 'update_invoice') {
+    try { return await handleUpdateInvoice(req, res); } catch (e) { return res.status(500).json({ ok: false, error: e.message }); }
   }
   if (resource === 'my_jobs_today') {
     try { return await handleMyJobsToday(req, res); } catch (e) { return res.status(500).json({ ok: false, error: e.message }); }

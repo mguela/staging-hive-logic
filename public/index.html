@@ -19,7 +19,7 @@
  * monitor_my_status poll, so "is this person running current code" is a
  * question the database can answer. Do not hand-edit it -- run
  * `node scripts/stamp-page-build.mjs`. */
-var HL_PAGE_BUILD = '2ea3aedfd5cf5d5c';
+var HL_PAGE_BUILD = 'cc2da7288af68888';
 </script>
 <script>
 (function () { // HL_FETCH_DEDUPE_V1 — single wrapper: GET /api/ dedupe + 60s cache + write-invalidate
@@ -33138,31 +33138,40 @@ function ajvLoadLinkedInvoices(jobId) {
         + '</div>'
         + '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:4px">'
         + '<div style="font-size:12px;font-weight:700;color:#0f172a">' + hlEsc(i.subject || 'Untitled invoice') + '</div>'
-        + (ivxIsLocal(i) ? ('<button onclick="event.stopPropagation();ajvEditInvoiceSubject(\'' + idEsc + '\')" title="Edit title" style="border:none;background:transparent;color:var(--mut);cursor:pointer;font-size:12px;padding:2px 4px;flex-shrink:0">&#9998;&#65039;</button>') : '')
+        + (ivxIsLocal(i) && i.status === 'draft' ? ('<button onclick="event.stopPropagation();ajvEditInvoice(\'' + idEsc + '\')" title="Edit title and amount" style="border:none;background:transparent;color:var(--mut);cursor:pointer;font-size:12px;padding:2px 4px;flex-shrink:0">&#9998;&#65039;</button>') : '')
         + '</div>'
         + '</div>';
     }).join('');
     host.innerHTML = label + rows;
-    invs.forEach(function (i) { window._ajvInvSubjects = window._ajvInvSubjects || {}; window._ajvInvSubjects[i.id] = i.subject || ''; });
+    invs.forEach(function (i) { window._ajvInvEdit = window._ajvInvEdit || {}; window._ajvInvEdit[i.id] = { subject: i.subject || '', total: i.total }; });
   }).catch(function () { host.innerHTML = ''; });
 }
-function ajvEditInvoiceSubject(id) {
-  var current = (window._ajvInvSubjects || {})[id] || '';
-  var body = '<div id="eis-body">'
+// 2026-08-26 follow-up, jomell: "it should also apply to when im editting
+// an invoice" -- the amount, same as the title, is now editable here too.
+// Only offered while still a draft (see handleUpdateInvoice's own guard):
+// once sent, the client has already seen a specific amount, so this
+// can't silently redefine what "the invoice" actually is anymore.
+function ajvEditInvoice(id) {
+  var current = (window._ajvInvEdit || {})[id] || {};
+  var body = '<div id="eiv-body">'
     + '<label style="' + _lbl + '">Title</label>'
-    + '<input id="eis-subject" type="text" placeholder="e.g. Kitchen remodel deposit" value="' + hlEsc(current) + '" style="' + _inp + ';margin-bottom:12px">'
-    + '<div id="eis-err" style="display:none;color:#c65b4e;font-size:11px;font-weight:700;margin-bottom:10px"></div>'
-    + '<div style="display:flex;gap:9px"><button onclick="_hlEisSubmit()" style="flex:1;padding:11px;border:none;border-radius:8px;background:#1B7A50;color:#fff;font-weight:900;font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;cursor:pointer;font-family:\'Montserrat\',sans-serif">Save</button><button onclick="document.getElementById(\'hlmodal\').remove()" style="flex:1;padding:11px;border:1px solid #dadde8;border-radius:8px;background:#fff;color:#5d657b;font-weight:900;font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;cursor:pointer;font-family:\'Montserrat\',sans-serif">Cancel</button></div>'
+    + '<input id="eiv-subject" type="text" placeholder="e.g. Deposit" value="' + hlEsc(current.subject || '') + '" style="' + _inp + ';margin-bottom:12px">'
+    + '<label style="' + _lbl + '">Amount</label>'
+    + '<input id="eiv-amount" type="number" min="0.01" step="0.01" value="' + (current.total ? Number(current.total).toFixed(2) : '') + '" style="' + _inp + ';margin-bottom:12px">'
+    + '<div id="eiv-err" style="display:none;color:#c65b4e;font-size:11px;font-weight:700;margin-bottom:10px"></div>'
+    + '<div style="display:flex;gap:9px"><button onclick="_hlEivSubmit()" style="flex:1;padding:11px;border:none;border-radius:8px;background:#1B7A50;color:#fff;font-weight:900;font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;cursor:pointer;font-family:\'Montserrat\',sans-serif">Save</button><button onclick="document.getElementById(\'hlmodal\').remove()" style="flex:1;padding:11px;border:1px solid #dadde8;border-radius:8px;background:#fff;color:#5d657b;font-weight:900;font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;cursor:pointer;font-family:\'Montserrat\',sans-serif">Cancel</button></div>'
     + '</div>';
-  hlModal('&#9998;&#65039; Edit invoice title', body);
-  window._hlEisSubmit = function () {
-    var subject = ((document.getElementById('eis-subject') || {}).value || '').trim();
-    var err = document.getElementById('eis-err');
+  hlModal('&#9998;&#65039; Edit invoice', body);
+  window._hlEivSubmit = function () {
+    var subject = ((document.getElementById('eiv-subject') || {}).value || '').trim();
+    var amount = Number((document.getElementById('eiv-amount') || {}).value);
+    var err = document.getElementById('eiv-err');
     if (!subject) { err.textContent = 'A title is required.'; err.style.display = 'block'; return; }
-    hlApiPost('update_invoice_subject', { id: id, subject: subject }).then(function (d) {
-      if (!d || !d.ok) { err.textContent = (d && d.error) || 'Could not save this title.'; err.style.display = 'block'; return; }
+    if (!isFinite(amount) || amount <= 0) { err.textContent = 'Enter an amount greater than $0.'; err.style.display = 'block'; return; }
+    hlApiPost('update_invoice', { id: id, subject: subject, amount: amount }).then(function (d) {
+      if (!d || !d.ok) { err.textContent = (d && d.error) || 'Could not save these changes.'; err.style.display = 'block'; return; }
       document.getElementById('hlmodal').remove();
-      chirpToast('&#10003; Invoice title saved');
+      chirpToast('&#10003; Invoice updated');
       if (AJX.job) ajvLoadLinkedInvoices(AJX.job.id);
     }).catch(function (e) { err.textContent = 'Network error: ' + e.message; err.style.display = 'block'; });
   };
