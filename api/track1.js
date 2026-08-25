@@ -4840,6 +4840,40 @@ async function handleCreateClient(req, res) {
 
   return res.status(200).json({ ok: true, resource: 'create_client', client: created, locationSaved, note: 'Saved in HiveLogic. Not pushed to Jobber yet -- Jobber write-back is a later phase.' });
 }
+// 2026-08-25, jomell, looking at jovie folloso's client card: "his number is
+// not present anywhere add this and it should reflect to all clients and
+// future clients." Every existing client-mutation path only ever CREATES a
+// brand-new HiveLogic client (handleCreateClient above) -- there was no way
+// to edit contact info on an already-synced client at all.
+//
+// Deliberately writes ONLY clients.phone, never phone_e164. The Jobber sync
+// (api/jobber/sync.js mapClient()) does a full-row upsert on jobber_id every
+// hour and always includes phone_e164 in that payload (even as null) --
+// writing there directly would get silently wiped on the very next sync for
+// any client with a real Jobber id. `phone` is never in that payload, and
+// api/clients.js already reads it as the fallback
+// (`phone: c.phone_e164 || c.phone || null`), so this is the column that's
+// actually safe to own from HiveLogic's side -- same column
+// handleCreateClient already uses for a brand-new client, just now also
+// settable on an existing one.
+async function handleUpdateClientContact(req, res) {
+  if (req.method !== 'POST') return res.status(405).json({ ok: false, error: 'POST only' });
+  const requester = await getRequestingProfile(req);
+  if (!requester) return res.status(401).json({ ok: false, error: 'Not signed in -- log into HiveLogic first.' });
+  const b = req.body || {};
+  const id = String(b.id || '').trim();
+  if (!id) return res.status(400).json({ ok: false, error: 'A client id is required.' });
+  const phoneRaw = String(b.phone || '').trim();
+  const r = await supabaseRequest(`clients?jobber_id=eq.${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    headers: { Prefer: 'return=representation' },
+    body: JSON.stringify({ phone: phoneRaw || null }),
+  });
+  if (!r.ok) return res.status(500).json({ ok: false, error: 'Update failed: ' + (await r.text()).slice(0, 300) });
+  const rows = await r.json();
+  if (!rows.length) return res.status(404).json({ ok: false, error: 'Client not found.' });
+  return res.status(200).json({ ok: true, resource: 'update_client_contact', client: rows[0] });
+}
 async function handleCreateJob(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ ok: false, error: 'POST only' });
   const requester = await getRequestingProfile(req);
@@ -8619,6 +8653,9 @@ if (resource === 'mailconnect') {
   }
   if (resource === 'create_client') {
     try { return await handleCreateClient(req, res); } catch (e) { return res.status(500).json({ ok: false, error: e.message }); }
+  }
+  if (resource === 'update_client_contact') {
+    try { return await handleUpdateClientContact(req, res); } catch (e) { return res.status(500).json({ ok: false, error: e.message }); }
   }
   if (resource === 'client_location') {
     try { return await handleClientLocation(req, res); } catch (e) { return res.status(500).json({ ok: false, error: e.message }); }
