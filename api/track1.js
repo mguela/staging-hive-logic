@@ -5235,6 +5235,82 @@ async function handleCreateInvoiceFromJob(req, res) {
   });
 }
 
+// 2026-08-25, jomell: "the client should be informed or mailed about the
+// invoice since they will be making a deposit for this." A draft invoice
+// created from a job (handleCreateInvoiceFromJob above) is explicitly "not
+// sent to the client" -- there was no way to actually tell them it exists
+// at all. Mirrors send.js's estimate email (sendEmail/isEmailConfigured,
+// same escapeHtml/money helpers) but simpler: an invoice needs no
+// approve/reject decision, just a notification. No "Pay now" link --
+// Phase 1 of the Client Portal explicitly has no live payment processor
+// wired in (sql/013_client_portal.sql's own header), so a payment button
+// here would be exactly the kind of capability Law 1 forbids inventing.
+// Same guard as handleMarkInvoicePaid: only ever a HiveLogic-created
+// invoice (HL-INV-) -- a Jobber-synced one is not this app's to notify
+// about.
+function ivEscapeHtml(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+function ivMoney(n) { return '$' + (Number(n) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+
+async function handleSendInvoiceEmail(req, res) {
+  if (req.method !== 'POST') return res.status(405).json({ ok: false, error: 'POST only' });
+  const requester = await getRequestingProfile(req);
+  if (!requester) return res.status(401).json({ ok: false, error: 'Not signed in -- log into HiveLogic first.' });
+  const id = String((req.body || {}).id || '').trim();
+  if (!id) return res.status(400).json({ ok: false, error: 'Which invoice? No id given.' });
+  if (!id.startsWith('HL-INV-')) {
+    return res.status(400).json({ ok: false, error: 'This invoice is synced from Jobber -- send it from there.' });
+  }
+
+  const invR = await supabaseRequest(`invoices?jobber_id=eq.${encodeURIComponent(id)}&select=*&limit=1`);
+  if (!invR.ok) return res.status(502).json({ ok: false, error: 'Could not look up that invoice.' });
+  const invoice = (await invR.json())[0];
+  if (!invoice) return res.status(404).json({ ok: false, error: 'That invoice no longer exists.' });
+
+  if (!invoice.client_id) return res.status(422).json({ ok: false, error: 'This invoice has no client on it.' });
+  const clientR = await supabaseRequest(`clients?jobber_id=eq.${encodeURIComponent(invoice.client_id)}&select=email,name,first_name&limit=1`);
+  const client = clientR.ok ? (await clientR.json())[0] : null;
+  if (!client || !client.email) return res.status(422).json({ ok: false, error: 'No email on file for this client.' });
+  if (!isEmailConfigured()) return res.status(422).json({ ok: false, error: 'Email is not configured for this deployment (RESEND_API_KEY unset).' });
+
+  const clientName = client.first_name || client.name || 'there';
+  const lineItems = Array.isArray(invoice.line_items) ? invoice.line_items : [];
+  const rowsHtml = lineItems.map((l) => `<tr><td style="padding:6px 0;color:#484f64">${ivEscapeHtml(l.description || 'Item')}</td><td style="padding:6px 0;text-align:right;font-weight:700;color:#161e2e">${ivMoney(l.lineTotal)}</td></tr>`).join('');
+  const dueLine = invoice.due_date ? `<tr><td style="padding:6px 0;color:#484f64">Due</td><td style="padding:6px 0;text-align:right;font-weight:700">${ivEscapeHtml(invoice.due_date)}</td></tr>` : '';
+
+  const html = `
+    <div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto">
+      <p>Hi ${ivEscapeHtml(clientName)},</p>
+      <p>You have a new invoice${invoice.subject ? ` for <b>${ivEscapeHtml(invoice.subject)}</b>` : ''}.</p>
+      <table style="width:100%;border-collapse:collapse;margin:16px 0" role="presentation">
+        <tr><td style="padding:6px 0;color:#484f64">Invoice</td><td style="padding:6px 0;text-align:right;font-weight:700">#${ivEscapeHtml(invoice.invoice_number || '')}</td></tr>
+        <tr><td style="padding:6px 0;color:#484f64">Amount due</td><td style="padding:6px 0;text-align:right;font-weight:700;font-size:16px">${ivMoney(invoice.total)}</td></tr>
+        ${dueLine}
+      </table>
+      ${rowsHtml ? `<table style="width:100%;border-collapse:collapse;margin:0 0 16px" role="presentation">${rowsHtml}</table>` : ''}
+      <p style="color:#484f64">Please contact us to arrange payment.</p>
+    </div>`;
+  const text = `You have a new invoice #${invoice.invoice_number || ''} for ${ivMoney(invoice.total)}. Please contact us to arrange payment.`;
+
+  const sent = await sendEmail({ to: client.email, subject: `Invoice #${invoice.invoice_number || ''}`, html, text });
+  if (!sent.ok) return res.status(422).json({ ok: false, error: sent.error || 'Could not send the email.' });
+
+  let updated = invoice;
+  if (invoice.invoice_status === 'draft') {
+    const patchR = await supabaseRequest(`invoices?jobber_id=eq.${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      headers: { Prefer: 'return=representation' },
+      body: JSON.stringify({ invoice_status: 'awaiting_payment', jobber_updated_at: new Date().toISOString() }),
+    });
+    if (patchR.ok) { const rows = await patchR.json(); if (rows.length) updated = rows[0]; }
+  }
+
+  return res.status(200).json({ ok: true, resource: 'send_invoice_email', invoice: updated, email: client.email });
+}
+
 async function handleMarkInvoicePaid(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ ok: false, error: 'POST only' });
   const requester = await getRequestingProfile(req);
@@ -8713,6 +8789,9 @@ if (resource === 'mailconnect') {
   }
   if (resource === 'create_invoice_from_job') {
     try { return await handleCreateInvoiceFromJob(req, res); } catch (e) { return res.status(500).json({ ok: false, error: e.message }); }
+  }
+  if (resource === 'send_invoice_email') {
+    try { return await handleSendInvoiceEmail(req, res); } catch (e) { return res.status(500).json({ ok: false, error: e.message }); }
   }
   if (resource === 'mark_invoice_paid') {
     try { return await handleMarkInvoicePaid(req, res); } catch (e) { return res.status(500).json({ ok: false, error: e.message }); }
