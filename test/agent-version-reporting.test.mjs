@@ -170,7 +170,10 @@ test('the admin roster shows the version alongside the device', () => {
   const src = fs.readFileSync('api/track1.js', 'utf8');
   assert.match(src, /agentVersion: a\.agent_version \|\| null,/);
   assert.match(src, /agentVersionState: agentVersionState\(a\.agent_version\),/);
-  assert.match(src, /select=id,employee_id,device_name,platform,status,last_seen_at,agent_version/);
+  // paired_at joined 2026-08-26 -- pickBestMonitorAgent needs it to pick the
+  // most-recently-paired active row when an employee has more than one
+  // monitor_agents record (see api/track1.js).
+  assert.match(src, /select=id,employee_id,device_name,platform,status,paired_at,last_seen_at,agent_version/);
 });
 
 // --- And it has to be READABLE, not just recorded --------------------------

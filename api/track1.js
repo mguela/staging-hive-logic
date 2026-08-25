@@ -5745,6 +5745,26 @@ export const MONITOR_AGENT_RESOURCES = [
   'monitor_app_rules',
 ];
 
+// One roster row per PERSON, never per device (2026-08-26). Re-pairing used
+// to insert a brand-new monitor_agents row and simply leave the previous
+// 'active' one in place -- "Unpair this device" in the tray menu only ever
+// cleared the desktop app's local config, it never told the server. Marvin
+// re-pairing after unpairing left two 'Paired' rows for the same name in
+// both the Monitor Settings roster and the dashboard's Activity & Screenshot
+// Review table, with nothing distinguishing them. handleMonitorPair now
+// revokes the old row the moment a new pairing completes (see below), so
+// this only has historical duplicates left to collapse -- most-recently-
+// paired active row wins, then most recent pending, then whatever's left.
+function pickBestMonitorAgent(rows) {
+  if (!rows || !rows.length) return null;
+  const byPairedDesc = (a, b) => (b.paired_at || '').localeCompare(a.paired_at || '');
+  const active = rows.filter((a) => a.status === 'active');
+  if (active.length) return active.sort(byPairedDesc)[0];
+  const pending = rows.filter((a) => a.status === 'pending');
+  if (pending.length) return pending.sort(byPairedDesc)[0];
+  return rows.slice().sort(byPairedDesc)[0];
+}
+
 async function handleMonitorStatus(req, res) {
   const requester = await getRequestingProfile(req);
   if (!requester) return res.status(401).json({ ok: false, error: 'Not signed in.' });
@@ -5849,6 +5869,18 @@ async function handleMonitorPair(req, res) {
     await supabaseRequest(`monitor_agents?id=eq.${pendingRow.id}`, { method: 'PATCH', body: JSON.stringify({ pair_attempts: newAttempts }) });
     return res.status(400).json({ ok: false, error: 'That pairing code is incorrect.' });
   }
+
+  // Revoke any OTHER already-active agent this employee has before this one
+  // takes over -- one device is meant to be "the" paired device per person.
+  // Without this, unpairing locally (which never tells the server, see the
+  // tray menu's "Unpair this device") followed by re-pairing left the old
+  // row 'active' forever, showing up as a second, permanently-offline
+  // "Paired" row next to the real one. Fire-and-forget: this pairing must
+  // not fail because the cleanup of an old row did.
+  supabaseRequest(`monitor_agents?employee_id=eq.${employeeId}&status=eq.active&id=neq.${pendingRow.id}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ status: 'revoked' }),
+  }).catch(() => {});
 
   const token = monitorRandomToken();
   const updRes = await supabaseRequest(`monitor_agents?id=eq.${pendingRow.id}`, {
@@ -6137,7 +6169,7 @@ async function handleMonitorSettings(req, res) {
   // omitted, and the toggle still works immediately -- the moment they
   // install and clock in, monitoring_enabled is already what was set here.
   const [agentsRes, profilesRes] = await Promise.all([
-    supabaseRequest('monitor_agents?select=id,employee_id,device_name,platform,status,last_seen_at,agent_version&order=last_seen_at.desc'),
+    supabaseRequest('monitor_agents?select=id,employee_id,device_name,platform,status,paired_at,last_seen_at,agent_version&order=last_seen_at.desc'),
     supabaseRequest('profiles?select=id,full_name,email,monitoring_enabled&order=full_name.asc'),
   ]);
   const agents = agentsRes.ok ? await agentsRes.json() : [];
@@ -6151,22 +6183,22 @@ async function handleMonitorSettings(req, res) {
   for (const p of profiles || []) {
     const name = p.full_name || p.email || 'Unknown';
     const monitoringEnabled = p.monitoring_enabled !== false;
-    const theirAgents = agentsByEmployee[p.id];
-    if (theirAgents && theirAgents.length) {
-      for (const a of theirAgents) {
-        roster.push({
-          employeeId: p.id, name,
-          deviceName: a.device_name, platform: a.platform, status: a.status,
-          lastSeenAt: a.last_seen_at, agentVersion: a.agent_version || null,
-          agentVersionState: agentVersionState(a.agent_version),
-          // Agent Status (2026-08-25): whether the agent has actually
-          // checked in recently, distinct from `status` (pairing/consent
-          // state) -- same "last heartbeat within the alive window" real
-          // signal handleMonitorReview's roster uses.
-          online: a.last_seen_at ? a.last_seen_at >= aliveCutoff : false,
-          monitoringEnabled,
-        });
-      }
+    // One row per PERSON, not per device (see pickBestMonitorAgent) -- a
+    // roster of "every agent that ever paired" is what showed Marvin twice.
+    const a = pickBestMonitorAgent(agentsByEmployee[p.id]);
+    if (a) {
+      roster.push({
+        employeeId: p.id, name,
+        deviceName: a.device_name, platform: a.platform, status: a.status,
+        lastSeenAt: a.last_seen_at, agentVersion: a.agent_version || null,
+        agentVersionState: agentVersionState(a.agent_version),
+        // Agent Status (2026-08-25): whether the agent has actually
+        // checked in recently, distinct from `status` (pairing/consent
+        // state) -- same "last heartbeat within the alive window" real
+        // signal handleMonitorReview's roster uses.
+        online: a.last_seen_at ? a.last_seen_at >= aliveCutoff : false,
+        monitoringEnabled,
+      });
     } else {
       roster.push({
         employeeId: p.id, name,
@@ -6407,18 +6439,25 @@ async function handleMonitorReview(req, res) {
         }
       }
     }
-    const roster = (agents || []).map((a) => ({
-      employeeId: a.employee_id,
-      name: (byId[a.employee_id] && byId[a.employee_id].full_name) || (byId[a.employee_id] && byId[a.employee_id].email) || 'Unknown',
-      deviceName: a.device_name,
-      platform: a.platform,
-      status: a.status,
-      pairedAt: a.paired_at,
-      lastSeenAt: a.last_seen_at,
-      agentVersion: a.agent_version || null,
-      online: a.last_seen_at ? a.last_seen_at >= aliveCutoff : false,
-      activityLevel: Object.prototype.hasOwnProperty.call(activityByEmployee, a.employee_id) ? activityByEmployee[a.employee_id] : null,
-    }));
+    // One row per PERSON, not per device (see pickBestMonitorAgent) -- a
+    // roster of "every agent that ever paired" is what showed Marvin twice.
+    const agentsByEmployee2 = {};
+    for (const a of agents || []) (agentsByEmployee2[a.employee_id] = agentsByEmployee2[a.employee_id] || []).push(a);
+    const roster = Object.keys(agentsByEmployee2).map((empId) => {
+      const a = pickBestMonitorAgent(agentsByEmployee2[empId]);
+      return {
+        employeeId: empId,
+        name: (byId[empId] && byId[empId].full_name) || (byId[empId] && byId[empId].email) || 'Unknown',
+        deviceName: a.device_name,
+        platform: a.platform,
+        status: a.status,
+        pairedAt: a.paired_at,
+        lastSeenAt: a.last_seen_at,
+        agentVersion: a.agent_version || null,
+        online: a.last_seen_at ? a.last_seen_at >= aliveCutoff : false,
+        activityLevel: Object.prototype.hasOwnProperty.call(activityByEmployee, empId) ? activityByEmployee[empId] : null,
+      };
+    });
     return res.status(200).json({ ok: true, resource: 'monitor_review', roster });
   }
 
