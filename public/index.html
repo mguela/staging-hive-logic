@@ -19,7 +19,7 @@
  * monitor_my_status poll, so "is this person running current code" is a
  * question the database can answer. Do not hand-edit it -- run
  * `node scripts/stamp-page-build.mjs`. */
-var HL_PAGE_BUILD = 'aaf0973a765f22c5';
+var HL_PAGE_BUILD = '6b2bcec7cf42e9f3';
 </script>
 <script>
 (function () { // HL_FETCH_DEDUPE_V1 — single wrapper: GET /api/ dedupe + 60s cache + write-invalidate
@@ -5559,15 +5559,20 @@ function ninvSave(){ var amt = parseFloat(document.getElementById('ninv-amt').va
       statusEl.textContent = 'Clocked in since ' + new Date(currentSession.clock_in).toLocaleTimeString();
       statusEl.style.color = 'var(--green)';
 
+      // Set the label on the <span>, never the button itself -- breakBtn may
+      // carry an <svg> icon alongside its <span>label</span>, and
+      // .textContent on the button would wipe the icon out along with the
+      // old label every time the clock state is re-rendered.
+      var wfBreakLabel = breakBtn.querySelector('span');
       if (currentSession.on_break) {
-        breakBtn.textContent = 'End Break';
+        if (wfBreakLabel) wfBreakLabel.textContent = 'End Break'; else breakBtn.textContent = 'End Break';
         breakEl.textContent = 'On break since ' + new Date(currentSession.break_started_at).toLocaleTimeString();
         breakEl.style.color = 'var(--amber)';
         outBtn.disabled = true;
         outBtn.style.opacity = '0.5';
         outBtn.title = 'End your break before clocking out.';
       } else {
-        breakBtn.textContent = 'Start Break';
+        if (wfBreakLabel) wfBreakLabel.textContent = 'Start Break'; else breakBtn.textContent = 'Start Break';
         var totalBreak = currentSession.total_break_seconds || 0;
         breakEl.textContent = totalBreak > 0 ? ('Break time today: ' + fmtDuration(totalBreak)) : '';
         breakEl.style.color = 'var(--mut)';
@@ -6388,14 +6393,19 @@ function ninvSave(){ var amt = parseFloat(document.getElementById('ninv-amt').va
       }
 
       inBtn.style.display = 'none'; breakBtn.style.display = 'flex'; outBtn.style.display = 'flex';
+      // Set the label on the <span>, never the button itself -- breakBtn's
+      // markup is an <svg> icon + <span>label</span>, and .textContent on
+      // the button would wipe the icon out along with the old label every
+      // time this sync runs (it does, on load and on every refresh).
+      var breakLabel = breakBtn.querySelector('span');
       if (session.on_break) {
         applyStatusCard('On Break', 'Break in progress', 'var(--amber)', true);
-        breakBtn.textContent = 'End Break';
+        if (breakLabel) breakLabel.textContent = 'End Break'; else breakBtn.textContent = 'End Break';
         outBtn.disabled = true; outBtn.style.opacity = '0.5'; outBtn.title = 'End your break before stopping.';
         if (noteEl) noteEl.textContent = 'On break since ' + new Date(session.break_started_at).toLocaleTimeString();
       } else {
         applyStatusCard('Working', 'Monitoring active', 'var(--green)', true);
-        breakBtn.textContent = 'Start Break';
+        if (breakLabel) breakLabel.textContent = 'Start Break'; else breakBtn.textContent = 'Start Break';
         outBtn.disabled = false; outBtn.style.opacity = '1'; outBtn.title = '';
         if (noteEl) noteEl.textContent = 'Clocked in since ' + new Date(session.clock_in).toLocaleTimeString();
       }
