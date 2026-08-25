@@ -19,7 +19,7 @@
  * monitor_my_status poll, so "is this person running current code" is a
  * question the database can answer. Do not hand-edit it -- run
  * `node scripts/stamp-page-build.mjs`. */
-var HL_PAGE_BUILD = 'ad83938390d5fd21';
+var HL_PAGE_BUILD = 'ce9b72aac6e4ec41';
 </script>
 <script>
 (function () { // HL_FETCH_DEDUPE_V1 — single wrapper: GET /api/ dedupe + 60s cache + write-invalidate
@@ -22881,12 +22881,23 @@ function openRealClient(id){
   document.getElementById('ck-tags').innerHTML=rcStatusChip(c);
   document.getElementById('ck-name').innerHTML=hlEsc(nm);
   var acts='';
+  if(c.phone)acts+='<button class="gbtn" onclick="window.location.href=\'tel:'+hlEsc(c.phone)+'\'">\u260E Call</button>';
   if(c.email)acts+='<button class="gbtn" onclick="window.location.href=\'mailto:'+hlEsc(c.email)+'\'">\u2709 Email</button>';
   if(c.jobberUrl)acts+='<button class="gbtn go" onclick="window.open(\''+hlEsc(c.jobberUrl)+'\',\'_blank\')">\u2197 Open in Jobber</button>';
   document.getElementById('ck-act').innerHTML=acts||'<span style="font-size:11px;color:var(--mut)">No contact info on file.</span>';
   document.getElementById('ck-qb').innerHTML='\u26A1 <b>Reina:</b> Real record synced from Jobber. Job history and property notes aren\'t wired into this view yet \u2014 use \u201COpen in Jobber\u201D for the full record.';
+  // 2026-08-25: "his number is not present anywhere add this and it should
+  // reflect to all clients and future clients" -- this card never had a
+  // Phone row at all (a different modal, the appointment sheet, already
+  // showed "No phone on file" correctly -- this one just omitted it
+  // entirely). Editable here via efOpenEditClientPhoneModal(), writing only
+  // clients.phone (never phone_e164, which the hourly Jobber sync
+  // overwrites every run) -- see handleUpdateClientContact in
+  // api/track1.js. Works the same for every client, synced or
+  // HiveLogic-created, present or future.
   document.getElementById('ck-contact').innerHTML=
-    '<div class="ck-kv"><span>Email</span><b>'+(c.email?hlEsc(c.email):'\u2014')+'</b></div>'
+    '<div class="ck-kv"><span>Phone</span><b>'+(c.phone?hlEsc(c.phone):'<span style="color:var(--mut);font-weight:600">No phone on file</span>')+' <a href="javascript:void(0)" onclick="efOpenEditClientPhoneModal(\''+hlEsc(c.id)+'\')" style="font-size:10px;font-weight:800;color:var(--slate);margin-left:6px">Edit</a></b></div>'
+    +'<div class="ck-kv"><span>Email</span><b>'+(c.email?hlEsc(c.email):'\u2014')+'</b></div>'
     +'<div class="ck-kv"><span>Company</span><b>'+(c.companyName?hlEsc(c.companyName):'\u2014')+'</b></div>'
     +'<div class="ck-kv"><span>Status</span><b>'+(c.isArchived?'Archived':(c.isLead?'Lead':'Active'))+'</b></div>'
     +'<div class="ck-kv"><span>Last updated</span><b>'+rcDate(c.updatedAt)+'</b></div>';
@@ -22901,6 +22912,35 @@ function openRealClient(id){
   document.getElementById('ck-mem').innerHTML='<div style="font-size:11px;color:var(--mut);padding:4px 0">No notes synced into this view yet.</div>';
   document.getElementById('ck-tl').innerHTML='<div class="t"><b>Last updated</b><small>'+rcDate(c.updatedAt)+'</small></div>';
   document.getElementById('ckv').classList.add('open');
+}
+// 2026-08-25: "his number is not present anywhere add this and it should
+// reflect to all clients and future clients" -- own modal (not
+// window.prompt), same pattern as this session's other edit flows. Saves
+// via update_client_contact (api/track1.js), which writes ONLY
+// clients.phone -- never phone_e164, which the hourly Jobber sync
+// overwrites on every run. Updates REAL_CLIENTS in place so the card
+// reflects it immediately without a full refetch.
+function efOpenEditClientPhoneModal(id){
+  var c=null; for(var i=0;i<REAL_CLIENTS.length;i++){ if(String(REAL_CLIENTS[i].id)===String(id)){c=REAL_CLIENTS[i];break;} }
+  if(!c)return;
+  var body='<div id="ecp-body">'
+    +'<label style="'+_lbl+'">Phone</label>'
+    +'<input id="ecp-phone" type="tel" placeholder="e.g. (203) 555-0134" value="'+hlEsc(c.phone||'')+'" style="'+_inp+';margin-bottom:12px">'
+    +'<div id="ecp-err" style="display:none;color:#c65b4e;font-size:11px;font-weight:700;margin-bottom:10px"></div>'
+    +'<div style="display:flex;gap:9px"><button onclick="_hlEcpSubmit()" style="flex:1;padding:11px;border:none;border-radius:8px;background:#1B7A50;color:#fff;font-weight:900;font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;cursor:pointer;font-family:\'Montserrat\',sans-serif">Save</button><button onclick="document.getElementById(\'hlmodal\').remove()" style="flex:1;padding:11px;border:1px solid #dadde8;border-radius:8px;background:#fff;color:#5d657b;font-weight:900;font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;cursor:pointer;font-family:\'Montserrat\',sans-serif">Cancel</button></div>'
+    +'</div>';
+  hlModal('☎ Edit phone', body);
+  window._hlEcpSubmit=function(){
+    var phone=((document.getElementById('ecp-phone')||{}).value||'').trim();
+    var err=document.getElementById('ecp-err');
+    hlApiPost('update_client_contact',{id:id,phone:phone}).then(function(d){
+      if(!d||!d.ok){ err.textContent=(d&&d.error)||'Could not save this number.'; err.style.display='block'; return; }
+      c.phone=phone||null;
+      document.getElementById('hlmodal').remove();
+      chirpToast('✓ Phone number saved');
+      openRealClient(id);
+    }).catch(function(e){ err.textContent='Network error: '+e.message; err.style.display='block'; });
+  };
 }
 var CKHIST={'Handyman':['Punch list & repairs','Door & trim work','Paint touch-up package'],'Electric':['Outlet & switch work','Lighting install','Panel service'],'Design|Build':['Bath renovation','Built-ins & carpentry','Kitchen refresh'],'Plumbing':['Fixture replacement','Water heater service','Leak repair'],'Outdoor':['Patio & stonework','Spring cleanup','Fence & gate work'],'Concierge':['Monthly walkthrough','Seasonal checklist','Vendor coordination'],'HVAC':['Seasonal service','Filter & tune-up','Thermostat upgrade']};
 function ckQbDefault(c){
