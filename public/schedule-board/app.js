@@ -1987,7 +1987,16 @@
     modal({k:'Appointment',title:`${v.jobNo?'#'+v.jobNo+' ':''}${v.type}`,body,actions:[
       {label:'Close',cls:'',fn:closeModal},
       editable
-        ? {label:'Apply move',cls:'primary',fn:()=>{const nt=document.getElementById('f_tech').value,ns=parseFloat(document.getElementById('f_time').value);closeModal();if(state.date!==v.date)state.date=v.date;openImpact(vid,nt,clampHr(ns,dur));}}
+        // 2026-08-25: "when i click 'apply move' nothing happens" -- this
+        // unconditionally routed through openImpact()->commitMove(), which
+        // is a local-only lab preview (its own body text says so: "No real
+        // write") -- the appointment reverted on the next reload with no
+        // visible error. The drag-and-drop path onto this same appointment
+        // already does this correctly (wireDay()'s drop handler, above):
+        // hlMoveNative() for a real native appointment (v.native, backed by
+        // a real hl_appointments row), openImpact() only for the
+        // non-native/no-apptId-yet case (e.g. a still-proposed visit).
+        ? {label:'Apply move',cls:'primary',fn:()=>{const nt=document.getElementById('f_tech').value,ns=parseFloat(document.getElementById('f_time').value);closeModal();if(state.date!==v.date)state.date=v.date;const clamped=clampHr(ns,dur);if(v.native)hlMoveNative(v,nt,clamped);else openImpact(vid,nt,clamped);}}
         : {label:'📨 Request change',cls:'primary',fn:()=>{const nt=document.getElementById('f_tech').value,ns=parseFloat(document.getElementById('f_time').value);closeModal();if(state.date!==v.date)state.date=v.date;openChangeRequest(vid,nt,clampHr(ns,dur));}}]});
   }
   // Crew + clock controls (HiveLogic-native; never writes to Jobber).
