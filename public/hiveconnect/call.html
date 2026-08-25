@@ -4,11 +4,11 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Join video call — HiveLogic</title>
-<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@500;600;700;800&display=swap" rel="stylesheet">
 <style>
   * { box-sizing: border-box; margin: 0; }
   html, body { height: 100%; }
-  body { font-family: 'Montserrat', sans-serif; background: #0b0f16; color: #e8edf6; display: flex; flex-direction: column; }
+  body { font-family: 'Inter', sans-serif; background: #0b0f16; color: #e8edf6; display: flex; flex-direction: column; }
 
   /* -- pre-join card -- */
   #gate { flex: 1; display: flex; align-items: center; justify-content: center; padding: 20px; }
@@ -189,7 +189,7 @@
   $('b-mic').onclick = async function () { if (!room) return; mic = !mic; try { await room.localParticipant.setMicrophoneEnabled(mic); } catch (e) { mic = false; } updateBar(); render(); };
   $('b-cam').onclick = async function () { if (!room) return; cam = !cam; try { await room.localParticipant.setCameraEnabled(cam); } catch (e) { cam = false; } updateBar(); render(); };
   $('b-share').onclick = async function () { if (!room) return; share = !share; try { await room.localParticipant.setScreenShareEnabled(share); } catch (e) { share = false; } updateBar(); render(); };
-  $('leave').onclick = function () { try { if (window.CoworkMarkup) window.CoworkMarkup.detach(); } catch (e) {} if (room) { try { room.disconnect(); } catch (e) {} } document.body.innerHTML = '<div style="height:100vh;display:flex;align-items:center;justify-content:center;font-family:Montserrat,sans-serif;color:#8b92a8;background:#0b0f16">You left the call. You can close this tab.</div>'; };
+  $('leave').onclick = function () { try { if (window.CoworkMarkup) window.CoworkMarkup.detach(); } catch (e) {} if (room) { try { room.disconnect(); } catch (e) {} } document.body.innerHTML = '<div style="height:100vh;display:flex;align-items:center;justify-content:center;font-family:Inter,sans-serif;color:#8b92a8;background:#0b0f16">You left the call. You can close this tab.</div>'; };
 })();
 </script>
 </body>

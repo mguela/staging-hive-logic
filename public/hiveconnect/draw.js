@@ -82,12 +82,12 @@ function renderShape(ctx, s) {
   else if (t === 'arrow') { var a = p[0], b = p[p.length - 1]; ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke(); ctx.setLineDash([]); head(ctx, a, b, s.width * 3 + 7); }
   else if (t === 'darrow') { var a2 = p[0], b2 = p[p.length - 1]; ctx.beginPath(); ctx.moveTo(a2.x, a2.y); ctx.lineTo(b2.x, b2.y); ctx.stroke(); ctx.setLineDash([]); head(ctx, a2, b2, s.width * 3 + 7); head(ctx, b2, a2, s.width * 3 + 7); }
   else if (t === 'rect') { ctx.beginPath(); ctx.rect(r.x, r.y, r.w, r.h); fillStroke(true); }
-  else if (t === 'rrect' || t === 'sticky' || t === 'callout') { roundRect(ctx, r.x, r.y, r.w, r.h, t === 'sticky' ? 6 : 12); if (t === 'sticky') { ctx.fillStyle = s.fill || '#ffe9a8'; ctx.fill(); } else fillStroke(true); if (s.text) { ctx.setLineDash([]); ctx.globalAlpha = s.opacity == null ? 1 : s.opacity; ctx.fillStyle = t === 'sticky' ? '#3a2f12' : s.color; ctx.font = '600 ' + s.fontSize + 'px Montserrat,sans-serif'; ctx.textBaseline = 'top'; wrapText(ctx, s.text, r.x + 8, r.y + 8, r.w - 16, s.fontSize * 1.3); } }
+  else if (t === 'rrect' || t === 'sticky' || t === 'callout') { roundRect(ctx, r.x, r.y, r.w, r.h, t === 'sticky' ? 6 : 12); if (t === 'sticky') { ctx.fillStyle = s.fill || '#ffe9a8'; ctx.fill(); } else fillStroke(true); if (s.text) { ctx.setLineDash([]); ctx.globalAlpha = s.opacity == null ? 1 : s.opacity; ctx.fillStyle = t === 'sticky' ? '#3a2f12' : s.color; ctx.font = '600 ' + s.fontSize + 'px Inter,sans-serif'; ctx.textBaseline = 'top'; wrapText(ctx, s.text, r.x + 8, r.y + 8, r.w - 16, s.fontSize * 1.3); } }
   else if (t === 'ellipse') { ctx.beginPath(); ctx.ellipse(cx, cy, Math.abs(r.w / 2), Math.abs(r.h / 2), 0, 0, 2 * Math.PI); fillStroke(true); }
   else if (t === 'diamond') { polyPath(ctx, [{ x: cx, y: r.y }, { x: r.x + r.w, y: cy }, { x: cx, y: r.y + r.h }, { x: r.x, y: cy }]); fillStroke(true); }
   else if (t === 'triangle') { polyPath(ctx, [{ x: cx, y: r.y }, { x: r.x + r.w, y: r.y + r.h }, { x: r.x, y: r.y + r.h }]); fillStroke(true); }
   else if (t === 'star') { polyPath(ctx, starPts(cx, cy, Math.max(Math.abs(r.w), Math.abs(r.h)) / 2, Math.max(Math.abs(r.w), Math.abs(r.h)) / 4.4)); fillStroke(true); }
-  else if (t === 'text') { ctx.globalAlpha = s.opacity == null ? 1 : s.opacity; ctx.font = '600 ' + s.fontSize + 'px Montserrat,sans-serif'; ctx.textBaseline = 'top'; ctx.fillStyle = s.color; ctx.fillText(s.text || '', p[0].x, p[0].y); }
+  else if (t === 'text') { ctx.globalAlpha = s.opacity == null ? 1 : s.opacity; ctx.font = '600 ' + s.fontSize + 'px Inter,sans-serif'; ctx.textBaseline = 'top'; ctx.fillStyle = s.color; ctx.fillText(s.text || '', p[0].x, p[0].y); }
   else if (t === 'stamp') { ctx.globalAlpha = 1; ctx.font = (s.fontSize * 1.9) + 'px serif'; ctx.textBaseline = 'middle'; ctx.textAlign = 'center'; ctx.fillText(s.emoji || '⭐', p[0].x, p[0].y); }
   ctx.restore();
 }
