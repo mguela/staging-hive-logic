@@ -6248,11 +6248,16 @@ function renderMessageList() {
     row.appendChild(mid);
     // hover quick-actions
     const qa = document.createElement('div'); qa.className = 'ev-item-qa';
-    const qab = (label, title, fn) => { const b = document.createElement('button'); b.textContent = label; b.title = title; b.onclick = (e) => { e.stopPropagation(); fn(); }; qa.appendChild(b); };
-    qab('🗄', 'Archive', () => evMove(m.id, 'archive', 'Archived'));
-    qab(m.isRead ? '●' : '✓', m.isRead ? 'Mark unread' : 'Mark read', () => (m.isRead ? evMarkUnread(m.id) : evMarkRead(m.id)));
+    const qab = (label, title, fn) => {
+      const b = document.createElement('button'); b.title = title;
+      if (/\.(png|svg)$/i.test(label)) { const img = document.createElement('img'); img.className = 'ev-item-qa-ic'; img.src = label; img.alt = ''; b.appendChild(img); }
+      else b.textContent = label;
+      b.onclick = (e) => { e.stopPropagation(); fn(); }; qa.appendChild(b);
+    };
+    qab('/hiveconnect/icons/Archive 2.png', 'Archive', () => evMove(m.id, 'archive', 'Archived'));
+    qab(m.isRead ? '●' : '/hiveconnect/icons/Mark as Read.png', m.isRead ? 'Mark unread' : 'Mark read', () => (m.isRead ? evMarkUnread(m.id) : evMarkRead(m.id)));
     qab('🚩', 'Flag', () => evFlag(m.id, !(m.flag && m.flag.flagStatus === 'flagged')));
-    qab('🗑', 'Delete', () => evDelete(m.id));
+    qab('/hiveconnect/icons/Delete 2.png', 'Delete', () => evDelete(m.id));
     row.appendChild(qa);
     row.onclick = () => openEmailMessage(m.id);
     list.appendChild(row);

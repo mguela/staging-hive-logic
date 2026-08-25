@@ -2192,7 +2192,9 @@ html[data-theme="dark"] :is(#hiveconnect-root, .hc-embed).huddle-banner {
 :is(#hiveconnect-root, .hc-embed) .ev-item:hover .ev-item-qa,
 :is(#hiveconnect-root, .hc-embed).ev-item:hover .ev-item-qa { display: flex; }
 :is(#hiveconnect-root, .hc-embed) .ev-item-qa button,
-:is(#hiveconnect-root, .hc-embed).ev-item-qa button { border: none; background: transparent; cursor: pointer; font-size: 13px; padding: 4px 6px; border-radius: 6px; }
+:is(#hiveconnect-root, .hc-embed).ev-item-qa button { border: none; background: transparent; cursor: pointer; font-size: 13px; padding: 4px 6px; border-radius: 6px; display: flex; align-items: center; justify-content: center; }
+:is(#hiveconnect-root, .hc-embed) .ev-item-qa-ic,
+:is(#hiveconnect-root, .hc-embed).ev-item-qa-ic { width: 14px; height: 14px; object-fit: contain; display: block; }
 :is(#hiveconnect-root, .hc-embed) .ev-item-qa button:hover,
 :is(#hiveconnect-root, .hc-embed).ev-item-qa button:hover { background: var(--steel-bg); }
 
