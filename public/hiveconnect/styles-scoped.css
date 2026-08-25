@@ -2421,7 +2421,7 @@ html[data-theme="dark"] :is(#hiveconnect-root, .hc-embed).huddle-banner {
 :is(#hiveconnect-root, .hc-embed) .ev-add-fav-link,
 :is(#hiveconnect-root, .hc-embed).ev-add-fav-link,
 :is(#hiveconnect-root, .hc-embed) .ev-new-folder,
-:is(#hiveconnect-root, .hc-embed).ev-new-folder { display: block; width: 100%; background: none; border: none; cursor: pointer; text-align: left; color: #8ba4c4; font-size: 12px; font-weight: 700; padding: 6px 9px; border-radius: 9px; }
+:is(#hiveconnect-root, .hc-embed).ev-new-folder { display: block; width: 100%; background: none; border: none; cursor: pointer; text-align: left; color: #8ba4c4; font-size: 11.52px; font-weight: 400; padding: 6px 9px; border-radius: 9px; }
 :is(#hiveconnect-root, .hc-embed) .ev-add-fav-link:hover,
 :is(#hiveconnect-root, .hc-embed).ev-add-fav-link:hover,
 :is(#hiveconnect-root, .hc-embed) .ev-new-folder:hover,
@@ -2546,7 +2546,7 @@ html[data-theme="dark"] :is(#hiveconnect-root, .hc-embed).huddle-banner {
 :is(#hiveconnect-root, .hc-embed) .ev-group-count,
 :is(#hiveconnect-root, .hc-embed).ev-group-count { margin-left: auto; font-size: 10.5px; color: var(--mut); }
 :is(#hiveconnect-root, .hc-embed) .ev-new-group,
-:is(#hiveconnect-root, .hc-embed).ev-new-group { display: block; width: 100%; background: none; border: none; cursor: pointer; text-align: left; color: #8ba4c4; font-size: 9.6px; font-weight: 400; padding: 6px 9px; border-radius: 9px; }
+:is(#hiveconnect-root, .hc-embed).ev-new-group { display: block; width: 100%; background: none; border: none; cursor: pointer; text-align: left; color: #8ba4c4; font-size: 11.52px; font-weight: 400; padding: 6px 9px; border-radius: 9px; }
 :is(#hiveconnect-root, .hc-embed) .ev-new-group:hover,
 :is(#hiveconnect-root, .hc-embed).ev-new-group:hover { color: #fff; background: rgba(116,138,158,.16); }
 

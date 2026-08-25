@@ -5186,7 +5186,7 @@ function renderCustomFolders() {
     });
   }
   const create = document.createElement('button'); create.type = 'button'; create.className = 'ev-new-folder';
-  create.textContent = '+ Create new folder…';
+  create.textContent = 'Create new folder…';
   create.onclick = evCreateFolder;
   wrap.appendChild(create);
 }

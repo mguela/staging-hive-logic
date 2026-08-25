@@ -1598,7 +1598,7 @@ html[data-theme="dark"] .huddle-banner {
 .ev-fav-row.active { background: rgba(255,201,75,.16); color: #ffe3a8; }
 .ev-fav-ic { width: 18px; text-align: center; flex: none; color: #ffc94b; }
 .ev-favs, .ev-folders-sec, .ev-groups-sec { margin-top: 14px; margin-bottom: 10px; }
-.ev-add-fav-link, .ev-new-folder { display: block; width: 100%; background: none; border: none; cursor: pointer; text-align: left; color: #8ba4c4; font-size: 12px; font-weight: 700; padding: 6px 9px; border-radius: 9px; }
+.ev-add-fav-link, .ev-new-folder { display: block; width: 100%; background: none; border: none; cursor: pointer; text-align: left; color: #8ba4c4; font-size: 11.52px; font-weight: 400; padding: 6px 9px; border-radius: 9px; }
 .ev-add-fav-link:hover, .ev-new-folder:hover { color: #fff; background: rgba(116,138,158,.16); }
 
 @media (max-width: 900px) {
@@ -1671,7 +1671,7 @@ html[data-theme="dark"] .huddle-banner {
 .ev-group-row:hover { background: rgba(116,138,158,.2); }
 .ev-group-ic { width: 22px; height: 22px; border-radius: 50%; background: var(--steel-bg); color: var(--steel-deep); font-size: 10px; font-weight: 800; display: flex; align-items: center; justify-content: center; flex: none; }
 .ev-group-count { margin-left: auto; font-size: 10.5px; color: var(--mut); }
-.ev-new-group { display: block; width: 100%; background: none; border: none; cursor: pointer; text-align: left; color: #8ba4c4; font-size: 9.6px; font-weight: 400; padding: 6px 9px; border-radius: 9px; }
+.ev-new-group { display: block; width: 100%; background: none; border: none; cursor: pointer; text-align: left; color: #8ba4c4; font-size: 11.52px; font-weight: 400; padding: 6px 9px; border-radius: 9px; }
 .ev-new-group:hover { color: #fff; background: rgba(116,138,158,.16); }
 
 /* Safety net: every button in the Email sidebar is a plain row/link, never
