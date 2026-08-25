@@ -1760,9 +1760,11 @@ html[data-theme="dark"] .chirp-folderhead { background: #1e2940; }
 #hc-back-btn:hover { background: rgba(255,201,75,.16); }
 .sidebar.sidebar-messages-theme #hc-back-btn { color: var(--steel-deep); }
 .sidebar.sidebar-messages-theme #hc-back-btn:hover { background: var(--steel-bg); }
-#bell-btn { width: 34px; height: 34px; min-width: 34px; border-radius: 9px; border: 1.5px solid rgba(255,255,255,.35); background: rgba(255,255,255,.10); color: #fff; display: flex; align-items: center; justify-content: center; cursor: pointer; }
-#bell-btn:hover { transform: scale(1.06); border-color: #ffc94b; background: rgba(255,255,255,.16); }
+#bell-btn { appearance: none; -webkit-appearance: none; width: 34px; height: 34px; min-width: 34px; border-radius: 9px; border: none; background: none; box-shadow: none; color: rgba(255,255,255,.85); display: flex; align-items: center; justify-content: center; cursor: pointer; }
+#bell-btn:hover { background: rgba(255,255,255,.16); color: #fff; }
 #bell-btn svg { width: 17px; height: 17px; }
+.sidebar.sidebar-messages-theme #bell-btn { color: var(--mut); }
+.sidebar.sidebar-messages-theme #bell-btn:hover { background: var(--steel-bg); color: var(--ink); }
 
 /* ===== HiveVideo: screen-share spotlight + full-window mode (2026-07-26) ===== */
 .huddle-dock.hd-full { left: 0 !important; top: 0 !important; right: auto !important; bottom: auto !important; width: 100vw !important; height: 100vh !important; max-width: none !important; max-height: none !important; border-radius: 0 !important; z-index: 100000; }
