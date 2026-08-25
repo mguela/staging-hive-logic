@@ -1355,6 +1355,11 @@ html[data-theme="dark"] .huddle-banner {
 }
 .sidebar.sidebar-messages-theme .channel-list li .unread { background: var(--red); color: #fff; }
 .sidebar.sidebar-messages-theme .presence-dot { border-color: var(--card); }
+.msg-search { display: flex; align-items: center; gap: 7px; background: var(--canvas); border: 1.5px solid var(--line);
+  border-radius: 9px; padding: 7px 11px; margin-bottom: 14px; color: var(--mut); }
+.msg-search svg { flex: none; }
+.msg-search input { flex: 1; min-width: 0; border: none; background: none; outline: none; font-family: var(--sans); font-size: 12.5px; color: var(--ink); }
+.msg-search input::placeholder { color: var(--mut); }
 
 /* ==================== EMAIL APP ==================== */
 /* sidebar: mailbox switcher + folders */

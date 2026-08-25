@@ -608,6 +608,20 @@ function renderSidebar() {
 // ---- Messages panel: DMs organized into Team / Vendor / Client / External folders ----
 const MSG_ORDER = [['team', 'Team'], ['vendor', 'Vendor'], ['client', 'Client'], ['external', 'External']];
 const msgOpen = { Team: true, Vendor: true, Client: true, External: true };
+let msgSearch = '';
+function dmDisplayName(c) { return isGroupDM(c) ? dmGroupLabel(c) : (dmOther(c) ? dmOther(c).display_name : 'DM'); }
+function applyMsgFilter() {
+  const q = (msgSearch || '').trim().toLowerCase();
+  document.querySelectorAll('#panel-messages .ct-folder').forEach(folder => {
+    let any = false;
+    folder.querySelectorAll('.channel-list li[data-name]').forEach(row => {
+      const match = !q || (row.dataset.name || '').includes(q);
+      row.style.display = match ? '' : 'none'; if (match) any = true;
+    });
+    if (q) { folder.classList.remove('collapsed'); folder.style.display = any ? '' : 'none'; }
+    else { folder.style.display = ''; }
+  });
+}
 function dmContactType(otherId) {
   const c = contactsData.find(x => x.profile_id === otherId);
   if (c) return c.contact_type;
@@ -619,6 +633,12 @@ function renderMessagesPanel() {
   const nb = document.createElement('button'); nb.className = 'new-channel-cta'; nb.id = 'new-dm-btn';
   nb.innerHTML = '<span>＋</span> New message'; nb.onclick = (e) => { e.stopPropagation(); openCompose(); };
   el.appendChild(nb);
+  const searchWrap = document.createElement('div'); searchWrap.className = 'msg-search';
+  searchWrap.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>';
+  const search = document.createElement('input'); search.id = 'msg-search'; search.type = 'text'; search.placeholder = 'Search People'; search.value = msgSearch;
+  search.addEventListener('input', () => { msgSearch = search.value; applyMsgFilter(); });
+  searchWrap.appendChild(search);
+  el.appendChild(searchWrap);
   const dms = [...channels.values()].filter(c => c.type === 'dm' && memberships.has(c.id) && dmOther(c));
   const grouped = { team: [], vendor: [], client: [], external: [] };
   dms.forEach(c => { const o = dmOther(c); const t = isGroupDM(c) ? 'team' : (o ? dmContactType(o.id) : 'team'); (grouped[t] || grouped.team).push(c); });
@@ -639,6 +659,7 @@ function renderMessagesPanel() {
     if (!list.length) { const em = document.createElement('div'); em.className = 'ct-empty'; em.textContent = 'No conversations yet'; ul.appendChild(em); }
     list.forEach(c => {
       const li = document.createElement('li');
+      li.dataset.name = dmDisplayName(c).toLowerCase();
       if (isGroupDM(c)) {
         const grp = partStrip(dmOtherProfiles(c), 2); grp.classList.add('dm-grp-av'); li.appendChild(grp);
         const nm = document.createElement('span'); nm.className = 'cname'; nm.textContent = dmGroupLabel(c); li.appendChild(nm);
@@ -661,6 +682,7 @@ function renderMessagesPanel() {
     body.appendChild(ul); folder.appendChild(body); el.appendChild(folder);
   });
   enableFolderDrag(el, '.ct-head', '.ct-folder', 'type', 'hcMsgOrder');
+  applyMsgFilter();
 }
 function hexA(hex, a) {
   const n = parseInt(hex.slice(1), 16);
