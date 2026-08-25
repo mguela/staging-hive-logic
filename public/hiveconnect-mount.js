@@ -55,7 +55,7 @@
 
   function showError(root, message) {
     root.innerHTML =
-      '<div style="padding:24px;font-family:Montserrat,sans-serif;color:#b42318;' +
+      '<div style="padding:24px;font-family:Inter,sans-serif;color:#b42318;' +
       'background:#fef3f2;border:1px solid #fda29b;border-radius:10px;max-width:520px">' +
       '<b>HiveConnect couldn\'t open.</b><br>' + message +
       '<br><br><button onclick="window.__mountHiveConnect(true)" ' +
@@ -96,7 +96,7 @@
       var fonts = document.createElement('link');
       fonts.id = 'hc-fonts';
       fonts.rel = 'stylesheet';
-      fonts.href = 'https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600;700;800&display=swap';
+      fonts.href = 'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600;700;800&display=swap';
       document.head.appendChild(fonts);
     }
   }
