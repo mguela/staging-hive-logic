@@ -19,7 +19,7 @@
  * monitor_my_status poll, so "is this person running current code" is a
  * question the database can answer. Do not hand-edit it -- run
  * `node scripts/stamp-page-build.mjs`. */
-var HL_PAGE_BUILD = '48cfe65bd34a13bc';
+var HL_PAGE_BUILD = 'ad83938390d5fd21';
 </script>
 <script>
 (function () { // HL_FETCH_DEDUPE_V1 — single wrapper: GET /api/ dedupe + 60s cache + write-invalidate
@@ -24293,7 +24293,14 @@ function nativeEstimateToRow(e){
     // genuine 50/50 split. Carrying the real schedule + total through lets
     // the modal render the estimate's own numbers instead of invented ones.
     paymentSchedule:e.paymentSchedule||[],
-    totalPrice:(e.totals&&e.totals.price)||0
+    totalPrice:(e.totals&&e.totals.price)||0,
+    // 2026-08-25: "send to client" now emails the client an Approve/Reject
+    // link (api/bookkeeping/estimates/send.js + respond.js). Approving
+    // there does NOT touch lifecycleStatus (that stays controller/deposit
+    // gated) -- clientApprovedAt is the only signal staff has that the
+    // client already said yes, so it has to ride through to the summary
+    // modal or the whole point of emailing them is invisible.
+    clientApprovedAt:e.clientApprovedAt||null
   };
 }
 function loadNativeEstimatesLive(){
@@ -26305,8 +26312,13 @@ document.addEventListener('click',function(e){
       lifecycleBtn='<button onclick="_hlEstSend()" style="flex:1;padding:11px;border:none;border-radius:8px;background:#1B7A50;color:#fff;font-weight:900;font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;cursor:pointer;font-family:\'Montserrat\',sans-serif">&#9993; Send to client</button>';
       window._hlEstSend=function(){
         hlEstApi('send',{id:nid}).then(function(d){
-          if(d&&d.ok){ chirpToast('&#10003; '+num+' sent — awaiting the deposit.'); document.getElementById('hlmodal').remove(); loadNativeEstimatesLive(); }
-          else chirpToast('&#9888; Could not send: '+((d&&d.error)||'unknown error'));
+          if(!d||!d.ok){ chirpToast('&#9888; Could not send: '+((d&&d.error)||'unknown error')); return; }
+          // 2026-08-25: "when clicking 'send to client' i should receive an
+          // email" -- send.js emails the client an Approve/Reject link as
+          // part of this call, best-effort. Say plainly whether it went out.
+          var emailNote=d.clientEmailSent?(' Emailed '+d.clientEmailAddress+'.'):(' Could not email the client: '+(d.clientEmailError||'unknown reason')+'.');
+          chirpToast('&#10003; '+num+' sent — awaiting the deposit.'+emailNote);
+          document.getElementById('hlmodal').remove(); loadNativeEstimatesLive();
         }).catch(function(e){ chirpToast('&#9888; Network error: '+e.message); });
       };
     } else if(nativeRow.lifecycleStatus==='sent'&&!nativeRow.depositSatisfied){
@@ -26425,8 +26437,15 @@ document.addEventListener('click',function(e){
      +'<div style="font-size:9px;font-weight:600;color:#9fb0c8;line-height:1.55;margin-top:9px">Locks with the Proposal Baseline at signature and becomes the job\'s <b style=\'color:#fff\'>live Payment Breakdown</b> — every actual is checked against this plan; any deviation flags a DISCREPANCY the moment it posts. In the coded build the tranches and payout mapping are editable per-activity right here in the builder.</div>'
      +'<button onclick="_hlEstPbk()" style="width:100%;margin-top:10px;padding:9px;border:1px solid #59718a;border-radius:8px;background:transparent;color:#8ba4c4;font-weight:800;font-size:9.5px;letter-spacing:.06em;text-transform:uppercase;cursor:pointer;font-family:\'Montserrat\',sans-serif">💵 See a live job breakdown — Payment Breakdowns →</button></div>';
   }
+  // 2026-08-25: an emailed Approve click (respond.js) only ever stamps
+  // clientApprovedAt -- it never touches lifecycleStatus, since that stays
+  // gated on a controller actor + the deposit being paid. Without this
+  // banner staff would have no way to see the client already said yes.
+  var clientApprovedBanner=(nativeRow&&nativeRow.clientApprovedAt)
+    ? '<div style="background:#e7f3ec;color:#1B7A50;font-size:11px;font-weight:700;padding:8px 12px;border-radius:8px;margin-bottom:10px">&#10003; Client approved via email — '+esc(new Date(nativeRow.clientApprovedAt).toLocaleDateString())+'</div>'
+    : '';
   hlModal('📄 '+num+' — '+(ttl||'Estimate'),
-   '<div style="display:flex;gap:10px;align-items:center;margin-bottom:4px"><b style="font-size:16px;color:#161e2e">'+client+'</b><span style="margin-left:auto;font-family:\'JetBrains Mono\',monospace;font-size:16px;font-weight:900;color:#59718a">'+amt+'</span></div><div style="'+_row+'">Status<b style="margin-left:auto">'+st+'</b></div><div style="'+_row+'">Created<b style="margin-left:auto">'+created+'</b></div><div style="'+_row+';border-bottom:none">Version<b style="margin-left:auto">V1 · locked on send</b></div>'+pbBlock+'<div style="display:flex;gap:9px;margin-top:14px"><button onclick="_hlEstEdit()" style="flex:1;padding:11px;border:none;border-radius:8px;background:#59718a;color:#fff;font-weight:900;font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;cursor:pointer;font-family:\'Montserrat\',sans-serif">✏️ Edit in builder</button><button onclick="_hlEstClient()" style="flex:1;padding:11px;border:1px solid #59718a;border-radius:8px;background:#fff;color:#59718a;font-weight:900;font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;cursor:pointer;font-family:\'Montserrat\',sans-serif">👤 Client record</button>'+lifecycleBtn+cancelBtn+hardDeleteBtn+quoteDeleteBtn+deleteBtn+'</div>');
+   '<div style="display:flex;gap:10px;align-items:center;margin-bottom:4px"><b style="font-size:16px;color:#161e2e">'+client+'</b><span style="margin-left:auto;font-family:\'JetBrains Mono\',monospace;font-size:16px;font-weight:900;color:#59718a">'+amt+'</span></div>'+clientApprovedBanner+'<div style="'+_row+'">Status<b style="margin-left:auto">'+st+'</b></div><div style="'+_row+'">Created<b style="margin-left:auto">'+created+'</b></div><div style="'+_row+';border-bottom:none">Version<b style="margin-left:auto">V1 · locked on send</b></div>'+pbBlock+'<div style="display:flex;gap:9px;margin-top:14px"><button onclick="_hlEstEdit()" style="flex:1;padding:11px;border:none;border-radius:8px;background:#59718a;color:#fff;font-weight:900;font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;cursor:pointer;font-family:\'Montserrat\',sans-serif">✏️ Edit in builder</button><button onclick="_hlEstClient()" style="flex:1;padding:11px;border:1px solid #59718a;border-radius:8px;background:#fff;color:#59718a;font-weight:900;font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;cursor:pointer;font-family:\'Montserrat\',sans-serif">👤 Client record</button>'+lifecycleBtn+cancelBtn+hardDeleteBtn+quoteDeleteBtn+deleteBtn+'</div>');
 },true);
 function hl63Wire(view,target,label){
   var v=document.getElementById('view-'+view);if(!v)return;
