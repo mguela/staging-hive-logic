@@ -4874,6 +4874,36 @@ async function handleUpdateClientContact(req, res) {
   if (!rows.length) return res.status(404).json({ ok: false, error: 'Client not found.' });
   return res.status(200).json({ ok: true, resource: 'update_client_contact', client: rows[0] });
 }
+// 2026-08-25, jomell: "in active jobs, when clicking on a job, there should
+// be an option to 'close job' (meaning its done)."
+//
+// Deliberately writes ONLY jobs.hl_closed_at, never job_status or
+// completed_at -- both of those are in the Jobber sync's mapJob() full-row
+// upsert payload every run, so writing "closed" there directly for a real
+// Jobber-synced job would get silently wiped on the next sync. hl_closed_at
+// is a new HiveLogic-owned column (20260825160000_jobs_hl_closed.sql) the
+// sync never touches, same discipline as clients.phone above and
+// project_seq/division_code already on this table. A toggle (closed: true
+// sets it to now, false clears it) rather than a one-way action, so a job
+// closed by mistake can be reopened without a database console.
+async function handleSetJobClosed(req, res) {
+  if (req.method !== 'POST') return res.status(405).json({ ok: false, error: 'POST only' });
+  const requester = await getRequestingProfile(req);
+  if (!requester) return res.status(401).json({ ok: false, error: 'Not signed in -- log into HiveLogic first.' });
+  const b = req.body || {};
+  const id = String(b.id || '').trim();
+  if (!id) return res.status(400).json({ ok: false, error: 'A job id is required.' });
+  const closed = !!b.closed;
+  const r = await supabaseRequest(`jobs?jobber_id=eq.${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    headers: { Prefer: 'return=representation' },
+    body: JSON.stringify({ hl_closed_at: closed ? new Date().toISOString() : null }),
+  });
+  if (!r.ok) return res.status(500).json({ ok: false, error: 'Update failed: ' + (await r.text()).slice(0, 300) });
+  const rows = await r.json();
+  if (!rows.length) return res.status(404).json({ ok: false, error: 'Job not found.' });
+  return res.status(200).json({ ok: true, resource: 'set_job_closed', job: rows[0] });
+}
 async function handleCreateJob(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ ok: false, error: 'POST only' });
   const requester = await getRequestingProfile(req);
@@ -8656,6 +8686,9 @@ if (resource === 'mailconnect') {
   }
   if (resource === 'update_client_contact') {
     try { return await handleUpdateClientContact(req, res); } catch (e) { return res.status(500).json({ ok: false, error: e.message }); }
+  }
+  if (resource === 'set_job_closed') {
+    try { return await handleSetJobClosed(req, res); } catch (e) { return res.status(500).json({ ok: false, error: e.message }); }
   }
   if (resource === 'client_location') {
     try { return await handleClientLocation(req, res); } catch (e) { return res.status(500).json({ ok: false, error: e.message }); }

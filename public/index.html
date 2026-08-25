@@ -19,7 +19,7 @@
  * monitor_my_status poll, so "is this person running current code" is a
  * question the database can answer. Do not hand-edit it -- run
  * `node scripts/stamp-page-build.mjs`. */
-var HL_PAGE_BUILD = 'ce9b72aac6e4ec41';
+var HL_PAGE_BUILD = '9f4cee3d00e7ec48';
 </script>
 <script>
 (function () { // HL_FETCH_DEDUPE_V1 — single wrapper: GET /api/ dedupe + 60s cache + write-invalidate
@@ -682,6 +682,11 @@ var HL_PAGE_BUILD = 'ce9b72aac6e4ec41';
   .ajx-pill.unsched{background:#fbf1e3;color:#a8702a}
   .ajx-money{font-family:var(--mono);font-size:12px;font-weight:800;color:#161e2e;text-align:right;white-space:nowrap}
   .ajx-empty{padding:26px 14px;text-align:center;color:var(--mut);font-size:12.5px;font-weight:600}
+  /* 2026-08-25: "in active jobs, when clicking on a job, there should be an
+     option to 'close job'... make it bold or even change the font color." */
+  .ajx-tbl tr.ajx-closed td{font-weight:800;color:#1B7A50}
+  .ajx-tbl tr.ajx-closed td.ajx-num,.ajx-tbl tr.ajx-closed td.ajx-money{color:#1B7A50}
+  .ajx-pill.closed{background:#e7f3ec;color:#1B7A50}
   .ajv{position:fixed;inset:0;background:rgba(22,30,46,.5);backdrop-filter:blur(6px);z-index:57;display:none;align-items:flex-start;justify-content:center;padding:50px 20px;overflow-y:auto}
   .ajv.open{display:flex}
   .ajv-card{width:min(760px,100%);background:#fff;border-radius:16px;box-shadow:0 30px 70px rgba(0,0,0,.3);overflow:hidden}
@@ -6570,6 +6575,10 @@ function devTodoLoad(){
     <div class="ajv-foot">
       <button class="ajv-btn ghost" id="ajv-save" onclick="ajvSaveLines()">Save line items</button>
       <button class="ajv-btn" id="ajv-inv" onclick="ajvMakeInvoice(false)">Create Invoice from this Job</button>
+      <!-- 2026-08-25: "there should be an option to 'close job' (meaning
+           its done)." Label/style/handler set live in ajxOpen()/
+           ajvToggleClosed() since it's a toggle (Close job <-> Reopen job). -->
+      <button class="ajv-btn ghost" id="ajv-close-toggle" onclick="ajvToggleClosed()">Close job</button>
       <span class="ajv-note" id="ajv-note">Invoices are saved as DRAFT &#8212; nothing is sent to the client.</span>
     </div>
   </div>
@@ -32964,12 +32973,18 @@ function ajxRender() {
     var sched = ajxIsScheduled(j)
       ? '<span class="ajx-pill sched">' + ajxDate(j.startAt) + '</span>'
       : '<span class="ajx-pill unsched">not booked</span>';
-    return '<tr onclick="ajxOpen(\'' + String(j.id).replace(/'/g, "\\'") + '\')">'
+    // 2026-08-25: "make it bold or even change the font color" once a job
+    // is closed (HiveLogic's own hl_closed_at, not Jobber's job_status --
+    // see handleSetJobClosed in api/track1.js for why they're kept separate).
+    var statusPill = j.closedAt
+      ? '<span class="ajx-pill closed">✓ Closed</span>'
+      : '<span class="ajx-pill">' + hlEsc(String(j.status || 'unknown').replace(/_/g, ' ')) + '</span>';
+    return '<tr class="' + (j.closedAt ? 'ajx-closed' : '') + '" onclick="ajxOpen(\'' + String(j.id).replace(/'/g, "\\'") + '\')">'
       + '<td class="ajx-num">' + hlEsc(ref) + '</td>'
       + '<td>' + hlEsc(j.title || 'Untitled job') + '</td>'
       + '<td>' + hlEsc(j.clientName || '—') + '</td>'
       + '<td>' + hlEsc(j.divisionCode || '—') + '</td>'
-      + '<td><span class="ajx-pill">' + hlEsc(String(j.status || 'unknown').replace(/_/g, ' ')) + '</span></td>'
+      + '<td>' + statusPill + '</td>'
       + '<td>' + sched + '</td>'
       + '<td class="ajx-money">' + ajxMoney(j.total) + '</td>'
       + '<td>' + ajxDate(j.createdAt) + '</td>'
@@ -33014,14 +33029,21 @@ function ajxOpen(jobId) {
 
   var meta = document.getElementById('ajv-meta');
   if (meta) {
+    // 2026-08-25: "make it bold or even change the font color" once closed
+    // -- same green treatment as the Active Jobs list row.
+    var statusHtml = j.closedAt
+      ? '<b style="color:#1B7A50;font-weight:900">&#10003; Closed ' + ajxDate(j.closedAt) + '</b>'
+      : '<b>' + hlEsc(String(j.status || 'unknown').replace(/_/g, ' ')) + '</b>';
     meta.innerHTML = ''
       + '<div><span>Client</span><b>' + hlEsc(j.clientName || '—') + '</b></div>'
       + '<div><span>Division</span><b>' + hlEsc(j.divisionCode || '—') + '</b></div>'
-      + '<div><span>Status</span><b>' + hlEsc(String(j.status || 'unknown').replace(/_/g, ' ')) + '</b></div>'
+      + '<div><span>Status</span>' + statusHtml + '</div>'
       + '<div><span>Scheduled</span><b>' + (ajxIsScheduled(j) ? ajxDate(j.startAt) : 'Not booked') + '</b></div>'
       + '<div><span>Estimated value</span><b>' + ajxMoney(j.total) + '</b></div>'
       + '<div><span>Created</span><b>' + ajxDate(j.createdAt) + '</b></div>';
   }
+  var closeBtn = document.getElementById('ajv-close-toggle');
+  if (closeBtn) closeBtn.textContent = j.closedAt ? 'Reopen job' : 'Close job';
 
   var note = document.getElementById('ajv-note');
   if (note) note.textContent = 'Invoices are saved as DRAFT — nothing is sent to the client.';
@@ -33050,6 +33072,37 @@ function ajxOpen(jobId) {
       // rather than leaving it to chance.
       if (typeof hlFormForget === 'function') hlFormForget('ajv');
     });
+}
+
+// 2026-08-25: "in active jobs, when clicking on a job, there should be an
+// option to 'close job' (meaning its done)." Toggle, not a one-way action --
+// see handleSetJobClosed in api/track1.js for why this writes only
+// jobs.hl_closed_at, never job_status/completed_at (both are overwritten by
+// the Jobber sync on every run; hl_closed_at is a HiveLogic-owned column the
+// sync never touches).
+function ajvToggleClosed() {
+  var j = AJX.job; if (!j) return;
+  var closing = !j.closedAt;
+  var btn = document.getElementById('ajv-close-toggle');
+  if (btn) { btn.disabled = true; btn.textContent = closing ? 'Closing…' : 'Reopening…'; }
+  hlApiPost('set_job_closed', { id: j.id, closed: closing }).then(function (r) {
+    if (!r || !r.ok) {
+      chirpToast('⚠ Could not ' + (closing ? 'close' : 'reopen') + ' this job: ' + ((r && r.error) || 'unknown error'));
+      if (btn) { btn.disabled = false; btn.textContent = closing ? 'Close job' : 'Reopen job'; }
+      return;
+    }
+    var closedAt = closing ? ((r.job && r.job.hl_closed_at) || new Date().toISOString()) : null;
+    j.closedAt = closedAt;
+    // AJX.job IS the same object the list renders from (AJX.jobs holds it
+    // by reference), so this one assignment is enough to keep both in sync.
+    if (btn) btn.disabled = false;
+    chirpToast(closing ? '✓ Job closed' : '↩ Job reopened');
+    ajxOpen(j.id);
+    ajxRender();
+  }).catch(function (e) {
+    chirpToast('⚠ Network error: ' + e.message);
+    if (btn) { btn.disabled = false; btn.textContent = closing ? 'Close job' : 'Reopen job'; }
+  });
 }
 
 function ajvLineAdd() { AJX.lines.push({ description: '', quantity: 1, unitPrice: 0 }); ajvLinesRender(); }

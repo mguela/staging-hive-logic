@@ -11,13 +11,27 @@ const FIXTURE = [
     job_status: 'active', job_type: 'ONE_OFF', total: 4200, start_at: '2026-07-01T12:00:00Z',
     end_at: null, completed_at: null, jobber_web_uri: 'https://x/j1',
     client_name: 'Jane Doe', gps_lat: 41.02, gps_lng: -73.62, loc_city: 'Greenwich', loc_province: 'CT',
-    effective_start_at: '2026-07-01T12:00:00Z', effective_end_at: null },
+    effective_start_at: '2026-07-01T12:00:00Z', effective_end_at: null, hl_closed_at: null },
   { jobber_id: 'J2', client_id: 'C2', job_number: 102, title: 'Fence',
     job_status: 'archived', job_type: 'ONE_OFF', total: 900, start_at: null,
     end_at: null, completed_at: '2026-06-01T12:00:00Z', jobber_web_uri: 'https://x/j2',
     client_name: null, gps_lat: null, gps_lng: null, loc_city: null, loc_province: null,
-    effective_start_at: null, effective_end_at: null },
+    effective_start_at: null, effective_end_at: null, hl_closed_at: null },
 ];
+
+// 2026-08-25, jomell: "in active jobs, when clicking on a job, there should
+// be an option to 'close job' (meaning its done)." hl_closed_at is a
+// HiveLogic-owned column (never in the Jobber sync's upsert payload, unlike
+// job_status/completed_at above) -- this fixture is a real Jobber-synced
+// job (job_status still 'active') that HiveLogic has separately marked closed.
+const CLOSED_BY_HL = {
+  jobber_id: 'J4', client_id: 'C1', job_number: 103, title: 'Deck rebuild, phase 2',
+  job_status: 'active', job_type: 'ONE_OFF', total: 1500, start_at: '2026-07-01T12:00:00Z',
+  end_at: null, completed_at: null, jobber_web_uri: 'https://x/j4',
+  client_name: 'Jane Doe', gps_lat: null, gps_lng: null, loc_city: null, loc_province: null,
+  effective_start_at: '2026-07-01T12:00:00Z', effective_end_at: null,
+  hl_closed_at: '2026-08-25T18:00:00Z',
+};
 
 // 2026-08-25, jomell: "i just booked a schedule... this should also reflect
 // in 'active jobs' tab." jobs.start_at is written only by the Jobber sync,
@@ -33,6 +47,7 @@ const NATIVE_ONLY = {
   end_at: null, completed_at: null, jobber_web_uri: null,
   client_name: 'jovie folloso', gps_lat: null, gps_lng: null, loc_city: null, loc_province: null,
   effective_start_at: '2026-08-30T13:00:00Z', effective_end_at: '2026-08-30T15:00:00Z',
+  hl_closed_at: null,
 };
 
 let lastPath = null;
@@ -41,6 +56,7 @@ mock.module('../api/_lib/jobber.js', {
     supabaseRequest: async (path) => {
       lastPath = path;
       if (/jobber_id=eq\.J3/.test(path)) return { ok: true, json: async () => [NATIVE_ONLY], headers: { get: () => null } };
+      if (/jobber_id=eq\.J4/.test(path)) return { ok: true, json: async () => [CLOSED_BY_HL], headers: { get: () => null } };
       const single = /jobber_id=eq\./.test(path);
       const rows = single ? [FIXTURE[0]] : FIXTURE;
       return {
@@ -70,7 +86,7 @@ test('list: exact legacy shape, one request, view path', async () => {
     'id','title','clientId','clientName','jobNumber',
     'projectSeq','projectRef','divisionCode',
     'status','type','total',
-    'startAt','endAt','completedAt','createdAt','jobberUrl','gpsLat','gpsLng','city','province',
+    'startAt','endAt','completedAt','createdAt','jobberUrl','gpsLat','gpsLng','city','province','closedAt',
   ]);
   // These fixtures are Jobber-synced jobs, so they carry jobNumber and no
   // project number -- a job has one or the other, never both.
@@ -98,7 +114,7 @@ test('single job: exact legacy shape (no clientName/city/province)', async () =>
     'id','title','clientId','jobNumber',
     'projectSeq','projectRef','divisionCode',
     'status','type','total',
-    'startAt','endAt','completedAt','jobberUrl','gpsLat','gpsLng',
+    'startAt','endAt','completedAt','jobberUrl','gpsLat','gpsLng','closedAt',
   ]);
   assert.equal(j.id, 'J1');
   assert.equal(j.gpsLng, -73.62);
@@ -135,4 +151,21 @@ test('the list endpoint applies the same native-appointment fallback as the sing
   assert.match(lastPath, /effective_start_at/);
   assert.match(lastPath, /effective_end_at/);
   assert.equal(list.jobs[0].startAt, FIXTURE[0].effective_start_at);
+});
+
+test('a job HiveLogic marked closed reports closedAt, even though Jobber still says active', () => {
+  return getJobByIdData('J4').then((j) => {
+    assert.equal(j.closedAt, '2026-08-25T18:00:00Z');
+    assert.equal(j.status, 'active', 'Jobber\'s own job_status is untouched by the HiveLogic-side close');
+  });
+});
+
+test('a job HiveLogic has not closed reports closedAt as null, not undefined', async () => {
+  const j = await getJobByIdData('J1');
+  assert.equal(j.closedAt, null);
+});
+
+test('the list select includes hl_closed_at', async () => {
+  await getJobsListData({ limit: 10 });
+  assert.match(lastPath, /hl_closed_at/);
 });

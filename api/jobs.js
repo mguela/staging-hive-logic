@@ -16,7 +16,7 @@ import { jobRef } from './_lib/project-numbers.js';
 
 const PAGE_SIZE = 50;
 
-const LIST_SELECT = 'jobber_id,client_id,job_number,project_seq,division_code,title,job_status,job_type,total,start_at,end_at,completed_at,jobber_created_at,jobber_web_uri,client_name,gps_lat,gps_lng,loc_city,loc_province,effective_start_at,effective_end_at';
+const LIST_SELECT = 'jobber_id,client_id,job_number,project_seq,division_code,title,job_status,job_type,total,start_at,end_at,completed_at,jobber_created_at,jobber_web_uri,client_name,gps_lat,gps_lng,loc_city,loc_province,effective_start_at,effective_end_at,hl_closed_at';
 
 // Single-job fetch, used by the real job-detail view (Visual Intelligence's
 // Photos/Timeline/Tags tabs live here). Returns null if not found (route
@@ -44,7 +44,11 @@ export async function getJobByIdData(id) {
     // blends the two for display.
     startAt: j.effective_start_at ?? j.start_at,
     endAt: j.effective_end_at ?? j.end_at, completedAt: j.completed_at, jobberUrl: j.jobber_web_uri,
-    gpsLat: j.gps_lat, gpsLng: j.gps_lng
+    gpsLat: j.gps_lat, gpsLng: j.gps_lng,
+    // 2026-08-25: HiveLogic's own "Close job" action (Active Jobs) --
+    // separate from Jobber's job_status/completed_at, which the sync
+    // overwrites every run. Null means not closed from HiveLogic's side.
+    closedAt: j.hl_closed_at || null
   };
 }
 
@@ -101,7 +105,8 @@ export async function getJobsListData({ limit, offset, status } = {}) {
     gpsLat: j.gps_lat,
     gpsLng: j.gps_lng,
     city: j.loc_city,
-    province: j.loc_province
+    province: j.loc_province,
+    closedAt: j.hl_closed_at || null
   }));
 
   return { totalCount, returned: jobs.length, jobs };
