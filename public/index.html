@@ -19,7 +19,7 @@
  * monitor_my_status poll, so "is this person running current code" is a
  * question the database can answer. Do not hand-edit it -- run
  * `node scripts/stamp-page-build.mjs`. */
-var HL_PAGE_BUILD = '99ed1bb4fbfacc4e';
+var HL_PAGE_BUILD = '2ea3aedfd5cf5d5c';
 </script>
 <script>
 (function () { // HL_FETCH_DEDUPE_V1 — single wrapper: GET /api/ dedupe + 60s cache + write-invalidate
@@ -6580,7 +6580,7 @@ function devTodoLoad(){
     </div>
     <div class="ajv-foot">
       <button class="ajv-btn ghost" id="ajv-save" onclick="ajvSaveLines()">Save line items</button>
-      <button class="ajv-btn" id="ajv-inv" onclick="ajvMakeInvoice(false)">Create Invoice from this Job</button>
+      <button class="ajv-btn" id="ajv-inv" onclick="ajvOpenCreateInvoiceModal()">Create Invoice from this Job</button>
       <!-- 2026-08-25: "there should be an option to 'close job' (meaning
            its done)." Label/style/handler set live in ajxOpen()/
            ajvToggleClosed() since it's a toggle (Close job <-> Reopen job). -->
@@ -33352,18 +33352,53 @@ function ajvSaveLines(after) {
   });
 }
 
+// 2026-08-26, jomell: "when creating an invoice from this job, the amount
+// should be customizable... since its going to be just a draft first. the
+// name/label should be customizable as well as the amount." Before this,
+// every invoice from a job billed the job's full line-item total under
+// the job's own title -- there was no way to invoice a deposit or any
+// other partial amount. Pre-fills with the job's real numbers (the line
+// items already entered here, or the job's estimated value if none) so
+// accepting the defaults still works exactly as before, but both are
+// editable before the draft is actually created.
+function ajvOpenCreateInvoiceModal() {
+  if (!AJX.job) return;
+  var defaultAmount = (AJX.lines && AJX.lines.length) ? ajvLinesSum() : (Number(AJX.job.total) || 0);
+  var body = '<div id="aci-body">'
+    + '<label style="' + _lbl + '">Title</label>'
+    + '<input id="aci-subject" type="text" placeholder="e.g. Deposit" value="' + hlEsc(AJX.job.title || '') + '" style="' + _inp + ';margin-bottom:12px">'
+    + '<label style="' + _lbl + '">Amount</label>'
+    + '<input id="aci-amount" type="number" min="0.01" step="0.01" value="' + (defaultAmount > 0 ? defaultAmount.toFixed(2) : '') + '" style="' + _inp + ';margin-bottom:6px">'
+    + '<div style="font-size:10.5px;color:var(--mut);font-weight:700;margin-bottom:12px">This job\'s value is ' + ajxMoney(AJX.job.total) + ' &mdash; invoice for all of it, a deposit, or any other amount.</div>'
+    + '<div id="aci-err" style="display:none;color:#c65b4e;font-size:11px;font-weight:700;margin-bottom:10px"></div>'
+    + '<div style="display:flex;gap:9px"><button onclick="_hlAciSubmit()" style="flex:1;padding:11px;border:none;border-radius:8px;background:#1B7A50;color:#fff;font-weight:900;font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;cursor:pointer;font-family:\'Montserrat\',sans-serif">Create draft invoice</button><button onclick="document.getElementById(\'hlmodal\').remove()" style="flex:1;padding:11px;border:1px solid #dadde8;border-radius:8px;background:#fff;color:#5d657b;font-weight:900;font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;cursor:pointer;font-family:\'Montserrat\',sans-serif">Cancel</button></div>'
+    + '</div>';
+  hlModal('&#129534; Create invoice from this job', body);
+  window._hlAciSubmit = function () {
+    var subject = ((document.getElementById('aci-subject') || {}).value || '').trim();
+    var amount = Number((document.getElementById('aci-amount') || {}).value);
+    var err = document.getElementById('aci-err');
+    if (!subject) { err.textContent = 'A title is required.'; err.style.display = 'block'; return; }
+    if (!isFinite(amount) || amount <= 0) { err.textContent = 'Enter an amount greater than $0.'; err.style.display = 'block'; return; }
+    window._ajvPendingInvoice = { subject: subject, amount: amount };
+    document.getElementById('hlmodal').remove();
+    ajvMakeInvoice(false);
+  };
+}
 /* Raises a DRAFT invoice. The backend refuses a second invoice on a job that
    already has one unless allowDuplicate is set, so the confirm below is the
    only way to get there -- billing a job twice should take a deliberate yes. */
 function ajvMakeInvoice(allowDuplicate) {
   if (!AJX.job) return;
+  var pending = window._ajvPendingInvoice || {};
   var btn = document.getElementById('ajv-inv');
   if (btn) { btn.disabled = true; btn.textContent = 'Creating…'; }
   var reset = function () { if (btn) { btn.disabled = false; btn.textContent = 'Create Invoice from this Job'; } };
 
-  hlApiPost('create_invoice_from_job', { jobRef: AJX.job.id, allowDuplicate: allowDuplicate === true }).then(function (r) {
+  hlApiPost('create_invoice_from_job', { jobRef: AJX.job.id, allowDuplicate: allowDuplicate === true, subject: pending.subject, amount: pending.amount }).then(function (r) {
     reset();
     if (r && r.ok) {
+      window._ajvPendingInvoice = null;
       chirpToast('&#10003; Draft invoice for ' + ajxMoney(r.amount) + ' created from ' + r.lineCount + ' line item' + (r.lineCount === 1 ? '' : 's') + ' — not sent');
       if (typeof ivxLoad === 'function') ivxLoad();
       return;

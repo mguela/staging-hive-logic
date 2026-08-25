@@ -249,3 +249,77 @@ test('a missing job is a 404, not a stray invoice', async () => {
   assert.equal(r.statusCode, 404);
   assert.equal(insertedInvoice, null);
 });
+
+// ---- 2026-08-26, jomell: customizable title + amount (e.g. a deposit) ----
+
+test('a custom amount bills that amount, not the job\'s full line-item total', async () => {
+  reset();
+  jobsFixture = [{
+    jobber_id: 'HL-JOB-10015', uuid_id: 'job-uuid', title: 'Test. Gutter Replacement',
+    total: 20800, client_id: 'C-1',
+  }];
+  lineFixture = [];
+  const r = res();
+  await trackMod.default(
+    {
+      method: 'POST', query: { resource: 'create_invoice_from_job' }, headers: { authorization: 'Bearer t' },
+      body: { jobRef: 'HL-JOB-10015', subject: 'Deposit', amount: 6240 },
+    },
+    r
+  );
+  assert.equal(r.statusCode, 200, JSON.stringify(r.body));
+  assert.equal(r.body.amount, 6240, 'a 30% deposit, not the full $20,800 job value');
+  assert.equal(insertedInvoice.total, 6240);
+  assert.equal(insertedInvoice.subtotal, 6240);
+  assert.equal(insertedInvoice.balance, 6240);
+  assert.equal(insertedInvoice.line_items.length, 1);
+  assert.equal(insertedInvoice.line_items[0].lineTotal, 6240);
+});
+
+test('a custom title is saved as the invoice subject instead of the job\'s own title', async () => {
+  reset();
+  jobsFixture = [{ jobber_id: 'HL-JOB-10015', uuid_id: 'job-uuid', title: 'Test. Gutter Replacement', total: 20800, client_id: 'C-1' }];
+  lineFixture = [];
+  const r = res();
+  await trackMod.default(
+    {
+      method: 'POST', query: { resource: 'create_invoice_from_job' }, headers: { authorization: 'Bearer t' },
+      body: { jobRef: 'HL-JOB-10015', subject: 'Deposit', amount: 6240 },
+    },
+    r
+  );
+  assert.equal(insertedInvoice.subject, 'Deposit');
+  assert.equal(insertedInvoice.line_items[0].description, 'Deposit');
+});
+
+test('a custom amount is honored even when the job has real priced line items', async () => {
+  reset();
+  jobsFixture = [{ jobber_id: 'HL-JOB-10016', uuid_id: 'u16', title: 'Kitchen remodel', total: 15000, client_id: 'C-2' }];
+  lineFixture = [{ description: 'Cabinets', quantity: 1, unit_price: 15000, line_total: 15000 }];
+  const r = res();
+  await trackMod.default(
+    {
+      method: 'POST', query: { resource: 'create_invoice_from_job' }, headers: { authorization: 'Bearer t' },
+      body: { jobRef: 'HL-JOB-10016', subject: 'First draw', amount: 5000 },
+    },
+    r
+  );
+  assert.equal(r.body.amount, 5000, 'a custom amount overrides the real line items, not just the no-lines fallback');
+  assert.equal(insertedInvoice.line_items.length, 1);
+});
+
+test('a blank or zero custom amount falls back to the normal job-line-items computation', async () => {
+  reset();
+  jobsFixture = [{ jobber_id: 'HL-JOB-10017', uuid_id: 'u17', title: 'Fence repair', total: 900, client_id: 'C-3' }];
+  lineFixture = [{ description: 'Repair', quantity: 1, unit_price: 900, line_total: 900 }];
+  const r = res();
+  await trackMod.default(
+    {
+      method: 'POST', query: { resource: 'create_invoice_from_job' }, headers: { authorization: 'Bearer t' },
+      body: { jobRef: 'HL-JOB-10017', subject: '', amount: 0 },
+    },
+    r
+  );
+  assert.equal(r.body.amount, 900);
+  assert.equal(insertedInvoice.subject, 'Fence repair');
+});
