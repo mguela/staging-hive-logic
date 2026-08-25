@@ -2524,7 +2524,7 @@ html[data-theme="dark"] :is(#hiveconnect-root, .hc-embed).huddle-banner {
 /* collapsible section headers (Favourites / Folders / Groups) — same
    chevron-rotate pattern already used for Chirp's collapsible people list */
 :is(#hiveconnect-root, .hc-embed) .ev-sec-head,
-:is(#hiveconnect-root, .hc-embed).ev-sec-head { display: flex; align-items: center; gap: 6px; width: 100%; background: none; border: none; cursor: pointer; padding: 4px 6px 6px; font-family: var(--mono); font-size: 10.5px; font-weight: 800; letter-spacing: .8px; text-transform: uppercase; color: var(--mut); }
+:is(#hiveconnect-root, .hc-embed).ev-sec-head { display: flex; align-items: center; gap: 6px; width: 100%; background: none; border: none; cursor: pointer; padding: 4px 6px 6px; font-family: var(--sans); font-size: 10.5px; font-weight: 800; letter-spacing: .8px; text-transform: uppercase; color: var(--mut); }
 :is(#hiveconnect-root, .hc-embed) .sidebar.sidebar-email-theme .ev-sec-head,
 :is(#hiveconnect-root, .hc-embed).sidebar.sidebar-email-theme .ev-sec-head { color: var(--mut); }
 :is(#hiveconnect-root, .hc-embed) .ev-sec-chev,
