@@ -6347,7 +6347,7 @@ function renderReadingPane(m) {
   const sv = (d) => '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">' + d + '</svg>';
   const act = (html, title, fn, extra) => { const b = document.createElement('button'); b.className = 'ev-act' + (extra ? ' ' + extra : ''); b.innerHTML = html; b.title = title; b.setAttribute('aria-label', title); b.onclick = fn; return b; };
   const sep = () => { const s = document.createElement('span'); s.className = 'ev-act-sep'; return s; };
-  bar.appendChild(act(sv('<path d="M9 15L4 10l5-5"/><path d="M4 10h11a5 5 0 0 1 5 5v3"/>'), 'Reply', () => openEmailCompose('reply', m)));
+  bar.appendChild(act('<img src="/hiveconnect/icons/Reply.png" class="ev-act-ic" alt="">', 'Reply', () => openEmailCompose('reply', m)));
   bar.appendChild(act(sv('<path d="M8 15l-5-5 5-5"/><path d="M13 15l-5-5 5-5"/><path d="M8 10h8a5 5 0 0 1 5 5v3"/>'), 'Reply all', () => openEmailCompose('replyAll', m)));
   bar.appendChild(act(sv('<path d="M15 15l5-5-5-5"/><path d="M20 10H9a5 5 0 0 0-5 5v3"/>'), 'Forward', () => openEmailCompose('forward', m)));
   bar.appendChild(sep());
@@ -6355,6 +6355,7 @@ function renderReadingPane(m) {
   bar.appendChild(act(sv('<path d="M3 7l1.8-2h4.4L11 7h7a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V7z"/>'), 'Move to folder', (e) => evMoveMenu(e, m.id)));
   bar.appendChild(act(sv('<path d="M4 21V4h13l-2.5 4L17 12H4"/>'), 'Flag / follow-up', (e) => evFlagMenu(e, m, flagged), flagged ? 'ev-act-on' : ''));
   bar.appendChild(act(sv('<path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/>'), 'Delete', () => evDelete(m.id)));
+  bar.appendChild(act('<img src="/hiveconnect/icons/Snooze.png" class="ev-act-ic" alt=""><span class="rail-soon">SOON</span>', 'Coming soon', () => evToast('Snooze is coming soon.'), 'ev-act-soon'));
   const spacer = document.createElement('span'); spacer.style.flex = '1'; bar.appendChild(spacer);
   bar.appendChild(act('<span class="ev-reina-star">✦</span> Reina', 'Reina AI — summarize, draft, extract', (e) => evReinaMenu(e, m), 'ev-act-reina'));
   bar.appendChild(act(sv('<circle cx="5" cy="12" r="1.4"/><circle cx="12" cy="12" r="1.4"/><circle cx="19" cy="12" r="1.4"/>'), 'More', (e) => evMoreMenu(e, m)));
@@ -6805,6 +6806,9 @@ function evEnsureToolbarCss() {
     + '#ev-read .ev-act.ev-act-on{color:var(--red)}'
     + '#ev-read .ev-act-reina{color:var(--steel-deep);font-weight:700}#ev-read .ev-reina-star{font-size:13px}'
     + '#ev-read .ev-act-sep{width:1px;height:20px;background:var(--line);margin:0 5px}'
+    + '#ev-read .ev-act-ic{width:18px;height:18px;object-fit:contain;flex:none}'
+    + '#ev-read .ev-act.ev-act-soon{opacity:.6;cursor:default}#ev-read .ev-act.ev-act-soon:hover{background:transparent;color:var(--slate)}'
+    + '#ev-read .ev-act-soon .rail-soon{position:static;margin-left:2px}'
     + '.ev-move-menu .ev-move-sep{height:1px;background:var(--line);margin:5px 0}';
   document.head.appendChild(st);
 }
