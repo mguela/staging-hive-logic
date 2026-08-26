@@ -32,6 +32,7 @@
 // well-formed PDF bytes.
 
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
+import { GH_LOGO_PNG_BASE64 } from './gh-logo-asset.js';
 
 export const LETTERHEAD = {
   name: 'Greenwich Handyman Co.',
@@ -195,6 +196,17 @@ export async function generateInvoicePdf(inputs) {
   const right = PAGE_W - MARGIN;
   const colDesc = left, colQty = 372, colPrice = 424, colTotal = 494;
 
+  const logoImage = await doc.embedPng(Buffer.from(GH_LOGO_PNG_BASE64, 'base64'));
+  const logoAspect = logoImage.width / logoImage.height;
+  // Real logo graphic, not the company name spelled out in text -- the
+  // reference PDF's letterhead is the mark itself plus the contact block,
+  // never a literal "GREENWICH HANDYMAN CO." text line.
+  function drawLogo(h) {
+    const w = h * logoAspect;
+    page.drawImage(logoImage, { x: left, y: y - h, width: w, height: h });
+    return w;
+  }
+
   const pages = [];
   let page = doc.addPage([PAGE_W, PAGE_H]);
   pages.push(page);
@@ -213,8 +225,9 @@ export async function generateInvoicePdf(inputs) {
     page = doc.addPage([PAGE_W, PAGE_H]);
     pages.push(page);
     y = CONTENT_TOP;
-    page.drawText(plan.letterhead.name.toUpperCase() + ' — Invoice #' + plan.invoiceBox.number + ' (continued)', { x: left, y, size: 10.5, font: bold, color: NAVY });
-    y -= 24;
+    const w = drawLogo(24);
+    page.drawText('Invoice #' + plan.invoiceBox.number + ' (continued)', { x: left + w + 10, y: y - 17, size: 10.5, font: bold, color: NAVY });
+    y -= 32;
     drawTableHeader();
   }
 
@@ -226,12 +239,16 @@ export async function generateInvoicePdf(inputs) {
   }
 
   // ---- Letterhead (page 1 only -- a continuation page gets the lighter
-  // "(continued)" header newPage() draws instead) ----
-  page.drawText(plan.letterhead.name.toUpperCase(), { x: left, y, size: 15, font: bold, color: NAVY });
-  y -= 16;
-  page.drawText(plan.letterhead.addressLine1 + ' | ' + plan.letterhead.addressLine2, { x: left, y, size: 8.5, font, color: MUT });
-  y -= 12;
-  page.drawText(plan.letterhead.phone + ' | ' + plan.letterhead.email + ' | ' + plan.letterhead.website, { x: left, y, size: 8.5, font, color: MUT });
+  // "(continued)" header newPage() draws instead). Font size and logo height
+  // are both picked (and width-checked against the invoice box's left edge
+  // at boxX) so the two real contact lines never run under the navy box --
+  // found live: at the first size tried, "www.greenwichhandyman.net" ran
+  // straight into it. ----
+  const logoW1 = drawLogo(36);
+  const addrX = left + logoW1 + 12;
+  page.drawText(plan.letterhead.addressLine1 + ' | ' + plan.letterhead.addressLine2, { x: addrX, y: y - 14, size: 7.5, font, color: MUT });
+  page.drawText(plan.letterhead.phone + ' | ' + plan.letterhead.email + ' | ' + plan.letterhead.website, { x: addrX, y: y - 25, size: 7.5, font, color: MUT });
+  y -= 36;
 
   // ---- Invoice box (top right) ----
   const boxW = 222, boxX = right - boxW;
@@ -323,8 +340,8 @@ export async function generateInvoicePdf(inputs) {
     page = doc.addPage([PAGE_W, PAGE_H]);
     pages.push(page);
     y = CONTENT_TOP;
-    page.drawText(plan.letterhead.name.toUpperCase(), { x: left, y, size: 12, font: bold, color: NAVY });
-    y -= 30;
+    drawLogo(28);
+    y -= 40;
     page.drawText('Payment Schedule', { x: left, y, size: 15, font: bold, color: NAVY });
     y -= 12;
     page.drawLine({ start: { x: left, y }, end: { x: right, y }, thickness: 1.5, color: NAVY });
@@ -363,11 +380,10 @@ export async function generateInvoicePdf(inputs) {
     page = doc.addPage([PAGE_W, PAGE_H]);
     pages.push(page);
     y = CONTENT_TOP;
-    page.drawText(plan.letterhead.name.toUpperCase(), { x: left, y, size: 12, font: bold, color: NAVY });
-    y -= 12;
-    page.drawText(plan.letterhead.addressLine1 + ' | ' + plan.letterhead.addressLine2, { x: left, y, size: 8, font, color: MUT });
-    y -= 10;
-    page.drawText(plan.letterhead.phone + ' | ' + plan.letterhead.email + ' | ' + plan.letterhead.website, { x: left, y, size: 8, font, color: MUT });
+    const rw = drawLogo(28);
+    page.drawText(plan.letterhead.addressLine1 + ' | ' + plan.letterhead.addressLine2, { x: left + rw + 12, y: y - 11, size: 8, font, color: MUT });
+    page.drawText(plan.letterhead.phone + ' | ' + plan.letterhead.email + ' | ' + plan.letterhead.website, { x: left + rw + 12, y: y - 22, size: 8, font, color: MUT });
+    y -= 28;
 
     // The dashed "tear here" line -- everything below it is the part meant
     // to be cut off and mailed back with a check, same layout the reference

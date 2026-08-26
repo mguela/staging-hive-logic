@@ -16,6 +16,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { PDFDocument } from 'pdf-lib';
 import { buildInvoicePlan, generateInvoicePdf, money, dateStr, LETTERHEAD } from '../api/_lib/invoice-pdf.js';
+import { GH_LOGO_PNG_BASE64, GH_LOGO_WIDTH, GH_LOGO_HEIGHT } from '../api/_lib/gh-logo-asset.js';
 
 const FULL = {
   invoice: {
@@ -199,6 +200,22 @@ test('the remittance stub carries the real invoice number, due date, and amount 
 test('remittance amount due falls back to the total when there is no separate balance', () => {
   const plan = buildInvoicePlan({ ...FULL, invoice: { ...FULL.invoice, balance: null } });
   assert.equal(plan.remittance.amountDue, '$4,068.95');
+});
+
+// --------------------------------------------------------------------- logo
+// jomell, 2026-08-27: the real GH Co. logo, embedded on every page instead
+// of the company name spelled out as text. (An earlier round flagged this
+// exact file as "corrupted" -- wrongly; a transparent PNG composited over a
+// dark preview background looked broken, but the raw pixel data, and the
+// PDF this decodes into here, were always correct.)
+
+test('the logo asset decodes to a real, well-formed PNG at the declared dimensions', () => {
+  const bytes = Buffer.from(GH_LOGO_PNG_BASE64, 'base64');
+  // PNG magic number: 89 50 4E 47 0D 0A 1A 0A
+  assert.deepEqual([...bytes.slice(0, 8)], [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+  assert.ok(bytes.length > 1000, 'a real logo should be more than a trivial stub');
+  assert.equal(GH_LOGO_WIDTH, 480);
+  assert.equal(GH_LOGO_HEIGHT, 378);
 });
 
 // ------------------------------------------------------------------ pdf-lib
