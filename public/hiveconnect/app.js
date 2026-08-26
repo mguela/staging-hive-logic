@@ -905,14 +905,6 @@ function msgEl(m, grouped, inThread) {
   div.dataset.id = m.id;
 
   if (grouped) {
-    const sp = document.createElement('div'); sp.className = 'time-col-spacer'; div.appendChild(sp);
-  } else {
-    const timeCol = document.createElement('div'); timeCol.className = 'msg-time-col';
-    timeCol.textContent = fmtTime(m.created_at);
-    div.appendChild(timeCol);
-  }
-
-  if (grouped) {
     const sp = document.createElement('div'); sp.className = 'avatar-spacer'; div.appendChild(sp);
   } else {
     div.appendChild(avatarEl(p));
@@ -987,6 +979,14 @@ function msgEl(m, grouped, inThread) {
   }
 
   div.appendChild(body);
+
+  if (grouped) {
+    const sp = document.createElement('div'); sp.className = 'time-col-spacer'; div.appendChild(sp);
+  } else {
+    const timeCol = document.createElement('div'); timeCol.className = 'msg-time-col';
+    timeCol.textContent = fmtTime(m.created_at);
+    div.appendChild(timeCol);
+  }
 
   // hover tools
   if (!m.deleted_at) {

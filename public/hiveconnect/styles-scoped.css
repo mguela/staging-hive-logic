@@ -701,7 +701,7 @@ html[data-theme="dark"] :is(#hiveconnect-root, .hc-embed).mention { background: 
 :is(#hiveconnect-root, .hc-embed) .msg .avatar-spacer,
 :is(#hiveconnect-root, .hc-embed).msg .avatar-spacer { width: 34px; flex-shrink: 0; }
 :is(#hiveconnect-root, .hc-embed) .msg-time-col,
-:is(#hiveconnect-root, .hc-embed).msg-time-col { flex: none; width: 50px; padding-top: 3px; font-family: var(--mono); color: var(--mut); font-size: 10px; font-weight: 600; text-align: left; }
+:is(#hiveconnect-root, .hc-embed).msg-time-col { flex: none; width: 50px; padding-top: 3px; font-family: var(--mono); color: var(--mut); font-size: 10px; font-weight: 600; text-align: right; }
 :is(#hiveconnect-root, .hc-embed) .time-col-spacer,
 :is(#hiveconnect-root, .hc-embed).time-col-spacer { flex: none; width: 50px; }
 :is(#hiveconnect-root, .hc-embed) .msg-body,

@@ -476,7 +476,7 @@ button { font-family: inherit; cursor: pointer; }
 .msg:not(.grouped) { margin-top: 10px; }
 .msg .avatar { margin-top: 0; }
 .msg .avatar-spacer { width: 34px; flex-shrink: 0; }
-.msg-time-col { flex: none; width: 50px; padding-top: 3px; font-family: var(--mono); color: var(--mut); font-size: 10px; font-weight: 600; text-align: left; }
+.msg-time-col { flex: none; width: 50px; padding-top: 3px; font-family: var(--mono); color: var(--mut); font-size: 10px; font-weight: 600; text-align: right; }
 .time-col-spacer { flex: none; width: 50px; }
 .msg-body { flex: 1; min-width: 0; }
 .msg-head { display: flex; align-items: baseline; gap: 8px; }
