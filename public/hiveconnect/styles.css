@@ -262,6 +262,12 @@ button { font-family: inherit; cursor: pointer; }
 .sidebar.sidebar-collapsed {
   width: 0; min-width: 0; overflow: hidden; border: none;
 }
+.sidebar.resizing, .sidebar.resizing + .sidebar-resizer + .main { transition: none; }
+.sidebar-resizer {
+  width: 5px; flex: none; cursor: col-resize; background: transparent;
+  position: relative; z-index: 5;
+}
+.sidebar-resizer:hover, .sidebar-resizer.dragging { background: var(--steel); }
 .sidebar-header {
   display: flex; align-items: center; justify-content: space-between;
   padding: 16px 14px 13px; border-bottom: 1px solid rgba(139, 164, 196, .16);
@@ -1392,7 +1398,7 @@ html[data-theme="dark"] .huddle-banner {
 /* Give the main content area the same floating-card margin as the Messages
    sidebar (12px, 0 on the left since the sidebar's own right margin already
    makes that gap), so both columns float as matching cards. */
-.sidebar.sidebar-messages-theme + .main { margin: 12px 12px 12px 0; border-radius: 15px; overflow: hidden; background: var(--card); }
+.sidebar.sidebar-messages-theme ~ .main { margin: 12px 12px 12px 0; border-radius: 15px; overflow: hidden; background: var(--card); }
 
 /* ==================== EMAIL APP ==================== */
 /* sidebar: mailbox switcher + folders */

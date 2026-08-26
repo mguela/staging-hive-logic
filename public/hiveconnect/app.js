@@ -2827,6 +2827,38 @@ function updateMainHeader() {
   else { t.textContent = 'Channels'; if (d) d.textContent = ''; }
 }
 document.querySelectorAll('.rail-btn[data-tab]').forEach(b => b.addEventListener('click', () => setNavTab(b.dataset.tab)));
+
+// ---- Sidebar resize (drag the divider between the sidebar and main content) ----
+// Real, cross-device preference (hcPref) -- same mechanism as every other
+// saved setting in this app, not a device-local hack.
+(function () {
+  const sidebar = document.querySelector('.sidebar');
+  const resizer = $('sidebar-resizer');
+  if (!sidebar || !resizer) return;
+  const MIN_W = 200, MAX_W = 460;
+  const saved = parseInt(hcPref('hcSidebarWidth', 'hcSidebarWidth', ''), 10);
+  if (saved && saved >= MIN_W && saved <= MAX_W) {
+    sidebar.style.width = saved + 'px'; sidebar.style.minWidth = saved + 'px';
+  }
+  let dragging = false, startX = 0, startW = 0;
+  resizer.addEventListener('mousedown', (e) => {
+    e.preventDefault();
+    dragging = true; startX = e.clientX; startW = sidebar.getBoundingClientRect().width;
+    sidebar.classList.add('resizing'); resizer.classList.add('dragging');
+    document.body.style.userSelect = 'none';
+  });
+  document.addEventListener('mousemove', (e) => {
+    if (!dragging) return;
+    const w = Math.min(MAX_W, Math.max(MIN_W, startW + (e.clientX - startX)));
+    sidebar.style.width = w + 'px'; sidebar.style.minWidth = w + 'px';
+  });
+  document.addEventListener('mouseup', () => {
+    if (!dragging) return;
+    dragging = false; sidebar.classList.remove('resizing'); resizer.classList.remove('dragging');
+    document.body.style.userSelect = '';
+    hcPrefSet('hcSidebarWidth', 'hcSidebarWidth', Math.round(sidebar.getBoundingClientRect().width));
+  });
+})();
 // placeholder rail buttons (Chirp, Email) — show a "coming soon" toast
 document.querySelectorAll('.rail-btn[data-soon]').forEach(b => b.addEventListener('click', () => railToast(b.dataset.soon)));
 let railToastT = null;

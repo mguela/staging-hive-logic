@@ -391,6 +391,19 @@ html[data-theme="dark"] :is(#hiveconnect-root, .hc-embed).mention { background: 
 :is(#hiveconnect-root, .hc-embed).sidebar.sidebar-collapsed {
   width: 0; min-width: 0; overflow: hidden; border: none;
 }
+:is(#hiveconnect-root, .hc-embed) .sidebar.resizing,
+:is(#hiveconnect-root, .hc-embed).sidebar.resizing,
+:is(#hiveconnect-root, .hc-embed) .sidebar.resizing + .sidebar-resizer + .main,
+:is(#hiveconnect-root, .hc-embed).sidebar.resizing + .sidebar-resizer + .main { transition: none; }
+:is(#hiveconnect-root, .hc-embed) .sidebar-resizer,
+:is(#hiveconnect-root, .hc-embed).sidebar-resizer {
+  width: 5px; flex: none; cursor: col-resize; background: transparent;
+  position: relative; z-index: 5;
+}
+:is(#hiveconnect-root, .hc-embed) .sidebar-resizer:hover,
+:is(#hiveconnect-root, .hc-embed).sidebar-resizer:hover,
+:is(#hiveconnect-root, .hc-embed) .sidebar-resizer.dragging,
+:is(#hiveconnect-root, .hc-embed).sidebar-resizer.dragging { background: var(--steel); }
 :is(#hiveconnect-root, .hc-embed) .sidebar-header,
 :is(#hiveconnect-root, .hc-embed).sidebar-header {
   display: flex; align-items: center; justify-content: space-between;
@@ -2046,8 +2059,8 @@ html[data-theme="dark"] :is(#hiveconnect-root, .hc-embed).huddle-banner {
 /* Give the main content area the same floating-card margin as the Messages
    sidebar (12px, 0 on the left since the sidebar's own right margin already
    makes that gap), so both columns float as matching cards. */
-:is(#hiveconnect-root, .hc-embed) .sidebar.sidebar-messages-theme + .main,
-:is(#hiveconnect-root, .hc-embed).sidebar.sidebar-messages-theme + .main { margin: 12px 12px 12px 0; border-radius: 15px; overflow: hidden; background: var(--card); }
+:is(#hiveconnect-root, .hc-embed) .sidebar.sidebar-messages-theme ~ .main,
+:is(#hiveconnect-root, .hc-embed).sidebar.sidebar-messages-theme ~ .main { margin: 12px 12px 12px 0; border-radius: 15px; overflow: hidden; background: var(--card); }
 
 /* ==================== EMAIL APP ==================== */
 /* sidebar: mailbox switcher + folders */
