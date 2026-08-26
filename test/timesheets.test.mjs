@@ -297,11 +297,13 @@ test('Approve timesheets and Confirm payroll are not built yet, on purpose', () 
   assert.doesNotMatch(HTML, /Confirm payroll/);
 });
 
-test('the Timesheets card is hidden by default and only workforceRefresh can reveal it, to owners only', () => {
+test('the Timesheets card is hidden until first paint, then revealed to every signed-in user by workforceRefresh -- not gated on isOwner', () => {
+  // jomell, 2026-08-26: "everyone needs to have access to the timesheet
+  // because they will be the one to enter their start time and end time."
   assert.match(HTML, /<div class="card" id="ts-card" style="margin-bottom:16px;display:none">/);
   const fn = extractFunction(HTML, 'async function workforceRefresh(){');
-  assert.match(fn, /tsCard\.style\.display = isOwner \? 'block' : 'none';/);
-  assert.match(fn, /if \(isOwner && typeof window\.tsLoad === 'function'\) window\.tsLoad\(\);/);
+  assert.match(fn, /tsCard\.style\.display = 'block';/);
+  assert.match(fn, /if \(typeof window\.tsLoad === 'function'\) window\.tsLoad\(\);/);
 });
 
 test('clicking an empty date cell opens the create modal; a filled cell just shows the value', () => {
