@@ -1598,7 +1598,7 @@ function renderHuddleUI() {
   dot.classList.toggle('hidden', !live);
   if (iAmIn) label.textContent = 'In call';
   else if (live) label.textContent = `Join (${parts.length})`;
-  else label.textContent = isDM ? 'Call' : 'HiveVideo';
+  else label.textContent = 'HiveVideo';
   btn.title = iAmIn ? 'You are in this call' : live ? 'Join the active call' : (isDM ? 'Start a call' : 'Start HiveVideo');
 
   // in-channel banner (only when a huddle is live here and I'm NOT already in it)
