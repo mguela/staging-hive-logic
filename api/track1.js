@@ -5410,6 +5410,7 @@ async function handleWorkforceStatus(req, res) {
     }
   }
 
+  const requesterIsOwner = await isOwner(requester);
   return res.status(200).json({
     ok: true,
     tablesReady: sessRes.ok && sumRes.ok,
@@ -5422,7 +5423,14 @@ async function handleWorkforceStatus(req, res) {
     // false the moment ownership changed. The clock-in refusal reads the same
     // source, so the button that is hidden and the request that is refused can
     // never disagree.
-    isOwner: await isOwner(requester),
+    isOwner: requesterIsOwner,
+    // Same reasoning, same shape (2026-08-26): the Monitor dashboard's "View
+    // All" button needs to know, before it's clicked, whether this person is
+    // allowed into the screenshot gallery -- handleMonitorReview enforces
+    // the real rule (Superadmin or Owner) server-side; this just lets the
+    // button be disabled with an honest reason instead of clickable and
+    // then refused.
+    canViewScreenshots: requester.role === 'superadmin' || requesterIsOwner,
   });
 }
 
@@ -6487,6 +6495,21 @@ async function handleMonitorReview(req, res) {
       };
     });
     return res.status(200).json({ ok: true, resource: 'monitor_review', roster });
+  }
+
+  // Screenshots are more sensitive than the roster above (real images of
+  // someone's screen, not just an online/offline dot and an activity
+  // number), so this one branch -- and only this one -- gets a tighter bar
+  // than the rest of Monitor's admin/superadmin gate: Superadmin or Owner
+  // only (2026-08-26, "Only System Admin/Owner must be able to view the
+  // screenshots"). A plain 'admin' (an office manager, a project manager)
+  // can still see who's online and how active they are; they just can't
+  // open the gallery. isOwner() reused from ./_lib/owner.js -- the same
+  // source that already answers "is this person exempt from the
+  // timeclock," now also answering "can this person see everyone else's
+  // screen."
+  if (requester.role !== 'superadmin' && !(await isOwner(requester))) {
+    return res.status(403).json({ ok: false, error: 'Screenshots are restricted to Superadmin/Owner.' });
   }
 
   const sessRes = await supabaseRequest(`monitor_sessions?employee_id=eq.${employeeId}&order=started_at.desc&limit=20`);

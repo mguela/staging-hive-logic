@@ -19,7 +19,7 @@
  * monitor_my_status poll, so "is this person running current code" is a
  * question the database can answer. Do not hand-edit it -- run
  * `node scripts/stamp-page-build.mjs`. */
-var HL_PAGE_BUILD = '0ec6a3cc4770ad5f';
+var HL_PAGE_BUILD = 'f5d7309243d117ed';
 </script>
 <script>
 (function () { // HL_FETCH_DEDUPE_V1 — single wrapper: GET /api/ dedupe + 60s cache + write-invalidate
@@ -5490,6 +5490,11 @@ function ninvSave(){ var amt = parseFloat(document.getElementById('ninv-amt').va
        state the status poll maintains, and set only from the server's answer --
        never inferred in the page. */
     var isOwner = false;
+    // Whether this signed-in person may open Monitor's screenshot gallery
+    // (Superadmin or Owner -- see handleMonitorReview/handleWorkforceStatus,
+    // api/track1.js). Same "server decides, page just reflects it" rule as
+    // isOwner above.
+    var canViewScreenshots = false;
 
     function fmtDuration(seconds){
       var h = Math.floor(seconds/3600), m = Math.floor((seconds%3600)/60);
@@ -5667,10 +5672,12 @@ function ninvSave(){ var amt = parseFloat(document.getElementById('ninv-amt').va
       currentSession = (data && data.activeSession) || null;
       summarySubmittedToday = !!(data && data.todaySummary);
       isOwner = !!(data && data.isOwner);
+      canViewScreenshots = !!(data && data.canViewScreenshots);
       /* Published the same way hlWorkforceIsClockedIn already is, because the
          clock-in prompt lives outside this closure and asks rather than
          guesses. */
       window.hlWorkforceIsOwner = function(){ return isOwner; };
+      window.hlWorkforceCanViewScreenshots = function(){ return canViewScreenshots; };
       renderClockState();
       if (data && data.lastClosed) hlWfExplainClockOut(data.lastClosed);
 
@@ -6714,25 +6721,56 @@ function devTodoLoad(){
     var hrs = Math.round(mins / 60);
     return hrs + (hrs === 1 ? ' hr ago' : ' hrs ago');
   }
+  // Keyed by employeeId, filled by mgrMonRefresh -- the "EOD Today" badge's
+  // click handler reads from here instead of carrying the report text in an
+  // HTML attribute. That exact mistake (JSON.stringify() spliced into an
+  // onclick=""), on this same roster table, corrupted the whole page once
+  // already (2026-08-25, the Manage Whitelist button bug) -- not repeating it.
+  window.__mgrMonEodByEmployee = {};
+
   window.mgrMonRefresh = function(){
     var el = document.getElementById('mon-roster');
     if(!el) return;
     el.textContent = 'Loading…';
     return hlRequireSession(async function(sess){
+      // workforce_team rides along for the EOD compliance column
+      // (2026-08-26) -- same admin/superadmin-gated endpoint the Time Clock
+      // page's Team card already uses (summarySubmitted + the full report
+      // text), just not previously surfaced inside Monitor. No new backend:
+      // this merges two already-real, already-gated datasets by employeeId.
+      var teamPromise = fetch('/api/track1?resource=workforce_team', { headers:{ Authorization:'Bearer '+sess.access_token } })
+        .then(function(tr){ return tr.json(); }).catch(function(){ return null; });
       var r = await fetch('/api/track1?resource=monitor_review', { headers:{ Authorization:'Bearer '+sess.access_token } });
       var data = await r.json().catch(function(){return null;});
+      var teamData = await teamPromise;
       if(!data || data.ok===false){ el.textContent = (data&&data.error) || 'Could not load Monitor data.'; return; }
       var roster = data.roster || [];
       if(!roster.length){ el.innerHTML = '<div style="font-size:12px;color:var(--mut);font-weight:600">No one has set up HiveLogic Monitor yet — it shows up here the moment someone pairs the desktop app.</div>'; return; }
+      var eodByEmployee = {};
+      (teamData && teamData.ok ? teamData.team : []).forEach(function(t){ eodByEmployee[t.id] = t; });
+      window.__mgrMonEodByEmployee = eodByEmployee;
+      var canViewShots = !!(window.hlWorkforceCanViewScreenshots && window.hlWorkforceCanViewScreenshots());
       // Table layout (2026-08-25): STATUS (real online/offline from
       // "last heartbeat within the alive window", not just 'paired' vs
       // not), LAST SEEN, OS / AGENT (platform + version, honestly labeled
       // per the comment below), ACTIVITY LEVEL (real, bounded -- see
       // handleMonitorReview's activityByEmployee -- null/"—" when there's
-      // no open session or no samples yet, never guessed), and a View All
-      // button into the existing per-employee detail (mgrMonOpenEmployee).
+      // no open session or no samples yet, never guessed), EOD TODAY
+      // (2026-08-26, from workforce_team, above), and a View All button
+      // into the existing per-employee detail (mgrMonOpenEmployee) --
+      // disabled with an honest reason for anyone who isn't Superadmin/
+      // Owner, matching what the server itself will refuse.
       var th = function(label){ return '<th style="padding:8px 10px;font-size:9.5px;color:var(--mut);font-weight:800;letter-spacing:.05em;text-transform:uppercase;text-align:left;white-space:nowrap">'+label+'</th>'; };
-      var rows = roster.map(function(p){
+      // Missing-EOD rows float to the top -- "who hasn't submitted" should
+      // be scannable at a glance, not something you hunt for in a longer
+      // roster. Everyone else keeps the order the API already sent.
+      var rosterSorted = roster.slice().sort(function(a, b){
+        var aEod = eodByEmployee[a.employeeId], bEod = eodByEmployee[b.employeeId];
+        var aMissing = aEod ? !aEod.summarySubmitted : false;
+        var bMissing = bEod ? !bEod.summarySubmitted : false;
+        return (bMissing ? 1 : 0) - (aMissing ? 1 : 0);
+      });
+      var rows = rosterSorted.map(function(p){
         var vState = p.lastSeenAt ? (p.agentVersionState || 'unknown') : null;
         // The API has sent agentVersion/agentVersionState since the version
         // reporting shipped. 'unknown' is deliberately not 'stale': an agent
@@ -6755,17 +6793,59 @@ function devTodoLoad(){
         var bar = '<span style="display:inline-flex;gap:2px;vertical-align:middle;margin-right:6px">' + Array.from({length:segs}).map(function(_, i){
           return '<span style="width:8px;height:8px;border-radius:2px;background:' + (i < filled ? actColor : '#e3e5ec') + '"></span>';
         }).join('') + '</span>';
+        var nameForOnclick = String(p.name||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/"/g,'&quot;');
+        // EOD Today (2026-08-26): eodByEmployee comes from workforce_team,
+        // which only knows about people who have a profile row -- someone
+        // who has paired an agent but has no matching profile (shouldn't
+        // happen, but this table has been burned by an unguarded lookup
+        // before) shows honestly as "—", never guessed into either state.
+        var eod = eodByEmployee[p.employeeId];
+        var eodCell = !eod
+          ? '<span style="font-size:10.5px;color:var(--mut);font-weight:700">—</span>'
+          : eod.summarySubmitted
+            ? '<button onclick="mgrMonOpenEodReport(\''+p.employeeId+'\', \''+nameForOnclick+'\')" style="border:none;background:none;padding:0;cursor:pointer;font-size:10.5px;font-weight:800;color:var(--green);text-decoration:underline">Submitted</button>'
+            : '<span style="font-size:10.5px;font-weight:800;color:var(--red)">Missing</span>';
+        // View All (2026-08-26): disabled with the real reason for anyone
+        // who isn't Superadmin/Owner, matching what handleMonitorReview
+        // will refuse server-side -- an honest disabled button, not a
+        // clickable one that just 403s.
+        var viewAllBtn = canViewShots
+          ? '<button onclick="mgrMonOpenEmployee(\''+p.employeeId+'\', \''+nameForOnclick+'\')" style="border:1px solid var(--line);background:#fff;color:var(--ink,#161e2e);font-weight:800;font-size:10px;padding:5px 12px;border-radius:7px;cursor:pointer;font-family:Montserrat">View All</button>'
+          : '<button disabled title="Screenshots are restricted to Superadmin/Owner" style="border:1px solid var(--line);background:#f5f6fa;color:var(--mut);font-weight:800;font-size:10px;padding:5px 12px;border-radius:7px;cursor:not-allowed;font-family:Montserrat">View All</button>';
         return '<tr style="border-top:1px solid var(--line)">'
           + '<td style="padding:9px 10px;font-weight:800;font-size:12px;white-space:nowrap">'+ (window.esc?esc(p.name):p.name) +'</td>'
           + '<td style="padding:9px 10px;white-space:nowrap"><span style="display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:700;color:'+(p.online?'var(--green)':'var(--mut)')+'"><span style="width:7px;height:7px;border-radius:50%;background:'+(p.online?'var(--green)':'#c7cfdb')+'"></span>'+(p.online?'Online':'Offline')+'</span></td>'
           + '<td style="padding:9px 10px;font-size:11px;color:var(--mut);font-weight:600;white-space:nowrap">'+(p.lastSeenAt ? fmtRelative(p.lastSeenAt) : 'never')+'</td>'
           + '<td style="padding:9px 10px;font-size:11px;color:var(--mut);font-weight:600;white-space:nowrap" title="'+agentTitle.replace(/"/g,'&quot;')+'">'+agentLabel+'</td>'
           + '<td style="padding:9px 10px;white-space:nowrap">'+bar+'<span style="font-size:10.5px;font-weight:800;color:'+actColor+'">'+actLabel+'</span></td>'
-          + '<td style="padding:9px 10px;text-align:right;white-space:nowrap"><button onclick="mgrMonOpenEmployee(\''+p.employeeId+'\', \''+String(p.name||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/"/g,'&quot;')+'\')" style="border:1px solid var(--line);background:#fff;color:var(--ink,#161e2e);font-weight:800;font-size:10px;padding:5px 12px;border-radius:7px;cursor:pointer;font-family:Montserrat">View All</button></td>'
+          + '<td style="padding:9px 10px;white-space:nowrap">'+eodCell+'</td>'
+          + '<td style="padding:9px 10px;text-align:right;white-space:nowrap">'+viewAllBtn+'</td>'
           + '</tr>';
       }).join('');
-      el.innerHTML = '<table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr>'+th('User')+th('Status')+th('Last Seen')+th('OS / Agent')+th('Activity Level')+th('')+'</tr></thead><tbody>'+rows+'</tbody></table>';
+      el.innerHTML = '<table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr>'+th('User')+th('Status')+th('Last Seen')+th('OS / Agent')+th('Activity Level')+th('EOD Today')+th('')+'</tr></thead><tbody>'+rows+'</tbody></table>';
     }, function(){ el.textContent='Sign in to view this.'; });
+  };
+
+  // EOD report read-out (2026-08-26): the text is already sitting in
+  // window.__mgrMonEodByEmployee from the same fetch that built the roster
+  // (workforce_team's summary object) -- no second network call, opens
+  // instantly. Read-only: this is for an admin/owner to see what someone
+  // reported, not to edit it.
+  window.mgrMonOpenEodReport = function(employeeId, name){
+    var eod = window.__mgrMonEodByEmployee && window.__mgrMonEodByEmployee[employeeId];
+    var s = eod && eod.summary;
+    if (!s) { hlModal('📋 ' + name, '<div style="font-size:12px;color:#8b92a8;font-weight:600;padding:6px 0">No report on file.</div>'); return; }
+    var field = function(label, value){
+      return '<div style="margin-bottom:12px"><div style="font-size:9px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:#8b92a8;margin-bottom:3px">'+label+'</div>'
+        + '<div style="font-size:12.5px;color:var(--ink,#161e2e);white-space:pre-wrap">'+(window.esc?esc(value||'—'):(value||'—'))+'</div></div>';
+    };
+    var submittedLabel = s.submitted_at ? new Date(s.submitted_at).toLocaleString() : 'Unknown time';
+    hlModal('📋 ' + name + ' — EOD Report', '<div style="font-size:10.5px;color:var(--mut);font-weight:700;margin-bottom:14px">Submitted ' + submittedLabel + '</div>'
+      + field('Completed Tasks', s.tasks_completed)
+      + field('Plans for Tomorrow', s.plans_tomorrow)
+      + field('Issues / Blockers', s.blockers)
+      + field('Support Needed', s.support_needed)
+      + field('Hours Worked', s.hours_worked));
   };
 
   // "View All" (2026-08-25): a real popup (hlModal, the same modal utility

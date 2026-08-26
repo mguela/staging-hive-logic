@@ -206,7 +206,10 @@ test('the browser and the server cannot disagree about who the Owner is', () => 
   // hardcoding the same address -- two copies of one fact, which is the thing
   // that drifts. Now there is one copy: the server answers, the page is told.
   const api = fs.readFileSync('api/track1.js', 'utf8');
-  assert.match(api, /isOwner: await isOwner\(requester\),/,
+  // requesterIsOwner (2026-08-26) is computed once via isOwner(requester)
+  // and reused for both isOwner and canViewScreenshots.
+  assert.match(api, /const requesterIsOwner = await isOwner\(requester\);/);
+  assert.match(api, /isOwner: requesterIsOwner,/,
     'workforce_status must carry the answer to the page');
   assert.match(html, /isOwner = !!\(data && data\.isOwner\);/,
     'and the page must take it from there rather than deciding for itself');
