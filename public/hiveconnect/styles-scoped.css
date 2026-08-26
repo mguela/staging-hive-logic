@@ -1991,15 +1991,27 @@ html[data-theme="dark"] :is(#hiveconnect-root, .hc-embed).huddle-banner {
 :is(#hiveconnect-root, .hc-embed).sidebar.sidebar-messages-theme .channel-list li .unread { background: var(--red); color: #fff; }
 :is(#hiveconnect-root, .hc-embed) .sidebar.sidebar-messages-theme .presence-dot,
 :is(#hiveconnect-root, .hc-embed).sidebar.sidebar-messages-theme .presence-dot { border-color: var(--card); }
+:is(#hiveconnect-root, .hc-embed) .msg-search-row,
+:is(#hiveconnect-root, .hc-embed).msg-search-row { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; }
 :is(#hiveconnect-root, .hc-embed) .msg-search,
 :is(#hiveconnect-root, .hc-embed).msg-search { display: flex; align-items: center; gap: 7px; background: var(--canvas); border: 1.5px solid var(--line);
-  border-radius: 9px; padding: 7px 11px; margin-bottom: 14px; color: var(--mut); }
+  border-radius: 9px; padding: 7px 11px; flex: 1; min-width: 0; color: var(--mut); }
 :is(#hiveconnect-root, .hc-embed) .msg-search svg,
 :is(#hiveconnect-root, .hc-embed).msg-search svg { flex: none; }
 :is(#hiveconnect-root, .hc-embed) .msg-search input,
 :is(#hiveconnect-root, .hc-embed).msg-search input { flex: 1; min-width: 0; border: none; background: none; outline: none; font-family: var(--sans); font-size: 12.5px; color: var(--ink); }
 :is(#hiveconnect-root, .hc-embed) .msg-search input::placeholder,
 :is(#hiveconnect-root, .hc-embed).msg-search input::placeholder { color: var(--mut); }
+:is(#hiveconnect-root, .hc-embed) .msg-filter-btn,
+:is(#hiveconnect-root, .hc-embed).msg-filter-btn { appearance: none; -webkit-appearance: none; box-shadow: none; display: flex; align-items: center; gap: 5px;
+  background: none; border: 1.5px solid var(--line); border-radius: 9px; padding: 7px 10px; flex: none;
+  font-family: var(--sans); font-size: 11.5px; font-weight: 700; color: var(--steel-deep); cursor: pointer; white-space: nowrap; }
+:is(#hiveconnect-root, .hc-embed) .msg-filter-btn:hover,
+:is(#hiveconnect-root, .hc-embed).msg-filter-btn:hover { background: var(--steel-bg); color: var(--ink); border-color: var(--steel); }
+:is(#hiveconnect-root, .hc-embed) .msg-filter-caret,
+:is(#hiveconnect-root, .hc-embed).msg-filter-caret { font-size: 9px; opacity: .7; }
+:is(#hiveconnect-root, .hc-embed) .msg-filter-ct,
+:is(#hiveconnect-root, .hc-embed).msg-filter-ct { color: var(--steel-deep); font-weight: 800; }
 /* Give the main content area the same floating-card margin as the Messages
    sidebar (12px, 0 on the left since the sidebar's own right margin already
    makes that gap), so both columns float as matching cards. */

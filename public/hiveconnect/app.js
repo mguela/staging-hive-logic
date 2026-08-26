@@ -609,16 +609,74 @@ function renderSidebar() {
 const MSG_ORDER = [['team', 'Team'], ['vendor', 'Vendor'], ['client', 'Client'], ['external', 'External']];
 const msgOpen = { Team: true, Vendor: true, Client: true, External: true };
 let msgSearch = '';
+// Real, cross-device preference — same hcPref mechanism as Email's favourites
+// and this panel's own folder order. Muting a conversation writes here from
+// its context menu; nothing writes to it yet.
+function evMsgMuted() { return hcPrefJson('hcMsgMuted', 'hcMsgMuted', []) || []; }
+function evMsgSetMuted(ids) { hcPrefSet('hcMsgMuted', 'hcMsgMuted', ids); }
+// Drafts are the one deliberate device-local exception (an in-flight unsent
+// draft belongs to the device until sent) — same localStorage-only pattern
+// as Email's hcEmailDraft: keys. Nothing writes hcMsgDraft: keys yet; this
+// reads whatever's there so the Drafts filter/count are honest from day one.
+function evMsgDraftChannelIds() {
+  try { return Object.keys(localStorage).filter(k => k.startsWith('hcMsgDraft:') && (localStorage.getItem(k) || '').trim()).map(k => k.slice('hcMsgDraft:'.length)); }
+  catch (e) { return []; }
+}
+function evMsgDmChannels() { return [...channels.values()].filter(c => c.type === 'dm' && memberships.has(c.id) && dmOther(c)); }
+function evMsgMentionedChannelIds() {
+  const dmIds = new Set(evMsgDmChannels().map(c => c.id));
+  return new Set(notifications.filter(n => !n.read && n.kind === 'mention' && dmIds.has(n.channel_id)).map(n => n.channel_id));
+}
+function evMsgFilterCounts() {
+  const dms = evMsgDmChannels();
+  const muted = new Set(evMsgMuted());
+  const draftIds = new Set(evMsgDraftChannelIds());
+  const mentioned = evMsgMentionedChannelIds();
+  let unread = 0, drafts = 0, mutedCt = 0;
+  dms.forEach(c => {
+    if ((unreads.get(c.id) || 0) > 0) unread++;
+    if (draftIds.has(c.id)) drafts++;
+    if (muted.has(c.id)) mutedCt++;
+  });
+  return { unread, mentions: mentioned.size, drafts, muted: mutedCt };
+}
+let msgFilter = 'all';
+const MSG_FILTERS = [
+  ['all', 'All'],
+  ['unread', 'Unread'],
+  ['mentions', 'Unread @mentions'],
+  ['drafts', 'Drafts'],
+  ['muted', 'Muted'],
+];
+function evMsgFilterMenu(e) {
+  const counts = evMsgFilterCounts();
+  const countFor = (key) => key === 'unread' ? counts.unread : key === 'mentions' ? counts.mentions : key === 'drafts' ? counts.drafts : key === 'muted' ? counts.muted : null;
+  evMenu(e, MSG_FILTERS.map(([key, label]) => {
+    const n = countFor(key);
+    const html = esc(label) + (n != null && n > 0 ? ' <span class="msg-filter-ct">' + n + '</span>' : '') + (msgFilter === key ? ' ✓' : '');
+    return [html, () => { msgFilter = key; renderMessagesPanel(); }];
+  }));
+}
 function dmDisplayName(c) { return isGroupDM(c) ? dmGroupLabel(c) : (dmOther(c) ? dmOther(c).display_name : 'DM'); }
 function applyMsgFilter() {
   const q = (msgSearch || '').trim().toLowerCase();
+  const muted = new Set(evMsgMuted());
+  const draftIds = new Set(evMsgDraftChannelIds());
+  const mentioned = evMsgMentionedChannelIds();
   document.querySelectorAll('#panel-messages .ct-folder').forEach(folder => {
     let any = false;
     folder.querySelectorAll('.channel-list li[data-name]').forEach(row => {
-      const match = !q || (row.dataset.name || '').includes(q);
+      const id = row.dataset.id;
+      const nameMatch = !q || (row.dataset.name || '').includes(q);
+      let filterMatch = true;
+      if (msgFilter === 'unread') filterMatch = row.classList.contains('has-unread');
+      else if (msgFilter === 'mentions') filterMatch = mentioned.has(id);
+      else if (msgFilter === 'drafts') filterMatch = draftIds.has(id);
+      else if (msgFilter === 'muted') filterMatch = muted.has(id);
+      const match = nameMatch && filterMatch;
       row.style.display = match ? '' : 'none'; if (match) any = true;
     });
-    if (q) { folder.classList.remove('collapsed'); folder.style.display = any ? '' : 'none'; }
+    if (q || msgFilter !== 'all') { folder.classList.remove('collapsed'); folder.style.display = any ? '' : 'none'; }
     else { folder.style.display = ''; }
   });
 }
@@ -633,13 +691,21 @@ function renderMessagesPanel() {
   const nb = document.createElement('button'); nb.className = 'new-channel-cta'; nb.id = 'new-dm-btn';
   nb.innerHTML = '<span>＋</span> New message'; nb.onclick = (e) => { e.stopPropagation(); openCompose(); };
   el.appendChild(nb);
+  const headRow = document.createElement('div'); headRow.className = 'msg-search-row';
   const searchWrap = document.createElement('div'); searchWrap.className = 'msg-search';
   searchWrap.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>';
   const search = document.createElement('input'); search.id = 'msg-search'; search.type = 'text'; search.placeholder = 'Search People'; search.value = msgSearch;
   search.addEventListener('input', () => { msgSearch = search.value; applyMsgFilter(); });
   searchWrap.appendChild(search);
-  el.appendChild(searchWrap);
-  const dms = [...channels.values()].filter(c => c.type === 'dm' && memberships.has(c.id) && dmOther(c));
+  headRow.appendChild(searchWrap);
+  const filterBtn = document.createElement('button'); filterBtn.type = 'button'; filterBtn.className = 'msg-filter-btn';
+  const filterLabel = (MSG_FILTERS.find(([k]) => k === msgFilter) || MSG_FILTERS[0])[1];
+  filterBtn.innerHTML = '<span>' + esc(filterLabel) + '</span><span class="msg-filter-caret">▾</span>';
+  filterBtn.title = 'Filter conversations';
+  filterBtn.onclick = (e) => evMsgFilterMenu(e);
+  headRow.appendChild(filterBtn);
+  el.appendChild(headRow);
+  const dms = evMsgDmChannels();
   const grouped = { team: [], vendor: [], client: [], external: [] };
   dms.forEach(c => { const o = dmOther(c); const t = isGroupDM(c) ? 'team' : (o ? dmContactType(o.id) : 'team'); (grouped[t] || grouped.team).push(c); });
   // Always show all four folders (Team / Vendor / Client / External) — even when empty.
@@ -658,6 +724,7 @@ function renderMessagesPanel() {
     list.forEach(c => {
       const li = document.createElement('li');
       li.dataset.name = dmDisplayName(c).toLowerCase();
+      li.dataset.id = c.id;
       if (isGroupDM(c)) {
         const grp = partStrip(dmOtherProfiles(c), 2); grp.classList.add('dm-grp-av'); li.appendChild(grp);
         const nm = document.createElement('span'); nm.className = 'cname'; nm.textContent = dmGroupLabel(c); li.appendChild(nm);
