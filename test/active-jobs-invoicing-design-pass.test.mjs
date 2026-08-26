@@ -256,6 +256,40 @@ test('efListTable and eqRenderKpis keep every real id, class, and click handler 
   assert.match(kpiFn, /Value outstanding/);
 });
 
+// ---- Financial Intelligence (iframe sub-doc) -------------------------------
+// jomell: "keep going through the rest" -- this and the other data-hl63
+// iframe screens are real, self-contained sub-documents with their own
+// isolated :root CSS variables, so the reskin strategy here is a pure
+// token retint (no structural change, no fabricated data) rather than the
+// scoped-class-rule approach used on the main-page inline screens.
+
+const FIX_START = HTML.indexOf('<title>HiveLogic — Financial Intelligence</title>');
+const FIX_END = HTML.indexOf('</iframe></div>', FIX_START);
+const FIX = (() => {
+  assert.ok(FIX_START > -1, 'the Financial Intelligence iframe sub-doc should still be findable');
+  return HTML.slice(FIX_START, FIX_END);
+})();
+
+test('the Financial Intelligence :root tokens retint to the mockup\'s blue/green/red/amber, with no other :root block on the page affected', () => {
+  assert.match(FIX, /--gold-deep:#2563eb;/);
+  assert.match(FIX, /--red:#dc2626; --red-bg:#fdecec;/);
+  assert.match(FIX, /--green:#16a34a; --green-bg:#e6f9ee;/);
+  assert.match(FIX, /--amber:#b45309;/);
+  // every other iframe sub-doc keeps the original shared palette untouched
+  const otherRootBlocks = (HTML.match(/--gold:#748a9e; --gold-deep:#59718a; --gold-bg:#e9eff4;/g) || []).length;
+  assert.ok(otherRootBlocks >= 20, 'expected the untouched original palette to still appear in the many other iframe sub-docs');
+});
+
+test('the Financial Intelligence real ids, resource calls, and render functions are untouched by the retint -- only :root hex values changed', () => {
+  for (const id of ['cashBridge', 'bankAccounts', 'cashNotConn', 'commitCal', 'leaksReal', 'ownerCost', 'fcWeeks']) {
+    assert.match(FIX, new RegExp("getElementById\\('" + id + "'\\)"));
+  }
+  assert.match(FIX, /resource=cash/);
+  assert.match(FIX, /resource=leaks/);
+  assert.match(FIX, /function loadCash\(\)/);
+  assert.match(FIX, /function fixFetch\(/);
+});
+
 test('every real nav id and its onclick handler survive the reskin untouched', () => {
   const start = HTML.indexOf('<aside class="rail" role="navigation" aria-label="Primary">');
   const end = HTML.indexOf('</aside>', start);
