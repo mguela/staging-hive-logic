@@ -4830,7 +4830,15 @@ async function emailSignIn() {
     if (r && r.account) { evActive = r.account; evAllInboxes = false; evUserPickedMailbox = true; await hcLinkMailbox(r.account); }
     evAccounts = app.getAllAccounts();
     openEmailTab();
-  } catch (e) { evToast('Sign-in cancelled or failed.'); }
+  } catch (e) {
+    // A bare "cancelled or failed" toast for every possible MSAL failure
+    // (redirect_uri mismatch, popup blocked, bad clientId, actual user
+    // cancel...) makes every one of those look the same. Surface the real
+    // reason so it's diagnosable from the toast alone.
+    const msg = (e && (e.errorMessage || e.message)) || String(e) || 'unknown error';
+    evToast('Sign-in failed: ' + msg.slice(0, 180));
+    console.error('[HiveConnect] Microsoft sign-in failed:', e);
+  }
 }
 async function emailRemoveAccount(acct) {
   if (acct && acct.provider === 'imap') {
