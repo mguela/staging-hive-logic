@@ -1991,27 +1991,56 @@ html[data-theme="dark"] :is(#hiveconnect-root, .hc-embed).huddle-banner {
 :is(#hiveconnect-root, .hc-embed).sidebar.sidebar-messages-theme .channel-list li .unread { background: var(--red); color: #fff; }
 :is(#hiveconnect-root, .hc-embed) .sidebar.sidebar-messages-theme .presence-dot,
 :is(#hiveconnect-root, .hc-embed).sidebar.sidebar-messages-theme .presence-dot { border-color: var(--card); }
-:is(#hiveconnect-root, .hc-embed) .msg-search-row,
-:is(#hiveconnect-root, .hc-embed).msg-search-row { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; }
+:is(#hiveconnect-root, .hc-embed) .msg-head-icons,
+:is(#hiveconnect-root, .hc-embed).msg-head-icons { display: flex; align-items: center; justify-content: flex-end; gap: 4px; margin-bottom: 10px; }
+:is(#hiveconnect-root, .hc-embed) .msg-head-ic,
+:is(#hiveconnect-root, .hc-embed).msg-head-ic { appearance: none; -webkit-appearance: none; box-shadow: none; background: none; border: none;
+  color: var(--mut); padding: 6px; border-radius: 8px; cursor: pointer; display: flex; }
+:is(#hiveconnect-root, .hc-embed) .msg-head-ic:hover,
+:is(#hiveconnect-root, .hc-embed).msg-head-ic:hover { background: var(--steel-bg); color: var(--ink); }
 :is(#hiveconnect-root, .hc-embed) .msg-search,
 :is(#hiveconnect-root, .hc-embed).msg-search { display: flex; align-items: center; gap: 7px; background: var(--canvas); border: 1.5px solid var(--line);
-  border-radius: 9px; padding: 7px 11px; flex: 1; min-width: 0; color: var(--mut); }
+  border-radius: 9px; padding: 7px 11px; color: var(--mut); margin-bottom: 8px; }
 :is(#hiveconnect-root, .hc-embed) .msg-search svg,
 :is(#hiveconnect-root, .hc-embed).msg-search svg { flex: none; }
 :is(#hiveconnect-root, .hc-embed) .msg-search input,
 :is(#hiveconnect-root, .hc-embed).msg-search input { flex: 1; min-width: 0; border: none; background: none; outline: none; font-family: var(--sans); font-size: 12.5px; color: var(--ink); }
 :is(#hiveconnect-root, .hc-embed) .msg-search input::placeholder,
 :is(#hiveconnect-root, .hc-embed).msg-search input::placeholder { color: var(--mut); }
-:is(#hiveconnect-root, .hc-embed) .msg-filter-btn,
-:is(#hiveconnect-root, .hc-embed).msg-filter-btn { appearance: none; -webkit-appearance: none; box-shadow: none; display: flex; align-items: center; gap: 5px;
-  background: none; border: 1.5px solid var(--line); border-radius: 9px; padding: 7px 10px; flex: none;
-  font-family: var(--sans); font-size: 11.5px; font-weight: 700; color: var(--steel-deep); cursor: pointer; white-space: nowrap; }
-:is(#hiveconnect-root, .hc-embed) .msg-filter-btn:hover,
-:is(#hiveconnect-root, .hc-embed).msg-filter-btn:hover { background: var(--steel-bg); color: var(--ink); border-color: var(--steel); }
-:is(#hiveconnect-root, .hc-embed) .msg-filter-caret,
-:is(#hiveconnect-root, .hc-embed).msg-filter-caret { font-size: 9px; opacity: .7; }
+:is(#hiveconnect-root, .hc-embed) .msg-filter-row,
+:is(#hiveconnect-root, .hc-embed).msg-filter-row { display: flex; align-items: center; justify-content: flex-end; gap: 12px; margin-bottom: 14px; }
+:is(#hiveconnect-root, .hc-embed) .msg-filter-quick,
+:is(#hiveconnect-root, .hc-embed).msg-filter-quick { appearance: none; -webkit-appearance: none; box-shadow: none; background: none; border: none;
+  font-family: var(--sans); font-size: 11px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase;
+  color: var(--mut); cursor: pointer; padding: 2px; }
+:is(#hiveconnect-root, .hc-embed) .msg-filter-quick:hover,
+:is(#hiveconnect-root, .hc-embed).msg-filter-quick:hover { color: var(--ink); }
+:is(#hiveconnect-root, .hc-embed) .msg-filter-quick.active,
+:is(#hiveconnect-root, .hc-embed).msg-filter-quick.active { color: var(--steel-deep); }
+:is(#hiveconnect-root, .hc-embed) .msg-filter-chev,
+:is(#hiveconnect-root, .hc-embed).msg-filter-chev { appearance: none; -webkit-appearance: none; box-shadow: none; background: none; border: none;
+  color: var(--mut); cursor: pointer; font-size: 10px; padding: 2px; }
+:is(#hiveconnect-root, .hc-embed) .msg-filter-chev:hover,
+:is(#hiveconnect-root, .hc-embed).msg-filter-chev:hover { color: var(--ink); }
 :is(#hiveconnect-root, .hc-embed) .msg-filter-ct,
 :is(#hiveconnect-root, .hc-embed).msg-filter-ct { color: var(--steel-deep); font-weight: 800; }
+:is(#hiveconnect-root, .hc-embed) .ct-head-ic,
+:is(#hiveconnect-root, .hc-embed).ct-head-ic { flex: none; width: 15px; display: flex; align-items: center; justify-content: center; color: var(--mut); font-size: 12px; }
+:is(#hiveconnect-root, .hc-embed) .ct-head-ic svg,
+:is(#hiveconnect-root, .hc-embed).ct-head-ic svg { display: block; }
+:is(#hiveconnect-root, .hc-embed) .msg-sec-add,
+:is(#hiveconnect-root, .hc-embed).msg-sec-add { flex: none; font-size: 13px; font-weight: 800; line-height: 1; color: var(--mut); cursor: pointer; padding: 3px 5px; border-radius: 5px; }
+:is(#hiveconnect-root, .hc-embed) .msg-sec-add:hover,
+:is(#hiveconnect-root, .hc-embed).msg-sec-add:hover { background: var(--steel-bg); color: var(--ink); }
+:is(#hiveconnect-root, .hc-embed) .dm-fav-btn,
+:is(#hiveconnect-root, .hc-embed).dm-fav-btn { appearance: none; -webkit-appearance: none; box-shadow: none; background: none; border: none;
+  flex: none; font-size: 12px; color: var(--mut); cursor: pointer; padding: 2px; opacity: 0; transition: opacity .12s; }
+:is(#hiveconnect-root, .hc-embed) .channel-list li:hover .dm-fav-btn,
+:is(#hiveconnect-root, .hc-embed).channel-list li:hover .dm-fav-btn,
+:is(#hiveconnect-root, .hc-embed) .dm-fav-btn.on,
+:is(#hiveconnect-root, .hc-embed).dm-fav-btn.on { opacity: 1; }
+:is(#hiveconnect-root, .hc-embed) .dm-fav-btn.on,
+:is(#hiveconnect-root, .hc-embed).dm-fav-btn.on { color: var(--gold); }
 /* Give the main content area the same floating-card margin as the Messages
    sidebar (12px, 0 on the left since the sidebar's own right margin already
    makes that gap), so both columns float as matching cards. */

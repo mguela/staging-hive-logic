@@ -1359,18 +1359,33 @@ html[data-theme="dark"] .huddle-banner {
 }
 .sidebar.sidebar-messages-theme .channel-list li .unread { background: var(--red); color: #fff; }
 .sidebar.sidebar-messages-theme .presence-dot { border-color: var(--card); }
-.msg-search-row { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; }
+.msg-head-icons { display: flex; align-items: center; justify-content: flex-end; gap: 4px; margin-bottom: 10px; }
+.msg-head-ic { appearance: none; -webkit-appearance: none; box-shadow: none; background: none; border: none;
+  color: var(--mut); padding: 6px; border-radius: 8px; cursor: pointer; display: flex; }
+.msg-head-ic:hover { background: var(--steel-bg); color: var(--ink); }
 .msg-search { display: flex; align-items: center; gap: 7px; background: var(--canvas); border: 1.5px solid var(--line);
-  border-radius: 9px; padding: 7px 11px; flex: 1; min-width: 0; color: var(--mut); }
+  border-radius: 9px; padding: 7px 11px; color: var(--mut); margin-bottom: 8px; }
 .msg-search svg { flex: none; }
 .msg-search input { flex: 1; min-width: 0; border: none; background: none; outline: none; font-family: var(--sans); font-size: 12.5px; color: var(--ink); }
 .msg-search input::placeholder { color: var(--mut); }
-.msg-filter-btn { appearance: none; -webkit-appearance: none; box-shadow: none; display: flex; align-items: center; gap: 5px;
-  background: none; border: 1.5px solid var(--line); border-radius: 9px; padding: 7px 10px; flex: none;
-  font-family: var(--sans); font-size: 11.5px; font-weight: 700; color: var(--steel-deep); cursor: pointer; white-space: nowrap; }
-.msg-filter-btn:hover { background: var(--steel-bg); color: var(--ink); border-color: var(--steel); }
-.msg-filter-caret { font-size: 9px; opacity: .7; }
+.msg-filter-row { display: flex; align-items: center; justify-content: flex-end; gap: 12px; margin-bottom: 14px; }
+.msg-filter-quick { appearance: none; -webkit-appearance: none; box-shadow: none; background: none; border: none;
+  font-family: var(--sans); font-size: 11px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase;
+  color: var(--mut); cursor: pointer; padding: 2px; }
+.msg-filter-quick:hover { color: var(--ink); }
+.msg-filter-quick.active { color: var(--steel-deep); }
+.msg-filter-chev { appearance: none; -webkit-appearance: none; box-shadow: none; background: none; border: none;
+  color: var(--mut); cursor: pointer; font-size: 10px; padding: 2px; }
+.msg-filter-chev:hover { color: var(--ink); }
 .msg-filter-ct { color: var(--steel-deep); font-weight: 800; }
+.ct-head-ic { flex: none; width: 15px; display: flex; align-items: center; justify-content: center; color: var(--mut); font-size: 12px; }
+.ct-head-ic svg { display: block; }
+.msg-sec-add { flex: none; font-size: 13px; font-weight: 800; line-height: 1; color: var(--mut); cursor: pointer; padding: 3px 5px; border-radius: 5px; }
+.msg-sec-add:hover { background: var(--steel-bg); color: var(--ink); }
+.dm-fav-btn { appearance: none; -webkit-appearance: none; box-shadow: none; background: none; border: none;
+  flex: none; font-size: 12px; color: var(--mut); cursor: pointer; padding: 2px; opacity: 0; transition: opacity .12s; }
+.channel-list li:hover .dm-fav-btn, .dm-fav-btn.on { opacity: 1; }
+.dm-fav-btn.on { color: var(--gold); }
 /* Give the main content area the same floating-card margin as the Messages
    sidebar (12px, 0 on the left since the sidebar's own right margin already
    makes that gap), so both columns float as matching cards. */

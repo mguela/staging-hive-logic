@@ -605,10 +605,18 @@ function renderSidebar() {
   if (typeof navTab !== 'undefined' && navTab === 'huddles') renderHuddlesPanel();
 }
 
-// ---- Messages panel: DMs organized into Team / Vendor / Client / External folders ----
-const MSG_ORDER = [['team', 'Team'], ['vendor', 'Vendor'], ['client', 'Client'], ['external', 'External']];
-const msgOpen = { Team: true, Vendor: true, Client: true, External: true };
+// ---- Messages panel: Favourites / Direct Messages / Teams ----
+const msgSecOpen = { favorites: true, dms: true, teams: true };
 let msgSearch = '';
+// Real, cross-device preference (same hcPref mechanism as Email's
+// favourites) -- not device-local, not fake. Toggled from each DM row's
+// hover-reveal star.
+function evMsgFavorites() { return hcPrefJson('hcMsgFavorites', 'hcMsgFavorites', []) || []; }
+function evMsgSetFavorites(ids) { hcPrefSet('hcMsgFavorites', 'hcMsgFavorites', ids); }
+function evMsgToggleFavorite(id) {
+  const cur = evMsgFavorites();
+  evMsgSetFavorites(cur.includes(id) ? cur.filter(x => x !== id) : cur.concat([id]));
+}
 // Real, cross-device preference — same hcPref mechanism as Email's favourites
 // and this panel's own folder order. Muting a conversation writes here from
 // its context menu; nothing writes to it yet.
@@ -651,11 +659,72 @@ const MSG_FILTERS = [
 function evMsgFilterMenu(e) {
   const counts = evMsgFilterCounts();
   const countFor = (key) => key === 'unread' ? counts.unread : key === 'mentions' ? counts.mentions : key === 'drafts' ? counts.drafts : key === 'muted' ? counts.muted : null;
-  evMenu(e, MSG_FILTERS.map(([key, label]) => {
+  // "All" and "Unread" already have their own quick-access buttons beside
+  // the search box -- the dropdown covers the rest.
+  evMenu(e, MSG_FILTERS.filter(([key]) => key !== 'all').map(([key, label]) => {
     const n = countFor(key);
     const html = esc(label) + (n != null && n > 0 ? ' <span class="msg-filter-ct">' + n + '</span>' : '') + (msgFilter === key ? ' ✓' : '');
     return [html, () => { msgFilter = key; renderMessagesPanel(); }];
   }));
+}
+// One collapsible section (Favourites / Direct Messages / Teams), reusing
+// the exact same .ct-folder/.ct-head/.ct-chev/.ct-body classes and styling
+// already polished for the folder headers this session -- just with an
+// icon slot and an optional "+" added.
+function evMsgSection(iconHtml, label, key, opts) {
+  opts = opts || {};
+  const folder = document.createElement('div'); folder.className = 'ct-folder' + (msgSecOpen[key] ? '' : ' collapsed');
+  const head = document.createElement('button'); head.type = 'button'; head.className = 'ct-head';
+  const ic = document.createElement('span'); ic.className = 'ct-head-ic'; ic.innerHTML = iconHtml; head.appendChild(ic);
+  const fn = document.createElement('span'); fn.className = 'ct-fname'; fn.textContent = label; head.appendChild(fn);
+  if (opts.count) { const fc = document.createElement('span'); fc.className = 'ct-fcount'; fc.textContent = opts.count; head.appendChild(fc); }
+  if (opts.onAdd) {
+    const add = document.createElement('span'); add.className = 'msg-sec-add'; add.textContent = '+'; add.title = opts.addTitle || 'Add';
+    add.onclick = (e) => { e.stopPropagation(); opts.onAdd(e); };
+    head.appendChild(add);
+  }
+  const chev = document.createElement('span'); chev.className = 'ct-chev'; chev.textContent = '▾'; head.appendChild(chev);
+  head.onclick = () => { const col = folder.classList.toggle('collapsed'); msgSecOpen[key] = !col; };
+  folder.appendChild(head);
+  const body = document.createElement('div'); body.className = 'ct-body';
+  const ul = document.createElement('ul'); ul.className = 'channel-list';
+  body.appendChild(ul); folder.appendChild(body);
+  return { folder, ul };
+}
+function evMsgMoreMenu(e) {
+  evMenu(e, [['✓ Mark all as read', () => evMsgMarkAllRead()]]);
+}
+function evMsgMarkAllRead() {
+  evMsgDmChannels().forEach(c => { if ((unreads.get(c.id) || 0) > 0) markRead(c.id); });
+  renderMessagesPanel();
+}
+function buildDmRow(c) {
+  const li = document.createElement('li');
+  li.dataset.name = dmDisplayName(c).toLowerCase();
+  li.dataset.id = c.id;
+  if (isGroupDM(c)) {
+    const grp = partStrip(dmOtherProfiles(c), 2); grp.classList.add('dm-grp-av'); li.appendChild(grp);
+    const nm = document.createElement('span'); nm.className = 'cname'; nm.textContent = dmGroupLabel(c); li.appendChild(nm);
+  } else {
+    const other = dmOther(c);
+    li.appendChild(avatarWithPresence(other));
+    const nm = document.createElement('span'); nm.className = 'cname'; nm.textContent = other ? other.display_name : 'DM'; li.appendChild(nm);
+  }
+  const unread = unreads.get(c.id) || 0;
+  if (c.id === currentChannelId) li.classList.add('active');
+  if (unread > 0) { li.classList.add('has-unread'); const b = document.createElement('span'); b.className = 'unread'; b.textContent = unread; li.appendChild(b); }
+  const favOn = evMsgFavorites().includes(c.id);
+  const favBtn = document.createElement('button'); favBtn.type = 'button'; favBtn.className = 'dm-fav-btn' + (favOn ? ' on' : '');
+  favBtn.title = favOn ? 'Remove from favourites' : 'Add to favourites'; favBtn.textContent = favOn ? '★' : '☆';
+  favBtn.onclick = (e) => { e.stopPropagation(); evMsgToggleFavorite(c.id); renderMessagesPanel(); };
+  li.appendChild(favBtn);
+  const hv = document.createElement('span'); hv.className = 'dm-hv'; hv.title = 'Start HiveVideo';
+  hv.innerHTML = '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>';
+  hv.onclick = async (e) => { e.stopPropagation(); if (currentChannelId !== c.id) await openChannel(c.id); joinHuddle(c.id); };
+  li.appendChild(hv);
+  if (huddleParticipants(c.id).length) { const h = document.createElement('span'); h.className = 'huddle-badge'; h.textContent = '🎧'; li.appendChild(h); }
+  li.onclick = () => openChannel(c.id);
+  return li;
 }
 function dmDisplayName(c) { return isGroupDM(c) ? dmGroupLabel(c) : (dmOther(c) ? dmOther(c).display_name : 'DM'); }
 function applyMsgFilter() {
@@ -680,73 +749,73 @@ function applyMsgFilter() {
     else { folder.style.display = ''; }
   });
 }
-function dmContactType(otherId) {
-  const c = contactsData.find(x => x.profile_id === otherId);
-  if (c) return c.contact_type;
-  const p = profiles.get(otherId);
-  return (p && p.role === 'guest') ? 'external' : 'team';
-}
+const MSG_ICON_STAR = '★';
+const MSG_ICON_PERSON = '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a8 8 0 0116 0v1"/></svg>';
+const MSG_ICON_TEAMS = '<svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor"><circle cx="6" cy="6" r="2.6"/><circle cx="18" cy="6" r="2.6"/><circle cx="6" cy="18" r="2.6"/><circle cx="18" cy="18" r="2.6"/></svg>';
 function renderMessagesPanel() {
   const el = $('panel-messages'); if (!el) return; el.innerHTML = '';
-  const nb = document.createElement('button'); nb.className = 'new-channel-cta'; nb.id = 'new-dm-btn';
-  nb.innerHTML = '<span>＋</span> New message'; nb.onclick = (e) => { e.stopPropagation(); openCompose(); };
-  el.appendChild(nb);
-  const headRow = document.createElement('div'); headRow.className = 'msg-search-row';
+
+  // Header icon row: only real actions -- compose (already existed as the
+  // big "+ New message" CTA) and a "..." menu with a real action (mark all
+  // read). No folder/snooze icons: this app has no message-folders or
+  // snoozed-message concept to back them.
+  const headIcons = document.createElement('div'); headIcons.className = 'msg-head-icons';
+  const composeIc = document.createElement('button'); composeIc.type = 'button'; composeIc.className = 'msg-head-ic'; composeIc.title = 'New message';
+  composeIc.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 114 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>';
+  composeIc.onclick = (e) => { e.stopPropagation(); openCompose(); };
+  headIcons.appendChild(composeIc);
+  const moreIc = document.createElement('button'); moreIc.type = 'button'; moreIc.className = 'msg-head-ic'; moreIc.title = 'More';
+  moreIc.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg>';
+  moreIc.onclick = (e) => evMsgMoreMenu(e);
+  headIcons.appendChild(moreIc);
+  el.appendChild(headIcons);
+
+  // Search (own row) + All/Unread quick filter + chevron for the rest.
   const searchWrap = document.createElement('div'); searchWrap.className = 'msg-search';
   searchWrap.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>';
-  const search = document.createElement('input'); search.id = 'msg-search'; search.type = 'text'; search.placeholder = 'Search People'; search.value = msgSearch;
+  const search = document.createElement('input'); search.id = 'msg-search'; search.type = 'text'; search.placeholder = 'Search conversations'; search.value = msgSearch;
   search.addEventListener('input', () => { msgSearch = search.value; applyMsgFilter(); });
   searchWrap.appendChild(search);
-  headRow.appendChild(searchWrap);
-  const filterBtn = document.createElement('button'); filterBtn.type = 'button'; filterBtn.className = 'msg-filter-btn';
-  const filterLabel = (MSG_FILTERS.find(([k]) => k === msgFilter) || MSG_FILTERS[0])[1];
-  filterBtn.innerHTML = '<span>' + esc(filterLabel) + '</span><span class="msg-filter-caret">▾</span>';
-  filterBtn.title = 'Filter conversations';
-  filterBtn.onclick = (e) => evMsgFilterMenu(e);
-  headRow.appendChild(filterBtn);
-  el.appendChild(headRow);
-  const dms = evMsgDmChannels();
-  const grouped = { team: [], vendor: [], client: [], external: [] };
-  dms.forEach(c => { const o = dmOther(c); const t = isGroupDM(c) ? 'team' : (o ? dmContactType(o.id) : 'team'); (grouped[t] || grouped.team).push(c); });
-  // Always show all four folders (Team / Vendor / Client / External) — even when empty.
-  applyStoredOrder(MSG_ORDER, x => x[0], 'hcMsgOrder').forEach(([type, label]) => {
-    const list = (grouped[type] || []).sort((a, b) => (dmLastActivity(b) || '').localeCompare(dmLastActivity(a) || ''));
-    const folder = document.createElement('div'); folder.className = 'ct-folder' + (msgOpen[label] ? '' : ' collapsed'); folder.dataset.type = type; folder.dataset.folder = label;
-    const head = document.createElement('button'); head.className = 'ct-head';
-    const chev = document.createElement('span'); chev.className = 'ct-chev'; chev.textContent = '▾'; head.appendChild(chev);
-    const fn = document.createElement('span'); fn.className = 'ct-fname'; fn.textContent = label; head.appendChild(fn);
-    const fc = document.createElement('span'); fc.className = 'ct-fcount'; fc.textContent = list.length; fc.title = list.length + (list.length === 1 ? ' contact' : ' contacts'); head.appendChild(fc);
-    head.onclick = () => { const col = folder.classList.toggle('collapsed'); msgOpen[label] = !col; };
-    folder.appendChild(head);
-    const body = document.createElement('div'); body.className = 'ct-body';
-    const ul = document.createElement('ul'); ul.className = 'channel-list';
-    if (!list.length) { const em = document.createElement('div'); em.className = 'ct-empty'; em.textContent = 'No conversations yet'; ul.appendChild(em); }
-    list.forEach(c => {
-      const li = document.createElement('li');
-      li.dataset.name = dmDisplayName(c).toLowerCase();
-      li.dataset.id = c.id;
-      if (isGroupDM(c)) {
-        const grp = partStrip(dmOtherProfiles(c), 2); grp.classList.add('dm-grp-av'); li.appendChild(grp);
-        const nm = document.createElement('span'); nm.className = 'cname'; nm.textContent = dmGroupLabel(c); li.appendChild(nm);
-      } else {
-        const other = dmOther(c);
-        li.appendChild(avatarWithPresence(other));
-        const nm = document.createElement('span'); nm.className = 'cname'; nm.textContent = other ? other.display_name : 'DM'; li.appendChild(nm);
-      }
-      const unread = unreads.get(c.id) || 0;
-      if (c.id === currentChannelId) li.classList.add('active');
-      if (unread > 0) { li.classList.add('has-unread'); const b = document.createElement('span'); b.className = 'unread'; b.textContent = unread; li.appendChild(b); }
-      const hv = document.createElement('span'); hv.className = 'dm-hv'; hv.title = 'Start HiveVideo';
-      hv.innerHTML = '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>';
-      hv.onclick = async (e) => { e.stopPropagation(); if (currentChannelId !== c.id) await openChannel(c.id); joinHuddle(c.id); };
-      li.appendChild(hv);
-      if (huddleParticipants(c.id).length) { const h = document.createElement('span'); h.className = 'huddle-badge'; h.textContent = '🎧'; li.appendChild(h); }
-      li.onclick = () => openChannel(c.id);
-      ul.appendChild(li);
-    });
-    body.appendChild(ul); folder.appendChild(body); el.appendChild(folder);
-  });
-  enableFolderDrag(el, '.ct-head', '.ct-folder', 'type', 'hcMsgOrder');
+  el.appendChild(searchWrap);
+  const filterRow = document.createElement('div'); filterRow.className = 'msg-filter-row';
+  const counts = evMsgFilterCounts();
+  const allBtn = document.createElement('button'); allBtn.type = 'button'; allBtn.className = 'msg-filter-quick' + (msgFilter === 'all' ? ' active' : '');
+  allBtn.textContent = 'All'; allBtn.onclick = () => { msgFilter = 'all'; renderMessagesPanel(); };
+  filterRow.appendChild(allBtn);
+  const unreadBtn = document.createElement('button'); unreadBtn.type = 'button'; unreadBtn.className = 'msg-filter-quick' + (msgFilter === 'unread' ? ' active' : '');
+  unreadBtn.textContent = 'Unread' + (counts.unread ? ' (' + counts.unread + ')' : '');
+  unreadBtn.onclick = () => { msgFilter = 'unread'; renderMessagesPanel(); };
+  filterRow.appendChild(unreadBtn);
+  const filterChev = document.createElement('button'); filterChev.type = 'button'; filterChev.className = 'msg-filter-chev'; filterChev.innerHTML = '▾'; filterChev.title = 'More filters';
+  filterChev.onclick = (e) => evMsgFilterMenu(e);
+  filterRow.appendChild(filterChev);
+  el.appendChild(filterRow);
+
+  // Favourites
+  const favIds = evMsgFavorites();
+  const favChannels = favIds.map(id => channels.get(id)).filter(c => c && c.type === 'dm' && memberships.has(c.id) && dmOther(c))
+    .sort((a, b) => (dmLastActivity(b) || '').localeCompare(dmLastActivity(a) || ''));
+  const fav = evMsgSection(MSG_ICON_STAR, 'FAVOURITES', 'favorites', {});
+  if (!favChannels.length) { const em = document.createElement('div'); em.className = 'ct-empty'; em.textContent = 'No favourites yet'; fav.ul.appendChild(em); }
+  favChannels.forEach(c => fav.ul.appendChild(buildDmRow(c)));
+  el.appendChild(fav.folder);
+
+  // Direct Messages (flat -- contact-type folders were dropped in favor of
+  // matching the reference's single-list structure)
+  const dms = evMsgDmChannels().sort((a, b) => (dmLastActivity(b) || '').localeCompare(dmLastActivity(a) || ''));
+  const dmSec = evMsgSection(MSG_ICON_PERSON, 'DIRECT MESSAGES', 'dms', { onAdd: () => openCompose(), addTitle: 'New message' });
+  if (!dms.length) { const em = document.createElement('div'); em.className = 'ct-empty'; em.textContent = 'No conversations yet'; dmSec.ul.appendChild(em); }
+  dms.forEach(c => dmSec.ul.appendChild(buildDmRow(c)));
+  el.appendChild(dmSec.folder);
+
+  // Teams -- the user's real non-DM channels (same data as the Channels
+  // tab), reusing channelRow() as-is rather than duplicating its logic.
+  const teamChannels = [...channels.values()].filter(c => c.type !== 'dm' && memberships.has(c.id) && !c.archived);
+  const teamSec = evMsgSection(MSG_ICON_TEAMS, 'TEAMS', 'teams', { onAdd: () => { const b = $('new-channel-btn'); if (b) b.click(); }, addTitle: 'New channel' });
+  if (!teamChannels.length) { const em = document.createElement('div'); em.className = 'ct-empty'; em.textContent = 'No teams yet'; teamSec.ul.appendChild(em); }
+  teamChannels.forEach(c => { const li = channelRow(c); li.dataset.name = (c.name || '').toLowerCase(); li.dataset.id = c.id; teamSec.ul.appendChild(li); });
+  el.appendChild(teamSec.folder);
+
   applyMsgFilter();
 }
 function hexA(hex, a) {
