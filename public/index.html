@@ -19,7 +19,7 @@
  * monitor_my_status poll, so "is this person running current code" is a
  * question the database can answer. Do not hand-edit it -- run
  * `node scripts/stamp-page-build.mjs`. */
-var HL_PAGE_BUILD = '746e44c13aa4bdb6';
+var HL_PAGE_BUILD = '211f8798508c9b44';
 </script>
 <script>
 (function () { // HL_FETCH_DEDUPE_V1 — single wrapper: GET /api/ dedupe + 60s cache + write-invalidate
@@ -6593,6 +6593,21 @@ function devTodoLoad(){
   </div>
 </div>
 <div id="view-jobs" style="display:none">
+    <!-- 2026-08-26, jomell: "Start with Active Jobs and Invoicing & AR" --
+         design-language pass from the coworker's Figma Make redesign. Scoped
+         to #view-jobs only (.kpi/.pcol/.pcard are shared kanban classes also
+         used by Estimates' board), so nothing outside this view is touched. -->
+    <style>
+      #view-jobs .kpis{display:flex;gap:14px}
+      #view-jobs .kpi{flex:1;display:flex;align-items:center;gap:14px;background:#fff;border:1px solid var(--line);border-radius:12px;padding:16px 18px;box-shadow:0 1px 4px rgba(22,30,46,.06)}
+      #view-jobs .kpi-ic{width:44px;height:44px;border-radius:12px;display:grid;place-items:center;flex-shrink:0}
+      #view-jobs .kpi .k{font-size:9px;letter-spacing:.06em}
+      #view-jobs .kpi .v{font-family:var(--sans);font-size:22px;font-weight:900;margin-top:2px}
+      #view-jobs .kpi .s{margin-top:1px}
+      #view-jobs .pcol{background:#f7f8fb;border-color:#eceef4}
+      #view-jobs .pcard{border-radius:10px}
+      #view-jobs .pcard:hover{box-shadow:0 4px 12px rgba(22,30,46,.10)}
+    </style>
     <div class="lsent" style="display:flex;align-items:flex-start;gap:20px">
       <div style="flex:1">
       <div class="vtabs" style="display:flex;align-items:center">
@@ -6616,10 +6631,10 @@ function devTodoLoad(){
     </div>
 
     <div class="kpis">
-      <div class="kpi"><div class="k">ACTIVE PIPELINE VALUE</div><div class="v" id="jwb-kpi-value">&#8212;</div><div class="s" id="jwb-kpi-value-sub">Loading&#8230;</div></div>
-      <div class="kpi"><div class="k">ACTIVE JOBS</div><div class="v" id="jwb-kpi-count">&#8212;</div><div class="s">Not archived</div></div>
-      <div class="kpi"><div class="k">AWAITING DEPOSIT</div><div class="v" id="jwb-kpi-deposit">&#8212;</div><div class="s">Blocking production start</div></div>
-      <div class="kpi"><div class="k">ON HOLD</div><div class="v" id="jwb-kpi-hold">&#8212;</div><div class="s">Needs a decision</div></div>
+      <div class="kpi"><div class="kpi-ic" style="background:#dcfce7"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="2.5"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></div><div><div class="k">ACTIVE PIPELINE VALUE</div><div class="v" id="jwb-kpi-value">&#8212;</div><div class="s" id="jwb-kpi-value-sub">Loading&#8230;</div></div></div>
+      <div class="kpi"><div class="kpi-ic" style="background:#dbeafe"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2.5"><rect x="9" y="2" width="6" height="4" rx="1"/><path d="M5 4h2v2h10V4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"/></svg></div><div><div class="k">ACTIVE JOBS</div><div class="v" id="jwb-kpi-count">&#8212;</div><div class="s">Not archived</div></div></div>
+      <div class="kpi"><div class="kpi-ic" style="background:#fef9c3"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ca8a04" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></div><div><div class="k">AWAITING DEPOSIT</div><div class="v" id="jwb-kpi-deposit">&#8212;</div><div class="s">Blocking production start</div></div></div>
+      <div class="kpi"><div class="kpi-ic" style="background:#fee2e2"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#dc2626" stroke-width="2.5"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg></div><div><div class="k">ON HOLD</div><div class="v" id="jwb-kpi-hold">&#8212;</div><div class="s">Needs a decision</div></div></div>
     </div>
 
     <div class="lgrid">
@@ -7118,18 +7133,22 @@ function coAfter(d,okMsg){ if(d&&d.ok){ chirpToast('&#10003; '+okMsg); } else { 
 </script>
 <div id="view-invx" style="display:none">
   <div style="max-width:1080px;margin:0 auto;padding:18px 16px 60px">
+    <!-- 2026-08-26, jomell: "Start with Active Jobs and Invoicing & AR" --
+         design-language pass from the coworker's Figma Make redesign. Kept
+         scoped to this view's own literal styles/markup, not shared CSS
+         classes, so nothing outside Invoicing is affected. -->
     <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:16px;flex-wrap:wrap">
       <div>
-        <div style="font-family:var(--sans);font-weight:900;font-size:22px;color:#0f172a">Invoicing</div>
-        <div style="color:var(--mut);font-size:12px;font-weight:700;margin-top:2px">Real invoices, live from Jobber. Create a draft here; payments are recorded in Jobber/QuickBooks.</div>
+        <div style="font-family:var(--sans);font-weight:900;font-size:26px;color:#0f172a">Invoicing</div>
+        <div style="color:var(--mut);font-size:13px;font-weight:600;margin-top:4px">Real invoices, live from Jobber. Create a draft here; payments are recorded in Jobber/QuickBooks.</div>
       </div>
-      <button class="btn-save" onclick="ivxOpenCreate()">+ New Invoice</button>
+      <button onclick="ivxOpenCreate()" style="padding:10px 22px;background:#1e3a5f;border:none;border-radius:9px;color:#fff;font-family:var(--sans);font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap">+ New Invoice</button>
     </div>
-    <div id="ivx-summary" style="margin-bottom:14px"></div>
+    <div id="ivx-summary" style="margin-bottom:20px"></div>
     <div id="ivx-create" style="display:none"></div>
-    <div style="display:inline-flex;gap:2px;background:#f1f5f9;border-radius:10px;padding:3px;margin-bottom:14px">
-      <button id="ivx-tab-open" onclick="ivxSetMode('open')" style="border:none;border-radius:8px;padding:7px 14px;font-family:var(--sans);font-weight:800;font-size:12px;cursor:pointer;background:#fff;color:#0f172a">Open &amp; drafts</button>
-      <button id="ivx-tab-all" onclick="ivxSetMode('all')" style="border:none;border-radius:8px;padding:7px 14px;font-family:var(--sans);font-weight:800;font-size:12px;cursor:pointer;background:transparent;color:var(--mut)">All recent</button>
+    <div style="display:inline-flex;gap:4px;margin-bottom:20px">
+      <button id="ivx-tab-open" onclick="ivxSetMode('open')" style="border:1.5px solid #d1d5db;border-radius:8px;padding:7px 18px;font-family:var(--sans);font-weight:600;font-size:13px;cursor:pointer;background:#fff;color:#0f172a;box-shadow:0 1px 3px rgba(0,0,0,.08)">Open &amp; drafts</button>
+      <button id="ivx-tab-all" onclick="ivxSetMode('all')" style="border:1.5px solid #d1d5db;border-radius:8px;padding:7px 18px;font-family:var(--sans);font-weight:600;font-size:13px;cursor:pointer;background:transparent;color:var(--mut)">All recent</button>
     </div>
     <div id="ivx-list"><div style="color:var(--mut);padding:44px;text-align:center;font-weight:700">Loading&hellip;</div></div>
   </div>
@@ -7142,7 +7161,7 @@ function ivxFmtDate(s){ if(!s) return ''; var d=new Date(s); if(isNaN(d.getTime(
 function ivxInp(){ return 'border:1.5px solid var(--line);border-radius:9px;padding:10px 11px;font-family:var(--sans);font-size:12px;font-weight:700;width:100%;outline:none;background:#fff;box-sizing:border-box'; }
 function ivxBadge(s){ var m={paid:['#047857','#d1fae5'],past_due:['#b91c1c','#fee2e2'],awaiting_payment:['#b45309','#fef3c7'],draft:['#475569','#f1f5f9'],bad_debt:['#6b7280','#f3f4f6']}; var c=m[s]||['#475569','#f1f5f9']; return '<span style="background:'+c[1]+';color:'+c[0]+';font-weight:800;font-size:10px;padding:3px 9px;border-radius:99px;text-transform:uppercase;letter-spacing:.04em">'+ivxEsc((s||'draft').replace(/_/g,' '))+'</span>'; }
 function ivxEmpty(t,s){ return '<div style="border:1.5px dashed var(--line);border-radius:14px;padding:44px;text-align:center;background:#fff"><div style="font-family:var(--sans);font-weight:900;font-size:16px;color:#0f172a">'+ivxEsc(t)+'</div><div style="color:var(--mut);font-size:12px;font-weight:700;margin-top:6px">'+ivxEsc(s)+'</div></div>'; }
-function ivxSetMode(m){ IVX.mode=m; var o=document.getElementById('ivx-tab-open'), a=document.getElementById('ivx-tab-all'); if(o){ o.style.background=(m==='open'?'#fff':'transparent'); o.style.color=(m==='open'?'#0f172a':'var(--mut)'); } if(a){ a.style.background=(m==='all'?'#fff':'transparent'); a.style.color=(m==='all'?'#0f172a':'var(--mut)'); } ivxRender(); }
+function ivxSetMode(m){ IVX.mode=m; var o=document.getElementById('ivx-tab-open'), a=document.getElementById('ivx-tab-all'); if(o){ o.style.background=(m==='open'?'#fff':'transparent'); o.style.color=(m==='open'?'#0f172a':'var(--mut)'); o.style.boxShadow=(m==='open'?'0 1px 3px rgba(0,0,0,.08)':'none'); } if(a){ a.style.background=(m==='all'?'#fff':'transparent'); a.style.color=(m==='all'?'#0f172a':'var(--mut)'); a.style.boxShadow=(m==='all'?'0 1px 3px rgba(0,0,0,.08)':'none'); } ivxRender(); }
 function ivxLoad(){
   var el=document.getElementById('ivx-list'); if(!el)return;
   el.innerHTML='<div style="color:var(--mut);padding:44px;text-align:center;font-weight:700">Loading&hellip;</div>';
@@ -7168,9 +7187,9 @@ function ivxRender(){
   var ar=arRows.reduce(function(s,i){ return s+(+i.balance||0); },0);
   var pastDue=all.filter(function(i){ return i.status==='past_due'; }).length;
   var drafts=all.filter(function(i){ return i.status==='draft'; }).length;
-  if(sum){ sum.innerHTML='<div style="display:flex;gap:10px;flex-wrap:wrap">'
-    +'<div style="flex:1;min-width:160px;border:1.5px solid var(--line);border-radius:13px;padding:13px 15px;background:#fff"><div style="color:var(--mut);font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.05em">Owed to you</div><div style="font-family:var(--sans);font-weight:900;font-size:22px;color:#0f172a;margin-top:3px">'+ivxMoney(ar)+'</div><div style="color:var(--mut);font-size:11px;font-weight:700">'+arRows.length+' open &middot; '+pastDue+' past due</div></div>'
-    +'<div style="flex:1;min-width:160px;border:1.5px solid var(--line);border-radius:13px;padding:13px 15px;background:#fff"><div style="color:var(--mut);font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.05em">Drafts</div><div style="font-family:var(--sans);font-weight:900;font-size:22px;color:#0f172a;margin-top:3px">'+drafts+'</div><div style="color:var(--mut);font-size:11px;font-weight:700">not sent yet</div></div>'
+  if(sum){ sum.innerHTML='<div style="display:flex;gap:16px;flex-wrap:wrap">'
+    +'<div style="flex:2;min-width:220px;border:1px solid var(--line);border-radius:12px;padding:20px 24px;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.05)"><div style="color:var(--mut);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">Owed to you</div><div style="font-family:var(--sans);font-weight:900;font-size:30px;color:#0f172a;margin-bottom:6px">'+ivxMoney(ar)+'</div><div style="color:var(--mut);font-size:13px">'+arRows.length+' open &middot; '+pastDue+' past due</div></div>'
+    +'<div style="flex:1;min-width:160px;border:1px solid var(--line);border-radius:12px;padding:20px 24px;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.05)"><div style="color:var(--mut);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">Drafts</div><div style="font-family:var(--sans);font-weight:900;font-size:30px;color:#0f172a;margin-bottom:6px">'+drafts+'</div><div style="color:var(--mut);font-size:13px">not sent yet</div></div>'
     +'</div>'; }
   var rows=all.slice();
   if(IVX.mode==='open'){ rows=rows.filter(ivxIsOpen); }
@@ -7197,16 +7216,21 @@ function ivxCard(i){
   else if(i.status==='bad_debt'){ right='<div style="color:#6b7280;font-weight:800;font-size:12px">Written off</div>'; }
   else { right='<div style="color:var(--mut);font-size:11px;font-weight:700;margin-top:2px">Balance '+ivxMoney(i.balance)+'</div>'; }
   var due=i.dueDate?('<div style="color:'+(i.status==='past_due'?'#b91c1c':'var(--mut)')+';font-size:11px;font-weight:700;margin-top:4px">Due '+ivxEsc(ivxFmtDate(i.dueDate))+'</div>'):'';
-  var jobber=i.jobberUrl?('<a href="'+ivxEsc(i.jobberUrl)+'" target="_blank" rel="noopener" style="text-decoration:none"><button style="border:none;border-radius:9px;padding:8px 13px;font-family:var(--sans);font-weight:800;font-size:12px;cursor:pointer;background:#eef2ff;color:#4338ca">Open in Jobber &#8599;</button></a>'):'';
+  var jobber=i.jobberUrl?('<a href="'+ivxEsc(i.jobberUrl)+'" target="_blank" rel="noopener" style="text-decoration:none"><button style="border:1.5px solid #2563eb;border-radius:7px;padding:6px 16px;font-family:var(--sans);font-weight:700;font-size:12px;cursor:pointer;background:#fff;color:#2563eb">Open in Jobber &#8599;</button></a>'):'';
   // Mark-paid is offered ONLY on invoices HiveLogic created itself (id "HL-INV-*").
   // Jobber-synced rows are owned by the sync -- writing invoice_status here would
   // be silently overwritten on the next sync, so those keep "Open in Jobber" and
   // a disabled button that says why, rather than a button that fakes success.
+  //
+  // 2026-08-26: outlined, not filled -- matches the design pass's primary
+  // (filled)/secondary (outlined) hierarchy. Send-to-client stays filled
+  // below since it's the one action here with real weight (money leaves
+  // the building); marking paid or opening Jobber are lighter, secondary.
   var pay='';
   if(ivxIsLocal(i)){
-    if(i.status!=='paid') pay='<button style="border:none;border-radius:9px;padding:8px 13px;font-family:var(--sans);font-weight:800;font-size:12px;cursor:pointer;background:#047857;color:#fff" onclick="ivxMarkPaid(\''+ivxEsc(i.id)+'\')">Mark paid</button>';
+    if(i.status!=='paid') pay='<button style="border:1.5px solid #d1d5db;border-radius:7px;padding:6px 16px;font-family:var(--sans);font-weight:600;font-size:12px;cursor:pointer;background:#fff;color:#0f172a" onclick="ivxMarkPaid(\''+ivxEsc(i.id)+'\')">Mark paid</button>';
   } else if(i.status!=='paid'&&i.status!=='bad_debt'){
-    pay='<button disabled title="Recorded in Jobber/QuickBooks -- HiveLogic mirrors that status, it does not set it." style="border:none;border-radius:9px;padding:8px 13px;font-family:var(--sans);font-weight:800;font-size:12px;cursor:not-allowed;background:#f1f5f9;color:#94a3b8">Mark paid</button>';
+    pay='<button disabled title="Recorded in Jobber/QuickBooks -- HiveLogic mirrors that status, it does not set it." style="border:1.5px solid #e5e7eb;border-radius:7px;padding:6px 16px;font-family:var(--sans);font-weight:600;font-size:12px;cursor:not-allowed;background:#f9fafb;color:#9ca3af">Mark paid</button>';
   }
   // 2026-08-25: "the client should be informed or mailed about the invoice
   // since they will be making a deposit for this." Same HL-INV- scoping as
@@ -7218,11 +7242,11 @@ function ivxCard(i){
     send='<button style="border:none;border-radius:9px;padding:8px 13px;font-family:var(--sans);font-weight:800;font-size:12px;cursor:pointer;background:#1B7A50;color:#fff" onclick="ivxSendEmail(\''+ivxEsc(i.id)+'\')" id="ivx-send-'+ivxEsc(i.id)+'">'+(i.status==='draft'?'Send to client':'Resend to client')+'</button>';
   }
   var acts=send+pay+jobber;
-  return '<div id="ivxrow-'+ivxEsc(i.id)+'" style="border:1.5px solid var(--line);border-radius:14px;padding:15px 16px;background:#fff">'
+  return '<div id="ivxrow-'+ivxEsc(i.id)+'" style="border:1px solid var(--line);border-radius:12px;padding:18px 22px;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.05)">'
     +'<div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start">'
-    +'<div style="min-width:0"><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span style="font-family:var(--sans);font-weight:900;font-size:14px;color:#0f172a">'+ivxEsc(i.invoiceNumber?('#'+i.invoiceNumber):'Invoice')+'</span>'+ivxBadge(i.status)+'</div>'
-    +'<div style="color:#0f172a;font-size:13px;font-weight:700;margin-top:7px">'+ivxEsc(i.subject||name||'Invoice')+'</div>'
-    +(name?'<div style="color:var(--mut);font-size:11px;font-weight:700;margin-top:4px">'+ivxEsc(name)+'</div>':'')+'</div>'
+    +'<div style="min-width:0"><div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><span style="font-family:var(--sans);font-weight:800;font-size:14px;color:#0f172a">'+ivxEsc(i.invoiceNumber?('#'+i.invoiceNumber):'Invoice')+'</span>'+ivxBadge(i.status)+'</div>'
+    +'<div style="color:#0f172a;font-size:15px;font-weight:800;margin-top:8px">'+ivxEsc(i.subject||name||'Invoice')+'</div>'
+    +(name?'<div style="color:var(--mut);font-size:13px;font-weight:600;margin-top:2px">'+ivxEsc(name)+'</div>':'')+'</div>'
     +'<div style="text-align:right;flex-shrink:0"><div style="font-family:var(--sans);font-weight:900;font-size:18px;color:#0f172a">'+ivxMoney(i.total)+'</div>'+right+due+'</div></div>'
     +(acts?'<div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">'+acts+'</div>':'')
     +'</div>';
