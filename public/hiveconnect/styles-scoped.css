@@ -1968,6 +1968,18 @@ html[data-theme="dark"] :is(#hiveconnect-root, .hc-embed).huddle-banner {
    navy rail (var(--rail)) regardless of theme; when the Messages tab is
    active we flip it to a light floating card instead, matching Email's
    design. Toggled by setNavTab() adding .sidebar-messages-theme. */
+/* Enterprise-blue palette, scoped to the Messages workspace only (the
+   sidebar while .sidebar-messages-theme is on, and .main while
+   .messages-workspace is on) -- deliberately NOT on :root, so it never
+   leaks into Email/Channels/Contacts/etc., which keep the app's existing
+   gold/steel tokens. */
+:is(#hiveconnect-root, .hc-embed) .sidebar.sidebar-messages-theme,
+:is(#hiveconnect-root, .hc-embed).sidebar.sidebar-messages-theme,
+:is(#hiveconnect-root, .hc-embed) .main.messages-workspace,
+:is(#hiveconnect-root, .hc-embed).main.messages-workspace {
+  --msg-blue: #2563EB; --msg-bg2: #F8FAFC; --msg-selected: #EFF6FF;
+  --msg-border: #E2E8F0; --msg-ink: #1E293B; --msg-mut: #64748B; --msg-online: #10B981;
+}
 :is(#hiveconnect-root, .hc-embed) .sidebar.sidebar-messages-theme,
 :is(#hiveconnect-root, .hc-embed).sidebar.sidebar-messages-theme { background: var(--card); border-radius: 15px; overflow: hidden; margin: 12px; }
 :is(#hiveconnect-root, .hc-embed) .sidebar.sidebar-messages-theme .sidebar-header,
@@ -2004,34 +2016,41 @@ html[data-theme="dark"] :is(#hiveconnect-root, .hc-embed).huddle-banner {
 :is(#hiveconnect-root, .hc-embed).sidebar.sidebar-messages-theme .channel-list li:hover { background: var(--steel-bg); color: var(--ink); }
 :is(#hiveconnect-root, .hc-embed) .sidebar.sidebar-messages-theme .channel-list li.active,
 :is(#hiveconnect-root, .hc-embed).sidebar.sidebar-messages-theme .channel-list li.active {
-  background: var(--gold-soft); color: #8a5a12; font-weight: 700;
-  border: none; padding: 6px 10px; box-shadow: none;
+  background: var(--msg-selected); color: var(--msg-blue); font-weight: 700;
+  border: none; border-radius: 10px; padding: 6px 10px; box-shadow: none;
 }
 :is(#hiveconnect-root, .hc-embed) .sidebar.sidebar-messages-theme .channel-list li .unread,
-:is(#hiveconnect-root, .hc-embed).sidebar.sidebar-messages-theme .channel-list li .unread { background: var(--red); color: #fff; }
+:is(#hiveconnect-root, .hc-embed).sidebar.sidebar-messages-theme .channel-list li .unread { background: var(--msg-blue); color: #fff; }
 :is(#hiveconnect-root, .hc-embed) .sidebar.sidebar-messages-theme .presence-dot,
 :is(#hiveconnect-root, .hc-embed).sidebar.sidebar-messages-theme .presence-dot { border-color: var(--card); }
 :is(#hiveconnect-root, .hc-embed) .msg-search-row,
-:is(#hiveconnect-root, .hc-embed).msg-search-row { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+:is(#hiveconnect-root, .hc-embed).msg-search-row { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
 :is(#hiveconnect-root, .hc-embed) .msg-search,
-:is(#hiveconnect-root, .hc-embed).msg-search { display: flex; align-items: center; gap: 7px; background: none; border: none;
-  padding: 10px 0; color: var(--mut); flex: 2 1 0; min-width: 0; }
+:is(#hiveconnect-root, .hc-embed).msg-search { display: flex; align-items: center; gap: 7px; height: 40px; box-sizing: border-box;
+  background: var(--msg-bg2); border: 1px solid var(--msg-border); border-radius: 8px;
+  padding: 0 11px; color: var(--msg-mut); flex: 2 1 0; min-width: 0; }
 :is(#hiveconnect-root, .hc-embed) .msg-search svg,
 :is(#hiveconnect-root, .hc-embed).msg-search svg { flex: none; }
 :is(#hiveconnect-root, .hc-embed) .msg-search input,
-:is(#hiveconnect-root, .hc-embed).msg-search input { flex: 1; min-width: 0; border: none; background: none; outline: none; font-family: var(--sans); font-size: 12.5px; color: var(--ink); }
+:is(#hiveconnect-root, .hc-embed).msg-search input { flex: 1; min-width: 0; border: none; background: none; outline: none; font-family: var(--sans); font-size: 12.5px; color: var(--msg-ink); }
 :is(#hiveconnect-root, .hc-embed) .msg-search input::placeholder,
-:is(#hiveconnect-root, .hc-embed).msg-search input::placeholder { color: var(--mut); }
+:is(#hiveconnect-root, .hc-embed).msg-search input::placeholder { color: var(--msg-mut); }
+:is(#hiveconnect-root, .hc-embed) .msg-search-kbd,
+:is(#hiveconnect-root, .hc-embed).msg-search-kbd { flex: none; font-family: var(--mono); font-size: 9.5px; font-weight: 700; color: var(--msg-mut);
+  background: var(--card); border: 1px solid var(--msg-border); border-radius: 4px; padding: 1px 5px; }
 :is(#hiveconnect-root, .hc-embed) .msg-filter-row,
-:is(#hiveconnect-root, .hc-embed).msg-filter-row { display: flex; align-items: center; justify-content: flex-end; gap: 8px; flex: 1 1 0; min-width: 0; margin-bottom: 0; }
+:is(#hiveconnect-root, .hc-embed).msg-filter-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-bottom: 14px; }
 :is(#hiveconnect-root, .hc-embed) .msg-filter-quick,
 :is(#hiveconnect-root, .hc-embed).msg-filter-quick { appearance: none; -webkit-appearance: none; box-shadow: none; background: none; border: none;
-  font-family: var(--sans); font-size: 11px; font-weight: 400; letter-spacing: .05em; text-transform: uppercase;
-  color: var(--mut); cursor: pointer; padding: 2px; }
+  font-family: var(--sans); font-size: 11.5px; font-weight: 600; letter-spacing: 0; text-transform: none;
+  color: var(--msg-mut); cursor: pointer; padding: 5px 10px; border-radius: 999px; display: inline-flex; align-items: center; gap: 5px; }
 :is(#hiveconnect-root, .hc-embed) .msg-filter-quick:hover,
-:is(#hiveconnect-root, .hc-embed).msg-filter-quick:hover { color: var(--ink); }
+:is(#hiveconnect-root, .hc-embed).msg-filter-quick:hover { background: var(--msg-bg2); color: var(--msg-ink); }
 :is(#hiveconnect-root, .hc-embed) .msg-filter-quick.active,
-:is(#hiveconnect-root, .hc-embed).msg-filter-quick.active { color: var(--steel-deep); }
+:is(#hiveconnect-root, .hc-embed).msg-filter-quick.active { background: var(--msg-selected); color: var(--msg-blue); }
+:is(#hiveconnect-root, .hc-embed) .msg-filter-quick .msg-filter-ct,
+:is(#hiveconnect-root, .hc-embed).msg-filter-quick .msg-filter-ct { background: var(--msg-blue); color: #fff; font-size: 9.5px; font-weight: 800;
+  border-radius: 999px; padding: 1px 6px; min-width: 15px; text-align: center; }
 :is(#hiveconnect-root, .hc-embed) .msg-filter-chev,
 :is(#hiveconnect-root, .hc-embed).msg-filter-chev { appearance: none; -webkit-appearance: none; box-shadow: none; background: none; border: none;
   color: var(--mut); cursor: pointer; font-size: 10px; padding: 2px; }
@@ -2056,6 +2075,28 @@ html[data-theme="dark"] :is(#hiveconnect-root, .hc-embed).huddle-banner {
 :is(#hiveconnect-root, .hc-embed).dm-fav-btn.on { opacity: 1; }
 :is(#hiveconnect-root, .hc-embed) .dm-fav-btn.on,
 :is(#hiveconnect-root, .hc-embed).dm-fav-btn.on { color: var(--gold); }
+/* DM row: two-line layout (name+time on top, preview+unread below), with
+   fav/HiveVideo actions in their own column so they don't disturb it. */
+:is(#hiveconnect-root, .hc-embed) .channel-list li.dm-row,
+:is(#hiveconnect-root, .hc-embed).channel-list li.dm-row { align-items: flex-start; padding: 7px 8px; gap: 10px; }
+:is(#hiveconnect-root, .hc-embed) .channel-list li.dm-row.active,
+:is(#hiveconnect-root, .hc-embed).channel-list li.dm-row.active { padding: 7px 8px; }
+:is(#hiveconnect-root, .hc-embed) .dm-row-body,
+:is(#hiveconnect-root, .hc-embed).dm-row-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+:is(#hiveconnect-root, .hc-embed) .dm-row-top,
+:is(#hiveconnect-root, .hc-embed).dm-row-top { display: flex; align-items: baseline; gap: 8px; }
+:is(#hiveconnect-root, .hc-embed) .dm-row-top .cname,
+:is(#hiveconnect-root, .hc-embed).dm-row-top .cname { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+:is(#hiveconnect-root, .hc-embed) .dm-row-time,
+:is(#hiveconnect-root, .hc-embed).dm-row-time { flex: none; font-size: 10.5px; font-weight: 400; color: var(--msg-mut); }
+:is(#hiveconnect-root, .hc-embed) .dm-row-bottom,
+:is(#hiveconnect-root, .hc-embed).dm-row-bottom { display: flex; align-items: center; gap: 8px; min-height: 15px; }
+:is(#hiveconnect-root, .hc-embed) .dm-row-preview,
+:is(#hiveconnect-root, .hc-embed).dm-row-preview { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11.5px; font-weight: 400; color: var(--msg-mut); }
+:is(#hiveconnect-root, .hc-embed) .dm-row.has-unread .dm-row-preview,
+:is(#hiveconnect-root, .hc-embed).dm-row.has-unread .dm-row-preview { color: var(--msg-ink); font-weight: 600; }
+:is(#hiveconnect-root, .hc-embed) .dm-row-actions,
+:is(#hiveconnect-root, .hc-embed).dm-row-actions { display: flex; align-items: center; gap: 2px; flex: none; align-self: center; }
 /* Give the main content area the same floating-card margin as the Messages
    sidebar (12px, 0 on the left since the sidebar's own right margin already
    makes that gap), so both columns float as matching cards. */

@@ -108,6 +108,11 @@ function initials(p) {
 function fmtTime(ts) {
   return new Date(ts).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
 }
+function evMsgRowTime(ts) {
+  const d = new Date(ts), today = new Date();
+  if (d.toDateString() === today.toDateString()) return fmtTime(ts);
+  return d.toLocaleDateString([], { month: 'short', day: 'numeric' });
+}
 function fmtDay(ts) {
   const d = new Date(ts), today = new Date();
   const yest = new Date(today); yest.setDate(today.getDate() - 1);
@@ -631,6 +636,30 @@ function evMsgDraftChannelIds() {
   catch (e) { return []; }
 }
 function evMsgDmChannels() { return [...channels.values()].filter(c => c.type === 'dm' && memberships.has(c.id) && dmOther(c)); }
+// Last-message-per-conversation preview cache. One query per channel the
+// first time it's needed (same acceptable parallel-query pattern
+// loadUnreads() already uses for unread counts), then kept live by the
+// existing message-INSERT realtime hook -- no new subscription.
+const evMsgLastCache = new Map(); // channel_id -> {content, created_at, attachment_name} | null
+async function evMsgLoadPreviews(channelIds) {
+  const missing = channelIds.filter(id => !evMsgLastCache.has(id));
+  if (!missing.length) return;
+  await Promise.all(missing.map(async (cid) => {
+    try {
+      const { data } = await sb.from('messages').select('content,created_at,attachment_name')
+        .eq('channel_id', cid).is('thread_parent_id', null).is('deleted_at', null)
+        .order('created_at', { ascending: false }).limit(1);
+      evMsgLastCache.set(cid, (data && data[0]) || null);
+    } catch (e) { evMsgLastCache.set(cid, null); }
+  }));
+  renderMessagesPanel();
+}
+function evMsgPreviewText(last) {
+  if (!last) return '';
+  if (last.content && last.content.trim()) return last.content.trim();
+  if (last.attachment_name) return '📎 ' + last.attachment_name;
+  return '';
+}
 function evMsgMentionedChannelIds() {
   const dmIds = new Set(evMsgDmChannels().map(c => c.id));
   return new Set(notifications.filter(n => !n.read && n.kind === 'mention' && dmIds.has(n.channel_id)).map(n => n.channel_id));
@@ -640,28 +669,31 @@ function evMsgFilterCounts() {
   const muted = new Set(evMsgMuted());
   const draftIds = new Set(evMsgDraftChannelIds());
   const mentioned = evMsgMentionedChannelIds();
-  let unread = 0, drafts = 0, mutedCt = 0;
+  const favIds = new Set(evMsgFavorites());
+  let unread = 0, drafts = 0, mutedCt = 0, favorites = 0;
   dms.forEach(c => {
     if ((unreads.get(c.id) || 0) > 0) unread++;
     if (draftIds.has(c.id)) drafts++;
     if (muted.has(c.id)) mutedCt++;
+    if (favIds.has(c.id)) favorites++;
   });
-  return { unread, mentions: mentioned.size, drafts, muted: mutedCt };
+  return { unread, mentions: mentioned.size, drafts, muted: mutedCt, favorites };
 }
 let msgFilter = 'all';
 const MSG_FILTERS = [
   ['all', 'All'],
   ['unread', 'Unread'],
   ['mentions', 'Unread @mentions'],
+  ['favorites', 'Favorites'],
   ['drafts', 'Drafts'],
   ['muted', 'Muted'],
 ];
 function evMsgFilterMenu(e) {
   const counts = evMsgFilterCounts();
-  const countFor = (key) => key === 'unread' ? counts.unread : key === 'mentions' ? counts.mentions : key === 'drafts' ? counts.drafts : key === 'muted' ? counts.muted : null;
-  // "All" and "Unread" already have their own quick-access buttons beside
-  // the search box -- the dropdown covers the rest.
-  evMenu(e, MSG_FILTERS.filter(([key]) => key !== 'all').map(([key, label]) => {
+  const countFor = (key) => key === 'unread' ? counts.unread : key === 'mentions' ? counts.mentions : key === 'drafts' ? counts.drafts : key === 'muted' ? counts.muted : key === 'favorites' ? counts.favorites : null;
+  // "All", "Unread", "Mentions" and "Favorites" already have their own
+  // quick-access pills above the list -- the dropdown covers the rest.
+  evMenu(e, MSG_FILTERS.filter(([key]) => !['all', 'unread', 'mentions', 'favorites'].includes(key)).map(([key, label]) => {
     const n = countFor(key);
     const html = esc(label) + (n != null && n > 0 ? ' <span class="msg-filter-ct">' + n + '</span>' : '') + (msgFilter === key ? ' ✓' : '');
     return [html, () => { msgFilter = key; renderMessagesPanel(); }];
@@ -693,29 +725,43 @@ function evMsgSection(iconHtml, label, key, opts) {
 }
 function buildDmRow(c) {
   const li = document.createElement('li');
+  li.className = 'dm-row';
   li.dataset.name = dmDisplayName(c).toLowerCase();
   li.dataset.id = c.id;
   if (isGroupDM(c)) {
     const grp = partStrip(dmOtherProfiles(c), 2); grp.classList.add('dm-grp-av'); li.appendChild(grp);
-    const nm = document.createElement('span'); nm.className = 'cname'; nm.textContent = dmGroupLabel(c); li.appendChild(nm);
   } else {
-    const other = dmOther(c);
-    li.appendChild(avatarWithPresence(other));
-    const nm = document.createElement('span'); nm.className = 'cname'; nm.textContent = other ? other.display_name : 'DM'; li.appendChild(nm);
+    li.appendChild(avatarWithPresence(dmOther(c)));
   }
+
+  const body = document.createElement('div'); body.className = 'dm-row-body';
+  const top = document.createElement('div'); top.className = 'dm-row-top';
+  const nm = document.createElement('span'); nm.className = 'cname'; nm.textContent = dmDisplayName(c); top.appendChild(nm);
+  const last = evMsgLastCache.get(c.id);
+  if (last && last.created_at) { const t = document.createElement('span'); t.className = 'dm-row-time'; t.textContent = evMsgRowTime(last.created_at); top.appendChild(t); }
+  body.appendChild(top);
+
+  const bottom = document.createElement('div'); bottom.className = 'dm-row-bottom';
+  const prev = document.createElement('span'); prev.className = 'dm-row-preview'; prev.textContent = evMsgPreviewText(last); bottom.appendChild(prev);
   const unread = unreads.get(c.id) || 0;
   if (c.id === currentChannelId) li.classList.add('active');
-  if (unread > 0) { li.classList.add('has-unread'); const b = document.createElement('span'); b.className = 'unread'; b.textContent = unread; li.appendChild(b); }
+  if (unread > 0) { li.classList.add('has-unread'); const b = document.createElement('span'); b.className = 'unread'; b.textContent = unread; bottom.appendChild(b); }
+  body.appendChild(bottom);
+  li.appendChild(body);
+
+  const actions = document.createElement('div'); actions.className = 'dm-row-actions';
   const favOn = evMsgFavorites().includes(c.id);
   const favBtn = document.createElement('button'); favBtn.type = 'button'; favBtn.className = 'dm-fav-btn' + (favOn ? ' on' : '');
   favBtn.title = favOn ? 'Remove from favorites' : 'Add to favorites'; favBtn.textContent = favOn ? '★' : '☆';
   favBtn.onclick = (e) => { e.stopPropagation(); evMsgToggleFavorite(c.id); renderMessagesPanel(); };
-  li.appendChild(favBtn);
+  actions.appendChild(favBtn);
   const hv = document.createElement('span'); hv.className = 'dm-hv'; hv.title = 'Start HiveVideo';
   hv.innerHTML = '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>';
   hv.onclick = async (e) => { e.stopPropagation(); if (currentChannelId !== c.id) await openChannel(c.id); joinHuddle(c.id); };
-  li.appendChild(hv);
-  if (huddleParticipants(c.id).length) { const h = document.createElement('span'); h.className = 'huddle-badge'; h.textContent = '🎧'; li.appendChild(h); }
+  actions.appendChild(hv);
+  if (huddleParticipants(c.id).length) { const h = document.createElement('span'); h.className = 'huddle-badge'; h.textContent = '🎧'; actions.appendChild(h); }
+  li.appendChild(actions);
+
   li.onclick = () => openChannel(c.id);
   return li;
 }
@@ -725,6 +771,7 @@ function applyMsgFilter() {
   const muted = new Set(evMsgMuted());
   const draftIds = new Set(evMsgDraftChannelIds());
   const mentioned = evMsgMentionedChannelIds();
+  const favIds = new Set(evMsgFavorites());
   document.querySelectorAll('#panel-messages .ct-folder').forEach(folder => {
     let any = false;
     folder.querySelectorAll('.channel-list li[data-name]').forEach(row => {
@@ -735,6 +782,7 @@ function applyMsgFilter() {
       else if (msgFilter === 'mentions') filterMatch = mentioned.has(id);
       else if (msgFilter === 'drafts') filterMatch = draftIds.has(id);
       else if (msgFilter === 'muted') filterMatch = muted.has(id);
+      else if (msgFilter === 'favorites') filterMatch = favIds.has(id);
       const match = nameMatch && filterMatch;
       row.style.display = match ? '' : 'none'; if (match) any = true;
     });
@@ -748,27 +796,36 @@ const MSG_ICON_TEAMS = '<svg viewBox="0 0 24 24" width="13" height="13" fill="cu
 function renderMessagesPanel() {
   const el = $('panel-messages'); if (!el) return; el.innerHTML = '';
 
-  // Search + All/Unread quick filter + chevron, all one row.
+  // Search (own row, with a ⌘K hint) + All/Unread/Mentions/Favorites quick
+  // filter pills (own row below) + a chevron for the rest (Drafts/Muted).
   const headRow = document.createElement('div'); headRow.className = 'msg-search-row';
   const searchWrap = document.createElement('div'); searchWrap.className = 'msg-search';
   searchWrap.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>';
-  const search = document.createElement('input'); search.id = 'msg-search'; search.type = 'text'; search.placeholder = 'Search'; search.value = msgSearch;
+  const search = document.createElement('input'); search.id = 'msg-search'; search.type = 'text'; search.placeholder = 'Search conversations'; search.value = msgSearch;
   search.addEventListener('input', () => { msgSearch = search.value; applyMsgFilter(); });
   searchWrap.appendChild(search);
+  const kbd = document.createElement('span'); kbd.className = 'msg-search-kbd'; kbd.textContent = /Mac/i.test(navigator.platform || '') ? '⌘K' : 'Ctrl K';
+  searchWrap.appendChild(kbd);
   headRow.appendChild(searchWrap);
+  el.appendChild(headRow);
+
   const filterRow = document.createElement('div'); filterRow.className = 'msg-filter-row';
   const counts = evMsgFilterCounts();
-  const allBtn = document.createElement('button'); allBtn.type = 'button'; allBtn.className = 'msg-filter-quick' + (msgFilter === 'all' ? ' active' : '');
-  allBtn.textContent = 'All'; allBtn.onclick = () => { msgFilter = 'all'; renderMessagesPanel(); };
-  filterRow.appendChild(allBtn);
-  const unreadBtn = document.createElement('button'); unreadBtn.type = 'button'; unreadBtn.className = 'msg-filter-quick' + (msgFilter === 'unread' ? ' active' : '');
-  unreadBtn.textContent = 'Unread' + (counts.unread ? ' (' + counts.unread + ')' : '');
-  unreadBtn.onclick = () => { msgFilter = 'unread'; renderMessagesPanel(); };
-  filterRow.appendChild(unreadBtn);
-  const filterChev = document.createElement('button'); filterChev.type = 'button'; filterChev.className = 'msg-filter-chev'; filterChev.innerHTML = '▾'; filterChev.title = 'More filters';
+  const quickPill = (key, label, count) => {
+    const b = document.createElement('button'); b.type = 'button'; b.className = 'msg-filter-quick' + (msgFilter === key ? ' active' : '');
+    b.textContent = label;
+    if (count) { const ct = document.createElement('span'); ct.className = 'msg-filter-ct'; ct.textContent = count; b.appendChild(ct); }
+    b.onclick = () => { msgFilter = key; renderMessagesPanel(); };
+    filterRow.appendChild(b);
+  };
+  quickPill('all', 'All', 0);
+  quickPill('unread', 'Unread', counts.unread);
+  quickPill('mentions', 'Mentions', counts.mentions);
+  quickPill('favorites', 'Favorites', counts.favorites);
+  const filterChev = document.createElement('button'); filterChev.type = 'button'; filterChev.className = 'msg-filter-chev'; filterChev.innerHTML = '▾'; filterChev.title = 'More filters (Drafts, Muted)';
   filterChev.onclick = (e) => evMsgFilterMenu(e);
   filterRow.appendChild(filterChev);
-  headRow.appendChild(filterRow);
+  el.appendChild(filterRow);
   el.appendChild(headRow);
 
   // Favourites
@@ -797,6 +854,7 @@ function renderMessagesPanel() {
   el.appendChild(teamSec.folder);
 
   applyMsgFilter();
+  evMsgLoadPreviews([...new Set([...favChannels, ...dms].map(c => c.id))]);
 }
 function hexA(hex, a) {
   const n = parseInt(hex.slice(1), 16);
@@ -2789,6 +2847,7 @@ function setNavTab(tab) {
   { const chv = $('chirp-view'); if (chv) chv.classList.toggle('hidden', tab !== 'chirp'); }
   { const vv = $('voip-view'); if (vv) vv.classList.toggle('hidden', tab !== 'voip'); }
   { const sb = document.querySelector('.sidebar'); if (sb) { sb.classList.toggle('sidebar-collapsed', tab === 'voip'); sb.classList.toggle('sidebar-messages-theme', tab === 'messages'); } }
+  { const mn = document.querySelector('.main'); if (mn) mn.classList.toggle('messages-workspace', tab === 'messages'); }
   if (tab === 'huddles') renderHuddlesPanel();
   if (tab === 'people') { renderPeoplePanel(); loadContacts().then(renderPeoplePanel); }
   if (tab === 'chirp') openChirpTab();
@@ -4536,6 +4595,7 @@ function subscribeRealtime() {
         if (m.thread_parent_id === currentThreadId) renderThread();
         return;
       }
+      evMsgLastCache.set(m.channel_id, { content: m.content, created_at: m.created_at, attachment_name: m.attachment_name });
       if (isCurrent) {
         messagesCache.set(m.id, m);
         renderMessages();
