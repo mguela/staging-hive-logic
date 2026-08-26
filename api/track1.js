@@ -5331,14 +5331,16 @@ async function handleSendInvoiceEmail(req, res) {
     if (jobR.ok) { const rows = await jobR.json(); job = rows[0] || null; }
   }
   let accountBalance = null;
+  let jobInvoices = null;
   if (invoice.job_id) {
-    const balR = await supabaseRequest(`invoices?job_id=eq.${encodeURIComponent(invoice.job_id)}&select=balance`);
-    if (balR.ok) {
-      const rows = await balR.json();
+    const jiR = await supabaseRequest(`invoices?job_id=eq.${encodeURIComponent(invoice.job_id)}&select=jobber_id,invoice_number,subject,total,balance,invoice_status&order=issued_date.asc.nullslast`);
+    if (jiR.ok) {
+      const rows = await jiR.json();
       accountBalance = rows.reduce((sum, r) => sum + (Number(r.balance) || 0), 0);
+      jobInvoices = rows;
     }
   }
-  const pdfBytes = await generateInvoicePdf({ invoice, client, address, job, accountBalance });
+  const pdfBytes = await generateInvoicePdf({ invoice, client, address, job, accountBalance, jobInvoices });
   const pdfBase64 = Buffer.from(pdfBytes).toString('base64');
 
   const clientName = client.first_name || client.name || 'there';

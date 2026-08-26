@@ -65,7 +65,11 @@ export function dateStr(iso) {
 //   invoice has no linked job or the job carries no priced total.
 // accountBalance: real sum of every invoice's balance on this job, or null
 //   to omit the row entirely (never a guessed running total).
-export function buildInvoicePlan({ invoice, client, address, job, accountBalance }) {
+// jobInvoices: every real invoice on this job (jobber_id, invoice_number,
+//   subject, total, invoice_status), used to build the Payment Schedule page
+//   -- omitted entirely (not one fabricated row) when there's no linked job
+//   or no priced job total to compute a real percentage against.
+export function buildInvoicePlan({ invoice, client, address, job, accountBalance, jobInvoices }) {
   const inv = invoice || {};
 
   const recipientName = (client && (client.name || client.first_name)) || 'Client';
@@ -102,6 +106,26 @@ export function buildInvoicePlan({ invoice, client, address, job, accountBalance
   totals.push({ label: 'Total', value: money(inv.total), emphasis: true });
   if (inv.balance != null) totals.push({ label: 'Balance due', value: money(inv.balance), emphasis: true, danger: true });
 
+  // Payment Schedule: one row per real invoice on the job, each showing what
+  // portion of the job's total price it represents. 'This Invoice' marks the
+  // one actually being sent; a real invoice_status (Title Cased) labels
+  // every other one -- 'Paid' is the only status the reference PDF itself
+  // shows, but a real draft/awaiting_payment sibling invoice gets its own
+  // real word rather than being folded into a made-up bucket.
+  let paymentSchedule = null;
+  if (job && isFinite(Number(job.total)) && Number(job.total) > 0 && Array.isArray(jobInvoices) && jobInvoices.length) {
+    const jobTotal = Number(job.total);
+    const rows = jobInvoices.map((ji) => {
+      const isThisOne = ji.jobber_id && inv.jobber_id && ji.jobber_id === inv.jobber_id;
+      const statusLabel = isThisOne ? 'This Invoice' : String(ji.invoice_status || '').replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()) || 'Open';
+      const pct = Math.round((Number(ji.total) / jobTotal) * 1000) / 10;
+      return { statusLabel, percentLabel: pct + '%', itemLabel: ji.subject || 'Invoice', amount: money(ji.total) };
+    });
+    const totalPct = Math.round(rows.reduce((s, r) => s + parseFloat(r.percentLabel), 0) * 10) / 10;
+    const totalAmount = jobInvoices.reduce((s, ji) => s + (Number(ji.total) || 0), 0);
+    paymentSchedule = { rows, totalPct: totalPct + '%', totalAmount: money(totalAmount) };
+  }
+
   return {
     letterhead: LETTERHEAD,
     invoiceBox,
@@ -110,6 +134,12 @@ export function buildInvoicePlan({ invoice, client, address, job, accountBalance
     sectionLabel: inv.subject || null,
     lineItems,
     totals,
+    paymentSchedule,
+    remittance: {
+      invoiceNumber: inv.invoice_number || '',
+      due: dateStr(inv.due_date),
+      amountDue: money(inv.balance != null ? inv.balance : inv.total),
+    },
     footerNote: 'Thank you for your business. Please contact us with any questions regarding this invoice.',
     taxId: LETTERHEAD.taxId,
   };
@@ -288,13 +318,103 @@ export async function generateInvoicePdf(inputs) {
     y -= row.emphasis ? 18 : 16;
   }
 
+  // ---- Payment Schedule (its own page, matching the reference PDF) ----
+  if (plan.paymentSchedule) {
+    page = doc.addPage([PAGE_W, PAGE_H]);
+    pages.push(page);
+    y = CONTENT_TOP;
+    page.drawText(plan.letterhead.name.toUpperCase(), { x: left, y, size: 12, font: bold, color: NAVY });
+    y -= 30;
+    page.drawText('Payment Schedule', { x: left, y, size: 15, font: bold, color: NAVY });
+    y -= 12;
+    page.drawLine({ start: { x: left, y }, end: { x: right, y }, thickness: 1.5, color: NAVY });
+    y -= 24;
+
+    const colStatus = left, colPct = 220, colItem = 280, colAmt = 494;
+    page.drawText('STATUS', { x: colStatus, y, size: 8.5, font: bold, color: MUT });
+    page.drawText('%', { x: colPct, y, size: 8.5, font: bold, color: MUT });
+    page.drawText('ITEM', { x: colItem, y, size: 8.5, font: bold, color: MUT });
+    page.drawText('AMOUNT', { x: colAmt, y, size: 8.5, font: bold, color: MUT });
+    y -= 10;
+    page.drawLine({ start: { x: left, y }, end: { x: right, y }, thickness: 1, color: LINE });
+    y -= 20;
+
+    plan.paymentSchedule.rows.forEach((row, i) => {
+      if (i % 2 === 1) page.drawRectangle({ x: left, y: y - 6, width: right - left, height: 20, color: rgb(0.97, 0.97, 0.98) });
+      page.drawText(row.statusLabel, { x: colStatus, y, size: 10, font: bold, color: NAVY });
+      page.drawText(row.percentLabel, { x: colPct, y, size: 10, font, color: INK });
+      page.drawText(row.itemLabel, { x: colItem, y, size: 10, font, color: INK });
+      const aw = font.widthOfTextAtSize(row.amount, 10);
+      page.drawText(row.amount, { x: right - aw, y, size: 10, font: bold, color: INK });
+      y -= 22;
+    });
+    y -= 4;
+    page.drawLine({ start: { x: left, y }, end: { x: right, y }, thickness: 1, color: LINE });
+    y -= 20;
+    page.drawText('Total', { x: colStatus, y, size: 10, font: bold, color: NAVY });
+    page.drawText(plan.paymentSchedule.totalPct, { x: colPct, y, size: 10, font: bold, color: NAVY });
+    const taw = font.widthOfTextAtSize(plan.paymentSchedule.totalAmount, 10);
+    page.drawText(plan.paymentSchedule.totalAmount, { x: right - taw, y, size: 10, font: bold, color: NAVY });
+  }
+
+  // ---- Remittance stub (its own page, matching the reference PDF -- a
+  // tear-off slip for a client mailing a check back) ----
+  {
+    page = doc.addPage([PAGE_W, PAGE_H]);
+    pages.push(page);
+    y = CONTENT_TOP;
+    page.drawText(plan.letterhead.name.toUpperCase(), { x: left, y, size: 12, font: bold, color: NAVY });
+    y -= 12;
+    page.drawText(plan.letterhead.addressLine1 + ' | ' + plan.letterhead.addressLine2, { x: left, y, size: 8, font, color: MUT });
+    y -= 10;
+    page.drawText(plan.letterhead.phone + ' | ' + plan.letterhead.email + ' | ' + plan.letterhead.website, { x: left, y, size: 8, font, color: MUT });
+
+    // The dashed "tear here" line -- everything below it is the part meant
+    // to be cut off and mailed back with a check, same layout the reference
+    // PDF uses.
+    const tearY = CONTENT_TOP - 420;
+    page.drawLine({ start: { x: left, y: tearY }, end: { x: right, y: tearY }, thickness: 1, color: NAVY, dashArray: [4, 4] });
+
+    let sy = tearY - 40;
+    page.drawText(plan.recipientName, { x: left, y: sy, size: 12, font: bold, color: NAVY });
+    sy -= 15;
+    for (const line of plan.recipientLines) { page.drawText(line, { x: left, y: sy, size: 9.5, font, color: MUT }); sy -= 12; }
+
+    let ry = tearY - 40;
+    const stubRow = (label, value) => {
+      page.drawText(label, { x: 340, y: ry, size: 9.5, font: bold, color: NAVY });
+      const vw = font.widthOfTextAtSize(value, 9.5);
+      page.drawText(value, { x: right - vw, y: ry, size: 9.5, font, color: INK });
+      ry -= 16;
+    };
+    stubRow('Invoice #:', plan.remittance.invoiceNumber);
+    stubRow('Due date:', plan.remittance.due);
+    stubRow('Amount due:', plan.remittance.amountDue);
+    page.drawText('Amount enclosed:', { x: 340, y: ry, size: 9.5, font: bold, color: NAVY });
+    page.drawLine({ start: { x: right - 90, y: ry - 2 }, end: { x: right, y: ry - 2 }, thickness: 1, color: MUT });
+
+    const my = Math.min(sy, ry) - 30;
+    page.drawText('Mail to:', { x: left, y: my, size: 9, font, color: MUT });
+    page.drawText(plan.letterhead.name, { x: left, y: my - 14, size: 10.5, font: bold, color: NAVY });
+    page.drawText(plan.letterhead.addressLine1, { x: left, y: my - 28, size: 9.5, font, color: MUT });
+    page.drawText(plan.letterhead.addressLine2, { x: left, y: my - 40, size: 9.5, font, color: MUT });
+  }
+
   // ---- Footer, fixed at the bottom of every page (page numbers only when
-  // there is more than one, matching the reference PDF's "Page 1 of 3") ----
+  // there is more than one, matching the reference PDF's "Page 1 of 3").
+  // Only page 1 carries the thank-you note + tax id, matching the reference
+  // exactly -- every later page (continuation, Payment Schedule, remittance
+  // stub) repeats just the plain contact line instead. ----
   const footY = 80;
   pages.forEach((p, i) => {
     p.drawLine({ start: { x: left, y: footY + 26 }, end: { x: right, y: footY + 26 }, thickness: 1, color: LINE });
-    p.drawText(plan.footerNote, { x: left, y: footY, size: 9, font, color: MUT });
-    p.drawText(plan.taxId, { x: left, y: footY - 14, size: 8, font, color: MUT });
+    if (i === 0) {
+      p.drawText(plan.footerNote, { x: left, y: footY, size: 9, font, color: MUT });
+      p.drawText(plan.taxId, { x: left, y: footY - 14, size: 8, font, color: MUT });
+    } else {
+      p.drawText(plan.letterhead.addressLine1 + ' | ' + plan.letterhead.addressLine2, { x: left, y: footY, size: 8, font, color: MUT });
+      p.drawText(plan.letterhead.phone + ' | ' + plan.letterhead.email + ' | ' + plan.letterhead.website, { x: left, y: footY - 14, size: 8, font, color: MUT });
+    }
     if (pages.length > 1) {
       const label = `Page ${i + 1} of ${pages.length}`;
       const lw = font.widthOfTextAtSize(label, 8);

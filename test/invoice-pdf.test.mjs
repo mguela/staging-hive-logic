@@ -19,6 +19,7 @@ import { buildInvoicePlan, generateInvoicePdf, money, dateStr, LETTERHEAD } from
 
 const FULL = {
   invoice: {
+    jobber_id: 'HL-INV-2',
     invoice_number: '504404',
     subject: 'Upon Completion',
     total: 4068.95,
@@ -35,6 +36,10 @@ const FULL = {
   address: { street: '123 Elm Street', city: 'Hartford', province: 'CT', postal_code: '06103' },
   job: { title: 'Renovation', total: 7652 },
   accountBalance: 4512.43,
+  jobInvoices: [
+    { jobber_id: 'HL-INV-1', invoice_number: '504403', subject: 'Deposit', total: 3826, balance: 0, invoice_status: 'paid' },
+    { jobber_id: 'HL-INV-2', invoice_number: '504404', subject: 'Upon Completion', total: 4068.95, balance: 4512.43, invoice_status: 'awaiting_payment' },
+  ],
 };
 
 // ------------------------------------------------------------------ helpers
@@ -141,13 +146,68 @@ test('a null balance omits Balance due from the totals block', () => {
   assert.deepEqual(plan.totals.map((t) => t.label), ['Subtotal', 'Total']);
 });
 
+// ---------------------------------------------------------- payment schedule
+// jomell, 2026-08-27: "it should follow the format exactly" -- the reference
+// PDF's page 2. One row per real invoice on the job; 'This Invoice' marks
+// the one being sent, a real invoice_status labels every other one.
+
+test('the payment schedule has one row per real invoice on the job, with the one being sent marked "This Invoice"', () => {
+  const plan = buildInvoicePlan(FULL);
+  assert.ok(plan.paymentSchedule, 'expected a payment schedule when a job and its other invoices are known');
+  assert.equal(plan.paymentSchedule.rows.length, 2);
+  assert.equal(plan.paymentSchedule.rows[0].statusLabel, 'Paid');
+  assert.equal(plan.paymentSchedule.rows[0].itemLabel, 'Deposit');
+  assert.equal(plan.paymentSchedule.rows[0].amount, '$3,826.00');
+  assert.equal(plan.paymentSchedule.rows[1].statusLabel, 'This Invoice');
+  assert.equal(plan.paymentSchedule.rows[1].itemLabel, 'Upon Completion');
+});
+
+test('a sibling invoice that is neither paid nor this one gets its own real status word, never a made-up bucket', () => {
+  const plan = buildInvoicePlan({
+    ...FULL,
+    jobInvoices: [
+      ...FULL.jobInvoices,
+      { jobber_id: 'HL-INV-3', invoice_number: '504405', subject: 'Punch list', total: 500, balance: 500, invoice_status: 'awaiting_payment' },
+    ],
+  });
+  const row = plan.paymentSchedule.rows.find((r) => r.itemLabel === 'Punch list');
+  assert.equal(row.statusLabel, 'Awaiting Payment');
+});
+
+test('percentages are computed per invoice against the real job total, never invented', () => {
+  const plan = buildInvoicePlan(FULL);
+  // 3826 / 7652 = exactly 50%
+  assert.equal(plan.paymentSchedule.rows[0].percentLabel, '50%');
+});
+
+test('no linked job, or no job total, or no other invoices omits the payment schedule entirely -- not a one-row guess', () => {
+  assert.equal(buildInvoicePlan({ ...FULL, job: null }).paymentSchedule, null);
+  assert.equal(buildInvoicePlan({ ...FULL, job: { title: 'x', total: 0 } }).paymentSchedule, null);
+  assert.equal(buildInvoicePlan({ ...FULL, jobInvoices: [] }).paymentSchedule, null);
+  assert.equal(buildInvoicePlan({ ...FULL, jobInvoices: null }).paymentSchedule, null);
+});
+
+// -------------------------------------------------------------- remittance
+
+test('the remittance stub carries the real invoice number, due date, and amount due (balance when known, else the total)', () => {
+  const plan = buildInvoicePlan(FULL);
+  assert.equal(plan.remittance.invoiceNumber, '504404');
+  assert.equal(plan.remittance.due, 'Aug 25, 2026');
+  assert.equal(plan.remittance.amountDue, '$4,512.43');
+});
+
+test('remittance amount due falls back to the total when there is no separate balance', () => {
+  const plan = buildInvoicePlan({ ...FULL, invoice: { ...FULL.invoice, balance: null } });
+  assert.equal(plan.remittance.amountDue, '$4,068.95');
+});
+
 // ------------------------------------------------------------------ pdf-lib
 
 test('generateInvoicePdf produces real, well-formed PDF bytes', async () => {
   const bytes = await generateInvoicePdf(FULL);
   const header = Buffer.from(bytes.slice(0, 5)).toString('utf-8');
   assert.equal(header, '%PDF-');
-  assert.ok(bytes.length > 500, 'a one-page invoice should be more than a trivial stub');
+  assert.ok(bytes.length > 500, 'a multi-page invoice should be more than a trivial stub');
 });
 
 test('generateInvoicePdf does not throw across every fixture above -- fully minimal to fully populated', async () => {
@@ -173,10 +233,20 @@ function manyItems(n) {
   return items;
 }
 
-test('a normal, short invoice stays on one page and shows no page-number footer', async () => {
+test('a normal invoice with a payment schedule is exactly 3 pages, matching the reference PDF\'s own "Page 1 of 3"', async () => {
   const bytes = await generateInvoicePdf(FULL);
   const loaded = await PDFDocument.load(bytes);
-  assert.equal(loaded.getPageCount(), 1);
+  assert.equal(loaded.getPageCount(), 3, 'invoice detail + Payment Schedule + remittance stub');
+});
+
+test('the remittance stub is always present, even for the simplest invoice with no job -- matching the reference PDF, which always includes a mail-in slip', async () => {
+  const minimal = {
+    invoice: { invoice_number: '999', subject: null, total: 500, subtotal: 500, balance: null, due_date: null, issued_date: null, line_items: [] },
+    client: null, address: null, job: null, accountBalance: null, jobInvoices: null,
+  };
+  const bytes = await generateInvoicePdf(minimal);
+  const loaded = await PDFDocument.load(bytes);
+  assert.equal(loaded.getPageCount(), 2, 'invoice detail + remittance stub, no Payment Schedule page since there is no job to schedule against');
 });
 
 test('enough line items to run off the page spills onto a real second page, not off the edge of the first', async () => {
