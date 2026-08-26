@@ -270,14 +270,11 @@ const FIX = (() => {
   return HTML.slice(FIX_START, FIX_END);
 })();
 
-test('the Financial Intelligence :root tokens retint to the mockup\'s blue/green/red/amber, with no other :root block on the page affected', () => {
+test('the Financial Intelligence :root tokens retint to the mockup\'s blue/green/red/amber', () => {
   assert.match(FIX, /--gold-deep:#2563eb;/);
   assert.match(FIX, /--red:#dc2626; --red-bg:#fdecec;/);
   assert.match(FIX, /--green:#16a34a; --green-bg:#e6f9ee;/);
   assert.match(FIX, /--amber:#b45309;/);
-  // every other iframe sub-doc keeps the original shared palette untouched
-  const otherRootBlocks = (HTML.match(/--gold:#748a9e; --gold-deep:#59718a; --gold-bg:#e9eff4;/g) || []).length;
-  assert.ok(otherRootBlocks >= 20, 'expected the untouched original palette to still appear in the many other iframe sub-docs');
 });
 
 test('the Financial Intelligence real ids, resource calls, and render functions are untouched by the retint -- only :root hex values changed', () => {
@@ -288,6 +285,46 @@ test('the Financial Intelligence real ids, resource calls, and render functions 
   assert.match(FIX, /resource=leaks/);
   assert.match(FIX, /function loadCash\(\)/);
   assert.match(FIX, /function fixFetch\(/);
+});
+
+// ---- The other iframe sub-docs that also have a mockup counterpart ---------
+// Mockup views cross-referenced against real iframe sub-docs (App.tsx has
+// ...View() functions for each): P&L Live, Reports, HiveGrid, Presentations,
+// T&M/Service Lane, Live Dispatch, Vendor Catalog, Job Setup & Readiness.
+// Real-app-only iframes with no mockup counterpart (Inventory, Memberships,
+// PTO, Client/Sub/Employee Portal, Payment Breakdowns, Capacity Planning,
+// Field App, Remote Work, Command Center V2, Comms Hub, Modular Dashboards,
+// Price Book) are out of scope per "at least what is available in
+// hivelogic.make" and are left on the original palette.
+
+const RETINTED_SCREENS = [
+  ['P&L (Live)', '<title>HiveLogic — Profit &amp; Loss (Live)</title>'],
+  ['Reports & Intelligence', '<title>HiveLogic — Reports &amp; Intelligence</title>'],
+  ['HiveGrid', '<title>HiveLogic — HiveGrid</title>'],
+  ['Presentations', '<title>HiveLogic — Presentations</title>'],
+  ['T&M & Service Work', '<title>HiveLogic — T&amp;M &amp; Service Work</title>'],
+  ['Live Dispatch', '<title>HiveLogic — Live Dispatch</title>'],
+  ['Vendor Catalog & Home Depot', '<title>HiveLogic — Vendor Catalog &amp; Home Depot</title>'],
+  ['Job Setup & Readiness Gate', '&lt;title&gt;HiveLogic — Job Setup &amp; Readiness Gate&lt;/title&gt;'],
+];
+
+for (const [name, titleMarker] of RETINTED_SCREENS) {
+  test(`${name}: the :root tokens retint to the shared blue/green/red/amber palette`, () => {
+    const start = HTML.indexOf(titleMarker);
+    assert.ok(start > -1, `${name} iframe sub-doc should still be findable`);
+    const section = HTML.slice(start, start + 700);
+    assert.match(section, /--gold-deep:#2563eb;/);
+    assert.match(section, /--red:#dc2626; --red-bg:#fdecec;/);
+    assert.match(section, /--green:#16a34a; --green-bg:#e6f9ee;/);
+    assert.match(section, /--amber:#b45309;/);
+  });
+}
+
+test('exactly 9 iframe sub-docs are retinted (Financial Intelligence + the 8 above); every other iframe sub-doc keeps the original shared palette untouched', () => {
+  const retinted = (HTML.match(/--gold-deep:#2563eb;/g) || []).length;
+  const original = (HTML.match(/--gold:#748a9e; --gold-deep:#59718a; --gold-bg:#e9eff4;/g) || []).length;
+  assert.strictEqual(retinted, 9);
+  assert.ok(original >= 12, 'expected most other iframe sub-docs (no mockup counterpart) to keep the original palette');
 });
 
 test('every real nav id and its onclick handler survive the reskin untouched', () => {
