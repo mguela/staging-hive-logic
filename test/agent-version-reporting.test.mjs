@@ -76,7 +76,7 @@ test('the heartbeat carries the version', () => {
   const src = fs.readFileSync('hivelogic-monitor-agent/src/main.js', 'utf8');
   assert.match(src, /agentVersion: app\.getVersion\(\)/,
     'read from the app itself, not a second constant that could disagree with package.json');
-  assert.match(src, /body: JSON\.stringify\(\{ activityLevel, idleSeconds, displayCount, activeApp, agentVersion/,
+  assert.match(src, /activityLevel, idleSeconds, displayCount, activeApp,\s*\n\s*agentVersion: app\.getVersion\(\)/,
     'it must ride the existing heartbeat -- no new call, no new schedule');
 });
 

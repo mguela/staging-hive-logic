@@ -25,8 +25,6 @@ const DEFAULT_CONFIG = {
   apiBase: 'https://hivelogic-live.vercel.app',
   agentToken: null,
   employeeEmail: null,
-  businessHoursStart: 6, // local 24h clock, inclusive
-  businessHoursEnd: 20, // local 24h clock, exclusive
   heartbeatIntervalSec: 60,
   screenshotEveryNHeartbeats: 5, // ~5 min at the default 60s heartbeat
 };
@@ -82,11 +80,6 @@ function detectPlatform() {
   if (process.platform === 'win32') return 'windows';
   if (process.platform === 'darwin') return 'mac';
   return null; // unsupported (e.g. Linux) -- pairing will reject this server-side too
-}
-
-function withinBusinessHours(cfg) {
-  const hour = new Date().getHours();
-  return hour >= cfg.businessHoursStart && hour < cfg.businessHoursEnd;
 }
 
 // -----------------------------------------------------------------------
@@ -299,7 +292,19 @@ async function sendHeartbeat() {
       // release there was no way to answer "who actually updated?" -- the same
       // blind spot the page build marker closed for browsers. See
       // api/_lib/agent-version.js.
-      body: JSON.stringify({ activityLevel, idleSeconds, displayCount, activeApp, agentVersion: app.getVersion() }),
+      //
+      // timezone (2026-08-26): the machine's own real IANA zone, read
+      // straight from the OS via Intl -- no geolocation, no manual setup.
+      // "Automatically detect my location and timezone" per Chris/the user.
+      // The server keeps this on the employee's profile (api/_lib/workday.js,
+      // api/user-settings.js) and always overwrites with the latest value,
+      // so it stays correct if someone travels rather than freezing on
+      // first pairing.
+      body: JSON.stringify({
+        activityLevel, idleSeconds, displayCount, activeApp,
+        agentVersion: app.getVersion(),
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      }),
     });
     const data = await r.json().catch(() => null);
     if (!data || data.ok === false) {
@@ -354,14 +359,23 @@ async function sendHeartbeat() {
       return;
     }
 
-    lastStatus = withinBusinessHours(CONFIG) ? 'Recording' : 'Clocked in — outside monitoring hours';
+    // "Recording" is now purely the server's answer (data.shouldCapture),
+    // not a second local-clock guess. This used to also require
+    // withinBusinessHours(CONFIG) -- a hardcoded 6am-8pm on the MACHINE'S
+    // local clock, completely blind to the server's actual, per-employee
+    // schedule (2026-08-26: an employee in Manila clocking in at 5:09 AM
+    // local had every capture silently skipped by this second gate, with
+    // shouldCapture=true the whole time and nothing telling anyone why).
+    // The server is the one place that already knows whether this is a
+    // real, consented, active work session -- there is no local fact this
+    // agent has that would make its own second guess more correct.
+    lastStatus = data.shouldCapture ? 'Recording' : 'Clocked in — not currently monitored';
     refreshTrayMenu();
 
-    // Phase 5 (2026-08-25): only while actually recording (clocked in,
-    // monitored, consented, within business hours) -- the same condition
-    // that gates capture below, so there is never a productivity notice
-    // for time that isn't itself being monitored.
-    if (withinBusinessHours(CONFIG)) {
+    // Phase 5 (2026-08-25): only while actually recording -- the same
+    // condition that gates capture below, so there is never a productivity
+    // notice for time that isn't itself being monitored.
+    if (data.shouldCapture) {
       await refreshAppRulesIfStale();
       maybeNotifyUnproductiveApp(activeApp);
     }
@@ -371,7 +385,7 @@ async function sendHeartbeat() {
       lastScreenshotAt = 0; // new clock-in / new session -- capture right away instead of waiting a full interval
     }
     const intervalMs = Math.max(1, Number(data.screenshotIntervalMinutes) || 5) * 60 * 1000;
-    if (data.shouldCapture && withinBusinessHours(CONFIG) && (Date.now() - lastScreenshotAt) >= intervalMs) {
+    if (data.shouldCapture && (Date.now() - lastScreenshotAt) >= intervalMs) {
       lastScreenshotAt = Date.now();
       await captureAndUploadScreenshots(data.monitorSessionId, !!data.blurScreenshots);
     }

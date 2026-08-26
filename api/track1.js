@@ -53,6 +53,8 @@ import { PAGE_BUILD, pageBuildState, shouldRecordPageBuild } from './_lib/page-b
 import { monitoringDecision, monitoringPolicy, CLOSE_REASON_DECLINED, CLOSE_REASONS_WORTH_EXPLAINING, CLOSE_NOTICE_WINDOW_MINUTES, closeReasonNotice } from './_lib/monitor-consent.js';
 import { EXPECTED_AGENT_VERSION, isWellFormedAgentVersion, agentVersionState } from './_lib/agent-version.js';
 import { VEHICLE_GPS_COLUMNS, VEHICLE_GPS_STALE_MS, vehicleGps } from './_lib/vehicle-gps.js';
+import { todayRangeInTz, isValidTimeZone, DEFAULT_TIMEZONE } from './_lib/workday.js';
+import { mergeSettings } from './user-settings.js';
 export { VEHICLE_GPS_COLUMNS, VEHICLE_GPS_STALE_MS, vehicleGps } from './_lib/vehicle-gps.js';
 
 const RESOURCE_CONFIG = {
@@ -1244,7 +1246,7 @@ async function getRequestingProfile(req) {
   if (!userRes.ok) return null;
   const user = await userRes.json();
   if (!user || !user.id) return null;
-  const profRes = await supabaseRequest(`profiles?id=eq.${user.id}&select=id,email,full_name,role,monitoring_enabled,page_build,page_build_seen_at`);
+  const profRes = await supabaseRequest(`profiles?id=eq.${user.id}&select=id,email,full_name,role,monitoring_enabled,page_build,page_build_seen_at,settings`);
   if (!profRes.ok) return { id: user.id, email: user.email, full_name: null, role: null, monitoring_enabled: true };
   const rows = await profRes.json();
   return (rows && rows[0]) || { id: user.id, email: user.email, full_name: null, role: null, monitoring_enabled: true };
@@ -5943,6 +5945,31 @@ async function handleMonitorHeartbeat(req, res) {
     ? null
     : `monitor_agents PATCH failed (${(patchRes && patchRes.status) || 'no response'}): ${patchRes ? await patchRes.text().catch(() => '') : ''}`.slice(0, 300);
 
+  // Timezone auto-detection (2026-08-26): "make it flexible so anyone who
+  // will be monitored regardless of the location and timezone... the
+  // system must automatically detect my location and timezone." The agent
+  // reports its OS's real IANA zone on every heartbeat; kept on
+  // profiles.settings (the one per-user preferences blob, api/user-settings.js
+  // -- follows the PERSON, not the device, per CLAUDE.md). Always
+  // overwritten with the latest report rather than set once, so it stays
+  // correct if someone travels. isValidTimeZone guards against a garbled or
+  // forged value ever reaching Intl elsewhere. Best-effort: this must never
+  // take down an otherwise-fine heartbeat.
+  const reportedTimezone = req.body && req.body.timezone;
+  if (isValidTimeZone(reportedTimezone)) {
+    try {
+      const profRes = await supabaseRequest(`profiles?id=eq.${agent.employee_id}&select=settings`);
+      const profRows = profRes.ok ? await profRes.json() : [];
+      const currentSettings = (profRows[0] && profRows[0].settings) || {};
+      if (currentSettings.timezone !== reportedTimezone) {
+        await supabaseRequest(`profiles?id=eq.${agent.employee_id}`, {
+          method: 'PATCH',
+          body: JSON.stringify({ settings: mergeSettings(currentSettings, { timezone: reportedTimezone }) }),
+        });
+      }
+    } catch (e) { /* best-effort -- never blocks the heartbeat */ }
+  }
+
   const activeRes = await supabaseRequest(`workforce_time_sessions?employee_id=eq.${agent.employee_id}&status=eq.active&order=clock_in.desc&limit=1`);
   const activeRows = activeRes.ok ? await activeRes.json() : [];
   const workforceSession = (activeRows && activeRows[0]) || null;
@@ -6112,15 +6139,16 @@ async function handleWorkforceSettings(req, res) {
   const row = (settingsRows && settingsRows[0]) || {};
   return res.status(200).json({
     ok: true,
-    // Monitored workday window (2026-08-25): 7:00 AM - 3:00 PM. Both this
-    // and workdayEndHour/Minute are ALWAYS meant as America/New_York local
-    // time regardless of the employee's own machine timezone -- the
-    // frontend prompts (hlWorkforceArmEodPrompt) resolve "now" in ET
-    // before comparing against these, not the browser's local clock.
+    // Monitored workday window: 7:00 AM - 3:30 PM. One shared wall-clock
+    // schedule (2026-08-26: "make it flexible... regardless of the location
+    // and timezone"), applied in EACH EMPLOYEE'S OWN timezone, not a single
+    // hardcoded America/New_York -- see api/_lib/workday.js and
+    // hlWfNowInTz() (public/index.html), which now take a zone parameter
+    // instead of assuming one.
     workdayStartHour: Number.isFinite(row.workday_start_hour) ? row.workday_start_hour : 7,
     workdayStartMinute: Number.isFinite(row.workday_start_minute) ? row.workday_start_minute : 0,
     workdayEndHour: Number.isFinite(row.workday_end_hour) ? row.workday_end_hour : 15,
-    workdayEndMinute: Number.isFinite(row.workday_end_minute) ? row.workday_end_minute : 0,
+    workdayEndMinute: Number.isFinite(row.workday_end_minute) ? row.workday_end_minute : 30,
     idleWarningMinutes: Number.isFinite(row.idle_warning_minutes) ? row.idle_warning_minutes : 30,
     idleAutoClockoutGraceMinutes: Number.isFinite(row.idle_autoclockout_grace_minutes) ? row.idle_autoclockout_grace_minutes : 15,
   });
@@ -6574,7 +6602,14 @@ async function handleMonitorAppRules(req, res) {
 async function handleMonitorAppUsage(req, res) {
   const requester = await getRequestingProfile(req);
   if (!requester) return res.status(401).json({ ok: false, error: 'Not signed in -- log into HiveLogic first.' });
-  const { startISO } = todayRangeET();
+  // "Today" in the EMPLOYEE'S OWN timezone (2026-08-26), not a hardcoded
+  // America/New_York -- this is a personal dashboard stat about their own
+  // day, unlike Command Center's Jobber-schedule views (which correctly
+  // stay ET, the business's own timezone). Falls back to DEFAULT_TIMEZONE
+  // until a heartbeat/session report has set profiles.settings.timezone.
+  const requesterTz = (requester.settings && isValidTimeZone(requester.settings.timezone))
+    ? requester.settings.timezone : DEFAULT_TIMEZONE;
+  const { startISO } = todayRangeInTz(requesterTz);
 
   const sessRes = await supabaseRequest(`monitor_sessions?employee_id=eq.${requester.id}&started_at=gte.${encodeURIComponent(startISO)}&select=id`);
   if (!sessRes.ok) return res.status(200).json({ ok: true, tablesReady: false, apps: [], productivityPercent: null, sampleCount: 0 });
