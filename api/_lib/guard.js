@@ -360,6 +360,12 @@ const PUBLIC_RESOURCE_PATHS = [
   { path: '/api/track1', resource: 'monitor_heartbeat', method: 'POST' },
   { path: '/api/track1', resource: 'monitor_consent', method: 'POST' },
   { path: '/api/track1', resource: 'monitor_screenshot_upload', method: 'POST' },
+  // Phase 5 (2026-08-25): the desktop agent GETs the app whitelist with its
+  // own bearer token to classify locally -- GET only. Writing a rule is an
+  // admin action and stays gated normally (a real Supabase session already
+  // clears this gate on its own; see handleMonitorAppRules for the
+  // requester.role check that still applies inside the handler either way).
+  { path: '/api/track1', resource: 'monitor_app_rules', method: 'GET' },
 
   // Customer card payment link (2026-08-19). EIGHTH instance of the
   // half-shipped-guard class catalogued above, and the only one that costs
