@@ -621,6 +621,7 @@ const HANDLER_EXEMPT_METHODS = {
   monitor_consent: 'POST',
   monitor_screenshot_upload: 'POST',
   monitor_app_rules: 'GET',
+  monitor_going_offline: 'POST',
 };
 
 test('the Monitor agent resource list matches what the guard allowlists', () => {

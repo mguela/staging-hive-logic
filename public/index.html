@@ -19,7 +19,7 @@
  * monitor_my_status poll, so "is this person running current code" is a
  * question the database can answer. Do not hand-edit it -- run
  * `node scripts/stamp-page-build.mjs`. */
-var HL_PAGE_BUILD = 'bb49e5d06d5e4d32';
+var HL_PAGE_BUILD = '769b5dbf4d9d2c64';
 </script>
 <script>
 (function () { // HL_FETCH_DEDUPE_V1 — single wrapper: GET /api/ dedupe + 60s cache + write-invalidate
@@ -7122,7 +7122,11 @@ function devTodoLoad(){
   window.mgrMonRefresh = function(){
     var el = document.getElementById('mon-roster');
     if(!el) return;
-    el.textContent = 'Loading…';
+    // Only show "Loading…" the first time -- the 30s auto-refresh
+    // (2026-08-27) calls this same function every 30s while the Monitor
+    // page is open, and blanking a table that's already showing real data
+    // every 30 seconds is just flicker, not information.
+    if (!el.querySelector('table')) el.textContent = 'Loading…';
     return hlRequireSession(async function(sess){
       // workforce_team rides along for the EOD compliance column
       // (2026-08-26) -- same admin/superadmin-gated endpoint the Time Clock
@@ -32480,6 +32484,15 @@ async function hlWorkforceInitGlobalWidgets(){
   hlWorkforceArmClockInPrompt();
   hlWorkforceArmStaleSessionPrompt();
   setInterval(function(){ if (window.workforceRefresh) workforceRefresh(); }, 60000);
+  // Monitor's Online/Offline roster (2026-08-27, "can we update that like
+  // realtime?") -- only polls while the Monitor dashboard is the view
+  // actually on screen, same as every other page-scoped refresh in this
+  // app; no point re-fetching a roster nobody is looking at. 30s keeps
+  // pace with the agent's own 60s heartbeat instead of waiting for the
+  // next full page load to notice a status change.
+  setInterval(function(){
+    if (window.__HL_CUR_VIEW === 'mon' && typeof mgrMonRefresh === 'function') mgrMonRefresh();
+  }, 30000);
 }
 window.hlWorkforceInitGlobalWidgets = hlWorkforceInitGlobalWidgets;
 

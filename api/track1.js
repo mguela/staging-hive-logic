@@ -6176,9 +6176,32 @@ async function getRequestingAgent(req) {
 }
 
 // How long since a Monitor agent's last heartbeat before we stop calling it
-// running. It heartbeats every 60s, so this is 15 missed beats -- generous
-// enough for a sleeping laptop, far short of the two weeks that went unnoticed.
-export const MONITOR_AGENT_ALIVE_MINUTES = 15;
+// running. It heartbeats every 60s -- 3 missed beats is enough margin for a
+// slow network tick without mistaking that for a dead agent, while still
+// flipping Offline within a few minutes of a real crash or lost connection
+// instead of the old 15-minute wait (2026-08-27: "can we update that like
+// realtime?"). A clean Quit is instant regardless of this number -- see
+// isAgentAlive() below.
+export const MONITOR_AGENT_ALIVE_MINUTES = 3;
+
+// One place decides "is this agent actually alive right now," reused by
+// every roster/status endpoint so they can't quietly disagree with each
+// other. Two ways an agent counts as not-alive:
+//   1. No heartbeat within MONITOR_AGENT_ALIVE_MINUTES (crash, force-kill,
+//      lost network -- nothing can announce these, so a timeout is the
+//      only way to detect them at all).
+//   2. It told us it was quitting (last_disconnected_at, set by
+//      resource=monitor_going_offline, the tray's Quit handler) and no
+//      heartbeat has landed since -- instant, no timeout needed, because
+//      a clean quit is exactly the case where the agent CAN tell us.
+// last_seen_at itself is never touched by a disconnect -- it stays the
+// real last heartbeat, so "Last Seen" never lies about when that was.
+export function isAgentAlive(agent, aliveCutoff) {
+  if (!agent || !agent.last_seen_at) return false;
+  if (agent.last_seen_at < aliveCutoff) return false;
+  if (agent.last_disconnected_at && agent.last_disconnected_at >= agent.last_seen_at) return false;
+  return true;
+}
 
 // The four resources the HiveLogic Monitor desktop agent posts to
 // (hivelogic-monitor-agent/src/main.js). They carry the agent's own hashed
@@ -6198,6 +6221,9 @@ export const MONITOR_AGENT_RESOURCES = [
   // this exemption only lets a GET carry an agent token instead of a
   // Supabase session, same as the four resources above.
   'monitor_app_rules',
+  // 2026-08-27: the tray's Quit handler reports itself going offline
+  // before it exits, same auth as every other agent-originated call here.
+  'monitor_going_offline',
 ];
 
 // One roster row per PERSON, never per device (2026-08-26). Re-pairing used
@@ -6223,7 +6249,7 @@ function pickBestMonitorAgent(rows) {
 async function handleMonitorStatus(req, res) {
   const requester = await getRequestingProfile(req);
   if (!requester) return res.status(401).json({ ok: false, error: 'Not signed in.' });
-  const activeRes = await supabaseRequest(`monitor_agents?employee_id=eq.${requester.id}&status=eq.active&order=paired_at.desc&limit=1`);
+  const activeRes = await supabaseRequest(`monitor_agents?employee_id=eq.${requester.id}&status=eq.active&order=paired_at.desc&limit=1&select=device_name,platform,paired_at,last_seen_at,last_disconnected_at`);
   const active = activeRes.ok ? await activeRes.json() : [];
   if (active && active[0]) {
     // PAIRED IS NOT RUNNING (Chris, 2026-08-16). status='active' only means a
@@ -6236,14 +6262,15 @@ async function handleMonitorStatus(req, res) {
     // showing green: claiming a state nothing verified. Law 1.
     //
     // The agent heartbeats every 60s while running, so anything past a few
-    // minutes means it is not running -- not that it is briefly busy. 15
-    // minutes is generous enough to absorb a sleeping laptop or a slow
-    // network without ever calling a dead agent alive.
+    // minutes means it is not running -- not that it is briefly busy. Also
+    // instantly false the moment a clean Quit reported itself -- see
+    // isAgentAlive().
     const lastSeenAt = active[0].last_seen_at || null;
     const staleMinutes = lastSeenAt
       ? Math.round((Date.now() - new Date(lastSeenAt).getTime()) / 60000)
       : null;
-    const alive = staleMinutes !== null && staleMinutes <= MONITOR_AGENT_ALIVE_MINUTES;
+    const aliveCutoff = new Date(Date.now() - MONITOR_AGENT_ALIVE_MINUTES * 60 * 1000).toISOString();
+    const alive = isAgentAlive(active[0], aliveCutoff);
     return res.status(200).json({
       ok: true,
       paired: true,
@@ -6546,6 +6573,30 @@ async function endClockInForDeclinedMonitoring(employeeId, monitorSessionId) {
   return true;
 }
 
+// POST /api/track1?resource=monitor_going_offline -- the tray's Quit
+// handler calls this right before app.quit() (2026-08-27, "can we update
+// that like realtime?"). Sets last_disconnected_at so isAgentAlive()
+// flips this agent to Offline on the NEXT roster read, no timeout wait --
+// a clean quit is exactly the case where the agent can tell us, unlike a
+// crash or lost network, which only a timeout can ever catch.
+//
+// Deliberately does not touch last_seen_at: that stays the honest record
+// of the last real heartbeat. Best-effort by design on the CALLER's side
+// (main.js gives this a short timeout and quits either way) -- an agent
+// that couldn't reach the network to say goodbye will still, correctly,
+// go stale via the timeout instead.
+async function handleMonitorGoingOffline(req, res) {
+  if (req.method !== 'POST') return res.status(405).json({ ok: false, error: 'Method not allowed.' });
+  const agent = await getRequestingAgent(req);
+  if (!agent) return res.status(401).json({ ok: false, error: 'Unknown or revoked agent token.' });
+  const patchRes = await supabaseRequest(`monitor_agents?id=eq.${agent.id}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ last_disconnected_at: new Date().toISOString() }),
+  });
+  if (!patchRes.ok) return res.status(500).json({ ok: false, error: 'Could not record the disconnect: ' + (await patchRes.text()) });
+  return res.status(200).json({ ok: true });
+}
+
 // Records the employee's allow/deny answer to the per-clock-in monitoring
 // consent prompt shown by the desktop agent. Only the paired agent itself
 // can call this (agent_token auth), and only for a monitor session that is
@@ -6650,7 +6701,7 @@ async function handleMonitorSettings(req, res) {
   // omitted, and the toggle still works immediately -- the moment they
   // install and clock in, monitoring_enabled is already what was set here.
   const [agentsRes, profilesRes] = await Promise.all([
-    supabaseRequest('monitor_agents?select=id,employee_id,device_name,platform,status,paired_at,last_seen_at,agent_version&order=last_seen_at.desc'),
+    supabaseRequest('monitor_agents?select=id,employee_id,device_name,platform,status,paired_at,last_seen_at,last_disconnected_at,agent_version&order=last_seen_at.desc'),
     supabaseRequest('profiles?select=id,full_name,email,monitoring_enabled&order=full_name.asc'),
   ]);
   const agents = agentsRes.ok ? await agentsRes.json() : [];
@@ -6675,9 +6726,9 @@ async function handleMonitorSettings(req, res) {
         agentVersionState: agentVersionState(a.agent_version),
         // Agent Status (2026-08-25): whether the agent has actually
         // checked in recently, distinct from `status` (pairing/consent
-        // state) -- same "last heartbeat within the alive window" real
-        // signal handleMonitorReview's roster uses.
-        online: a.last_seen_at ? a.last_seen_at >= aliveCutoff : false,
+        // state) -- same isAgentAlive() signal handleMonitorReview's
+        // roster uses, so a clean Quit shows Offline instantly here too.
+        online: isAgentAlive(a, aliveCutoff),
         monitoringEnabled,
       });
     } else {
@@ -6883,7 +6934,7 @@ async function handleMonitorReview(req, res) {
   const employeeId = req.query.employeeId || null;
 
   if (!employeeId) {
-    const agentsRes = await supabaseRequest('monitor_agents?select=id,employee_id,device_name,platform,status,paired_at,last_seen_at,agent_version&order=last_seen_at.desc');
+    const agentsRes = await supabaseRequest('monitor_agents?select=id,employee_id,device_name,platform,status,paired_at,last_seen_at,last_disconnected_at,agent_version&order=last_seen_at.desc');
     const agents = agentsRes.ok ? await agentsRes.json() : [];
     const empIds = [...new Set((agents || []).map((a) => a.employee_id))];
     let profiles = [];
@@ -6894,13 +6945,13 @@ async function handleMonitorReview(req, res) {
     const byId = Object.fromEntries((profiles || []).map((p) => [p.id, p]));
     const aliveCutoff = new Date(Date.now() - MONITOR_AGENT_ALIVE_MINUTES * 60 * 1000).toISOString();
     // Real, bounded activity-level indicator (2026-08-25): only computed for
-    // agents that are actually online right now (last_seen within the alive
-    // window) -- an offline agent has no "current" activity to report, and
-    // fetching this for every agent that has EVER paired would be an
-    // unbounded query for no one still looking at their screen. Averages the
-    // 5 most recent samples of their currently-open session; honestly null
-    // (not 0) when there is no open session or no samples yet.
-    const onlineAgents = (agents || []).filter((a) => a.last_seen_at && a.last_seen_at >= aliveCutoff);
+    // agents that are actually online right now -- an offline agent has no
+    // "current" activity to report, and fetching this for every agent that
+    // has EVER paired would be an unbounded query for no one still looking
+    // at their screen. Averages the 5 most recent samples of their
+    // currently-open session; honestly null (not 0) when there is no open
+    // session or no samples yet.
+    const onlineAgents = (agents || []).filter((a) => isAgentAlive(a, aliveCutoff));
     const activityByEmployee = {};
     if (onlineAgents.length) {
       const onlineIds = [...new Set(onlineAgents.map((a) => a.employee_id))];
@@ -6935,7 +6986,7 @@ async function handleMonitorReview(req, res) {
         pairedAt: a.paired_at,
         lastSeenAt: a.last_seen_at,
         agentVersion: a.agent_version || null,
-        online: a.last_seen_at ? a.last_seen_at >= aliveCutoff : false,
+        online: isAgentAlive(a, aliveCutoff),
         activityLevel: Object.prototype.hasOwnProperty.call(activityByEmployee, empId) ? activityByEmployee[empId] : null,
       };
     });
@@ -9321,6 +9372,9 @@ if (resource === 'mailconnect') {
   }
   if (resource === 'monitor_heartbeat') {
     try { return await handleMonitorHeartbeat(req, res); } catch (e) { return res.status(500).json({ ok: false, error: e.message }); }
+  }
+  if (resource === 'monitor_going_offline') {
+    try { return await handleMonitorGoingOffline(req, res); } catch (e) { return res.status(500).json({ ok: false, error: e.message }); }
   }
   if (resource === 'monitor_consent') {
     try { return await handleMonitorConsent(req, res); } catch (e) { return res.status(500).json({ ok: false, error: e.message }); }

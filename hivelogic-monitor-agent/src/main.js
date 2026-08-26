@@ -157,6 +157,32 @@ function buildTray() {
   refreshTrayMenu();
 }
 
+// Tells the server this device is going offline right now (2026-08-27,
+// "can we update that like realtime?"). A clean Quit or Unpair is exactly
+// the case where the agent CAN announce itself -- unlike a crash or lost
+// network, which only the server's own heartbeat timeout can ever catch.
+// Awaited before the caller proceeds (quitting, or clearing the pairing)
+// so the goodbye actually has a chance to leave before the process that
+// would send it goes away; short-timeout best-effort either way -- a
+// network hiccup here must never block quitting or unpairing, it just
+// means this device falls back to going stale via the normal timeout.
+async function reportGoingOffline() {
+  if (!CONFIG.agentToken) return;
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 2500);
+    await fetch(`${CONFIG.apiBase}/api/track1?resource=monitor_going_offline`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${CONFIG.agentToken}` },
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
+    logLine('Reported going offline.');
+  } catch (e) {
+    logLine(`Going-offline report failed (non-fatal, falls back to the heartbeat timeout): ${e.message}`);
+  }
+}
+
 function refreshTrayMenu() {
   if (!tray) return;
   const menu = Menu.buildFromTemplate([
@@ -174,17 +200,19 @@ function refreshTrayMenu() {
     {
       label: 'Unpair this device',
       click: () => {
-        CONFIG.agentToken = null;
-        CONFIG.employeeEmail = null;
-        saveConfig(CONFIG);
-        if (heartbeatTimer) clearInterval(heartbeatTimer);
-        lastStatus = 'Not paired';
-        refreshTrayMenu();
-        createPairingWindow();
+        reportGoingOffline().finally(() => {
+          CONFIG.agentToken = null;
+          CONFIG.employeeEmail = null;
+          saveConfig(CONFIG);
+          if (heartbeatTimer) clearInterval(heartbeatTimer);
+          lastStatus = 'Not paired';
+          refreshTrayMenu();
+          createPairingWindow();
+        });
       },
     },
     { type: 'separator' },
-    { label: 'Quit HiveLogic Monitor', click: () => app.quit() },
+    { label: 'Quit HiveLogic Monitor', click: () => { reportGoingOffline().finally(() => app.quit()); } },
   ]);
   tray.setContextMenu(menu);
   tray.setToolTip(`HiveLogic Monitor v${app.getVersion()} — ${lastStatus}`);
