@@ -171,6 +171,32 @@ test('coCard keeps every real id and action wired -- coSend/coApprove/coRejectFo
   assert.match(fn, /onclick="coPayForm\(/);
 });
 
+// ---- Clients --------------------------------------------------------------
+
+test('the Clients reskin is scoped under #view-clients, never a bare .stat/.rav redefinition -- both are reused elsewhere', () => {
+  const start = HTML.indexOf('<div id="view-clients" style="display:none">');
+  const section = HTML.slice(start, start + 900);
+  assert.match(section, /#view-clients \.stat\{/);
+  assert.match(section, /#view-clients \.rav\{/);
+  assert.doesNotMatch(section, /\n\s*\.stat\{/);
+  assert.doesNotMatch(section, /\n\s*\.rav\{/);
+});
+
+test('the client avatar chip gets real styling -- previously .rav rendered unstyled outside .rowline, the only other place it appears', () => {
+  const fn = extractFunction(HTML, 'function cdbRender(){');
+  assert.match(fn, /class="rav" style="background:'\+col\+'"/);
+  const start = HTML.indexOf('<div id="view-clients" style="display:none">');
+  const section = HTML.slice(start, start + 900);
+  assert.match(section, /width:30px;height:30px;border-radius:8px/);
+});
+
+test('cdbRender keeps every real search/filter/sort input and the click-through to openRealClient', () => {
+  const fn = extractFunction(HTML, 'function cdbRender(){');
+  assert.match(fn, /getElementById\('cdb-q'\)/);
+  assert.match(fn, /getElementById\('cdb-sort'\)/);
+  assert.match(fn, /onclick="openRealClient\(/);
+});
+
 test('every real nav id and its onclick handler survive the reskin untouched', () => {
   const start = HTML.indexOf('<aside class="rail" role="navigation" aria-label="Primary">');
   const end = HTML.indexOf('</aside>', start);

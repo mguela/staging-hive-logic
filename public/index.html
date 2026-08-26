@@ -19,7 +19,7 @@
  * monitor_my_status poll, so "is this person running current code" is a
  * question the database can answer. Do not hand-edit it -- run
  * `node scripts/stamp-page-build.mjs`. */
-var HL_PAGE_BUILD = '261954110b7b655a';
+var HL_PAGE_BUILD = 'b400e89d364f9e91';
 </script>
 <script>
 (function () { // HL_FETCH_DEDUPE_V1 — single wrapper: GET /api/ dedupe + 60s cache + write-invalidate
@@ -6754,6 +6754,15 @@ function devTodoLoad(){
 </div><div id="ef-page"></div></div>
 
 <div id="view-clients" style="display:none">
+    <!-- 2026-08-26, jomell: design-language pass from the coworker's Figma
+         Make redesign. Scoped under #view-clients -- .stat/.statrow/.chip2/
+         .cdb-table are shared classes reused by unrelated parts of the app,
+         so nothing outside this view is touched. -->
+    <style>
+      #view-clients .stat{border-radius:10px;padding:14px 16px}
+      #view-clients .stat b{font-family:var(--sans);font-size:26px;font-weight:900;letter-spacing:-.5px}
+      #view-clients .rav{width:30px;height:30px;border-radius:8px;color:#fff;font-size:10px;font-weight:800;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;font-family:var(--sans)}
+    </style>
     <div class="lsent"><h1>Clients</h1>
     <p>Your full client book, live from Jobber. Search, filter, and open any record.</p></div>
     <div id="rlv-clients-live" style="display:flex;align-items:center;gap:10px;background:#eef8f1;border:2px solid var(--green);border-radius:13px;padding:11px 15px;margin-bottom:14px;flex-wrap:wrap">
