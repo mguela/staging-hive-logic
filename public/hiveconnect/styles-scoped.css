@@ -2198,6 +2198,31 @@ html[data-theme="dark"] :is(#hiveconnect-root, .hc-embed).huddle-banner {
 :is(#hiveconnect-root, .hc-embed) .main.messages-workspace .composer-hint,
 :is(#hiveconnect-root, .hc-embed).main.messages-workspace .composer-hint { color: var(--msg-mut); }
 
+/* Mobile: list OR thread, never both -- #msg-back-btn returns to the list.
+   body.msg-mobile-thread is a pure UI flag (openChannel()/setNavTab()),
+   independent of which conversation is actually open. */
+:is(#hiveconnect-root, .hc-embed) #msg-back-btn,
+:is(#hiveconnect-root, .hc-embed)#msg-back-btn {
+  display: none; appearance: none; -webkit-appearance: none; box-shadow: none;
+  background: none; border: none; color: var(--msg-blue, var(--steel-deep));
+  width: 32px; height: 32px; border-radius: 8px; align-items: center; justify-content: center;
+  flex: none; cursor: pointer;
+}
+:is(#hiveconnect-root, .hc-embed) #msg-back-btn:hover,
+:is(#hiveconnect-root, .hc-embed)#msg-back-btn:hover { background: var(--msg-bg2, var(--steel-bg)); }
+@media (max-width: 760px) {
+  :is(#hiveconnect-root, .hc-embed) .sidebar.sidebar-messages-theme ~ #sidebar-resizer,
+:is(#hiveconnect-root, .hc-embed).sidebar.sidebar-messages-theme ~ #sidebar-resizer { display: none; }
+  :is(#hiveconnect-root, .hc-embed) .sidebar.sidebar-messages-theme,
+:is(#hiveconnect-root, .hc-embed).sidebar.sidebar-messages-theme { width: 100% !important; min-width: 0 !important; margin: 0; border-radius: 0; }
+  :is(#hiveconnect-root, .hc-embed) .sidebar.sidebar-messages-theme ~ .main.messages-workspace,
+:is(#hiveconnect-root, .hc-embed).sidebar.sidebar-messages-theme ~ .main.messages-workspace { margin: 0; border-radius: 0; }
+  :is(#hiveconnect-root, .hc-embed) body:not(.msg-mobile-thread) .sidebar.sidebar-messages-theme ~ .main.messages-workspace { display: none; }
+  :is(#hiveconnect-root, .hc-embed) body.msg-mobile-thread .sidebar.sidebar-messages-theme { display: none; }
+  :is(#hiveconnect-root, .hc-embed) body.msg-mobile-thread #msg-back-btn { display: flex; }
+  :is(#hiveconnect-root, .hc-embed) body.msg-mobile-thread .main.messages-workspace .main-header { justify-content: flex-start; gap: 10px; }
+}
+
 /* ==================== EMAIL APP ==================== */
 /* sidebar: mailbox switcher + folders */
 :is(#hiveconnect-root, .hc-embed) .ev-accts,

@@ -1479,6 +1479,26 @@ html[data-theme="dark"] .huddle-banner {
 .main.messages-workspace .send-btn { background: var(--msg-blue); color: #fff; box-shadow: none; }
 .main.messages-workspace .composer-hint { color: var(--msg-mut); }
 
+/* Mobile: list OR thread, never both -- #msg-back-btn returns to the list.
+   body.msg-mobile-thread is a pure UI flag (openChannel()/setNavTab()),
+   independent of which conversation is actually open. */
+#msg-back-btn {
+  display: none; appearance: none; -webkit-appearance: none; box-shadow: none;
+  background: none; border: none; color: var(--msg-blue, var(--steel-deep));
+  width: 32px; height: 32px; border-radius: 8px; align-items: center; justify-content: center;
+  flex: none; cursor: pointer;
+}
+#msg-back-btn:hover { background: var(--msg-bg2, var(--steel-bg)); }
+@media (max-width: 760px) {
+  .sidebar.sidebar-messages-theme ~ #sidebar-resizer { display: none; }
+  .sidebar.sidebar-messages-theme { width: 100% !important; min-width: 0 !important; margin: 0; border-radius: 0; }
+  .sidebar.sidebar-messages-theme ~ .main.messages-workspace { margin: 0; border-radius: 0; }
+  body:not(.msg-mobile-thread) .sidebar.sidebar-messages-theme ~ .main.messages-workspace { display: none; }
+  body.msg-mobile-thread .sidebar.sidebar-messages-theme { display: none; }
+  body.msg-mobile-thread #msg-back-btn { display: flex; }
+  body.msg-mobile-thread .main.messages-workspace .main-header { justify-content: flex-start; gap: 10px; }
+}
+
 /* ==================== EMAIL APP ==================== */
 /* sidebar: mailbox switcher + folders */
 .ev-accts { padding: 10px 10px 6px; border-bottom: 1px solid var(--line); }

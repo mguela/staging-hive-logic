@@ -900,6 +900,7 @@ async function openChannel(channelId) {
   // Opening a conversation IS the current activity → make sure the rail + header reflect it
   if (navTab === 'people' || navTab === 'huddles') setNavTab(c && c.type === 'dm' ? 'messages' : 'channels');
   else updateMainHeader();
+  if (c && c.type === 'dm') { msgMobileThreadOpen = true; evMsgUpdateMobileView(); }
   { const g = $('channel-settings-btn'); if (g) g.classList.toggle('hidden', !(c && c.type !== 'dm' && (me.role === 'owner' || me.role === 'admin'))); }
   messagesEl.innerHTML = '<div class="notif-empty">Loading…</div>';
 
@@ -2886,7 +2887,16 @@ function setNavTab(tab) {
   if (tab === 'calendar') openCalendarTab();
   if (tab === 'voip') openVoipTab();
   updateMainHeader();
+  evMsgUpdateMobileView();
 }
+
+// Mobile: show the conversation list OR the open thread, never both. Pure UI
+// flag -- independent of currentChannelId, so desktop is unaffected.
+let msgMobileThreadOpen = false;
+function evMsgUpdateMobileView() {
+  document.body.classList.toggle('msg-mobile-thread', navTab === 'messages' && msgMobileThreadOpen);
+}
+{ const bb = $('msg-back-btn'); if (bb) bb.onclick = () => { msgMobileThreadOpen = false; evMsgUpdateMobileView(); }; }
 
 // Main title bar reflects the CURRENT activity, not just the last channel.
 // Contacts / HiveVideo are section views; Channels / Messages show the open conversation.
@@ -2927,7 +2937,10 @@ function updateMainHeader() {
   if (c && c.type !== 'dm') { t.textContent = channelLabel(c); if (d) d.textContent = c.description || ''; }
   else { t.textContent = 'Channels'; if (d) d.textContent = ''; }
 }
-document.querySelectorAll('.rail-btn[data-tab]').forEach(b => b.addEventListener('click', () => setNavTab(b.dataset.tab)));
+document.querySelectorAll('.rail-btn[data-tab]').forEach(b => b.addEventListener('click', () => {
+  if (b.dataset.tab === 'messages') msgMobileThreadOpen = false; // tapping the rail icon always lands on the list, not a stale open thread
+  setNavTab(b.dataset.tab);
+}));
 
 // ---- Sidebar resize (drag the divider between the sidebar and main content) ----
 // Real, cross-device preference (hcPref) -- same mechanism as every other
