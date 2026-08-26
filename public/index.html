@@ -19,7 +19,7 @@
  * monitor_my_status poll, so "is this person running current code" is a
  * question the database can answer. Do not hand-edit it -- run
  * `node scripts/stamp-page-build.mjs`. */
-var HL_PAGE_BUILD = '468667aeb4f31a8b';
+var HL_PAGE_BUILD = 'b70821089605de38';
 </script>
 <script>
 (function () { // HL_FETCH_DEDUPE_V1 — single wrapper: GET /api/ dedupe + 60s cache + write-invalidate
@@ -32551,17 +32551,24 @@ function hlMonitorShowInstallBanner(){
 // denial, etc.).
 //
 // Also returns WHEN it was uploaded (2026-08-27) -- the data was already
-// being fetched and simply not shown. There is no version number anywhere
-// to display honestly (the installer's filename never carries one, see
-// hivelogic-monitor-agent/package.json's artifactName), so this is the one
-// real signal available for "is this actually current": an admin who just
-// shipped a new build can see whether Docs still shows last month's date
-// instead of trusting the link blindly.
+// being fetched and simply not shown, so an admin who just shipped a new
+// build can see whether Docs still shows last month's date instead of
+// trusting the link blindly.
+//
+// Matches on 'Monitor' + 'Setup' rather than the exact phrase "HiveLogic
+// Monitor Setup" (2026-08-27) -- the build's artifactName
+// (hivelogic-monitor-agent/package.json) now embeds the version
+// ("HiveLogic-Monitor-Setup-v1.3.0.exe", hyphens, not the old
+// space-separated name), and the exact-phrase match would have silently
+// stopped finding new uploads the moment the naming changed. Loose enough
+// to survive future naming/version changes; still scoped enough (both
+// words, not just one) that it won't pick up an unrelated document.
 async function hlMonitorFindInstallerUrl(){
   try {
     var { data: rows } = await sb.from('documents')
       .select('storage_path, filename, uploaded_at')
-      .ilike('filename', '%HiveLogic Monitor Setup%')
+      .ilike('filename', '%Monitor%')
+      .ilike('filename', '%Setup%')
       .order('uploaded_at', { ascending: false })
       .limit(1);
     if (!rows || !rows[0]) return null;
