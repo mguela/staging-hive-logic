@@ -905,6 +905,14 @@ function msgEl(m, grouped, inThread) {
   div.dataset.id = m.id;
 
   if (grouped) {
+    const sp = document.createElement('div'); sp.className = 'time-col-spacer'; div.appendChild(sp);
+  } else {
+    const timeCol = document.createElement('div'); timeCol.className = 'msg-time-col';
+    timeCol.textContent = fmtTime(m.created_at);
+    div.appendChild(timeCol);
+  }
+
+  if (grouped) {
     const sp = document.createElement('div'); sp.className = 'avatar-spacer'; div.appendChild(sp);
   } else {
     div.appendChild(avatarEl(p));
@@ -913,7 +921,7 @@ function msgEl(m, grouped, inThread) {
   const body = document.createElement('div'); body.className = 'msg-body';
   if (!grouped) {
     const head = document.createElement('div'); head.className = 'msg-head';
-    head.innerHTML = `<span class="msg-time">${fmtTime(m.created_at)}</span><span class="msg-author"></span>${p && p.username === 'reina' ? '<span class="bot-badge">BOT</span>' : ''}`;
+    head.innerHTML = `<span class="msg-author"></span>${p && p.username === 'reina' ? '<span class="bot-badge">BOT</span>' : ''}`;
     head.querySelector('.msg-author').textContent = p ? p.display_name : 'Unknown';
     body.appendChild(head);
   }
