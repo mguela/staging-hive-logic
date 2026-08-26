@@ -4792,6 +4792,10 @@ async function hcRefreshImapAccounts() {
 // ---- open the Email tab: pick the right state ----
 function openEmailTab() {
   ensureMsal();
+  // One-time-per-load check of whether "Sign in with Google" will actually
+  // work (GOOGLE_CLIENT_ID/SECRET set server-side) so hcAddImapMailbox()
+  // doesn't default Gmail to a one-click button that's guaranteed to fail.
+  evMailApi('health').then((j) => { evMailGoogleOn = !!j.googleConfigured; }).catch(() => {});
   const connect = $('ev-connect'); if (!$('email-view')) return;
   evAccounts = evListAccounts();
   if (evActive && !evAccounts.some(a => a.homeAccountId === evActive.homeAccountId)) evActive = null;
