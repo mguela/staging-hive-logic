@@ -2177,6 +2177,26 @@ html[data-theme="dark"] :is(#hiveconnect-root, .hc-embed).huddle-banner {
 :is(#hiveconnect-root, .hc-embed).main.messages-workspace .reaction:hover { border-color: var(--msg-blue); }
 :is(#hiveconnect-root, .hc-embed) .main.messages-workspace .reaction.mine,
 :is(#hiveconnect-root, .hc-embed).main.messages-workspace .reaction.mine { background: var(--msg-selected); border-color: var(--msg-blue); color: var(--msg-blue); }
+:is(#hiveconnect-root, .hc-embed) .main.messages-workspace .attach-img,
+:is(#hiveconnect-root, .hc-embed).main.messages-workspace .attach-img { max-width: 420px; max-height: 300px; object-fit: cover; border-radius: 10px; border-color: var(--msg-border); }
+:is(#hiveconnect-root, .hc-embed) .main.messages-workspace .file-chip,
+:is(#hiveconnect-root, .hc-embed).main.messages-workspace .file-chip { background: var(--msg-bg2); border-color: var(--msg-border); color: var(--msg-ink); }
+:is(#hiveconnect-root, .hc-embed) .main.messages-workspace .file-chip:hover,
+:is(#hiveconnect-root, .hc-embed).main.messages-workspace .file-chip:hover { border-color: var(--msg-blue); }
+:is(#hiveconnect-root, .hc-embed) .main.messages-workspace .composer,
+:is(#hiveconnect-root, .hc-embed).main.messages-workspace .composer { background: #fff; border-color: var(--msg-border); border-radius: 12px; min-height: 52px; box-shadow: none; }
+:is(#hiveconnect-root, .hc-embed) .main.messages-workspace .composer:focus-within,
+:is(#hiveconnect-root, .hc-embed).main.messages-workspace .composer:focus-within { border-color: var(--msg-blue); }
+:is(#hiveconnect-root, .hc-embed) .main.messages-workspace .composer textarea,
+:is(#hiveconnect-root, .hc-embed).main.messages-workspace .composer textarea { color: var(--msg-ink); }
+:is(#hiveconnect-root, .hc-embed) .main.messages-workspace .composer textarea::placeholder,
+:is(#hiveconnect-root, .hc-embed).main.messages-workspace .composer textarea::placeholder { color: var(--msg-mut); }
+:is(#hiveconnect-root, .hc-embed) .main.messages-workspace .attach-btn:hover,
+:is(#hiveconnect-root, .hc-embed).main.messages-workspace .attach-btn:hover { background: var(--msg-bg2); color: var(--msg-blue); }
+:is(#hiveconnect-root, .hc-embed) .main.messages-workspace .send-btn,
+:is(#hiveconnect-root, .hc-embed).main.messages-workspace .send-btn { background: var(--msg-blue); color: #fff; box-shadow: none; }
+:is(#hiveconnect-root, .hc-embed) .main.messages-workspace .composer-hint,
+:is(#hiveconnect-root, .hc-embed).main.messages-workspace .composer-hint { color: var(--msg-mut); }
 
 /* ==================== EMAIL APP ==================== */
 /* sidebar: mailbox switcher + folders */

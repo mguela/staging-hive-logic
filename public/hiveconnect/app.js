@@ -2900,7 +2900,9 @@ function updateMainHeader() {
   if (navTab === 'tasks') { t.textContent = 'Tasks'; if (d) d.textContent = 'Who owns what, and by when'; return; }
   if (navTab === 'calendar') { t.textContent = 'Calendar'; if (d) d.textContent = 'Your Outlook calendar'; return; }
   const c = channels.get(currentChannelId);
-  if (searchInput) searchInput.placeholder = (navTab === 'messages' && c && c.type === 'dm') ? 'Search this conversation…' : 'Search messages…';
+  const inDm = navTab === 'messages' && c && c.type === 'dm';
+  if (searchInput) searchInput.placeholder = inDm ? 'Search this conversation…' : 'Search messages…';
+  if (composerInput) composerInput.placeholder = inDm ? 'Type a message…' : 'Message';
   if (navTab === 'messages') {
     // Messages is about DMs — only echo the open thing if it's actually a DM.
     if (c && c.type === 'dm') {
@@ -2958,6 +2960,15 @@ document.querySelectorAll('.rail-btn[data-tab]').forEach(b => b.addEventListener
     hcPrefSet('hcSidebarWidth', 'hcSidebarWidth', Math.round(sidebar.getBoundingClientRect().width));
   });
 })();
+// Cmd/Ctrl+K -- focus the Messages sidebar search (the ⌘K hint chip next to
+// it advertises this), scoped to the Messages tab so it doesn't fight other
+// tabs' own shortcuts.
+window.addEventListener('keydown', (e) => {
+  if (navTab === 'messages' && (e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+    e.preventDefault();
+    const s = $('msg-search'); if (s) s.focus();
+  }
+});
 // placeholder rail buttons (Chirp, Email) — show a "coming soon" toast
 document.querySelectorAll('.rail-btn[data-soon]').forEach(b => b.addEventListener('click', () => railToast(b.dataset.soon)));
 let railToastT = null;
