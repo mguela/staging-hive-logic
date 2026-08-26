@@ -7215,6 +7215,72 @@ async function handleWorkforceWeekSummary(req, res) {
   return res.status(200).json({ ok: true, tablesReady: true, todaySeconds, weekSeconds, weekStart });
 }
 
+// GET /api/track1?resource=eod_reports&date=YYYY-MM-DD -- Reports > EOD
+// Reports (2026-08-27). Superadmin/Owner only: "check the system if we do
+// have that, if none, let's Plan and add it... provide a view for
+// admins/owner ... who did not submit EOD report." handleWorkforceTeam
+// already answers this for TODAY (any admin/superadmin) -- this is a
+// separate, stricter-access, date-parameterized sibling rather than a
+// modification of that endpoint, so its existing broader-access callers
+// are untouched.
+//
+// Owners never appear in the roster: they never clock in
+// (api/_lib/owner.js), so they never have an EOD report, and including
+// them would just show permanent, meaningless "Missing" noise. Resolved
+// in bulk -- one query for who holds 'owner' in employee_roles, one for
+// the emails that maps to -- rather than isOwner() called once per
+// profile (which would be a real N+1 round-trip per person on a roster
+// this size).
+async function handleEodReports(req, res) {
+  if (req.method !== 'GET') return res.status(405).json({ ok: false, error: 'Method not allowed.' });
+  const requester = await getRequestingProfile(req);
+  if (!requester) return res.status(401).json({ ok: false, error: 'Not signed in -- log into HiveLogic first.' });
+  if (requester.role !== 'superadmin' && !(await isOwner(requester))) {
+    return res.status(403).json({ ok: false, error: 'EOD Reports is restricted to Superadmin/Owner.' });
+  }
+
+  const requestedDate = String(req.query.date || '').trim();
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(requestedDate) ? requestedDate : todayStr();
+
+  const [profRes, ownerRolesRes] = await Promise.all([
+    supabaseRequest('profiles?select=id,email,full_name&order=full_name.asc'),
+    supabaseRequest(`employee_roles?permission_roles=cs.{owner}&select=jobber_id`),
+  ]);
+  const profiles = profRes.ok ? await profRes.json() : [];
+  if (!profRes.ok) return res.status(200).json({ ok: true, date, roster: [], tablesReady: false, countSubmitted: 0, countMissing: 0 });
+
+  const ownerJobberIds = (ownerRolesRes.ok ? await ownerRolesRes.json() : []).map((r) => r.jobber_id).filter(Boolean);
+  let ownerEmails = new Set();
+  if (ownerJobberIds.length) {
+    const usersRes = await supabaseRequest(`users?jobber_id=in.(${ownerJobberIds.map((id) => encodeURIComponent(id)).join(',')})&select=email`);
+    const userRows = usersRes.ok ? await usersRes.json() : [];
+    ownerEmails = new Set(userRows.map((u) => String(u.email || '').toLowerCase()));
+  }
+
+  const sumRes = await supabaseRequest(`workforce_daily_summaries?summary_date=eq.${date}`);
+  if (!sumRes.ok) return res.status(200).json({ ok: true, date, roster: [], tablesReady: false, countSubmitted: 0, countMissing: 0 });
+  const summaries = await sumRes.json();
+
+  const roster = profiles
+    .filter((p) => !ownerEmails.has(String(p.email || '').toLowerCase()))
+    .map((p) => {
+      const mySummary = summaries.find((s) => s.employee_id === p.id);
+      return {
+        employeeId: p.id,
+        name: p.full_name || p.email || 'Unknown',
+        email: p.email,
+        submitted: !!mySummary,
+        summary: mySummary || null,
+      };
+    });
+  const countSubmitted = roster.filter((r) => r.submitted).length;
+
+  return res.status(200).json({
+    ok: true, date, roster, tablesReady: true,
+    countSubmitted, countMissing: roster.length - countSubmitted,
+  });
+}
+
 async function handleWorkforceTeam(req, res) {
   const requester = await getRequestingProfile(req);
   if (!requester) return res.status(401).json({ ok: false, error: 'Not signed in -- log into HiveLogic first.' });
@@ -9357,6 +9423,9 @@ if (resource === 'mailconnect') {
 }
   if (resource === 'workforce_team') {
     try { return await handleWorkforceTeam(req, res); } catch (e) { return res.status(500).json({ ok: false, error: e.message }); }
+}
+  if (resource === 'eod_reports') {
+    try { return await handleEodReports(req, res); } catch (e) { return res.status(500).json({ ok: false, error: e.message }); }
 }
   if (resource === 'workforce_week_summary') {
     try { return await handleWorkforceWeekSummary(req, res); } catch (e) { return res.status(500).json({ ok: false, error: e.message }); }
