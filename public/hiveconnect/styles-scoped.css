@@ -2136,6 +2136,38 @@ html[data-theme="dark"] :is(#hiveconnect-root, .hc-embed).huddle-banner {
 :is(#hiveconnect-root, .hc-embed) .main.messages-workspace .huddle-btn:hover,
 :is(#hiveconnect-root, .hc-embed).main.messages-workspace .huddle-btn:hover { background: var(--msg-selected); color: var(--msg-blue); border-color: var(--msg-blue); }
 
+/* Message thread -- bubble + pill day-divider, scoped so the Channels tab
+   (same msgEl()/.msg markup, different .main class) keeps its own look. */
+:is(#hiveconnect-root, .hc-embed) .main.messages-workspace .day-divider,
+:is(#hiveconnect-root, .hc-embed).main.messages-workspace .day-divider {
+  display: block; width: fit-content; margin: 18px auto 10px;
+  background: var(--msg-bg2); border: 1px solid var(--msg-border); border-radius: 999px;
+  padding: 4px 14px; text-transform: none; letter-spacing: 0; font-family: var(--sans);
+  font-weight: 600; font-size: 11px; color: var(--msg-mut);
+}
+:is(#hiveconnect-root, .hc-embed) .main.messages-workspace .day-divider::before,
+:is(#hiveconnect-root, .hc-embed).main.messages-workspace .day-divider::before,
+:is(#hiveconnect-root, .hc-embed) .main.messages-workspace .day-divider::after,
+:is(#hiveconnect-root, .hc-embed).main.messages-workspace .day-divider::after { content: none; }
+:is(#hiveconnect-root, .hc-embed) .main.messages-workspace .msg:hover,
+:is(#hiveconnect-root, .hc-embed).main.messages-workspace .msg:hover { background: var(--msg-bg2); }
+:is(#hiveconnect-root, .hc-embed) .main.messages-workspace .msg-author,
+:is(#hiveconnect-root, .hc-embed).main.messages-workspace .msg-author { color: var(--msg-ink); }
+:is(#hiveconnect-root, .hc-embed) .main.messages-workspace .msg-time-col,
+:is(#hiveconnect-root, .hc-embed).main.messages-workspace .msg-time-col { color: var(--msg-mut); }
+:is(#hiveconnect-root, .hc-embed) .main.messages-workspace .msg-content,
+:is(#hiveconnect-root, .hc-embed).main.messages-workspace .msg-content {
+  background: var(--msg-bg2); border: 1px solid var(--msg-border); border-radius: 8px;
+  padding: 8px 12px; max-width: 640px; color: var(--msg-ink); margin-top: 3px;
+}
+:is(#hiveconnect-root, .hc-embed) .main.messages-workspace .msg-content code,
+:is(#hiveconnect-root, .hc-embed).main.messages-workspace .msg-content code { background: var(--card); border-color: var(--msg-border); }
+:is(#hiveconnect-root, .hc-embed) .main.messages-workspace .msg-seen,
+:is(#hiveconnect-root, .hc-embed).main.messages-workspace .msg-seen {
+  text-align: right; font-family: var(--sans); font-size: 10.5px; font-weight: 500;
+  color: var(--msg-mut); padding: 2px 20px 6px 0;
+}
+
 /* ==================== EMAIL APP ==================== */
 /* sidebar: mailbox switcher + folders */
 :is(#hiveconnect-root, .hc-embed) .ev-accts,

@@ -872,6 +872,21 @@ function dmOther(channel) {
   return profiles.get(otherId);
 }
 
+// "Seen" read receipt -- no schema change: every DM member already has their
+// own channel_members.last_read_at row; "seen" is just the OTHER member's
+// copy being at/after the timestamp of my own last message in the channel.
+const dmOtherLastRead = new Map(); // dm channel_id -> other member's last_read_at | null
+async function evLoadOtherLastRead(channelId) {
+  const c = channels.get(channelId);
+  if (!c || c.type !== 'dm' || isGroupDM(c)) return;
+  const other = dmOther(c);
+  if (!other) return;
+  const { data } = await sb.from('channel_members').select('last_read_at')
+    .eq('channel_id', channelId).eq('user_id', other.id).single();
+  dmOtherLastRead.set(channelId, data ? data.last_read_at : null);
+  if (channelId === currentChannelId) renderMessages();
+}
+
 function channelLabel(c) {
   if (c.type === 'dm') { if (isGroupDM(c)) return dmGroupLabel(c); const o = dmOther(c); return o ? o.display_name : 'DM'; }
   return `${c.type === 'private' ? '🔒 ' : '#'}${c.name}`;
@@ -911,6 +926,7 @@ async function openChannel(channelId) {
   refreshPinCount();
   $('pinned-panel').classList.add('hidden');
   renderHuddleUI();
+  evLoadOtherLastRead(channelId);
   composerInput.focus();
 }
 
@@ -952,6 +968,15 @@ function renderMessages() {
     const grouped = m.user_id === lastAuthor && (new Date(m.created_at) - lastTs) < 5 * 60 * 1000 && !m.deleted_at;
     messagesEl.appendChild(msgEl(m, grouped, false));
     lastAuthor = m.user_id; lastTs = new Date(m.created_at).getTime();
+  }
+  // "Seen" -- only under my own most recent message, and only once the other
+  // DM member's last_read_at has caught up to it (real data, no schema change).
+  const myLast = [...msgs].reverse().find(m => m.user_id === me.id && !m.deleted_at);
+  const otherRead = dmOtherLastRead.get(currentChannelId);
+  if (myLast && otherRead && otherRead >= myLast.created_at) {
+    const seen = document.createElement('div'); seen.className = 'msg-seen';
+    seen.textContent = 'Seen ' + fmtTime(otherRead);
+    messagesEl.appendChild(seen);
   }
   messagesEl.scrollTop = messagesEl.scrollHeight;
 }
@@ -4658,6 +4683,14 @@ function subscribeRealtime() {
       renderSidebar();
       // …then surface any live call there immediately (don't wait for the next presence sync).
       if (typeof updateIncomingCalls === 'function') updateIncomingCalls();
+    })
+    .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'channel_members' }, ({ new: m }) => {
+      // The other DM member reading my messages moves their last_read_at --
+      // that's what powers the real "Seen" indicator, no new subscription needed elsewhere.
+      if (m.user_id !== me.id && dmOtherLastRead.has(m.channel_id)) {
+        dmOtherLastRead.set(m.channel_id, m.last_read_at);
+        if (m.channel_id === currentChannelId) renderMessages();
+      }
     })
     .subscribe();
 

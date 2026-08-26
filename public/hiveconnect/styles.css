@@ -1442,6 +1442,28 @@ html[data-theme="dark"] .huddle-banner {
 .main.messages-workspace .huddle-btn { border-color: var(--msg-border); color: var(--msg-blue); }
 .main.messages-workspace .huddle-btn:hover { background: var(--msg-selected); color: var(--msg-blue); border-color: var(--msg-blue); }
 
+/* Message thread -- bubble + pill day-divider, scoped so the Channels tab
+   (same msgEl()/.msg markup, different .main class) keeps its own look. */
+.main.messages-workspace .day-divider {
+  display: block; width: fit-content; margin: 18px auto 10px;
+  background: var(--msg-bg2); border: 1px solid var(--msg-border); border-radius: 999px;
+  padding: 4px 14px; text-transform: none; letter-spacing: 0; font-family: var(--sans);
+  font-weight: 600; font-size: 11px; color: var(--msg-mut);
+}
+.main.messages-workspace .day-divider::before, .main.messages-workspace .day-divider::after { content: none; }
+.main.messages-workspace .msg:hover { background: var(--msg-bg2); }
+.main.messages-workspace .msg-author { color: var(--msg-ink); }
+.main.messages-workspace .msg-time-col { color: var(--msg-mut); }
+.main.messages-workspace .msg-content {
+  background: var(--msg-bg2); border: 1px solid var(--msg-border); border-radius: 8px;
+  padding: 8px 12px; max-width: 640px; color: var(--msg-ink); margin-top: 3px;
+}
+.main.messages-workspace .msg-content code { background: var(--card); border-color: var(--msg-border); }
+.main.messages-workspace .msg-seen {
+  text-align: right; font-family: var(--sans); font-size: 10.5px; font-weight: 500;
+  color: var(--msg-mut); padding: 2px 20px 6px 0;
+}
+
 /* ==================== EMAIL APP ==================== */
 /* sidebar: mailbox switcher + folders */
 .ev-accts { padding: 10px 10px 6px; border-bottom: 1px solid var(--line); }
