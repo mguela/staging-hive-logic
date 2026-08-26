@@ -843,8 +843,8 @@ html[data-theme="dark"] .pin-flag { color: #f0c987; }
 /* Header "Huddle" button */
 .huddle-btn {
   display: inline-flex; align-items: center; gap: 6px;
-  padding: 6px 12px; border-radius: 99px; cursor: pointer;
-  background: var(--steel-bg); border: 1.5px solid var(--line);
+  padding: 6px 12px; border-radius: 9px; cursor: pointer;
+  background: none; border: 1.5px solid var(--line);
   color: var(--steel-deep); font-family: var(--sans);
   font-weight: 700; font-size: 12px; letter-spacing: -.01em;
   transition: background .14s, color .14s, border-color .14s, box-shadow .14s;
@@ -1361,6 +1361,10 @@ html[data-theme="dark"] .huddle-banner {
 .msg-search svg { flex: none; }
 .msg-search input { flex: 1; min-width: 0; border: none; background: none; outline: none; font-family: var(--sans); font-size: 12.5px; color: var(--ink); }
 .msg-search input::placeholder { color: var(--mut); }
+/* Give the main content area the same floating-card margin as the Messages
+   sidebar (12px, 0 on the left since the sidebar's own right margin already
+   makes that gap), so both columns float as matching cards. */
+.sidebar.sidebar-messages-theme + .main { margin: 12px 12px 12px 0; border-radius: 15px; overflow: hidden; background: var(--card); }
 
 /* ==================== EMAIL APP ==================== */
 /* sidebar: mailbox switcher + folders */
