@@ -13,6 +13,7 @@
     "imapflow": "^1.0.191",
     "mailparser": "^3.7.4",
     "nodemailer": "^9.0.5",
+    "pdf-lib": "^1.17.1",
     "web-push": "^3.6.7"
   },
   "overridesRationale": {

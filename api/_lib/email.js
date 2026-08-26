@@ -32,7 +32,12 @@ function defaultFromAddress() {
 
 // Sends one email. Never throws -- returns { ok, id, error } so a caller
 // looping over a recipient list can keep going even if one send fails.
-export async function sendEmail({ to, subject, html, text, from, replyTo }) {
+//
+// attachments: [{ filename, content }], content a base64 string (Resend's
+// own format -- see https://resend.com/docs/api-reference/emails/send-email).
+// Optional and additive: every existing caller that doesn't pass it behaves
+// exactly as before.
+export async function sendEmail({ to, subject, html, text, from, replyTo, attachments }) {
   const apiKey = process.env.RESEND_API_KEY;
   if (!apiKey) return { ok: false, error: 'RESEND_API_KEY is not set for this deployment.' };
   if (!to) return { ok: false, error: 'to is required.' };
@@ -47,6 +52,7 @@ export async function sendEmail({ to, subject, html, text, from, replyTo }) {
   if (html) body.html = html;
   if (text) body.text = text;
   if (replyTo) body.reply_to = replyTo;
+  if (Array.isArray(attachments) && attachments.length) body.attachments = attachments;
 
   try {
     const res = await fetch(`${RESEND_API_BASE}/emails`, {
