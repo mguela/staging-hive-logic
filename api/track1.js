@@ -5412,6 +5412,111 @@ async function handleUpdateInvoice(req, res) {
   return res.status(200).json({ ok: true, resource: 'update_invoice', invoice: rows[0] });
 }
 
+// 2026-08-26, jomell: "lets start with the timesheet... copy it into our
+// own [Time & Timesheets tab]." A week's worth of time_sheet_entries
+// (Jobber-synced table, api/jobber/sync-extended.js), shaped for the
+// weekly grid: each entry's job resolved to a real title where one
+// exists, or "General" for the entries no job is attached to (matches
+// Jobber's own screenshot layout). Job titles are looked up only for the
+// distinct job ids actually present this week -- not the whole jobs
+// table -- since a week's entries touch at most a handful of jobs.
+async function handleTimesheetWeek(req, res) {
+  const requester = await getRequestingProfile(req);
+  if (!requester) return res.status(401).json({ ok: false, error: 'Not signed in -- log into HiveLogic first.' });
+  const startAt = String(req.query.startAt || '').trim();
+  const endAt = String(req.query.endAt || '').trim();
+  if (!startAt || !endAt || isNaN(Date.parse(startAt)) || isNaN(Date.parse(endAt))) {
+    return res.status(400).json({ ok: false, error: 'A valid startAt and endAt are required.' });
+  }
+
+  const entriesRes = await supabaseRequest(
+    `time_sheet_entries?start_at=gte.${encodeURIComponent(startAt)}&start_at=lt.${encodeURIComponent(endAt)}` +
+    `&select=jobber_id,start_at,end_at,final_duration,user_id,job_id,note&order=start_at.asc&limit=2000`
+  );
+  if (!entriesRes.ok) return res.status(500).json({ ok: false, error: 'Could not load timesheet entries: ' + (await entriesRes.text()).slice(0, 300) });
+  const entries = await entriesRes.json();
+
+  const jobIds = [...new Set(entries.map(e => e.job_id).filter(Boolean))];
+  let jobTitleById = {};
+  if (jobIds.length) {
+    const jobsRes = await supabaseRequest(`jobs?jobber_id=in.(${jobIds.map(id => encodeURIComponent(id)).join(',')})&select=jobber_id,title`);
+    if (jobsRes.ok) { (await jobsRes.json()).forEach(j => { jobTitleById[j.jobber_id] = j.title; }); }
+  }
+
+  const shaped = entries.map(e => {
+    const durationSeconds = isFinite(Number(e.final_duration)) && Number(e.final_duration) > 0
+      ? Number(e.final_duration)
+      : Math.round((new Date(e.end_at) - new Date(e.start_at)) / 1000);
+    return {
+      id: e.jobber_id,
+      userId: e.user_id,
+      jobId: e.job_id || null,
+      jobLabel: e.job_id ? (jobTitleById[e.job_id] || 'Job') : 'General',
+      startAt: e.start_at,
+      endAt: e.end_at,
+      durationSeconds,
+      note: e.note || null,
+    };
+  });
+
+  return res.status(200).json({ ok: true, resource: 'timesheet_week', entries: shaped });
+}
+
+// The Create Timesheet Entry popup. HiveLogic-native rows use their own
+// 'HL-TSE-<uuid>' id namespace (same convention as HL-INV-/HL-JOB-/HL-CO-)
+// so the Jobber sync's own timeSheetEntries upsert never touches or
+// collides with one. Duration is always DERIVED from startAt/endAt here,
+// never trusted from a client-submitted hours/minutes figure that could
+// drift from the actual time range (Law 1).
+async function handleCreateTimesheetEntry(req, res) {
+  if (req.method !== 'POST') return res.status(405).json({ ok: false, error: 'POST only' });
+  const requester = await getRequestingProfile(req);
+  if (!requester) return res.status(401).json({ ok: false, error: 'Not signed in -- log into HiveLogic first.' });
+  const b = req.body || {};
+  const userId = String(b.userId || '').trim();
+  if (!userId) return res.status(400).json({ ok: false, error: 'An employee is required.' });
+  const jobId = String(b.jobId || '').trim() || null;
+  const startAt = String(b.startAt || '').trim();
+  const endAt = String(b.endAt || '').trim();
+  if (!startAt || !endAt || isNaN(Date.parse(startAt)) || isNaN(Date.parse(endAt))) {
+    return res.status(400).json({ ok: false, error: 'A valid start and end time are required.' });
+  }
+  const startMs = new Date(startAt).getTime();
+  const endMs = new Date(endAt).getTime();
+  if (endMs <= startMs) return res.status(400).json({ ok: false, error: 'End time must be after start time.' });
+
+  let jobUuid = null;
+  let jobTitle = null;
+  if (jobId) {
+    const jobRes = await supabaseRequest(`jobs?jobber_id=eq.${encodeURIComponent(jobId)}&select=uuid_id,title&limit=1`);
+    if (jobRes.ok) { const rows = await jobRes.json(); jobUuid = rows[0]?.uuid_id || null; jobTitle = rows[0]?.title || null; }
+  }
+
+  const row = {
+    jobber_id: 'HL-TSE-' + crypto.randomUUID(),
+    start_at: new Date(startAt).toISOString(),
+    end_at: new Date(endAt).toISOString(),
+    final_duration: Math.round((endMs - startMs) / 1000),
+    user_id: userId,
+    job_id: jobId,
+    job_uuid: jobUuid,
+    note: String(b.note || '').trim() || null,
+    jobber_updated_at: new Date().toISOString(),
+  };
+  const r = await supabaseRequest('time_sheet_entries', { method: 'POST', headers: { Prefer: 'return=representation' }, body: JSON.stringify(row) });
+  if (!r.ok) return res.status(500).json({ ok: false, error: 'Could not save this timesheet entry: ' + (await r.text()).slice(0, 300) });
+  const created = (await r.json())[0];
+  return res.status(200).json({
+    ok: true,
+    resource: 'create_timesheet_entry',
+    entry: {
+      id: created.jobber_id, userId: created.user_id, jobId: created.job_id || null,
+      jobLabel: jobId ? (jobTitle || 'Job') : 'General', startAt: created.start_at, endAt: created.end_at,
+      durationSeconds: row.final_duration, note: created.note || null,
+    },
+  });
+}
+
 async function handleMyJobsToday(req, res) {
   const requester = await getRequestingProfile(req);
   if (!requester) return res.status(401).json({ ok: false, error: 'Not signed in -- log into HiveLogic first.' });
@@ -8879,6 +8984,12 @@ if (resource === 'mailconnect') {
   }
   if (resource === 'update_invoice') {
     try { return await handleUpdateInvoice(req, res); } catch (e) { return res.status(500).json({ ok: false, error: e.message }); }
+  }
+  if (resource === 'timesheet_week') {
+    try { return await handleTimesheetWeek(req, res); } catch (e) { return res.status(500).json({ ok: false, error: e.message }); }
+  }
+  if (resource === 'create_timesheet_entry') {
+    try { return await handleCreateTimesheetEntry(req, res); } catch (e) { return res.status(500).json({ ok: false, error: e.message }); }
   }
   if (resource === 'my_jobs_today') {
     try { return await handleMyJobsToday(req, res); } catch (e) { return res.status(500).json({ ok: false, error: e.message }); }

@@ -19,7 +19,7 @@
  * monitor_my_status poll, so "is this person running current code" is a
  * question the database can answer. Do not hand-edit it -- run
  * `node scripts/stamp-page-build.mjs`. */
-var HL_PAGE_BUILD = '746e44c13aa4bdb6';
+var HL_PAGE_BUILD = '58276554fcc0b96c';
 </script>
 <script>
 (function () { // HL_FETCH_DEDUPE_V1 — single wrapper: GET /api/ dedupe + 60s cache + write-invalidate
@@ -5435,6 +5435,35 @@ function ninvSave(){ var amt = parseFloat(document.getElementById('ninv-amt').va
 <div id="workforce">
   <style>@keyframes wfPulse{0%{opacity:1}50%{opacity:.35}100%{opacity:1}}</style>
   <button class="back" onclick="showView('cc')">← COMMAND CENTER</button>
+
+  <!-- 2026-08-26, jomell: "lets start with the timesheet. the screenshot is
+       from jobber and we will copy it into our own... in the timesheets the
+       user can click on their name and a table would appear and once
+       clicked on an empty date, a window will popup its the 'create
+       timesheet entry'." Only the Timesheets tab itself for now -- "for now
+       lets not add the 'approve timesheets' and 'confirm payroll' tab."
+       Admin/owner-only, same visibility rule as wf-team-card below (this is
+       everyone's hours, not just your own) -- shown/hidden by
+       workforceRefresh() once it knows isOwner. -->
+  <div class="card" id="ts-card" style="margin-bottom:16px;display:none">
+    <h2 style="margin:0 0 4px;font-family:Montserrat;font-size:15px;font-weight:900">Timesheets</h2>
+    <div style="font-size:11px;color:var(--mut);font-weight:600;margin-bottom:14px">Click an employee to see their week. Click an empty date to log time for them.</div>
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px">
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        <button onclick="tsShiftWeek(-1)" style="border:1px solid var(--line);background:#fff;border-radius:8px;width:30px;height:30px;font-size:14px;font-weight:800;cursor:pointer;color:var(--ink)">&#8249;</button>
+        <div id="ts-range-label" style="font-weight:800;font-size:13px;min-width:170px;text-align:center;border:1px solid var(--line);border-radius:8px;padding:6px 12px">&nbsp;</div>
+        <button onclick="tsShiftWeek(1)" style="border:1px solid var(--line);background:#fff;border-radius:8px;width:30px;height:30px;font-size:14px;font-weight:800;cursor:pointer;color:var(--ink)">&#8250;</button>
+        <button onclick="tsGoToday()" style="border:1px solid var(--line);background:#fff;border-radius:8px;padding:7px 14px;font-size:11.5px;font-weight:800;cursor:pointer;color:var(--ink)">Today</button>
+        <span title="Day view isn't built yet -- Week is the only view for now" style="border:1px solid var(--line);border-right:none;border-radius:8px 0 0 8px;padding:7px 14px;font-size:11.5px;font-weight:800;color:var(--mut);cursor:not-allowed">Day</span>
+        <span style="border:1.5px solid var(--green);border-radius:0 8px 8px 0;padding:6.5px 14px;font-size:11.5px;font-weight:800;color:var(--green)">Week</span>
+      </div>
+      <button onclick="tsExpandAll()" style="border:1px solid var(--line);background:#fff;border-radius:8px;padding:7px 14px;font-size:11.5px;font-weight:800;cursor:pointer;color:var(--ink)">+ Expand all</button>
+    </div>
+    <div id="ts-table-wrap" style="overflow-x:auto;border:1px solid var(--line);border-radius:10px">
+      <div style="padding:26px;text-align:center;color:var(--mut);font-size:12px;font-weight:700">Loading timesheets&hellip;</div>
+    </div>
+  </div>
+
   <div class="card" style="margin-bottom:16px">
     <h2 style="margin:0 0 4px;font-family:Montserrat;font-size:15px;font-weight:900">Time Clock</h2>
     <div style="font-size:11px;color:var(--mut);font-weight:600;margin-bottom:14px">Clock in, track breaks, and submit your end-of-day report — replaces the old Google Form.</div>
@@ -5673,6 +5702,11 @@ function ninvSave(){ var amt = parseFloat(document.getElementById('ninv-amt').va
          clock-in prompt lives outside this closure and asks rather than
          guesses. */
       window.hlWorkforceIsOwner = function(){ return isOwner; };
+      var tsCard = document.getElementById('ts-card');
+      if (tsCard) {
+        tsCard.style.display = isOwner ? 'block' : 'none';
+        if (isOwner && typeof window.tsLoad === 'function') window.tsLoad();
+      }
       renderClockState();
       if (data && data.lastClosed) hlWfExplainClockOut(data.lastClosed);
 
@@ -5955,6 +5989,248 @@ function ninvSave(){ var amt = parseFloat(document.getElementById('ninv-amt').va
       });
     };
   })();
+  </script>
+
+  <script>
+  // ---- Timesheets (2026-08-26, jomell) ----------------------------------
+  // "the screenshot is from jobber and we will copy it into our own." Real
+  // data from time_sheet_entries (api/track1.js's timesheet_week/
+  // create_timesheet_entry), same roster as resource=users. Entries this
+  // app creates itself use their own HL-TSE- id namespace so the Jobber
+  // sync's own upsert never touches or collides with one.
+  var TS = { weekStart: null, users: [], entries: [], expanded: {}, jobsAll: null };
+
+  function tsEtDateStr(iso) {
+    return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(iso));
+  }
+  // Same DST-safe probe nlEtToUTC uses (New Lead form's site-visit booking),
+  // extended to carry minutes -- a wall-clock ET date+time in, a UTC instant out.
+  function tsEtToUTC(ymd, hour, minute) {
+    var probe = new Date(ymd + 'T12:00:00Z');
+    var etHour = parseInt(new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', hour: '2-digit', hour12: false }).format(probe), 10);
+    var offset = 12 - etHour;
+    var d = new Date(ymd + 'T00:00:00Z');
+    d.setUTCHours((hour || 0) + offset, minute || 0, 0, 0);
+    return d;
+  }
+  function tsAddDays(ymd, n) {
+    var d = new Date(ymd + 'T12:00:00Z');
+    d.setUTCDate(d.getUTCDate() + n);
+    return d.toISOString().slice(0, 10);
+  }
+  function tsMondayOf(ymd) {
+    var d = new Date(ymd + 'T12:00:00Z');
+    var dow = d.getUTCDay(); // 0=Sun..6=Sat
+    var back = dow === 0 ? 6 : dow - 1;
+    return tsAddDays(ymd, -back);
+  }
+  function tsFmtDur(seconds) {
+    if (!seconds) return '&#8212;';
+    var h = Math.floor(seconds / 3600), m = Math.round((seconds % 3600) / 60);
+    return h + 'h ' + m + 'm';
+  }
+  function tsFmtRangeLabel(mondayYmd) {
+    var start = new Date(mondayYmd + 'T12:00:00Z');
+    var end = new Date(tsAddDays(mondayYmd, 6) + 'T12:00:00Z');
+    var sameMonth = start.getUTCMonth() === end.getUTCMonth();
+    var opt1 = { month: 'short', day: 'numeric', timeZone: 'UTC' };
+    var opt2 = sameMonth ? { day: 'numeric', timeZone: 'UTC' } : opt1;
+    var s = start.toLocaleDateString('en-US', opt1);
+    var e = sameMonth ? end.toLocaleDateString('en-US', opt2) : end.toLocaleDateString('en-US', opt1);
+    return s + ' &#8211; ' + e + ', ' + end.getUTCFullYear();
+  }
+  // Safe embedding of a JS argument inside an onclick="..." attribute built
+  // by string concatenation. JSON.stringify(v) here would inject literal
+  // double-quote characters into a double-quoted HTML attribute and break
+  // it outright -- this instead matches the single-quoted-argument pattern
+  // already used throughout this file (e.g. coSend(\'id\')).
+  function tsJsArg(v) { return v === null || v === undefined ? 'null' : "'" + String(v).replace(/\\/g, '\\\\').replace(/'/g, "\\'") + "'"; }
+
+  function tsGoToday() { TS.weekStart = tsMondayOf(new Date().toISOString().slice(0, 10)); tsLoad(); }
+  function tsShiftWeek(n) { TS.weekStart = tsAddDays(TS.weekStart || tsMondayOf(new Date().toISOString().slice(0, 10)), n * 7); tsLoad(); }
+  function tsExpandAll() { TS.users.forEach(function (u) { TS.expanded[u.id] = true; }); tsRender(); }
+
+  function tsLoad() {
+    if (!TS.weekStart) TS.weekStart = tsMondayOf(new Date().toISOString().slice(0, 10));
+    var label = document.getElementById('ts-range-label');
+    if (label) label.innerHTML = tsFmtRangeLabel(TS.weekStart);
+    var startAt = tsEtToUTC(TS.weekStart, 0, 0).toISOString();
+    var endAt = tsEtToUTC(tsAddDays(TS.weekStart, 7), 0, 0).toISOString();
+    Promise.all([
+      fetch('/api/track1?resource=users').then(function (r) { return r.json(); }).catch(function () { return null; }),
+      fetch('/api/track1?resource=timesheet_week&startAt=' + encodeURIComponent(startAt) + '&endAt=' + encodeURIComponent(endAt))
+        .then(function (r) { return r.json(); }).catch(function () { return null; })
+    ]).then(function (res) {
+      var usersData = res[0], weekData = res[1];
+      TS.users = (usersData && usersData.records) ? usersData.records : [];
+      TS.entries = (weekData && weekData.ok) ? weekData.entries : [];
+      tsRender();
+    });
+  }
+
+  function tsRender() {
+    var wrap = document.getElementById('ts-table-wrap');
+    if (!wrap) return;
+    if (!TS.users.length) { wrap.innerHTML = '<div style="padding:26px;text-align:center;color:var(--mut);font-size:12px;font-weight:700">No team members synced yet.</div>'; return; }
+
+    var days = []; for (var i = 0; i < 7; i++) days.push(tsAddDays(TS.weekStart, i));
+    var dayLabels = days.map(function (ymd) { return new Date(ymd + 'T12:00:00Z').toLocaleDateString('en-US', { weekday: 'short', timeZone: 'UTC' }) + ' ' + Number(ymd.slice(8, 10)); });
+
+    var byUser = {};
+    TS.entries.forEach(function (e) {
+      (byUser[e.userId] = byUser[e.userId] || []).push(e);
+    });
+
+    var h = '<table style="width:100%;border-collapse:collapse;font-size:12.5px;min-width:820px">';
+    h += '<thead><tr style="border-bottom:1.5px solid var(--line)">';
+    h += '<th style="text-align:left;padding:10px 12px;color:var(--mut);font-size:10px;letter-spacing:.04em;font-weight:800">EMPLOYEE</th>';
+    dayLabels.forEach(function (lbl) { h += '<th style="text-align:right;padding:10px 12px;color:var(--mut);font-size:10.5px;font-weight:800;white-space:nowrap">' + hlEsc(lbl) + '</th>'; });
+    h += '<th style="text-align:right;padding:10px 12px;color:var(--mut);font-size:10px;letter-spacing:.04em;font-weight:800">TOTAL</th></tr></thead><tbody>';
+
+    TS.users.forEach(function (u) {
+      // Totals are always derived from the per-day buckets actually shown,
+      // never a raw sum over every entry this user has -- start_at is
+      // already scoped to this week server-side, but deriving the total
+      // from what's on screen keeps the two impossible to disagree even if
+      // that ever stops being true.
+      var mine = byUser[u.id] || [];
+      var perDay = days.map(function (ymd) {
+        return mine.filter(function (e) { return tsEtDateStr(e.startAt) === ymd; }).reduce(function (s, e) { return s + (e.durationSeconds || 0); }, 0);
+      });
+      var weekTotal = perDay.reduce(function (s, v) { return s + v; }, 0);
+      var open = !!TS.expanded[u.id];
+      h += '<tr style="background:#f7f8fa;border-bottom:1px solid var(--line);cursor:pointer" onclick="tsToggleEmployee(' + tsJsArg(u.id) + ')">'
+        + '<td style="padding:10px 12px;font-weight:800"><span style="display:inline-block;width:14px;transform:rotate(' + (open ? '90' : '0') + 'deg);transition:transform .15s">&#8250;</span> ' + hlEsc(u.name || 'Unknown') + '</td>';
+      perDay.forEach(function (secs) { h += '<td style="text-align:right;padding:10px 12px;color:var(--ink);font-weight:600">' + tsFmtDur(secs) + '</td>'; });
+      h += '<td style="text-align:right;padding:10px 12px;font-weight:900">' + tsFmtDur(weekTotal) + '</td></tr>';
+
+      if (open) {
+        var byCat = {};
+        mine.forEach(function (e) {
+          var key = e.jobId || 'general';
+          (byCat[key] = byCat[key] || { label: e.jobId ? e.jobLabel : 'General', jobId: e.jobId, entries: [] }).entries.push(e);
+        });
+        if (!Object.keys(byCat).length) byCat.general = { label: 'General', jobId: null, entries: [] };
+        Object.keys(byCat).forEach(function (key) {
+          var cat = byCat[key];
+          var catTotal = 0;
+          var rowHtml = '<tr style="border-bottom:1px solid var(--line)"><td style="padding:8px 12px 8px 30px;color:var(--mut);font-weight:700">' + hlEsc(cat.label) + '</td>';
+          days.forEach(function (ymd) {
+            var dayEntries = cat.entries.filter(function (e) { return tsEtDateStr(e.startAt) === ymd; });
+            var secs = dayEntries.reduce(function (s, e) { return s + (e.durationSeconds || 0); }, 0);
+            catTotal += secs;
+            if (dayEntries.length) {
+              rowHtml += '<td style="text-align:right;padding:6px 12px"><div style="display:inline-block;padding:7px 10px;border:1.5px solid var(--line);border-radius:8px;font-weight:700;background:#fff">' + tsFmtDur(secs) + '</div></td>';
+            } else {
+              rowHtml += '<td style="text-align:right;padding:6px 12px"><div onclick="event.stopPropagation();tsOpenCreateModal(' + tsJsArg(u.id) + ',' + tsJsArg(cat.jobId) + ',' + tsJsArg(ymd) + ')" title="Add a timesheet entry" style="display:inline-block;width:64px;height:30px;border:1.5px dashed var(--line);border-radius:8px;cursor:pointer"></div></td>';
+            }
+          });
+          h += rowHtml + '<td style="text-align:right;padding:8px 12px;font-weight:800;color:var(--mut)">' + tsFmtDur(catTotal) + '</td></tr>';
+        });
+        h += '<tr style="border-bottom:1px solid var(--line)"><td style="padding:8px 12px 8px 30px;font-weight:900">Total</td>';
+        perDay.forEach(function (secs) { h += '<td style="text-align:right;padding:8px 12px;font-weight:900">' + tsFmtDur(secs) + '</td>'; });
+        h += '<td style="text-align:right;padding:8px 12px;font-weight:900">' + tsFmtDur(weekTotal) + '</td></tr>';
+        h += '<tr><td colspan="9" style="padding:10px 12px 14px 30px"><button onclick="event.stopPropagation();tsOpenCreateModal(' + tsJsArg(u.id) + ',null,null)" style="border:1.5px dashed var(--line);background:#fff;border-radius:8px;padding:8px 16px;font-size:11.5px;font-weight:800;color:var(--green);cursor:pointer">+ Add entry</button></td></tr>';
+      }
+    });
+    h += '</tbody></table>';
+    wrap.innerHTML = h;
+  }
+
+  function tsToggleEmployee(userId) { TS.expanded[userId] = !TS.expanded[userId]; tsRender(); }
+
+  // ---- Create Timesheet Entry popup --------------------------------------
+  function tsFillJobs(cb) {
+    if (TS.jobsAll) { if (cb) cb(); return; }
+    fetch((window.API || '') + '/api/jobs?limit=500').then(function (r) { return r.json(); }).then(function (d) {
+      TS.jobsAll = (d && d.ok && d.jobs) ? d.jobs : [];
+      if (cb) cb();
+    }).catch(function () { TS.jobsAll = []; if (cb) cb(); });
+  }
+  function tsFilterJobs() {
+    var q = ((document.getElementById('ts-ce-job-q') || {}).value || '').trim().toLowerCase();
+    var box = document.getElementById('ts-ce-job-results');
+    if (!box) return;
+    if (!q || 'general'.indexOf(q) === 0) {
+      box.innerHTML = '<div onclick="tsPickJob(null,\'General\')" style="padding:8px 11px;cursor:pointer;font-weight:700">General &mdash; not tied to a job</div>';
+    } else {
+      box.innerHTML = '';
+    }
+    var matches = (TS.jobsAll || []).filter(function (j) {
+      return String(j.jobNumber || '').toLowerCase().indexOf(q) > -1 || String(j.title || '').toLowerCase().indexOf(q) > -1 || String(j.clientName || '').toLowerCase().indexOf(q) > -1;
+    }).slice(0, 25);
+    matches.forEach(function (j) {
+      var lbl = (j.jobNumber ? ('#' + j.jobNumber + ' ') : '') + (j.title || 'Untitled') + (j.clientName ? (' &mdash; ' + hlEsc(j.clientName)) : '');
+      box.innerHTML += '<div onclick="tsPickJob(' + tsJsArg(j.id) + ',' + tsJsArg((j.jobNumber ? ('#' + j.jobNumber + ' ') : '') + (j.title || 'Untitled')) + ')" style="padding:8px 11px;cursor:pointer;border-top:1px solid var(--line)">' + lbl + '</div>';
+    });
+    box.style.display = 'block';
+  }
+  function tsPickJob(jobId, label) {
+    document.getElementById('ts-ce-job-id').value = jobId || '';
+    document.getElementById('ts-ce-job-q').value = label;
+    document.getElementById('ts-ce-job-results').style.display = 'none';
+  }
+  function tsRecalcDuration() {
+    var st = (document.getElementById('ts-ce-start') || {}).value;
+    var et = (document.getElementById('ts-ce-end') || {}).value;
+    var out = document.getElementById('ts-ce-dur');
+    if (!out) return;
+    if (!st || !et) { out.textContent = ''; return; }
+    var s = st.split(':'), e = et.split(':');
+    var mins = (parseInt(e[0], 10) * 60 + parseInt(e[1], 10)) - (parseInt(s[0], 10) * 60 + parseInt(s[1], 10));
+    if (mins <= 0) { out.textContent = 'End time must be after start time.'; out.style.color = '#c65b4e'; return; }
+    out.style.color = 'var(--mut)';
+    out.textContent = Math.floor(mins / 60) + 'h ' + (mins % 60) + 'm';
+  }
+
+  function tsOpenCreateModal(userId, jobId, ymd) {
+    tsFillJobs(function () {
+      var dateVal = ymd || new Date().toISOString().slice(0, 10);
+      var jobLabel = 'General';
+      if (jobId) { var j = (TS.jobsAll || []).find(function (x) { return x.id === jobId; }); if (j) jobLabel = (j.jobNumber ? ('#' + j.jobNumber + ' ') : '') + (j.title || 'Untitled'); }
+      var userOptions = TS.users.map(function (u) { return '<option value="' + hlEsc(u.id) + '"' + (u.id === userId ? ' selected' : '') + '>' + hlEsc(u.name || 'Unknown') + '</option>'; }).join('');
+      var body = '<div id="ts-ce-body">'
+        + '<label style="' + _lbl + '">Employee</label>'
+        + '<select id="ts-ce-emp" style="' + _inp + ';margin-bottom:12px">' + userOptions + '</select>'
+        + '<label style="' + _lbl + '">Search jobs, assessments, or categories</label>'
+        + '<div style="position:relative;margin-bottom:12px">'
+        + '<input id="ts-ce-job-q" type="text" value="' + hlEsc(jobLabel) + '" onfocus="tsFilterJobs()" oninput="tsFilterJobs()" style="' + _inp + '">'
+        + '<input type="hidden" id="ts-ce-job-id" value="' + hlEsc(jobId || '') + '">'
+        + '<div id="ts-ce-job-results" style="display:none;position:absolute;z-index:10;left:0;right:0;top:100%;background:#fff;border:1px solid #dadde8;border-radius:8px;max-height:200px;overflow:auto;box-shadow:0 8px 24px rgba(0,0,0,.12);font-size:12px"></div>'
+        + '</div>'
+        + '<label style="' + _lbl + '">Start Date</label>'
+        + '<input id="ts-ce-date" type="date" value="' + hlEsc(dateVal) + '" style="' + _inp + ';margin-bottom:12px">'
+        + '<div style="display:flex;gap:10px;margin-bottom:4px"><div style="flex:1"><label style="' + _lbl + '">Start Time</label><input id="ts-ce-start" type="time" value="09:00" oninput="tsRecalcDuration()" style="' + _inp + '"></div><div style="flex:1"><label style="' + _lbl + '">End Time</label><input id="ts-ce-end" type="time" value="17:00" oninput="tsRecalcDuration()" style="' + _inp + '"></div></div>'
+        + '<div id="ts-ce-dur" style="font-size:10.5px;font-weight:700;color:var(--mut);margin-bottom:12px">8h 0m</div>'
+        + '<label style="' + _lbl + '">Notes</label>'
+        + '<textarea id="ts-ce-notes" rows="3" style="' + _inp + ';margin-bottom:12px;resize:vertical"></textarea>'
+        + '<div id="ts-ce-err" style="display:none;color:#c65b4e;font-size:11px;font-weight:700;margin-bottom:10px"></div>'
+        + '<div style="display:flex;gap:9px"><button onclick="_hlTsceSubmit()" style="flex:1;padding:11px;border:none;border-radius:8px;background:#1B7A50;color:#fff;font-weight:900;font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;cursor:pointer;font-family:\'Montserrat\',sans-serif">Save</button><button onclick="document.getElementById(\'hlmodal\').remove()" style="flex:1;padding:11px;border:1px solid #dadde8;border-radius:8px;background:#fff;color:#5d657b;font-weight:900;font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;cursor:pointer;font-family:\'Montserrat\',sans-serif">Cancel</button></div>'
+        + '</div>';
+      hlModal('Create Timesheet Entry', body);
+      window._hlTsceSubmit = function () {
+        var err = document.getElementById('ts-ce-err');
+        var emp = (document.getElementById('ts-ce-emp') || {}).value;
+        var date = (document.getElementById('ts-ce-date') || {}).value;
+        var st = (document.getElementById('ts-ce-start') || {}).value;
+        var et = (document.getElementById('ts-ce-end') || {}).value;
+        var jid = (document.getElementById('ts-ce-job-id') || {}).value || null;
+        var notes = (document.getElementById('ts-ce-notes') || {}).value || '';
+        if (!emp) { err.textContent = 'Pick an employee.'; err.style.display = 'block'; return; }
+        if (!date || !st || !et) { err.textContent = 'Start date, start time, and end time are required.'; err.style.display = 'block'; return; }
+        var sParts = st.split(':'), eParts = et.split(':');
+        var startAt = tsEtToUTC(date, parseInt(sParts[0], 10), parseInt(sParts[1], 10));
+        var endAt = tsEtToUTC(date, parseInt(eParts[0], 10), parseInt(eParts[1], 10));
+        if (endAt <= startAt) { err.textContent = 'End time must be after start time.'; err.style.display = 'block'; return; }
+        hlApiPost('create_timesheet_entry', { userId: emp, jobId: jid, startAt: startAt.toISOString(), endAt: endAt.toISOString(), note: notes }).then(function (d) {
+          if (!d || !d.ok) { err.textContent = (d && d.error) || 'Could not save this entry.'; err.style.display = 'block'; return; }
+          document.getElementById('hlmodal').remove();
+          chirpToast('&#10003; Timesheet entry saved');
+          tsLoad();
+        }).catch(function (e) { err.textContent = 'Network error: ' + e.message; err.style.display = 'block'; });
+      };
+    });
+  }
   </script>
 </div>
 
