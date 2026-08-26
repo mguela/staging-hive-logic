@@ -1960,7 +1960,7 @@ html[data-theme="dark"] :is(#hiveconnect-root, .hc-embed).huddle-banner {
 :is(#hiveconnect-root, .hc-embed) .sidebar.sidebar-messages-theme .sidebar-header,
 :is(#hiveconnect-root, .hc-embed).sidebar.sidebar-messages-theme .sidebar-header { background: var(--card); border-bottom: 1px solid var(--line); }
 :is(#hiveconnect-root, .hc-embed) .sidebar.sidebar-messages-theme #panel-messages,
-:is(#hiveconnect-root, .hc-embed).sidebar.sidebar-messages-theme #panel-messages { padding: 30px; }
+:is(#hiveconnect-root, .hc-embed).sidebar.sidebar-messages-theme #panel-messages { padding: 30px 16px; }
 :is(#hiveconnect-root, .hc-embed) #panel-messages button,
 :is(#hiveconnect-root, .hc-embed)#panel-messages button { appearance: none; -webkit-appearance: none; box-shadow: none; }
 :is(#hiveconnect-root, .hc-embed) .sidebar.sidebar-messages-theme .sidebar-title,
@@ -2002,7 +2002,7 @@ html[data-theme="dark"] :is(#hiveconnect-root, .hc-embed).huddle-banner {
 :is(#hiveconnect-root, .hc-embed).msg-search-row { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
 :is(#hiveconnect-root, .hc-embed) .msg-search,
 :is(#hiveconnect-root, .hc-embed).msg-search { display: flex; align-items: center; gap: 7px; background: none; border: none;
-  padding: 10px 0; color: var(--mut); flex: 1; min-width: 0; }
+  padding: 10px 0; color: var(--mut); flex: 2 1 0; min-width: 0; }
 :is(#hiveconnect-root, .hc-embed) .msg-search svg,
 :is(#hiveconnect-root, .hc-embed).msg-search svg { flex: none; }
 :is(#hiveconnect-root, .hc-embed) .msg-search input,
@@ -2010,7 +2010,7 @@ html[data-theme="dark"] :is(#hiveconnect-root, .hc-embed).huddle-banner {
 :is(#hiveconnect-root, .hc-embed) .msg-search input::placeholder,
 :is(#hiveconnect-root, .hc-embed).msg-search input::placeholder { color: var(--mut); }
 :is(#hiveconnect-root, .hc-embed) .msg-filter-row,
-:is(#hiveconnect-root, .hc-embed).msg-filter-row { display: flex; align-items: center; justify-content: flex-end; gap: 12px; flex: none; margin-bottom: 0; }
+:is(#hiveconnect-root, .hc-embed).msg-filter-row { display: flex; align-items: center; justify-content: flex-end; gap: 8px; flex: 1 1 0; min-width: 0; margin-bottom: 0; }
 :is(#hiveconnect-root, .hc-embed) .msg-filter-quick,
 :is(#hiveconnect-root, .hc-embed).msg-filter-quick { appearance: none; -webkit-appearance: none; box-shadow: none; background: none; border: none;
   font-family: var(--sans); font-size: 11px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase;
