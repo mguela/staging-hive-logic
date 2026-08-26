@@ -1509,6 +1509,7 @@ function subscribePresence() {
     const state = ch.presenceState();
     onlineUsers = new Set(Object.keys(state));
     renderSidebar();
+    updateMainHeader();
     // refresh the me-dot
     document.querySelector('.me-dot')?.classList.toggle('online', onlineUsers.has(me.id));
   }).subscribe(async status => {
@@ -2862,6 +2863,7 @@ function setNavTab(tab) {
 // Contacts / HiveVideo are section views; Channels / Messages show the open conversation.
 function updateMainHeader() {
   const t = $('channel-title'), d = $('channel-desc'); if (!t) return;
+  if (d) d.classList.remove('ch-desc-online');
   if (navTab === 'people') { t.textContent = 'Contacts'; if (d) d.textContent = 'Your contact directory'; return; }
   if (navTab === 'huddles') { t.textContent = 'HiveVideo'; if (d) d.textContent = 'Start or join a video call'; return; }
   if (navTab === 'chirp') { t.textContent = 'Chirp'; if (d) d.textContent = chirpClockedIn() ? 'Push-to-talk · on' : 'Push-to-talk · off'; return; }
@@ -2869,14 +2871,23 @@ function updateMainHeader() {
   if (navTab === 'tasks') { t.textContent = 'Tasks'; if (d) d.textContent = 'Who owns what, and by when'; return; }
   if (navTab === 'calendar') { t.textContent = 'Calendar'; if (d) d.textContent = 'Your Outlook calendar'; return; }
   const c = channels.get(currentChannelId);
+  if (searchInput) searchInput.placeholder = (navTab === 'messages' && c && c.type === 'dm') ? 'Search this conversation…' : 'Search messages…';
   if (navTab === 'messages') {
     // Messages is about DMs — only echo the open thing if it's actually a DM.
     if (c && c.type === 'dm') {
       t.innerHTML = '';
-      if (isGroupDM(c)) { const grp = partStrip(dmOtherProfiles(c), 2); grp.classList.add('dm-grp-av'); t.appendChild(grp); }
+      const group = isGroupDM(c);
+      if (group) { const grp = partStrip(dmOtherProfiles(c), 2); grp.classList.add('dm-grp-av'); t.appendChild(grp); }
       else t.appendChild(avatarWithPresence(dmOther(c)));
       const nm = document.createElement('span'); nm.textContent = channelLabel(c); t.appendChild(nm);
-      if (d) d.textContent = '';
+      const favOn = evMsgFavorites().includes(c.id);
+      const favBtn = document.createElement('button'); favBtn.type = 'button'; favBtn.className = 'ch-title-fav' + (favOn ? ' on' : '');
+      favBtn.title = favOn ? 'Remove from favorites' : 'Add to favorites'; favBtn.textContent = favOn ? '★' : '☆';
+      favBtn.onclick = () => { evMsgToggleFavorite(c.id); updateMainHeader(); renderMessagesPanel(); };
+      t.appendChild(favBtn);
+      const other = !group ? dmOther(c) : null;
+      const isOnline = !!(other && onlineUsers.has(other.id));
+      if (d) { d.textContent = isOnline ? '● Online' : ''; d.classList.toggle('ch-desc-online', isOnline); }
     }
     else { t.textContent = 'Messages'; if (d) d.textContent = ''; }
     return;
@@ -4023,18 +4034,20 @@ searchInput.addEventListener('keydown', async e => {
   const q = searchInput.value.trim();
   if (q.length < 2) return;
   const panel = $('search-panel'), list = $('search-results');
+  const scopeChannel = channels.get(currentChannelId);
+  const scoped = navTab === 'messages' && scopeChannel && scopeChannel.type === 'dm';
   $('search-title').textContent = `Results for “${q}”`;
   list.innerHTML = '<div class="notif-empty">Searching…</div>';
   panel.classList.remove('hidden');
-  const { data } = await sb.from('messages')
+  let query = sb.from('messages')
     .select('*')
     .ilike('content', `%${q}%`)
-    .is('deleted_at', null)
-    .order('created_at', { ascending: false })
-    .limit(60);
+    .is('deleted_at', null);
+  if (scoped) query = query.eq('channel_id', currentChannelId);
+  const { data } = await query.order('created_at', { ascending: false }).limit(60);
   list.innerHTML = '';
   if (!data || !data.length) {
-    list.innerHTML = '<div class="notif-empty">No matches across your channels & history.</div>';
+    list.innerHTML = `<div class="notif-empty">No matches ${scoped ? 'in this conversation' : 'across your channels & history'}.</div>`;
     return;
   }
   $('search-title').textContent = `${data.length}${data.length === 60 ? '+' : ''} result${data.length === 1 ? '' : 's'} for “${q}”`;

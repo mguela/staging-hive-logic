@@ -1426,6 +1426,22 @@ html[data-theme="dark"] .huddle-banner {
    makes that gap), so both columns float as matching cards. */
 .sidebar.sidebar-messages-theme ~ .main { margin: 12px 12px 12px 0; border-radius: 15px; overflow: hidden; background: var(--card); }
 
+/* Messages chat header -- same enterprise-blue tokens as the sidebar. */
+.main.messages-workspace .main-header { background: var(--card); border-bottom: 1px solid var(--msg-border); }
+.main.messages-workspace .channel-title { color: var(--msg-ink); }
+.main.messages-workspace .channel-desc { color: var(--msg-mut); }
+.main.messages-workspace .channel-desc.ch-desc-online { color: var(--msg-online); font-weight: 600; }
+.main.messages-workspace .ch-title-fav { appearance: none; -webkit-appearance: none; box-shadow: none; background: none; border: none;
+  font-size: 15px; color: var(--msg-mut); cursor: pointer; padding: 2px; line-height: 1; }
+.main.messages-workspace .ch-title-fav:hover { color: var(--gold); }
+.main.messages-workspace .ch-title-fav.on { color: var(--gold); }
+.main.messages-workspace .search-box { background: var(--msg-bg2); border-color: var(--msg-border); }
+.main.messages-workspace .search-box:focus-within { border-color: var(--msg-blue); }
+.main.messages-workspace .icon-btn, .main.messages-workspace .pin-header-btn { color: var(--msg-mut); }
+.main.messages-workspace .icon-btn:hover, .main.messages-workspace .pin-header-btn:hover { background: var(--msg-bg2); color: var(--msg-ink); }
+.main.messages-workspace .huddle-btn { border-color: var(--msg-border); color: var(--msg-blue); }
+.main.messages-workspace .huddle-btn:hover { background: var(--msg-selected); color: var(--msg-blue); border-color: var(--msg-blue); }
+
 /* ==================== EMAIL APP ==================== */
 /* sidebar: mailbox switcher + folders */
 .ev-accts { padding: 10px 10px 6px; border-bottom: 1px solid var(--line); }
