@@ -348,11 +348,14 @@ test('Save on its own still parks a lead with no destination picked', () => {
 });
 
 test('a lead with no name is still refused, once, in one place', () => {
+  // 2026-08-26: the bare name-only check moved into nlValidateRequired,
+  // which also gates phone/email, service address, and "in their words" --
+  // still one gate for all six entry points, just a fuller one now.
   const core = extractFunction(HTML, 'function nlSaveLeadCore(extra) {');
-  assert.match(core, /Enter at least a first or last name/);
-  // One gate for all six entry points. Two copies is how one path grows a rule
-  // the other does not have.
-  assert.strictEqual(HTML.split('Enter at least a first or last name').length - 1, 1);
+  assert.match(core, /if \(!nlValidateRequired\(f\)\) return Promise\.resolve\(null\);/);
+  assert.strictEqual(HTML.split('function nlValidateRequired(').length - 1, 1);
+  const gate = extractFunction(HTML, 'function nlValidateRequired(f) {');
+  assert.match(gate, /!f\.firstName\.trim\(\) && !f\.lastName\.trim\(\)/);
 });
 
 test('a saved lead clears its draft and refreshes the board exactly once', () => {

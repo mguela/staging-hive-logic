@@ -19,7 +19,7 @@
  * monitor_my_status poll, so "is this person running current code" is a
  * question the database can answer. Do not hand-edit it -- run
  * `node scripts/stamp-page-build.mjs`. */
-var HL_PAGE_BUILD = 'cc2da7288af68888';
+var HL_PAGE_BUILD = '746e44c13aa4bdb6';
 </script>
 <script>
 (function () { // HL_FETCH_DEDUPE_V1 — single wrapper: GET /api/ dedupe + 60s cache + write-invalidate
@@ -639,6 +639,9 @@ var HL_PAGE_BUILD = 'cc2da7288af68888';
   .fld input,.fld select,.fld textarea{border:1.5px solid var(--line);border-radius:9px;padding:10px 12px;font-family:var(--sans);font-size:13px;color:var(--ink);outline:none;background:#fff}
   .fld input:focus,.fld select:focus,.fld textarea:focus{border-color:#748a9e}
   .fld textarea{resize:vertical;min-height:64px}
+  .fld label .req{color:var(--red);margin-left:2px}
+  .fld input.nl-invalid,.fld select.nl-invalid,.fld textarea.nl-invalid{border-color:var(--red);box-shadow:0 0 0 3px rgba(198,40,40,.12)}
+  .nl-req-hint{font-size:9.5px;font-weight:700;color:var(--mut);margin:-6px 0 10px}
   /* Searchable client picker (hlFillClientSel combobox mode). */
   .hlcb{position:relative}
   .hlcb-in{width:100%;border:1.5px solid var(--line);border-radius:9px;padding:10px 12px;font-family:var(--sans);font-size:13px;color:var(--ink);outline:none;background:#fff}
@@ -18871,7 +18874,7 @@ function nlResetForm() {
   // nl-approx was missing here, so an approximate cost typed for one lead was
   // still sitting in the box on the next one -- and it saves silently as that
   // lead's value. A wrong number nobody typed is worse than an empty one.
-  ['nl-search', 'nl-first', 'nl-last', 'nl-phone', 'nl-email', 'nl-addr', 'nl-unit', 'nl-need', 'nl-approx'].forEach(function (id) { var el = document.getElementById(id); if (el) el.value = ''; });
+  ['nl-search', 'nl-first', 'nl-last', 'nl-phone', 'nl-email', 'nl-addr', 'nl-unit', 'nl-need', 'nl-approx'].forEach(function (id) { var el = document.getElementById(id); if (el) { el.value = ''; el.classList.remove('nl-invalid'); } });
   document.getElementById('nl-clientid').value = '';
   document.getElementById('nl-proptype').value = 'residential';
   document.getElementById('nl-match').style.display = 'none';
@@ -19006,16 +19009,45 @@ function nlReadForm() {
   };
 }
 
+function nlClearReq(id) { var e = document.getElementById(id); if (e) e.classList.remove('nl-invalid'); }
+
+// 2026-08-26, jomell: "they fields should have an asterisk or a label that
+// says required and then it cannot be saved if required field is not
+// filled out." Shared by every save path -- the plain Save button AND all
+// five "Where does this go?" buttons funnel through nlSaveLeadCore -- so a
+// lead can't slip through incomplete on one path while being blocked on
+// another. Red-borders every offending field (not just the first) and
+// focuses the first one, so nothing is left for the user to hunt for.
+function nlValidateRequired(f) {
+  ['nl-first', 'nl-last', 'nl-phone', 'nl-email', 'nl-addr', 'nl-need'].forEach(nlClearReq);
+  var missing = [];
+  var firstBadId = null;
+  function bad(ids, label) {
+    ids.forEach(function (id) {
+      var e = document.getElementById(id);
+      if (e) e.classList.add('nl-invalid');
+      if (!firstBadId) firstBadId = id;
+    });
+    missing.push(label);
+  }
+  if (!f.firstName.trim() && !f.lastName.trim()) bad(['nl-first', 'nl-last'], 'a first or last name');
+  if (!f.phone.trim() && !f.email.trim()) bad(['nl-phone', 'nl-email'], 'a phone or email');
+  if (!(document.getElementById('nl-addr').value || '').trim()) bad(['nl-addr'], 'the service address');
+  if (!f.need.trim()) bad(['nl-need'], 'what they need');
+  if (!missing.length) return true;
+  chirpToast('&#9888; Missing: ' + missing.join(', '));
+  var el = document.getElementById(firstBadId);
+  if (el) el.focus();
+  return false;
+}
+
 // Save the lead and hand back what was saved. Resolves with null when the save
 // did not happen, so a caller that was going to send the user somewhere knows
 // not to -- sending them to a prefilled job form off a lead that failed to save
 // is how you get a job with nothing behind it.
 function nlSaveLeadCore(extra) {
   var f = nlReadForm();
-  if (!f.firstName.trim() && !f.lastName.trim()) {
-    chirpToast('&#9888; Enter at least a first or last name');
-    return Promise.resolve(null);
-  }
+  if (!nlValidateRequired(f)) return Promise.resolve(null);
   // The card's headline is the lead's title, falling back to the client's name.
   // This form never sent a title, so every hand-entered lead was headlined with
   // just the customer's name -- and two leads for one customer were
@@ -19476,8 +19508,10 @@ document.addEventListener('keydown',function(e){
             </div>
             <div class="nl-newtoggle" id="nl-search-back" style="display:none;margin-bottom:10px" onclick="nlBackToSearch()">&#8592; Search existing clients instead</div>
             <div id="nl-dupe" style="display:none;background:var(--gold-bg,#fbf1e2);border:1.5px solid #ecd9ae;border-radius:10px;padding:10px 12px;margin-bottom:10px;font-size:11.5px;font-weight:600;color:#484f64;line-height:1.5"></div>
-            <div class="frow"><div class="fld"><label>FIRST NAME</label><input id="nl-first" placeholder="First" oninput="nlDupeCheck()"></div><div class="fld"><label>LAST NAME</label><input id="nl-last" placeholder="Last" oninput="nlDupeCheck()"></div></div>
-            <div class="frow"><div class="fld"><label>PHONE</label><input id="nl-phone" placeholder="(914) 555-0100" oninput="nlDupeCheck()"></div><div class="fld"><label>EMAIL</label><input id="nl-email" placeholder="name@email.com" oninput="nlDupeCheck()"></div></div>
+            <div class="frow"><div class="fld"><label>FIRST NAME</label><input id="nl-first" placeholder="First" oninput="nlDupeCheck();nlClearReq('nl-first')"></div><div class="fld"><label>LAST NAME</label><input id="nl-last" placeholder="Last" oninput="nlDupeCheck();nlClearReq('nl-last')"></div></div>
+            <div class="nl-req-hint">* First or last name required</div>
+            <div class="frow"><div class="fld"><label>PHONE</label><input id="nl-phone" placeholder="(914) 555-0100" oninput="nlDupeCheck();nlClearReq('nl-phone')"></div><div class="fld"><label>EMAIL</label><input id="nl-email" placeholder="name@email.com" oninput="nlDupeCheck();nlClearReq('nl-email')"></div></div>
+            <div class="nl-req-hint">* Phone or email required</div>
             <div class="match" id="nl-match" style="display:none">&#10003; <div id="nl-match-txt"></div><button class="mb" onclick="nlUnlinkClient()">Unlink</button></div>
           </div>
           <div class="sec">
@@ -19485,12 +19519,12 @@ document.addEventListener('keydown',function(e){
             <input type="hidden" id="nl-proptype" value="residential">
             <div class="seg" style="margin-bottom:12px"><div class="opt sel" data-type="residential" onclick="nlPickType(this)">Residential<span>Home, condo, townhouse</span></div><div class="opt" data-type="commercial" onclick="nlPickType(this)">Commercial<span>Office, retail, industrial</span></div></div>
             <div class="frow one" style="margin-bottom:12px"><div class="fld"><label>WHAT KIND OF PROPERTY?</label><select id="nl-propkind"></select></div></div>
-            <div class="frow" style="gap:10px"><div class="fld" style="position:relative;flex:2.2"><label>SERVICE ADDRESS</label><input id="nl-addr" autocomplete="off" placeholder="Start typing &#8212; we&#8217;ll offer matches" oninput="nlAddrInput(this.value)" onfocus="nlAddrInput(this.value)"><div id="nl-addr-state" style="font-size:10.5px;font-weight:800;margin-top:4px;min-height:14px"></div><div id="nl-addr-results" style="display:none;position:absolute;z-index:60;left:0;right:0;top:100%;background:#fff;border:1px solid var(--line);border-radius:9px;max-height:240px;overflow:auto;box-shadow:0 8px 24px rgba(0,0,0,.12)"></div></div><div class="fld" style="flex:1"><label>APT / SUITE / UNIT</label><input id="nl-unit" autocomplete="off" placeholder="e.g. 2B" maxlength="30"><span style="font-size:9.5px;font-weight:700;color:var(--mut);display:block;margin-top:4px">Kept separate so the address still matches</span></div></div>
+            <div class="frow" style="gap:10px"><div class="fld" style="position:relative;flex:2.2"><label>SERVICE ADDRESS <span class="req">*</span></label><input id="nl-addr" autocomplete="off" placeholder="Start typing &#8212; we&#8217;ll offer matches" oninput="nlClearReq('nl-addr');nlAddrInput(this.value)" onfocus="nlAddrInput(this.value)"><div id="nl-addr-state" style="font-size:10.5px;font-weight:800;margin-top:4px;min-height:14px"></div><div id="nl-addr-results" style="display:none;position:absolute;z-index:60;left:0;right:0;top:100%;background:#fff;border:1px solid var(--line);border-radius:9px;max-height:240px;overflow:auto;box-shadow:0 8px 24px rgba(0,0,0,.12)"></div></div><div class="fld" style="flex:1"><label>APT / SUITE / UNIT</label><input id="nl-unit" autocomplete="off" placeholder="e.g. 2B" maxlength="30"><span style="font-size:9.5px;font-weight:700;color:var(--mut);display:block;margin-top:4px">Kept separate so the address still matches</span></div></div>
             <div class="mapbox" id="nl-mapbox"><div class="mappin">&#8962;</div><div class="maplbl" id="nl-maplbl">Enter an address above to preview the map</div></div>
           </div>
           <div class="sec">
             <h3><span class="n">3</span>What do they need?</h3>
-            <div class="frow one"><div class="fld"><label>IN THEIR WORDS</label><textarea id="nl-need" placeholder="What did they ask for?"></textarea></div></div>
+            <div class="frow one"><div class="fld"><label>IN THEIR WORDS <span class="req">*</span></label><textarea id="nl-need" placeholder="What did they ask for?" oninput="nlClearReq('nl-need')"></textarea></div></div>
             <div style="display:flex;gap:7px;margin-bottom:10px">
               <span id="nlm-tm" onclick="nlMode('tm')" style="font-size:10.5px;font-weight:800;padding:8px 16px;border-radius:99px;border:1px solid var(--line);background:#161e2e;color:#fff;cursor:pointer">🔧 T&M / Service</span>
               <span id="nlm-rfq" onclick="nlMode('rfq')" style="font-size:10.5px;font-weight:800;padding:8px 16px;border-radius:99px;border:1px solid var(--line);background:#fff;color:#5d657b;cursor:pointer">📑 Request for Quote</span>
