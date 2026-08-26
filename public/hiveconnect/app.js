@@ -645,13 +645,12 @@ function renderMessagesPanel() {
   // Always show all four folders (Team / Vendor / Client / External) — even when empty.
   applyStoredOrder(MSG_ORDER, x => x[0], 'hcMsgOrder').forEach(([type, label]) => {
     const list = (grouped[type] || []).sort((a, b) => (dmLastActivity(b) || '').localeCompare(dmLastActivity(a) || ''));
-    const unreadTotal = list.reduce((s, c) => s + (unreads.get(c.id) || 0), 0);
     const folder = document.createElement('div'); folder.className = 'ct-folder' + (msgOpen[label] ? '' : ' collapsed'); folder.dataset.type = type; folder.dataset.folder = label;
     const head = document.createElement('button'); head.className = 'ct-head';
     const grip = document.createElement('span'); grip.className = 'fold-grip'; grip.textContent = '⠿'; grip.setAttribute('aria-hidden', 'true'); head.appendChild(grip);
     const chev = document.createElement('span'); chev.className = 'ct-chev'; chev.textContent = '▾'; head.appendChild(chev);
     const fn = document.createElement('span'); fn.className = 'ct-fname'; fn.textContent = label; head.appendChild(fn);
-    const fc = document.createElement('span'); fc.className = 'ct-fcount'; fc.textContent = unreadTotal || ''; head.appendChild(fc);
+    const fc = document.createElement('span'); fc.className = 'ct-fcount'; fc.textContent = list.length; fc.title = list.length + (list.length === 1 ? ' contact' : ' contacts'); head.appendChild(fc);
     head.onclick = () => { const col = folder.classList.toggle('collapsed'); msgOpen[label] = !col; };
     folder.appendChild(head);
     const body = document.createElement('div'); body.className = 'ct-body';
