@@ -141,6 +141,24 @@ test('the sidebar background moves to the mockup\'s navy gradient', () => {
   assert.match(RAIL, /\.rail\{background:linear-gradient\(180deg,#0a1e30 0%,#0f2d47 55%,#0a1c2e 100%\)\}/);
 });
 
+test('the sidebar logo (upper-left, every page) swaps to the new hexagon-H mark, and the login screen\'s separate logo is untouched', () => {
+  assert.match(RAIL, /<img class="bee" src="\/images\/hivelogic-icon\.png" alt="HiveLogic" width="240" height="225">/);
+  assert.doesNotMatch(RAIL, /<svg class="bee"/, 'the old hand-coded hexagon svg should be gone from the sidebar');
+  assert.match(HTML, /\.bee\{width:42px;height:auto;flex-shrink:0;object-fit:contain\}/);
+  // the real "Hive"/"Logic"/tagline text is untouched -- only the icon changed
+  assert.match(RAIL, /<div class="word"><b>Hive<\/b><span>Logic<\/span>/);
+  // a second, unrelated hexagon logo lives on the login screen -- "upper left"
+  // meant the sidebar, so this one is explicitly out of scope
+  const loginStart = HTML.indexOf('<div class="lg-logo">');
+  const loginSection = HTML.slice(loginStart, loginStart + 400);
+  assert.match(loginSection, /<svg viewBox="0 0 224 120">/, 'the login screen should keep its own separate svg logo');
+});
+
+test('public/images/hivelogic-icon.png exists as the new sidebar logo asset', () => {
+  const p = path.join(__dirname, '..', 'public', 'images', 'hivelogic-icon.png');
+  assert.ok(fs.existsSync(p), 'expected public/images/hivelogic-icon.png to exist');
+});
+
 // ---- Change Orders ------------------------------------------------------------
 
 test('the Change Orders header/button adopt the mockup styling without touching the shared btn-save class', () => {
@@ -195,6 +213,47 @@ test('cdbRender keeps every real search/filter/sort input and the click-through 
   assert.match(fn, /getElementById\('cdb-q'\)/);
   assert.match(fn, /getElementById\('cdb-sort'\)/);
   assert.match(fn, /onclick="openRealClient\(/);
+});
+
+// ---- Leads ------------------------------------------------------------------
+
+test('the Leads KPI reskin is scoped under #view-leads, not a bare .kpi redefinition', () => {
+  const start = HTML.indexOf('<div id="view-leads" style="display:none">');
+  const section = HTML.slice(start, start + 700);
+  assert.match(section, /#view-leads \.kpi\{/);
+  assert.doesNotMatch(section, /\n\s*\.kpi\{/);
+});
+
+test('the four real lead KPIs (pipeline value, open leads, close rate, going stale) each get an icon square, and the real numbers are untouched', () => {
+  const fn = extractFunction(HTML, 'function renderRealLeadsKpis(all, open, pipelineValue, closeRate) {');
+  assert.match(fn, /class="kpi-ic" style="background:#eef0ff"/);
+  assert.match(fn, /class="kpi-ic" style="background:#e8f8f0"/);
+  assert.match(fn, /class="kpi-ic" style="background:#fff8e8"/);
+  assert.match(fn, /class="kpi-ic" style="background:#fff0f0"/);
+  assert.match(fn, /pipelineValue\.toLocaleString\(\)/);
+  assert.match(fn, /closeRate != null \? closeRate \+ '%' : .—./);
+});
+
+// ---- Estimates ----------------------------------------------------------------
+
+test('the .efl-card KPI tiles get a shadow and the mockup\'s uppercase-label/big-number treatment', () => {
+  assert.match(HTML, /\.efl-card\{background:#fff;border:1px solid var\(--line\);border-radius:10px;padding:15px 16px;min-width:0;box-shadow:0 1px 3px rgba\(0,0,0,\.04\)\}/);
+  assert.match(HTML, /\.efl-card h4\{font-size:9px;font-weight:700;letter-spacing:\.05em;text-transform:uppercase/);
+});
+
+test('both real "+ New Estimate" buttons (list mode and track mode) get the mockup\'s blue, without touching the shared ef-green class other buttons use', () => {
+  const matches = HTML.match(/class="ef-green" style="background:#2563eb" onclick="estFormNew\(null\)"/g) || [];
+  assert.ok(matches.length >= 2, 'expected both New Estimate buttons to be updated');
+});
+
+test('efListTable and eqRenderKpis keep every real id, class, and click handler the Estimates page depends on', () => {
+  const tableFn = extractFunction(HTML, 'function efListTable(){');
+  assert.match(tableFn, /efl-tb/);
+  assert.match(tableFn, /efRowToggle\(/);
+  const kpiFn = extractFunction(HTML, 'function eqRenderKpis(){');
+  assert.match(kpiFn, /efl-kpis/);
+  assert.match(kpiFn, /Open estimates/);
+  assert.match(kpiFn, /Value outstanding/);
 });
 
 test('every real nav id and its onclick handler survive the reskin untouched', () => {
