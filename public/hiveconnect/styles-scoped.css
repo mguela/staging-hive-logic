@@ -1245,6 +1245,7 @@ html[data-theme="dark"] :is(#hiveconnect-root, .hc-embed).pin-flag { color: #f0c
 /* Header "Huddle" button */
 :is(#hiveconnect-root, .hc-embed) .huddle-btn,
 :is(#hiveconnect-root, .hc-embed).huddle-btn {
+  appearance: none; -webkit-appearance: none; box-shadow: none;
   display: inline-flex; align-items: center; gap: 6px;
   padding: 6px 12px; border-radius: 9px; cursor: pointer;
   background: none; border: 1.5px solid var(--line);

@@ -842,6 +842,7 @@ html[data-theme="dark"] .pin-flag { color: #f0c987; }
 /* ==================== HUDDLES ==================== */
 /* Header "Huddle" button */
 .huddle-btn {
+  appearance: none; -webkit-appearance: none; box-shadow: none;
   display: inline-flex; align-items: center; gap: 6px;
   padding: 6px 12px; border-radius: 9px; cursor: pointer;
   background: none; border: 1.5px solid var(--line);
