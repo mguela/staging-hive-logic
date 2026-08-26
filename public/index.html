@@ -19,7 +19,7 @@
  * monitor_my_status poll, so "is this person running current code" is a
  * question the database can answer. Do not hand-edit it -- run
  * `node scripts/stamp-page-build.mjs`. */
-var HL_PAGE_BUILD = 'f5d7309243d117ed';
+var HL_PAGE_BUILD = '075f796b313906bd';
 </script>
 <script>
 (function () { // HL_FETCH_DEDUPE_V1 — single wrapper: GET /api/ dedupe + 60s cache + write-invalidate
@@ -6803,7 +6803,7 @@ function devTodoLoad(){
         var eodCell = !eod
           ? '<span style="font-size:10.5px;color:var(--mut);font-weight:700">—</span>'
           : eod.summarySubmitted
-            ? '<button onclick="mgrMonOpenEodReport(\''+p.employeeId+'\', \''+nameForOnclick+'\')" style="border:none;background:none;padding:0;cursor:pointer;font-size:10.5px;font-weight:800;color:var(--green);text-decoration:underline">Submitted</button>'
+            ? '<button onclick="mgrMonOpenEodReport(\''+p.employeeId+'\', \''+nameForOnclick+'\')" style="border:1px solid var(--green);background:var(--green);color:#fff;font-weight:800;font-size:10px;padding:5px 12px;border-radius:7px;cursor:pointer;font-family:Montserrat">Submitted</button>'
             : '<span style="font-size:10.5px;font-weight:800;color:var(--red)">Missing</span>';
         // View All (2026-08-26): disabled with the real reason for anyone
         // who isn't Superadmin/Owner, matching what handleMonitorReview
