@@ -901,7 +901,7 @@ function renderMessages() {
 function msgEl(m, grouped, inThread) {
   const p = profiles.get(m.user_id);
   const div = document.createElement('div');
-  div.className = 'msg' + (grouped ? ' grouped' : '') + (m.user_id === me.id ? ' mine' : '');
+  div.className = 'msg' + (grouped ? ' grouped' : '');
   div.dataset.id = m.id;
 
   if (grouped) {
@@ -913,7 +913,7 @@ function msgEl(m, grouped, inThread) {
   const body = document.createElement('div'); body.className = 'msg-body';
   if (!grouped) {
     const head = document.createElement('div'); head.className = 'msg-head';
-    head.innerHTML = `<span class="msg-author"></span>${p && p.username === 'reina' ? '<span class="bot-badge">BOT</span>' : ''}<span class="msg-time">${fmtTime(m.created_at)}</span>`;
+    head.innerHTML = `<span class="msg-time">${fmtTime(m.created_at)}</span><span class="msg-author"></span>${p && p.username === 'reina' ? '<span class="bot-badge">BOT</span>' : ''}`;
     head.querySelector('.msg-author').textContent = p ? p.display_name : 'Unknown';
     body.appendChild(head);
   }
