@@ -647,7 +647,6 @@ function renderMessagesPanel() {
     const list = (grouped[type] || []).sort((a, b) => (dmLastActivity(b) || '').localeCompare(dmLastActivity(a) || ''));
     const folder = document.createElement('div'); folder.className = 'ct-folder' + (msgOpen[label] ? '' : ' collapsed'); folder.dataset.type = type; folder.dataset.folder = label;
     const head = document.createElement('button'); head.className = 'ct-head';
-    const grip = document.createElement('span'); grip.className = 'fold-grip'; grip.textContent = '⠿'; grip.setAttribute('aria-hidden', 'true'); head.appendChild(grip);
     const chev = document.createElement('span'); chev.className = 'ct-chev'; chev.textContent = '▾'; head.appendChild(chev);
     const fn = document.createElement('span'); fn.className = 'ct-fname'; fn.textContent = label; head.appendChild(fn);
     const fc = document.createElement('span'); fc.className = 'ct-fcount'; fc.textContent = list.length; fc.title = list.length + (list.length === 1 ? ' contact' : ' contacts'); head.appendChild(fc);
