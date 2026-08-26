@@ -19,7 +19,7 @@
  * monitor_my_status poll, so "is this person running current code" is a
  * question the database can answer. Do not hand-edit it -- run
  * `node scripts/stamp-page-build.mjs`. */
-var HL_PAGE_BUILD = 'd7ba5e4876085ed6';
+var HL_PAGE_BUILD = '7e664470a2906442';
 </script>
 <script>
 (function () { // HL_FETCH_DEDUPE_V1 — single wrapper: GET /api/ dedupe + 60s cache + write-invalidate
@@ -6002,6 +6002,12 @@ function ninvSave(){ var amt = parseFloat(document.getElementById('ninv-amt').va
   function tsEtDateStr(iso) {
     return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(iso));
   }
+  // The reverse of tsEtToUTC's wall-clock-in direction: a stored UTC instant
+  // out as the ET "HH:MM" a <input type="time"> expects, for prefilling the
+  // edit modal from a real saved entry.
+  function tsEtTimeStr(iso) {
+    return new Intl.DateTimeFormat('en-GB', { timeZone: 'America/New_York', hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date(iso));
+  }
   // Same DST-safe probe nlEtToUTC uses (New Lead form's site-visit booking),
   // extended to carry minutes -- a wall-clock ET date+time in, a UTC instant out.
   function tsEtToUTC(ymd, hour, minute) {
@@ -6124,7 +6130,10 @@ function ninvSave(){ var amt = parseFloat(document.getElementById('ninv-amt').va
             var secs = dayEntries.reduce(function (s, e) { return s + (e.durationSeconds || 0); }, 0);
             catTotal += secs;
             if (dayEntries.length) {
-              rowHtml += '<td style="text-align:right;padding:6px 12px"><div style="display:inline-block;padding:7px 10px;border:1.5px solid var(--line);border-radius:8px;font-weight:700;background:#fff">' + tsFmtDur(secs) + '</div></td>';
+              // Jobber's own crew grid is one entry per employee/job/day; if
+              // more than one ever lands in the same cell, editing opens the
+              // first -- rare enough that a picker isn't worth building yet.
+              rowHtml += '<td style="text-align:right;padding:6px 12px"><div onclick="event.stopPropagation();tsOpenEditModal(' + tsJsArg(dayEntries[0].id) + ')" title="Edit this timesheet entry" style="display:inline-block;padding:7px 10px;border:1.5px solid var(--line);border-radius:8px;font-weight:700;background:#fff;cursor:pointer">' + tsFmtDur(secs) + '</div></td>';
             } else {
               rowHtml += '<td style="text-align:right;padding:6px 12px"><div onclick="event.stopPropagation();tsOpenCreateModal(' + tsJsArg(u.id) + ',' + tsJsArg(cat.jobId) + ',' + tsJsArg(ymd) + ')" title="Add a timesheet entry" style="display:inline-block;width:64px;height:30px;border:1.5px dashed var(--line);border-radius:8px;cursor:pointer"></div></td>';
             }
@@ -6232,6 +6241,82 @@ function ninvSave(){ var amt = parseFloat(document.getElementById('ninv-amt').va
           chirpToast('&#10003; Timesheet entry saved');
           tsLoad();
         }).catch(function (e) { err.textContent = 'Network error: ' + e.message; err.style.display = 'block'; });
+      };
+    });
+  }
+
+  // ---- Edit Timesheet Entry popup ----------------------------------------
+  // jomell, 2026-08-26: "lets add an option to edit the timesheet like this
+  // in jobber" (screenshot: Employee greyed out, job/date/start/end/notes
+  // editable, Delete on the left, Cancel/Save on the right). Reuses the
+  // create modal's ts-ce-* field ids (job search, date, start/end time,
+  // duration readout, notes, error line) since only one of these modals is
+  // ever open at once -- tsFilterJobs/tsPickJob/tsRecalcDuration all work
+  // unchanged. Employee is intentionally not editable here (see the comment
+  // on handleUpdateTimesheetEntry) and Hours/Minutes are not separate
+  // editable fields -- duration is always the computed readout, derived
+  // from Start/End Time, matching the "never trust a typed duration" rule
+  // the create modal already follows. A real "Timesheet history" section
+  // like Jobber's is left out: this app has no audit log of who
+  // created/edited an entry to show there, and Law 1 says don't invent one.
+  function tsOpenEditModal(entryId) {
+    var entry = (TS.entries || []).find(function (e) { return e.id === entryId; });
+    if (!entry) { chirpToast('That entry could not be found -- try reloading.'); return; }
+    tsFillJobs(function () {
+      var user = (TS.users || []).find(function (u) { return u.id === entry.userId; });
+      var jobLabel = entry.jobId ? (entry.jobLabel || 'Job') : 'General';
+      var body = '<div id="ts-ee-body">'
+        + '<label style="' + _lbl + '">Employee</label>'
+        + '<div style="' + _inp + ';margin-bottom:12px;background:#eceef4;color:var(--mut)">' + hlEsc(user ? user.name : 'Unknown') + '</div>'
+        + '<label style="' + _lbl + '">Search jobs, assessments, or categories</label>'
+        + '<div style="position:relative;margin-bottom:12px">'
+        + '<input id="ts-ce-job-q" type="text" value="' + hlEsc(jobLabel) + '" onfocus="tsFilterJobs()" oninput="tsFilterJobs()" style="' + _inp + '">'
+        + '<input type="hidden" id="ts-ce-job-id" value="' + hlEsc(entry.jobId || '') + '">'
+        + '<div id="ts-ce-job-results" style="display:none;position:absolute;z-index:10;left:0;right:0;top:100%;background:#fff;border:1px solid #dadde8;border-radius:8px;max-height:200px;overflow:auto;box-shadow:0 8px 24px rgba(0,0,0,.12);font-size:12px"></div>'
+        + '</div>'
+        + '<label style="' + _lbl + '">Start Date</label>'
+        + '<input id="ts-ce-date" type="date" value="' + hlEsc(tsEtDateStr(entry.startAt)) + '" style="' + _inp + ';margin-bottom:12px">'
+        + '<div style="display:flex;gap:10px;margin-bottom:4px"><div style="flex:1"><label style="' + _lbl + '">Start Time</label><input id="ts-ce-start" type="time" value="' + hlEsc(tsEtTimeStr(entry.startAt)) + '" oninput="tsRecalcDuration()" style="' + _inp + '"></div><div style="flex:1"><label style="' + _lbl + '">End Time</label><input id="ts-ce-end" type="time" value="' + hlEsc(tsEtTimeStr(entry.endAt)) + '" oninput="tsRecalcDuration()" style="' + _inp + '"></div></div>'
+        + '<div id="ts-ce-dur" style="font-size:10.5px;font-weight:700;color:var(--mut);margin-bottom:12px">' + tsFmtDur(entry.durationSeconds || 0) + '</div>'
+        + '<label style="' + _lbl + '">Notes</label>'
+        + '<textarea id="ts-ce-notes" rows="3" style="' + _inp + ';margin-bottom:12px;resize:vertical">' + hlEsc(entry.note || '') + '</textarea>'
+        + '<div id="ts-ce-err" style="display:none;color:#c65b4e;font-size:11px;font-weight:700;margin-bottom:10px"></div>'
+        + '<div style="display:flex;gap:9px;align-items:center">'
+        + '<button onclick="_hlTseeDelete()" style="padding:11px 16px;border:1px solid #f0d3ce;border-radius:8px;background:#fff;color:#c65b4e;font-weight:900;font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;cursor:pointer;font-family:\'Montserrat\',sans-serif">Delete</button>'
+        + '<span style="flex:1"></span>'
+        + '<button onclick="document.getElementById(\'hlmodal\').remove()" style="padding:11px 16px;border:1px solid #dadde8;border-radius:8px;background:#fff;color:#5d657b;font-weight:900;font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;cursor:pointer;font-family:\'Montserrat\',sans-serif">Cancel</button>'
+        + '<button onclick="_hlTseeSubmit()" style="padding:11px 16px;border:none;border-radius:8px;background:#1B7A50;color:#fff;font-weight:900;font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;cursor:pointer;font-family:\'Montserrat\',sans-serif">Save</button>'
+        + '</div>'
+        + '</div>';
+      hlModal('Edit Timesheet Entry', body);
+      window._hlTseeSubmit = function () {
+        var err = document.getElementById('ts-ce-err');
+        var date = (document.getElementById('ts-ce-date') || {}).value;
+        var st = (document.getElementById('ts-ce-start') || {}).value;
+        var et = (document.getElementById('ts-ce-end') || {}).value;
+        var jid = (document.getElementById('ts-ce-job-id') || {}).value || null;
+        var notes = (document.getElementById('ts-ce-notes') || {}).value || '';
+        if (!date || !st || !et) { err.textContent = 'Start date, start time, and end time are required.'; err.style.display = 'block'; return; }
+        var sParts = st.split(':'), eParts = et.split(':');
+        var startAt = tsEtToUTC(date, parseInt(sParts[0], 10), parseInt(sParts[1], 10));
+        var endAt = tsEtToUTC(date, parseInt(eParts[0], 10), parseInt(eParts[1], 10));
+        if (endAt <= startAt) { err.textContent = 'End time must be after start time.'; err.style.display = 'block'; return; }
+        hlApiPatch('update_timesheet_entry', { id: entry.id, jobId: jid, startAt: startAt.toISOString(), endAt: endAt.toISOString(), note: notes }).then(function (d) {
+          if (!d || !d.ok) { err.textContent = (d && d.error) || 'Could not save this entry.'; err.style.display = 'block'; return; }
+          document.getElementById('hlmodal').remove();
+          chirpToast('&#10003; Timesheet entry saved');
+          tsLoad();
+        }).catch(function (e) { err.textContent = 'Network error: ' + e.message; err.style.display = 'block'; });
+      };
+      window._hlTseeDelete = function () {
+        if (!window.confirm('Delete this timesheet entry? This cannot be undone.')) return;
+        hlApiDelete('delete_timesheet_entry&id=' + encodeURIComponent(entry.id)).then(function (d) {
+          var err = document.getElementById('ts-ce-err');
+          if (!d || !d.ok) { if (err) { err.textContent = (d && d.error) || 'Could not delete this entry.'; err.style.display = 'block'; } return; }
+          document.getElementById('hlmodal').remove();
+          chirpToast('&#10003; Timesheet entry deleted');
+          tsLoad();
+        }).catch(function (e) { var err = document.getElementById('ts-ce-err'); if (err) { err.textContent = 'Network error: ' + e.message; err.style.display = 'block'; } });
       };
     });
   }

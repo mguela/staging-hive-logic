@@ -45,6 +45,10 @@ let jobsFixture = [];
 let calls = [];
 let insertedEntry = null;
 let insertFails = null;
+let updatedPatch = null;
+let updateFails = null;
+let deleteFails = null;
+let updateReturnsEmpty = false;
 
 const { mock } = await import('node:test');
 
@@ -60,6 +64,17 @@ mock.module('../api/_lib/jobber.js', {
           if (insertFails) return { ok: false, text: async () => insertFails };
           insertedEntry = JSON.parse(opts.body);
           return { ok: true, json: async () => [{ ...insertedEntry }], text: async () => '' };
+        }
+        if (method === 'PATCH') {
+          if (updateFails) return { ok: false, text: async () => updateFails };
+          updatedPatch = JSON.parse(opts.body);
+          if (updateReturnsEmpty) return { ok: true, json: async () => [], text: async () => '' };
+          const existing = entriesFixture[0] || { jobber_id: 'HL-TSE-1', user_id: 'u-1' };
+          return { ok: true, json: async () => [{ ...existing, ...updatedPatch }], text: async () => '' };
+        }
+        if (method === 'DELETE') {
+          if (deleteFails) return { ok: false, text: async () => deleteFails };
+          return { ok: true, json: async () => [], text: async () => '' };
         }
         return { ok: true, json: async () => entriesFixture, text: async () => '' };
       }
@@ -93,6 +108,10 @@ function reset() {
   calls = [];
   insertedEntry = null;
   insertFails = null;
+  updatedPatch = null;
+  updateFails = null;
+  deleteFails = null;
+  updateReturnsEmpty = false;
 }
 
 // ---------------------------------------------------------- timesheet_week
@@ -271,13 +290,196 @@ test('the route stays POST-only', async () => {
   assert.equal(r.statusCode, 405);
 });
 
+// ------------------------------------------------------ update_timesheet_entry
+// jomell, 2026-08-26: "lets add an option to edit the timesheet like this in
+// jobber" (screenshot: Employee greyed out, job/date/start/end/notes
+// editable, Delete/Cancel/Save).
+
+test('updating requires an id', async () => {
+  reset();
+  const r = res();
+  await trackMod.default(
+    {
+      method: 'PATCH', query: { resource: 'update_timesheet_entry' }, headers: { authorization: 'Bearer t' },
+      body: { startAt: '2026-08-26T13:00:00.000Z', endAt: '2026-08-26T21:00:00.000Z' },
+    },
+    r
+  );
+  assert.equal(r.statusCode, 400);
+  assert.match(r.body.error, /id/i);
+  assert.equal(updatedPatch, null);
+});
+
+test('a Jobber-synced entry (no HL-TSE- prefix) cannot be edited here', async () => {
+  reset();
+  const r = res();
+  await trackMod.default(
+    {
+      method: 'PATCH', query: { resource: 'update_timesheet_entry' }, headers: { authorization: 'Bearer t' },
+      body: { id: 'jobber-synced-123', startAt: '2026-08-26T13:00:00.000Z', endAt: '2026-08-26T21:00:00.000Z' },
+    },
+    r
+  );
+  assert.equal(r.statusCode, 400);
+  assert.match(r.body.error, /Jobber/i);
+  assert.equal(updatedPatch, null);
+});
+
+test('end time must be after start time on update too', async () => {
+  reset();
+  const r = res();
+  await trackMod.default(
+    {
+      method: 'PATCH', query: { resource: 'update_timesheet_entry' }, headers: { authorization: 'Bearer t' },
+      body: { id: 'HL-TSE-1', startAt: '2026-08-26T21:00:00.000Z', endAt: '2026-08-26T13:00:00.000Z' },
+    },
+    r
+  );
+  assert.equal(r.statusCode, 400);
+  assert.match(r.body.error, /after start/i);
+  assert.equal(updatedPatch, null);
+});
+
+test('a successful update recomputes duration from the real time range and returns the shaped entry', async () => {
+  reset();
+  entriesFixture = [{ jobber_id: 'HL-TSE-1', user_id: 'u-1', job_id: null, note: null }];
+  const r = res();
+  await trackMod.default(
+    {
+      method: 'PATCH', query: { resource: 'update_timesheet_entry' }, headers: { authorization: 'Bearer t' },
+      body: { id: 'HL-TSE-1', startAt: '2026-08-26T13:00:00.000Z', endAt: '2026-08-26T21:30:00.000Z', note: 'Updated note' },
+    },
+    r
+  );
+  assert.equal(r.statusCode, 200, JSON.stringify(r.body));
+  assert.equal(updatedPatch.final_duration, 8.5 * 3600, 'duration must be recomputed, never trusted from the client');
+  assert.equal(updatedPatch.note, 'Updated note');
+  assert.equal(r.body.entry.id, 'HL-TSE-1');
+  assert.equal(r.body.entry.durationSeconds, 8.5 * 3600);
+});
+
+test('editing does not accept or apply a userId -- the employee is not reassignable from this modal', async () => {
+  reset();
+  entriesFixture = [{ jobber_id: 'HL-TSE-1', user_id: 'u-1', job_id: null, note: null }];
+  const r = res();
+  await trackMod.default(
+    {
+      method: 'PATCH', query: { resource: 'update_timesheet_entry' }, headers: { authorization: 'Bearer t' },
+      body: { id: 'HL-TSE-1', userId: 'someone-else', startAt: '2026-08-26T13:00:00.000Z', endAt: '2026-08-26T21:00:00.000Z' },
+    },
+    r
+  );
+  assert.equal(r.statusCode, 200, JSON.stringify(r.body));
+  assert.ok(!('user_id' in updatedPatch), 'the PATCH body sent to Supabase must not touch user_id');
+});
+
+test('a job-linked update resolves the real job_uuid, same as create', async () => {
+  reset();
+  entriesFixture = [{ jobber_id: 'HL-TSE-1', user_id: 'u-1' }];
+  jobsFixture = [{ jobber_id: 'HL-JOB-10001', uuid_id: 'job-uuid-1', title: 'Kitchen remodel' }];
+  const r = res();
+  await trackMod.default(
+    {
+      method: 'PATCH', query: { resource: 'update_timesheet_entry' }, headers: { authorization: 'Bearer t' },
+      body: { id: 'HL-TSE-1', jobId: 'HL-JOB-10001', startAt: '2026-08-26T13:00:00.000Z', endAt: '2026-08-26T21:00:00.000Z' },
+    },
+    r
+  );
+  assert.equal(r.statusCode, 200, JSON.stringify(r.body));
+  assert.equal(updatedPatch.job_uuid, 'job-uuid-1');
+  assert.equal(r.body.entry.jobLabel, 'Kitchen remodel');
+});
+
+test('an update targeting a row that no longer exists is reported, not silently accepted', async () => {
+  reset();
+  updateReturnsEmpty = true;
+  const r = res();
+  await trackMod.default(
+    {
+      method: 'PATCH', query: { resource: 'update_timesheet_entry' }, headers: { authorization: 'Bearer t' },
+      body: { id: 'HL-TSE-gone', startAt: '2026-08-26T13:00:00.000Z', endAt: '2026-08-26T21:00:00.000Z' },
+    },
+    r
+  );
+  assert.equal(r.statusCode, 404);
+});
+
+test('an update failure is surfaced, not swallowed', async () => {
+  reset();
+  updateFails = 'db is down';
+  const r = res();
+  await trackMod.default(
+    {
+      method: 'PATCH', query: { resource: 'update_timesheet_entry' }, headers: { authorization: 'Bearer t' },
+      body: { id: 'HL-TSE-1', startAt: '2026-08-26T13:00:00.000Z', endAt: '2026-08-26T21:00:00.000Z' },
+    },
+    r
+  );
+  assert.equal(r.statusCode, 500);
+  assert.match(r.body.error, /db is down/);
+});
+
+test('the update route stays PATCH-only', async () => {
+  reset();
+  const r = res();
+  await trackMod.default({ method: 'POST', query: { resource: 'update_timesheet_entry' }, headers: { authorization: 'Bearer t' }, body: {} }, r);
+  assert.equal(r.statusCode, 405);
+});
+
+// ------------------------------------------------------ delete_timesheet_entry
+
+test('deleting requires an id', async () => {
+  reset();
+  const r = res();
+  await trackMod.default({ method: 'DELETE', query: { resource: 'delete_timesheet_entry' }, headers: { authorization: 'Bearer t' } }, r);
+  assert.equal(r.statusCode, 400);
+});
+
+test('a Jobber-synced entry cannot be deleted here', async () => {
+  reset();
+  const r = res();
+  await trackMod.default({ method: 'DELETE', query: { resource: 'delete_timesheet_entry', id: 'jobber-synced-123' }, headers: { authorization: 'Bearer t' } }, r);
+  assert.equal(r.statusCode, 400);
+  assert.match(r.body.error, /Jobber/i);
+});
+
+test('a successful delete removes the row by its real id', async () => {
+  reset();
+  const r = res();
+  await trackMod.default({ method: 'DELETE', query: { resource: 'delete_timesheet_entry', id: 'HL-TSE-1' }, headers: { authorization: 'Bearer t' } }, r);
+  assert.equal(r.statusCode, 200, JSON.stringify(r.body));
+  const call = calls.find((c) => c.path.startsWith('time_sheet_entries') && c.method === 'DELETE');
+  assert.ok(call, 'expected a DELETE call');
+  assert.match(call.path, /jobber_id=eq\.HL-TSE-1/);
+});
+
+test('a delete failure is surfaced, not swallowed', async () => {
+  reset();
+  deleteFails = 'db is down';
+  const r = res();
+  await trackMod.default({ method: 'DELETE', query: { resource: 'delete_timesheet_entry', id: 'HL-TSE-1' }, headers: { authorization: 'Bearer t' } }, r);
+  assert.equal(r.statusCode, 500);
+  assert.match(r.body.error, /db is down/);
+});
+
+test('the delete route stays DELETE-only', async () => {
+  reset();
+  const r = res();
+  await trackMod.default({ method: 'GET', query: { resource: 'delete_timesheet_entry', id: 'HL-TSE-1' }, headers: { authorization: 'Bearer t' } }, r);
+  assert.equal(r.statusCode, 405);
+});
+
 // ---------------------------------------------------------------- dispatch
 
-test('both resources are actually wired into the dispatch table', () => {
+test('all four resources are actually wired into the dispatch table', () => {
   assert.match(TRACK1_SRC, /resource === 'timesheet_week'/);
   assert.match(TRACK1_SRC, /handleTimesheetWeek\(req, res\)/);
   assert.match(TRACK1_SRC, /resource === 'create_timesheet_entry'/);
   assert.match(TRACK1_SRC, /handleCreateTimesheetEntry\(req, res\)/);
+  assert.match(TRACK1_SRC, /resource === 'update_timesheet_entry'/);
+  assert.match(TRACK1_SRC, /handleUpdateTimesheetEntry\(req, res\)/);
+  assert.match(TRACK1_SRC, /resource === 'delete_timesheet_entry'/);
+  assert.match(TRACK1_SRC, /handleDeleteTimesheetEntry\(req, res\)/);
 });
 
 // --------------------------------------------------------------- frontend
@@ -320,14 +522,15 @@ test('tsLoad reads the crew roster from the real /api/track1?resource=users resp
   assert.doesNotMatch(fn, /usersData\.records/);
 });
 
-test('clicking an empty date cell opens the create modal; a filled cell just shows the value', () => {
+test('clicking an empty date cell opens the create modal; a filled cell opens the edit modal for that entry', () => {
+  // 2026-08-26: "lets add an option to edit the timesheet like this in
+  // jobber" -- a filled cell used to be a plain, non-interactive box; it now
+  // opens tsOpenEditModal for the real entry in that cell.
   const fn = extractFunction(HTML, 'function tsRender() {');
   assert.match(fn, /onclick="event\.stopPropagation\(\);tsOpenCreateModal\(/);
-  // A filled day renders a plain, non-interactive box -- only the empty
-  // ones are click targets, matching "once clicked on an empty date."
   const filledCellIdx = fn.indexOf('if (dayEntries.length) {');
   const filledCellBlock = fn.slice(filledCellIdx, fn.indexOf('} else {', filledCellIdx));
-  assert.doesNotMatch(filledCellBlock, /onclick/);
+  assert.match(filledCellBlock, /onclick="event\.stopPropagation\(\);tsOpenEditModal\(/);
 });
 
 test('week/day totals are derived from the per-day buckets actually shown, not a raw sum over every entry the user has', () => {
@@ -370,4 +573,54 @@ test('the migration backing the Notes field exists and is replay-safe', () => {
   assert.ok(fs.existsSync(migPath), 'expected the time_sheet_entries.note migration to exist');
   const sql = fs.readFileSync(migPath, 'utf-8');
   assert.match(sql, /alter table public\.time_sheet_entries add column if not exists note text;/);
+});
+
+// -------------------------------------------------------- Edit Timesheet Entry
+// jomell, 2026-08-26: "lets add an option to edit the timesheet like this in
+// jobber" -- Employee greyed out, job/date/start/end/notes editable, Delete
+// on the left, Cancel/Save on the right.
+
+test('tsOpenEditModal looks the entry up by id and shows the real employee name as read-only, not an editable select', () => {
+  const fn = extractFunction(HTML, 'function tsOpenEditModal(entryId) {');
+  assert.match(fn, /TS\.entries \|\| \[\]\)\.find\(function \(e\) \{ return e\.id === entryId; \}\)/);
+  // A plain div, not a <select id="ts-ce-emp">, so there is nothing to
+  // submit for the employee and nothing that lets it be reassigned here.
+  assert.doesNotMatch(fn, /<select id="ts-ce-emp"/);
+  assert.match(fn, /background:#eceef4;color:var\(--mut\)/);
+});
+
+test("the edit modal reuses the create modal's job-search field ids so tsFilterJobs/tsPickJob work unchanged", () => {
+  const fn = extractFunction(HTML, 'function tsOpenEditModal(entryId) {');
+  assert.match(fn, /id="ts-ce-job-q"/);
+  assert.match(fn, /id="ts-ce-job-id"/);
+  assert.match(fn, /id="ts-ce-job-results"/);
+});
+
+test('the edit modal prefills date/time from the real entry using the UTC-to-ET reverse of tsEtToUTC', () => {
+  const fn = extractFunction(HTML, 'function tsOpenEditModal(entryId) {');
+  assert.match(fn, /tsEtDateStr\(entry\.startAt\)/);
+  assert.match(fn, /tsEtTimeStr\(entry\.startAt\)/);
+  assert.match(fn, /tsEtTimeStr\(entry\.endAt\)/);
+});
+
+test('tsEtTimeStr is the real inverse of tsEtToUTC for a known instant', () => {
+  const fn = extractFunction(HTML, 'function tsEtTimeStr(iso) {');
+  assert.match(fn, /timeZone: 'America\/New_York'/);
+  assert.match(fn, /hour12: false/);
+});
+
+test('Save PATCHes update_timesheet_entry with the real entry id and never sends a userId', () => {
+  const fn = extractFunction(HTML, 'function tsOpenEditModal(entryId) {');
+  assert.match(fn, /hlApiPatch\('update_timesheet_entry', \{ id: entry\.id, jobId: jid, startAt: startAt\.toISOString\(\), endAt: endAt\.toISOString\(\), note: notes \}\)/);
+});
+
+test('Delete asks for confirmation before calling delete_timesheet_entry with the real id', () => {
+  const fn = extractFunction(HTML, 'function tsOpenEditModal(entryId) {');
+  assert.match(fn, /window\.confirm\('Delete this timesheet entry\? This cannot be undone\.'\)/);
+  assert.match(fn, /hlApiDelete\('delete_timesheet_entry&id=' \+ encodeURIComponent\(entry\.id\)\)/);
+});
+
+test('a missing entry (stale click after a reload) shows a toast instead of opening a broken modal', () => {
+  const fn = extractFunction(HTML, 'function tsOpenEditModal(entryId) {');
+  assert.match(fn, /if \(!entry\) \{ chirpToast\('That entry could not be found -- try reloading\.'\); return; \}/);
 });
