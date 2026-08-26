@@ -752,7 +752,7 @@ function renderMessagesPanel() {
   const headRow = document.createElement('div'); headRow.className = 'msg-search-row';
   const searchWrap = document.createElement('div'); searchWrap.className = 'msg-search';
   searchWrap.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>';
-  const search = document.createElement('input'); search.id = 'msg-search'; search.type = 'text'; search.placeholder = 'Search conversations'; search.value = msgSearch;
+  const search = document.createElement('input'); search.id = 'msg-search'; search.type = 'text'; search.placeholder = 'Search'; search.value = msgSearch;
   search.addEventListener('input', () => { msgSearch = search.value; applyMsgFilter(); });
   searchWrap.appendChild(search);
   headRow.appendChild(searchWrap);

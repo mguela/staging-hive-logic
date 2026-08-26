@@ -2013,7 +2013,7 @@ html[data-theme="dark"] :is(#hiveconnect-root, .hc-embed).huddle-banner {
 :is(#hiveconnect-root, .hc-embed).msg-filter-row { display: flex; align-items: center; justify-content: flex-end; gap: 8px; flex: 1 1 0; min-width: 0; margin-bottom: 0; }
 :is(#hiveconnect-root, .hc-embed) .msg-filter-quick,
 :is(#hiveconnect-root, .hc-embed).msg-filter-quick { appearance: none; -webkit-appearance: none; box-shadow: none; background: none; border: none;
-  font-family: var(--sans); font-size: 11px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase;
+  font-family: var(--sans); font-size: 11px; font-weight: 400; letter-spacing: .05em; text-transform: uppercase;
   color: var(--mut); cursor: pointer; padding: 2px; }
 :is(#hiveconnect-root, .hc-embed) .msg-filter-quick:hover,
 :is(#hiveconnect-root, .hc-embed).msg-filter-quick:hover { color: var(--ink); }
