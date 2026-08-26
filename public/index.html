@@ -19,7 +19,7 @@
  * monitor_my_status poll, so "is this person running current code" is a
  * question the database can answer. Do not hand-edit it -- run
  * `node scripts/stamp-page-build.mjs`. */
-var HL_PAGE_BUILD = '5f6f5c82c052c0f2';
+var HL_PAGE_BUILD = '330d1b1b18a3588f';
 </script>
 <script>
 (function () { // HL_FETCH_DEDUPE_V1 — single wrapper: GET /api/ dedupe + 60s cache + write-invalidate
@@ -5435,9 +5435,10 @@ function ninvSave(){ var amt = parseFloat(document.getElementById('ninv-amt').va
        clicked on an empty date, a window will popup its the 'create
        timesheet entry'." Only the Timesheets tab itself for now -- "for now
        lets not add the 'approve timesheets' and 'confirm payroll' tab."
-       Admin/owner-only, same visibility rule as wf-team-card below (this is
-       everyone's hours, not just your own) -- shown/hidden by
-       workforceRefresh() once it knows isOwner. -->
+       2026-08-26: "everyone needs to have access to the timesheet because
+       they will be the one to enter their start time and end time" --
+       shown to every signed-in user (not gated on isOwner the way
+       wf-team-card below is), toggled visible by workforceRefresh(). -->
   <div class="card" id="ts-card" style="margin-bottom:16px;display:none">
     <h2 style="margin:0 0 4px;font-family:Montserrat;font-size:15px;font-weight:900">Timesheets</h2>
     <div style="font-size:11px;color:var(--mut);font-weight:600;margin-bottom:14px">Click an employee to see their week. Click an empty date to log time for them.</div>
@@ -5695,10 +5696,15 @@ function ninvSave(){ var amt = parseFloat(document.getElementById('ninv-amt').va
          clock-in prompt lives outside this closure and asks rather than
          guesses. */
       window.hlWorkforceIsOwner = function(){ return isOwner; };
+      // jomell, 2026-08-26: "everyone needs to have access to the timesheet
+      // because they will be the one to enter their start time and end
+      // time" -- shown to every signed-in user, not just owners. The API
+      // (resource=timesheet_week / create_timesheet_entry) already only
+      // requires a signed-in session, so this is a pure visibility change.
       var tsCard = document.getElementById('ts-card');
       if (tsCard) {
-        tsCard.style.display = isOwner ? 'block' : 'none';
-        if (isOwner && typeof window.tsLoad === 'function') window.tsLoad();
+        tsCard.style.display = 'block';
+        if (typeof window.tsLoad === 'function') window.tsLoad();
       }
       renderClockState();
       if (data && data.lastClosed) hlWfExplainClockOut(data.lastClosed);
