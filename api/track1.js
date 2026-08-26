@@ -40,6 +40,7 @@ import { provisionHiveConnectAccount, getMapping, postBotMessage } from './hivec
 import { encryptSecret as _encSecret, decryptSecret as _decSecret } from './_lib/secrets.js';
 import { mailboxAccessToken } from './_lib/ms-mailbox-tokens.js';
 import { sendEmail, isEmailConfigured } from './_lib/email.js';
+import { generateInvoicePdf } from './_lib/invoice-pdf.js';
 import { getFinancials, getFinancialsDurable, qboConnected } from './qbo/index.js';
 // Material Catalog & Procurement -- Vendor Catalog module (view-vcx). Folded
 // in here for the same 12-function-cap reason as everything else in this
@@ -5312,26 +5313,56 @@ async function handleSendInvoiceEmail(req, res) {
   if (!client || !client.email) return res.status(422).json({ ok: false, error: 'No email on file for this client.' });
   if (!isEmailConfigured()) return res.status(422).json({ ok: false, error: 'Email is not configured for this deployment (RESEND_API_KEY unset).' });
 
+  // 2026-08-27, jomell: "whenever we send an invoice to a client, they
+  // should receive a pdf with the details of the invoice." Everything below
+  // is read fresh, real data for the attached PDF -- an address on file, the
+  // job it's billing against, and the job's other real invoices for a true
+  // running balance. Any of the three can legitimately be missing (no
+  // address on file, no linked job, no other invoices yet); the PDF just
+  // omits that section rather than guessing.
+  let address = null;
+  if (client) {
+    const addrR = await supabaseRequest(`client_locations?jobber_id=eq.${encodeURIComponent(invoice.client_id)}&select=street,city,province,postal_code&limit=1`);
+    if (addrR.ok) { const rows = await addrR.json(); address = rows[0] || null; }
+  }
+  let job = null;
+  if (invoice.job_id) {
+    const jobR = await supabaseRequest(`jobs?jobber_id=eq.${encodeURIComponent(invoice.job_id)}&select=title,total&limit=1`);
+    if (jobR.ok) { const rows = await jobR.json(); job = rows[0] || null; }
+  }
+  let accountBalance = null;
+  if (invoice.job_id) {
+    const balR = await supabaseRequest(`invoices?job_id=eq.${encodeURIComponent(invoice.job_id)}&select=balance`);
+    if (balR.ok) {
+      const rows = await balR.json();
+      accountBalance = rows.reduce((sum, r) => sum + (Number(r.balance) || 0), 0);
+    }
+  }
+  const pdfBytes = await generateInvoicePdf({ invoice, client, address, job, accountBalance });
+  const pdfBase64 = Buffer.from(pdfBytes).toString('base64');
+
   const clientName = client.first_name || client.name || 'there';
-  const lineItems = Array.isArray(invoice.line_items) ? invoice.line_items : [];
-  const rowsHtml = lineItems.map((l) => `<tr><td style="padding:6px 0;color:#484f64">${ivEscapeHtml(l.description || 'Item')}</td><td style="padding:6px 0;text-align:right;font-weight:700;color:#161e2e">${ivMoney(l.lineTotal)}</td></tr>`).join('');
   const dueLine = invoice.due_date ? `<tr><td style="padding:6px 0;color:#484f64">Due</td><td style="padding:6px 0;text-align:right;font-weight:700">${ivEscapeHtml(invoice.due_date)}</td></tr>` : '';
 
   const html = `
     <div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto">
       <p>Hi ${ivEscapeHtml(clientName)},</p>
-      <p>You have a new invoice${invoice.subject ? ` for <b>${ivEscapeHtml(invoice.subject)}</b>` : ''}.</p>
+      <p>You have a new invoice${invoice.subject ? ` for <b>${ivEscapeHtml(invoice.subject)}</b>` : ''} -- the full details are in the attached PDF.</p>
       <table style="width:100%;border-collapse:collapse;margin:16px 0" role="presentation">
         <tr><td style="padding:6px 0;color:#484f64">Invoice</td><td style="padding:6px 0;text-align:right;font-weight:700">#${ivEscapeHtml(invoice.invoice_number || '')}</td></tr>
         <tr><td style="padding:6px 0;color:#484f64">Amount due</td><td style="padding:6px 0;text-align:right;font-weight:700;font-size:16px">${ivMoney(invoice.total)}</td></tr>
         ${dueLine}
       </table>
-      ${rowsHtml ? `<table style="width:100%;border-collapse:collapse;margin:0 0 16px" role="presentation">${rowsHtml}</table>` : ''}
       <p style="color:#484f64">Please contact us to arrange payment.</p>
     </div>`;
-  const text = `You have a new invoice #${invoice.invoice_number || ''} for ${ivMoney(invoice.total)}. Please contact us to arrange payment.`;
+  const text = `You have a new invoice #${invoice.invoice_number || ''} for ${ivMoney(invoice.total)}. The full details are in the attached PDF. Please contact us to arrange payment.`;
 
-  const sent = await sendEmail({ to: client.email, subject: `Invoice #${invoice.invoice_number || ''}`, html, text });
+  const sent = await sendEmail({
+    to: client.email,
+    subject: `Invoice #${invoice.invoice_number || ''}`,
+    html, text,
+    attachments: [{ filename: `Invoice-${invoice.invoice_number || id}.pdf`, content: pdfBase64 }],
+  });
   if (!sent.ok) return res.status(422).json({ ok: false, error: sent.error || 'Could not send the email.' });
 
   let updated = invoice;
