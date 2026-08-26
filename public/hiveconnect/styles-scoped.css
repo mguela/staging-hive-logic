@@ -709,9 +709,26 @@ html[data-theme="dark"] :is(#hiveconnect-root, .hc-embed).mention { background: 
 :is(#hiveconnect-root, .hc-embed) .msg-time,
 :is(#hiveconnect-root, .hc-embed).msg-time { font-family: var(--mono); color: var(--mut); font-size: 10px; font-weight: 600; }
 :is(#hiveconnect-root, .hc-embed) .msg-content,
-:is(#hiveconnect-root, .hc-embed).msg-content { font-size: 13.5px; font-weight: 500; line-height: 1.5; word-wrap: break-word; white-space: pre-wrap; color: var(--ink); }
+:is(#hiveconnect-root, .hc-embed).msg-content {
+  display: inline-block; max-width: 72%; font-size: 13.5px; font-weight: 500; line-height: 1.5;
+  word-wrap: break-word; white-space: pre-wrap; color: var(--ink);
+  background: #F4F5F5; padding: 8px 13px; border-radius: 14px; margin-top: 3px;
+}
 :is(#hiveconnect-root, .hc-embed) .msg-content a,
 :is(#hiveconnect-root, .hc-embed).msg-content a { color: var(--steel-deep); font-weight: 700; text-decoration: none; }
+/* Sent-by-me messages: bubble on the right, dark fill, light text. */
+:is(#hiveconnect-root, .hc-embed) .msg.mine,
+:is(#hiveconnect-root, .hc-embed).msg.mine { flex-direction: row-reverse; }
+:is(#hiveconnect-root, .hc-embed) .msg.mine .msg-body,
+:is(#hiveconnect-root, .hc-embed).msg.mine .msg-body { display: flex; flex-direction: column; align-items: flex-end; }
+:is(#hiveconnect-root, .hc-embed) .msg.mine .msg-head,
+:is(#hiveconnect-root, .hc-embed).msg.mine .msg-head { flex-direction: row-reverse; }
+:is(#hiveconnect-root, .hc-embed) .msg.mine .msg-content,
+:is(#hiveconnect-root, .hc-embed).msg.mine .msg-content { background: #07253D; color: #fff; }
+:is(#hiveconnect-root, .hc-embed) .msg.mine .msg-content a,
+:is(#hiveconnect-root, .hc-embed).msg.mine .msg-content a { color: #9dc4ff; }
+:is(#hiveconnect-root, .hc-embed) .msg.mine .msg-content code,
+:is(#hiveconnect-root, .hc-embed).msg.mine .msg-content code { color: #d5deea; }
 :is(#hiveconnect-root, .hc-embed) .msg-content a:hover,
 :is(#hiveconnect-root, .hc-embed).msg-content a:hover { text-decoration: underline; }
 :is(#hiveconnect-root, .hc-embed) .msg-content code,

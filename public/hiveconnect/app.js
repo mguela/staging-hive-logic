@@ -901,7 +901,7 @@ function renderMessages() {
 function msgEl(m, grouped, inThread) {
   const p = profiles.get(m.user_id);
   const div = document.createElement('div');
-  div.className = 'msg' + (grouped ? ' grouped' : '');
+  div.className = 'msg' + (grouped ? ' grouped' : '') + (m.user_id === me.id ? ' mine' : '');
   div.dataset.id = m.id;
 
   if (grouped) {
