@@ -19,7 +19,7 @@
  * monitor_my_status poll, so "is this person running current code" is a
  * question the database can answer. Do not hand-edit it -- run
  * `node scripts/stamp-page-build.mjs`. */
-var HL_PAGE_BUILD = '7e664470a2906442';
+var HL_PAGE_BUILD = 'ebea1eb845326d57';
 </script>
 <script>
 (function () { // HL_FETCH_DEDUPE_V1 — single wrapper: GET /api/ dedupe + 60s cache + write-invalidate
@@ -19994,7 +19994,7 @@ document.addEventListener('keydown',function(e){
   <div class="nl" style="max-width:560px">
     <div class="nl-head">
       <div><h1 id="rlm-name">Lead</h1><p id="rlm-sub"></p></div>
-      <div class="acts"><button class="btn-ghost" onclick="rlmTryClose()">Close</button><button class="btn-ghost" id="rlm-estimate" onclick="rlmStartEstimate()">Start estimate</button><button class="btn-ghost" onclick="rlmStartJob()">Start the job</button><button class="btn-save" onclick="saveRealLead()">Save</button></div>
+      <div class="acts"><button class="btn-ghost" id="rlm-delete" style="color:#c65b4e;border-color:#f0d3ce" onclick="rlmDelete()">Delete</button><button class="btn-ghost" onclick="rlmTryClose()">Close</button><button class="btn-ghost" id="rlm-estimate" onclick="rlmStartEstimate()">Start estimate</button><button class="btn-ghost" onclick="rlmStartJob()">Start the job</button><button class="btn-save" onclick="saveRealLead()">Save</button></div>
     </div>
     <div class="nl-body">
       <div class="fwrap">
@@ -28234,6 +28234,29 @@ function saveRealLead() {
   }).catch(function (e) { chirpToast('&#9888; Update failed: ' + e.message); });
 }
 
+// jomell, 2026-08-27, looking at a real lead card: "i should be able to
+// delete a lead here... there should be a delete button and then it should
+// disappear." Removes the lead_pipeline opportunity row only -- the client
+// record and (if this lead came from one) Jobber's own request are untouched.
+function rlmDelete() {
+  var modal = document.getElementById('rlv-lead-modal');
+  var openLead = findLeadByKey(modal.getAttribute('data-lead-key'));
+  if (!openLead || !openLead.id) {
+    chirpToast('&#9888; This lead has not been saved yet — nothing to delete.');
+    return;
+  }
+  if (!window.confirm('Delete this lead? This cannot be undone.')) return;
+  hlApiDelete('leads&id=' + encodeURIComponent(openLead.id)).then(function (r) {
+    if (r && r.ok) {
+      modal.classList.remove('open');
+      chirpToast('&#10003; Lead deleted');
+      loadLeadsLive();
+    } else {
+      chirpToast('&#9888; ' + ((r && r.error) || 'Delete failed — are you signed in?'));
+    }
+  }).catch(function (e) { chirpToast('&#9888; Delete failed: ' + e.message); });
+}
+
 // This whole region sits inside a closure, not at page scope. An inline
 // onclick="" runs in GLOBAL scope, so every one of these was throwing
 // "not defined" the moment somebody pressed the button: Save Lead on the lead
@@ -28257,6 +28280,7 @@ window.rlmReferredByPick = rlmReferredByPick;
 window.rlmStartJob = rlmStartJob;
 window.rlmStartEstimate = rlmStartEstimate;
 window.saveRealLead = saveRealLead;
+window.rlmDelete = rlmDelete;
 window.findLeadByKey = typeof findLeadByKey === 'function' ? findLeadByKey : undefined;
 
 

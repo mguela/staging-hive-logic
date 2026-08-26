@@ -1224,6 +1224,20 @@ async function handleLeads(req, res) {
     return res.status(200).json({ ok: true, resource: 'leads', pipeline: updated });
   }
 
+  if (req.method === 'DELETE') {
+    // lead_pipeline is entirely HiveLogic-owned (either created here or
+    // one-time-backfilled from Jobber's requests table -- see the POST/GET
+    // comments above), so unlike invoices/timesheets there is no live Jobber
+    // sync to collide with and no HL- id-prefix guard needed. The client and
+    // Jobber's own request record are untouched either way -- this only
+    // removes the opportunity row itself.
+    const leadId = String((req.query && req.query.id) || '').trim();
+    if (!leadId) return res.status(400).json({ ok: false, error: 'Which lead? No id given.' });
+    const r = await supabaseRequest(`lead_pipeline?id=eq.${encodeURIComponent(leadId)}`, { method: 'DELETE' });
+    if (!r.ok) return res.status(500).json({ ok: false, error: 'Could not delete this lead: ' + (await r.text()).slice(0, 300) });
+    return res.status(200).json({ ok: true, resource: 'leads' });
+  }
+
   return res.status(405).json({ ok: false, error: 'Method not allowed.' });
 }
 
