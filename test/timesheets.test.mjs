@@ -306,6 +306,20 @@ test('the Timesheets card is hidden until first paint, then revealed to every si
   assert.match(fn, /if \(typeof window\.tsLoad === 'function'\) window\.tsLoad\(\);/);
 });
 
+test('tsLoad reads the crew roster from the real /api/track1?resource=users response shape -- keyed by the resource name, not .records', () => {
+  // Bug found live, 2026-08-26: the Timesheets card showed "No team members
+  // synced yet" for a real signed-in user because tsLoad() read
+  // usersData.records, but the real HTTP handler (RESOURCE_CONFIG dispatch
+  // in api/track1.js, ~line 9033) returns the shaped array under a key
+  // named after the resource itself: { ok:true, users:[...] } -- same
+  // pattern resource=quotes uses (d.quotes), not the { records:[...] }
+  // shape that is only how the internal getTrackResourceData() helper
+  // (reused by api/chat.js) shapes its return value.
+  const fn = extractFunction(HTML, 'function tsLoad() {');
+  assert.match(fn, /TS\.users = \(usersData && usersData\.users\) \? usersData\.users : \[\];/);
+  assert.doesNotMatch(fn, /usersData\.records/);
+});
+
 test('clicking an empty date cell opens the create modal; a filled cell just shows the value', () => {
   const fn = extractFunction(HTML, 'function tsRender() {');
   assert.match(fn, /onclick="event\.stopPropagation\(\);tsOpenCreateModal\(/);
