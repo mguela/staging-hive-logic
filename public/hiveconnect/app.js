@@ -1071,7 +1071,8 @@ function msgEl(m, grouped, inThread) {
     div.appendChild(timeCol);
   }
 
-  // hover tools
+  // hover tools -- React | Reply | Copy | More (Pin/Task/Edit/Delete folded
+  // into the More dropdown, same real actions as before, just consolidated).
   if (!m.deleted_at) {
     const tools = document.createElement('div'); tools.className = 'msg-tools';
     const btn = (label, title, fn) => {
@@ -1080,22 +1081,25 @@ function msgEl(m, grouped, inThread) {
     };
     btn('😊', 'React', e => openEmojiPicker(e, m.id));
     if (!inThread) btn('💬', 'Reply in thread', () => openThread(m.id));
-    btn('📌', m.pinned_at ? 'Unpin' : 'Pin', () => togglePin(m));
-    btn('✅', 'Create task from this message', () => {
-      const ch = channels.get(m.channel_id);
-      const isDm = ch && ch.type === 'dm';
-      openTaskQuickCreateFromSource({
-        type: isDm ? 'message' : (inThread ? 'thread_reply' : 'channel_post'),
-        sourceMessageId: m.id, sourceChannelId: m.channel_id,
-        subject: isDm ? ('DM with ' + (profiles.get(m.user_id)?.display_name || 'someone')) : ('#' + (ch ? ch.name : 'channel')),
-        sender: profiles.get(m.user_id)?.display_name || profiles.get(m.user_id)?.username || '?',
-        preview: (m.content || '').slice(0, 200),
-      });
+    btn('📋', 'Copy', () => { navigator.clipboard.writeText(m.content || ''); railToast('Copied'); });
+    btn('⋯', 'More', e => {
+      const items = [
+        [m.pinned_at ? '📌 Unpin' : '📌 Pin', () => togglePin(m)],
+        ['✅ Create task from this message', () => {
+          const ch = channels.get(m.channel_id);
+          const isDm = ch && ch.type === 'dm';
+          openTaskQuickCreateFromSource({
+            type: isDm ? 'message' : (inThread ? 'thread_reply' : 'channel_post'),
+            sourceMessageId: m.id, sourceChannelId: m.channel_id,
+            subject: isDm ? ('DM with ' + (profiles.get(m.user_id)?.display_name || 'someone')) : ('#' + (ch ? ch.name : 'channel')),
+            sender: profiles.get(m.user_id)?.display_name || profiles.get(m.user_id)?.username || '?',
+            preview: (m.content || '').slice(0, 200),
+          });
+        }],
+      ];
+      if (m.user_id === me.id) items.push('---', ['✏️ Edit', () => startEdit(div, m)], ['🗑️ Delete', () => deleteMessage(m)]);
+      evMenu(e, items);
     });
-    if (m.user_id === me.id) {
-      btn('✏️', 'Edit', () => startEdit(div, m));
-      btn('🗑️', 'Delete', () => deleteMessage(m));
-    }
     div.appendChild(tools);
   }
   return div;
