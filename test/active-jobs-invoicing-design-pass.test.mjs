@@ -116,3 +116,45 @@ test('nothing in the summary/list/card path was renamed -- ivxLoad, ivxRender, a
   const renderFn = extractFunction(HTML, 'function ivxRender(){');
   assert.match(renderFn, /rows\.forEach\(function\(i\)\{ html\+=ivxCard\(i\); \}\);/);
 });
+
+// ---- Sidebar -----------------------------------------------------------------
+// jomell: "add the ui/ux design for the sidebar."
+
+const RAIL = (() => {
+  const start = HTML.indexOf('<aside class="rail" role="navigation" aria-label="Primary">');
+  assert.ok(start > -1, 'the primary sidebar should still be findable');
+  return HTML.slice(start, start + 2000);
+})();
+
+test('the sidebar reskin is scoped under .rail, never a bare redefinition of .nav/.ic/.logo/.foot -- all four are reused by unrelated parts of the app', () => {
+  assert.match(RAIL, /\.rail \.nav\{/);
+  assert.match(RAIL, /\.rail \.nav:hover\{/);
+  assert.match(RAIL, /\.rail \.nav\.on\{/);
+  assert.match(RAIL, /\.rail \.logo \.tagline\{/);
+  assert.doesNotMatch(RAIL, /\n\s*\.nav\{/);
+  assert.doesNotMatch(RAIL, /\n\s*\.ic\{/);
+  assert.doesNotMatch(RAIL, /\n\s*\.logo\{/);
+  assert.doesNotMatch(RAIL, /\n\s*\.foot\{/);
+});
+
+test('the sidebar background moves to the mockup\'s navy gradient', () => {
+  assert.match(RAIL, /\.rail\{background:linear-gradient\(180deg,#0a1e30 0%,#0f2d47 55%,#0a1c2e 100%\)\}/);
+});
+
+test('every real nav id and its onclick handler survive the reskin untouched', () => {
+  const start = HTML.indexOf('<aside class="rail" role="navigation" aria-label="Primary">');
+  const end = HTML.indexOf('</aside>', start);
+  const section = HTML.slice(start, end);
+  for (const [id, onclick] of [
+    ['nav-cc', "showView('cc')"],
+    ['nav-sched', "showView('schedule')"],
+    ['nav-ajx', "showView('ajx')"],
+    ['nav-invx', "showView('invx')"],
+    ['nav-ttx', "showView('ttx')"],
+    ['nav-signout', 'hlSignOut()'],
+  ]) {
+    assert.match(section, new RegExp(`id="${id}" onclick="${onclick.replace(/[().']/g, '\\$&')}"`), `${id} should still call ${onclick}`);
+  }
+  assert.match(section, /onclick="hlGrpAllToggle\(\)"/);
+  assert.match(section, /onclick="hlCompanyPop\(\)"/);
+});
