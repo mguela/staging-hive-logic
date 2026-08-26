@@ -141,6 +141,36 @@ test('the sidebar background moves to the mockup\'s navy gradient', () => {
   assert.match(RAIL, /\.rail\{background:linear-gradient\(180deg,#0a1e30 0%,#0f2d47 55%,#0a1c2e 100%\)\}/);
 });
 
+// ---- Change Orders ------------------------------------------------------------
+
+test('the Change Orders header/button adopt the mockup styling without touching the shared btn-save class', () => {
+  const start = HTML.indexOf('<div id="view-co" style="display:none">');
+  const section = HTML.slice(start, start + 1500);
+  assert.match(section, /background:#1e3a5f/);
+  assert.doesNotMatch(section, /class="btn-save"/);
+  assert.match(section, /onclick="coOpenCreate\(\)"/);
+});
+
+test('coBadge moves from a pill to the mockup\'s bordered chip, while covering every real status', () => {
+  const fn = extractFunction(HTML, 'function coBadge(s){');
+  assert.match(fn, /border-radius:4px/);
+  assert.match(fn, /border:1px solid '\+c\[0\]\+'40/);
+  for (const status of ['draft', 'sent', 'approved', 'rejected', 'overdue', 'paid', 'partially_paid']) {
+    assert.match(fn, new RegExp(status + ':\\['));
+  }
+});
+
+test('coCard keeps every real id and action wired -- coSend/coApprove/coRejectForm/coPayForm', () => {
+  const fn = extractFunction(HTML, 'function coCard(co){');
+  assert.match(fn, /id="corow-'\+cid\+'"/);
+  assert.match(fn, /id="coacts-'\+cid\+'"/);
+  assert.match(fn, /id="cop-'\+cid\+'"/);
+  assert.match(fn, /onclick="coSend\(/);
+  assert.match(fn, /onclick="coApprove\(/);
+  assert.match(fn, /onclick="coRejectForm\(/);
+  assert.match(fn, /onclick="coPayForm\(/);
+});
+
 test('every real nav id and its onclick handler survive the reskin untouched', () => {
   const start = HTML.indexOf('<aside class="rail" role="navigation" aria-label="Primary">');
   const end = HTML.indexOf('</aside>', start);
