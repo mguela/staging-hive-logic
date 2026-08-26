@@ -59,5 +59,9 @@
    }
   ],
   "artifactName": "HiveLogic-Monitor-Setup.${ext}"
+ },
+ "allowScripts": {
+  "electron@31.7.7": true,
+  "get-windows@9.3.0": true
  }
 }
