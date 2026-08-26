@@ -25,8 +25,6 @@ const DEFAULT_CONFIG = {
   apiBase: 'https://hivelogic-live.vercel.app',
   agentToken: null,
   employeeEmail: null,
-  businessHoursStart: 6, // local 24h clock, inclusive
-  businessHoursEnd: 20, // local 24h clock, exclusive
   heartbeatIntervalSec: 60,
   screenshotEveryNHeartbeats: 5, // ~5 min at the default 60s heartbeat
 };
@@ -64,15 +62,24 @@ let lastConsentPromptSessionId = null; // which monitor session we've already as
 let lastScreenshotAt = 0; // ms epoch of the last screenshot capture -- drives the admin-configurable interval instead of a fixed heartbeat count
 let lastScreenshotSessionId = null; // forces an immediate first screenshot whenever the monitor session changes
 
+// Phase 5 (2026-08-25): app whitelist / productivity classification. The
+// rule list is cached and refreshed on its own slower cadence (not every
+// 60s heartbeat) -- it changes rarely (an admin editing it in Monitor
+// Settings) and this app never blocks/slows the heartbeat loop on a
+// second network round trip. lastUnproductiveNoticeApp/At rate-limit the
+// notification so switching tabs on the SAME unproductive app for an hour
+// shows one notice, not sixty.
+let appRulesCache = new Map(); // app_name -> category
+let appRulesFetchedAt = 0;
+const APP_RULES_REFRESH_MS = 10 * 60 * 1000; // 10 minutes
+let lastUnproductiveNoticeApp = null;
+let lastUnproductiveNoticeAt = 0;
+const UNPRODUCTIVE_NOTICE_COOLDOWN_MS = 15 * 60 * 1000; // 15 minutes per distinct app
+
 function detectPlatform() {
   if (process.platform === 'win32') return 'windows';
   if (process.platform === 'darwin') return 'mac';
   return null; // unsupported (e.g. Linux) -- pairing will reject this server-side too
-}
-
-function withinBusinessHours(cfg) {
-  const hour = new Date().getHours();
-  return hour >= cfg.businessHoursStart && hour < cfg.businessHoursEnd;
 }
 
 // -----------------------------------------------------------------------
@@ -216,6 +223,56 @@ async function getActiveAppName() {
   }
 }
 
+// Refreshes appRulesCache from the server on its own slower cadence (see
+// APP_RULES_REFRESH_MS). Uses the agent's own bearer token -- the same
+// GET-only exemption monitor_heartbeat etc. use (see
+// api/track1.js MONITOR_AGENT_RESOURCES / api/_lib/guard.js). Best-effort:
+// a failed fetch just keeps whatever was cached before (or an empty map on
+// first run), never blocks the heartbeat loop.
+async function refreshAppRulesIfStale() {
+  if (!CONFIG.agentToken) return;
+  if (Date.now() - appRulesFetchedAt < APP_RULES_REFRESH_MS) return;
+  try {
+    const r = await fetch(`${CONFIG.apiBase}/api/track1?resource=monitor_app_rules`, {
+      headers: { Authorization: `Bearer ${CONFIG.agentToken}` },
+    });
+    const data = await r.json().catch(() => null);
+    if (data && data.ok !== false && Array.isArray(data.rules)) {
+      appRulesCache = new Map(data.rules.map((rule) => [rule.appName, rule.category]));
+      appRulesFetchedAt = Date.now();
+    }
+  } catch (e) {
+    // Keep the stale cache -- classifying against last-known rules is
+    // better than not classifying at all.
+  }
+}
+
+// Chris: "provide a pop up notif that the app currently open is not
+// productive." Classifies locally against the cached whitelist and shows
+// a real OS notification -- but only for an app explicitly marked
+// 'unproductive' (never for 'unclassified', which would be guessing), and
+// at most once per distinct app per UNPRODUCTIVE_NOTICE_COOLDOWN_MS so
+// switching back to the same app repeatedly doesn't spam. Same
+// Notification API the startup notice already uses.
+function maybeNotifyUnproductiveApp(activeApp) {
+  if (!activeApp) return;
+  const category = appRulesCache.get(activeApp);
+  if (category !== 'unproductive') return;
+  const now = Date.now();
+  if (activeApp === lastUnproductiveNoticeApp && (now - lastUnproductiveNoticeAt) < UNPRODUCTIVE_NOTICE_COOLDOWN_MS) return;
+  lastUnproductiveNoticeApp = activeApp;
+  lastUnproductiveNoticeAt = now;
+  try {
+    new Notification({
+      title: 'HiveLogic Monitor',
+      body: `"${activeApp}" is marked unproductive. This does not affect your clock -- just a heads up.`,
+      silent: false,
+    }).show();
+  } catch (e) {
+    logLine(`Unproductive-app notification failed: ${e.message}`);
+  }
+}
+
 // -----------------------------------------------------------------------
 // Monitoring loop -- heartbeat decides clocked-in status server-side;
 // this app never trusts its own guess about whether someone is working.
@@ -235,7 +292,19 @@ async function sendHeartbeat() {
       // release there was no way to answer "who actually updated?" -- the same
       // blind spot the page build marker closed for browsers. See
       // api/_lib/agent-version.js.
-      body: JSON.stringify({ activityLevel, idleSeconds, displayCount, activeApp, agentVersion: app.getVersion() }),
+      //
+      // timezone (2026-08-26): the machine's own real IANA zone, read
+      // straight from the OS via Intl -- no geolocation, no manual setup.
+      // "Automatically detect my location and timezone" per Chris/the user.
+      // The server keeps this on the employee's profile (api/_lib/workday.js,
+      // api/user-settings.js) and always overwrites with the latest value,
+      // so it stays correct if someone travels rather than freezing on
+      // first pairing.
+      body: JSON.stringify({
+        activityLevel, idleSeconds, displayCount, activeApp,
+        agentVersion: app.getVersion(),
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      }),
     });
     const data = await r.json().catch(() => null);
     if (!data || data.ok === false) {
@@ -290,15 +359,33 @@ async function sendHeartbeat() {
       return;
     }
 
-    lastStatus = withinBusinessHours(CONFIG) ? 'Recording' : 'Clocked in — outside monitoring hours';
+    // "Recording" is now purely the server's answer (data.shouldCapture),
+    // not a second local-clock guess. This used to also require
+    // withinBusinessHours(CONFIG) -- a hardcoded 6am-8pm on the MACHINE'S
+    // local clock, completely blind to the server's actual, per-employee
+    // schedule (2026-08-26: an employee in Manila clocking in at 5:09 AM
+    // local had every capture silently skipped by this second gate, with
+    // shouldCapture=true the whole time and nothing telling anyone why).
+    // The server is the one place that already knows whether this is a
+    // real, consented, active work session -- there is no local fact this
+    // agent has that would make its own second guess more correct.
+    lastStatus = data.shouldCapture ? 'Recording' : 'Clocked in — not currently monitored';
     refreshTrayMenu();
+
+    // Phase 5 (2026-08-25): only while actually recording -- the same
+    // condition that gates capture below, so there is never a productivity
+    // notice for time that isn't itself being monitored.
+    if (data.shouldCapture) {
+      await refreshAppRulesIfStale();
+      maybeNotifyUnproductiveApp(activeApp);
+    }
 
     if (data.monitorSessionId !== lastScreenshotSessionId) {
       lastScreenshotSessionId = data.monitorSessionId;
       lastScreenshotAt = 0; // new clock-in / new session -- capture right away instead of waiting a full interval
     }
     const intervalMs = Math.max(1, Number(data.screenshotIntervalMinutes) || 5) * 60 * 1000;
-    if (data.shouldCapture && withinBusinessHours(CONFIG) && (Date.now() - lastScreenshotAt) >= intervalMs) {
+    if (data.shouldCapture && (Date.now() - lastScreenshotAt) >= intervalMs) {
       lastScreenshotAt = Date.now();
       await captureAndUploadScreenshots(data.monitorSessionId, !!data.blurScreenshots);
     }

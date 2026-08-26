@@ -76,7 +76,7 @@ test('the heartbeat carries the version', () => {
   const src = fs.readFileSync('hivelogic-monitor-agent/src/main.js', 'utf8');
   assert.match(src, /agentVersion: app\.getVersion\(\)/,
     'read from the app itself, not a second constant that could disagree with package.json');
-  assert.match(src, /body: JSON\.stringify\(\{ activityLevel, idleSeconds, displayCount, activeApp, agentVersion/,
+  assert.match(src, /activityLevel, idleSeconds, displayCount, activeApp,\s*\n\s*agentVersion: app\.getVersion\(\)/,
     'it must ride the existing heartbeat -- no new call, no new schedule');
 });
 
@@ -170,7 +170,10 @@ test('the admin roster shows the version alongside the device', () => {
   const src = fs.readFileSync('api/track1.js', 'utf8');
   assert.match(src, /agentVersion: a\.agent_version \|\| null,/);
   assert.match(src, /agentVersionState: agentVersionState\(a\.agent_version\),/);
-  assert.match(src, /select=id,employee_id,device_name,platform,status,last_seen_at,agent_version/);
+  // paired_at joined 2026-08-26 -- pickBestMonitorAgent needs it to pick the
+  // most-recently-paired active row when an employee has more than one
+  // monitor_agents record (see api/track1.js).
+  assert.match(src, /select=id,employee_id,device_name,platform,status,paired_at,last_seen_at,agent_version/);
 });
 
 // --- And it has to be READABLE, not just recorded --------------------------

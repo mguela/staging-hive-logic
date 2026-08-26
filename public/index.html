@@ -19,7 +19,7 @@
  * monitor_my_status poll, so "is this person running current code" is a
  * question the database can answer. Do not hand-edit it -- run
  * `node scripts/stamp-page-build.mjs`. */
-var HL_PAGE_BUILD = '51a3e3ece474d4c1';
+var HL_PAGE_BUILD = '4eca4ee8837a70ca';
 </script>
 <script>
 (function () { // HL_FETCH_DEDUPE_V1 — single wrapper: GET /api/ dedupe + 60s cache + write-invalidate
@@ -5489,7 +5489,7 @@ function ninvSave(){ var amt = parseFloat(document.getElementById('ninv-amt').va
     </div>
     <div style="display:flex;gap:10px;flex-wrap:wrap">
       <button class="lg-btn" id="wf-clockin-btn" style="width:auto;padding:10px 20px;display:none" onclick="workforceClockIn()">Clock In</button>
-      <button class="lg-btn" id="wf-break-btn" style="width:auto;padding:10px 20px;display:none;background:var(--amber)" onclick="workforceBreakToggle()">Start Break</button>
+      <button class="lg-btn" id="wf-break-btn" style="width:auto;padding:10px 20px;display:none;background:var(--amber);align-items:center;gap:8px;" onclick="workforceBreakToggle()"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 2v2"/><path d="M14 2v2"/><path d="M6 2v2"/><path d="M18 8h1a3 3 0 0 1 0 6h-1"/><path d="M4 8h14v5a7 7 0 0 1-7 7 7 7 0 0 1-7-7Z"/><path d="M6 22h10"/></svg><span>Start Break</span></button>
       <button class="lg-btn" id="wf-clockout-btn" style="width:auto;padding:10px 20px;display:none;background:var(--red)" onclick="workforceClockOut()">Clock Out</button>
     </div>
     <div id="wf-clock-msg" style="margin-top:10px;font-size:12px;font-weight:700"></div>
@@ -5530,6 +5530,11 @@ function ninvSave(){ var amt = parseFloat(document.getElementById('ninv-amt').va
        state the status poll maintains, and set only from the server's answer --
        never inferred in the page. */
     var isOwner = false;
+    // Whether this signed-in person may open Monitor's screenshot gallery
+    // (Superadmin or Owner -- see handleMonitorReview/handleWorkforceStatus,
+    // api/track1.js). Same "server decides, page just reflects it" rule as
+    // isOwner above.
+    var canViewScreenshots = false;
 
     function fmtDuration(seconds){
       var h = Math.floor(seconds/3600), m = Math.floor((seconds%3600)/60);
@@ -5585,7 +5590,7 @@ function ninvSave(){ var amt = parseFloat(document.getElementById('ninv-amt').va
       }
 
       inBtn.style.display = 'none';
-      breakBtn.style.display = 'inline-block';
+      breakBtn.style.display = 'flex';
       outBtn.style.display = 'inline-block';
       if (statusRow) {
         statusRow.style.display = 'block';
@@ -5599,15 +5604,20 @@ function ninvSave(){ var amt = parseFloat(document.getElementById('ninv-amt').va
       statusEl.textContent = 'Clocked in since ' + new Date(currentSession.clock_in).toLocaleTimeString();
       statusEl.style.color = 'var(--green)';
 
+      // Set the label on the <span>, never the button itself -- breakBtn may
+      // carry an <svg> icon alongside its <span>label</span>, and
+      // .textContent on the button would wipe the icon out along with the
+      // old label every time the clock state is re-rendered.
+      var wfBreakLabel = breakBtn.querySelector('span');
       if (currentSession.on_break) {
-        breakBtn.textContent = 'End Break';
+        if (wfBreakLabel) wfBreakLabel.textContent = 'End Break'; else breakBtn.textContent = 'End Break';
         breakEl.textContent = 'On break since ' + new Date(currentSession.break_started_at).toLocaleTimeString();
         breakEl.style.color = 'var(--amber)';
         outBtn.disabled = true;
         outBtn.style.opacity = '0.5';
         outBtn.title = 'End your break before clocking out.';
       } else {
-        breakBtn.textContent = 'Start Break';
+        if (wfBreakLabel) wfBreakLabel.textContent = 'Start Break'; else breakBtn.textContent = 'Start Break';
         var totalBreak = currentSession.total_break_seconds || 0;
         breakEl.textContent = totalBreak > 0 ? ('Break time today: ' + fmtDuration(totalBreak)) : '';
         breakEl.style.color = 'var(--mut)';
@@ -5688,6 +5698,7 @@ function ninvSave(){ var amt = parseFloat(document.getElementById('ninv-amt').va
     }
     window.hlRequireSession = hlRequireSession; // exposed globally: hlTrySilentLogin (defined in a separate, later script block) calls this by bare name and needs it on window -- was previously private to this IIFE, causing 'hlRequireSession is not defined' and silently breaking the already-signed-in-on-reload check.
     window.hlWorkforceIsClockedIn = function(){ return !!currentSession; }; // used by the global idle-timer/EOD-prompt logic further down the page
+    window.hlWorkforceActiveSession = function(){ return currentSession; }; // real clock_in/on_break state for the stale-session (missed clock-out) detector
 
     async function workforceRefresh(){
       return hlRequireSession(async function(sess){
@@ -5701,10 +5712,12 @@ function ninvSave(){ var amt = parseFloat(document.getElementById('ninv-amt').va
       currentSession = (data && data.activeSession) || null;
       summarySubmittedToday = !!(data && data.todaySummary);
       isOwner = !!(data && data.isOwner);
+      canViewScreenshots = !!(data && data.canViewScreenshots);
       /* Published the same way hlWorkforceIsClockedIn already is, because the
          clock-in prompt lives outside this closure and asks rather than
          guesses. */
       window.hlWorkforceIsOwner = function(){ return isOwner; };
+      window.hlWorkforceCanViewScreenshots = function(){ return canViewScreenshots; };
       // jomell, 2026-08-26: "everyone needs to have access to the timesheet
       // because they will be the one to enter their start time and end
       // time" -- shown to every signed-in user, not just owners. The API
@@ -5724,6 +5737,15 @@ function ninvSave(){ var amt = parseFloat(document.getElementById('ninv-amt').va
         var blockers = document.getElementById('wf-blockers'); if (blockers) blockers.value = data.todaySummary.blockers || '';
         var support = document.getElementById('wf-support'); if (support) support.value = data.todaySummary.support_needed || '';
         var hours = document.getElementById('wf-hours'); if (hours) hours.value = data.todaySummary.hours_worked || '';
+      }
+
+      // Monitor dashboard hook (2026-08-25): feeds this same currentSession/
+      // isOwner/todaySummary into the new Monitor view's controls so it never
+      // runs a second workforce_status poll -- one source of truth, repainted
+      // in two places. typeof-guarded so this closure never depends on that
+      // view's script having loaded.
+      if (typeof window.hlMonSyncFromWorkforce === 'function') {
+        try { window.hlMonSyncFromWorkforce(currentSession, isOwner, data && data.todaySummary); } catch (e) {}
       }
 
       var teamRes = await fetch('/api/track1?resource=workforce_team', { headers: { Authorization: 'Bearer ' + sess.access_token } });
@@ -5829,14 +5851,19 @@ function ninvSave(){ var amt = parseFloat(document.getElementById('ninv-amt').va
       if (window.hlTopClockClose) hlTopClockClose();
       return hlRequireSession(async function(sess){
       var btn = document.getElementById('wf-clockin-btn');
-      btn.disabled = true;
+      // The Monitor dashboard (public/index.html #view-mon) calls this same
+      // function from its own mon-clockin-btn -- disable both, or a
+      // double-click there fires a duplicate clock-in POST before the first
+      // response lands.
+      var monBtn = document.getElementById('mon-clockin-btn');
+      btn.disabled = true; if (monBtn) monBtn.disabled = true;
       var res = await fetch('/api/track1?resource=workforce_clock', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + sess.access_token },
         body: JSON.stringify({ action: 'in' })
       });
       var data = await res.json().catch(function(){ return null; });
-      btn.disabled = false;
+      btn.disabled = false; if (monBtn) monBtn.disabled = false;
       if (!data || data.ok === false) {
         var msgEl = document.getElementById('wf-clock-msg');
         msgEl.textContent = (data && data.error) || 'Could not clock in.';
@@ -5863,6 +5890,7 @@ function ninvSave(){ var amt = parseFloat(document.getElementById('ninv-amt').va
       var firstField = document.getElementById('wf-tasks');
       if (firstField) setTimeout(function(){ try{ firstField.focus(); }catch(e){} }, 700);
     }
+    window.hlWfGoToEodForm = hlWfGoToEodForm; // the manual clock-out prompt (further down the page) needs this same EOD-required redirect
     window.workforceClockOut = async function(){
       if (window.hlTopClockClose) hlTopClockClose();
       var msgEl = document.getElementById('wf-clock-msg');
@@ -5889,7 +5917,10 @@ function ninvSave(){ var amt = parseFloat(document.getElementById('ninv-amt').va
       }
       return hlRequireSession(async function(sess){
       var btn = document.getElementById('wf-clockout-btn');
-      btn.disabled = true;
+      // See the matching comment in workforceClockIn -- the Monitor
+      // dashboard's mon-clockout-btn calls this same function.
+      var monBtn = document.getElementById('mon-clockout-btn');
+      btn.disabled = true; if (monBtn) monBtn.disabled = true;
       var res = await fetch('/api/track1?resource=workforce_clock', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + sess.access_token },
@@ -5900,7 +5931,7 @@ function ninvSave(){ var amt = parseFloat(document.getElementById('ninv-amt').va
         msgEl.textContent = (data && data.error) || 'Could not clock out.';
         msgEl.style.color = 'var(--red)';
         if (window.chirpToast) chirpToast('⚠️ ' + ((data && data.error) || 'Could not clock out.'));
-        btn.disabled = false;
+        btn.disabled = false; if (monBtn) monBtn.disabled = false;
         // If the server refused because the EOD report is missing, show the
         // form -- don't just report the requirement and leave them stranded.
         // needsEodReport is the server's explicit flag; the text match is a
@@ -5923,14 +5954,17 @@ function ninvSave(){ var amt = parseFloat(document.getElementById('ninv-amt').va
       return hlRequireSession(async function(sess){
       var action = (currentSession && currentSession.on_break) ? 'end' : 'start';
       var btn = document.getElementById('wf-break-btn');
-      btn.disabled = true;
+      // See the matching comment in workforceClockIn -- the Monitor
+      // dashboard's mon-break-btn calls this same function.
+      var monBtn = document.getElementById('mon-break-btn');
+      btn.disabled = true; if (monBtn) monBtn.disabled = true;
       var res = await fetch('/api/track1?resource=workforce_break', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + sess.access_token },
         body: JSON.stringify({ action: action })
       });
       var data = await res.json().catch(function(){ return null; });
-      btn.disabled = false;
+      btn.disabled = false; if (monBtn) monBtn.disabled = false;
       if (!data || data.ok === false) {
         var msgEl = document.getElementById('wf-clock-msg');
         msgEl.textContent = (data && data.error) || 'Could not update break status.';
@@ -6452,17 +6486,454 @@ function ninvSave(){ var amt = parseFloat(document.getElementById('ninv-amt').va
 </script>
 
 <div id="view-mon" style="display:none">
-  <button class="back" onclick="showView('cc')">← COMMAND CENTER</button>
   <div class="card" style="margin-bottom:16px">
-    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:6px">
-      <h2 style="margin:0;font-family:Montserrat;font-size:15px;font-weight:900">HiveLogic Monitor</h2>
-      <button onclick="hlMonitorSettingsOpen()" style="font-size:10px;font-weight:800;padding:7px 14px;border-radius:99px;background:#fff;border:1px solid var(--line);color:#5d657b;cursor:pointer;font-family:Montserrat;margin-right:6px">⚙ Settings</button>
-      <button onclick="mgrMonRefresh()" style="font-size:10px;font-weight:800;padding:7px 14px;border-radius:99px;background:#fff;border:1px solid var(--line);color:#5d657b;cursor:pointer;font-family:Montserrat">Refresh</button>
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px">
+      <div>
+        <h2 style="margin:0;font-family:Montserrat;font-size:15px;font-weight:900">Monitor Module</h2>
+        <div id="mon-clock-pill" style="font-size:11px;color:var(--mut);font-weight:700;margin-top:5px"></div>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button type="button" onclick="hlMonitorSettingsOpen()" aria-label="Settings" style="display:inline-flex;align-items:center;gap:7px;min-height:34px;padding:7px 12px;border:1px solid rgba(31,42,68,.14);border-radius:8px;background:#f2f4f9;color:#1f2a44;font-family:inherit;font-size:12px;font-weight:700;line-height:1;cursor:pointer;white-space:nowrap;transition:.18s ease;" onmouseover="this.style.background='#e7eaf3';this.style.transform='translateY(-1px)';this.style.boxShadow='0 3px 10px rgba(31,42,68,.10)'" onmouseout="this.style.background='#f2f4f9';this.style.transform='translateY(0)';this.style.boxShadow='none'"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex-shrink:0"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06A1.7 1.7 0 0 0 15 19.4a1.7 1.7 0 0 0-1 .6 1.7 1.7 0 0 0-.4 1.1V21a2 2 0 1 1-4 0v-.09A1.7 1.7 0 0 0 8.6 19.4a1.7 1.7 0 0 0-1.88.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-.6-1 1.7 1.7 0 0 0-1.1-.4H3a2 2 0 1 1 0-4h.09A1.7 1.7 0 0 0 4.6 8.6a1.7 1.7 0 0 0-.34-1.88l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-.6 1.7 1.7 0 0 0 .4-1.1V3a2 2 0 1 1 4 0v.09A1.7 1.7 0 0 0 15.4 4.6a1.7 1.7 0 0 0 1.88-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 19.4 9c.17.37.54.75 1 .95.34.15.72.2 1.1.2H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.51.85Z"></path></svg><span>Settings</span></button>
+        <button type="button" onclick="hlMonitorWhitelistOpen()" aria-label="Manage Whitelist" style="display:inline-flex;align-items:center;gap:7px;min-height:34px;padding:7px 12px;border:1px solid rgba(27,122,80,.18);border-radius:8px;background:#eef8f3;color:#1B7A50;font-family:inherit;font-size:12px;font-weight:700;line-height:1;cursor:pointer;white-space:nowrap;transition:.18s ease;" onmouseover="this.style.background='#e2f3ea';this.style.color='#146440';this.style.transform='translateY(-1px)';this.style.boxShadow='0 3px 10px rgba(27,122,80,.10)'" onmouseout="this.style.background='#eef8f3';this.style.color='#1B7A50';this.style.transform='translateY(0)';this.style.boxShadow='none'"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="width:16px;height:16px;flex-shrink:0"><path d="M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z"/><path d="M8 13h8"/><path d="M12 9v8"/></svg><span>Manage Whitelist</span></button>
+        <button type="button" onclick="monRefresh()" aria-label="Refresh" style="display:inline-flex;align-items:center;gap:7px;min-height:34px;padding:7px 12px;border:1px solid rgba(31,42,68,.14);border-radius:8px;background:#f2f4f9;color:#1f2a44;font-family:inherit;font-size:12px;font-weight:700;line-height:1;cursor:pointer;white-space:nowrap;transition:.18s ease;" onmouseover="this.style.background='#e7eaf3';this.style.transform='translateY(-1px)';this.style.boxShadow='0 3px 10px rgba(31,42,68,.10)'" onmouseout="this.style.background='#f2f4f9';this.style.transform='translateY(0)';this.style.boxShadow='none'"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex-shrink:0"><path d="M20 11a8.1 8.1 0 0 0-15.5-2M4 4v5h5"></path><path d="M4 13a8.1 8.1 0 0 0 15.5 2M20 20v-5h-5"></path></svg><span>Refresh</span></button>
+      </div>
     </div>
-    <div style="font-size:11px;color:var(--mut);font-weight:600">Activity level + screenshots, captured only while someone is clocked in. Click a name to see their recent sessions.</div>
   </div>
-  <div class="card" style="margin-bottom:16px"><div id="mon-roster">Loading…</div></div>
-  <div class="card" id="mon-detail-card" style="display:none"><div id="mon-detail">Select someone from the list above.</div></div>
+
+  <div id="mon-owner-note" style="display:none;font-size:11px;color:var(--mut);font-weight:600;background:#fff;border:1px solid var(--line);border-radius:10px;padding:10px 14px;margin-bottom:16px"></div>
+
+  <!-- Employee summary cards. Today's Hours / This Week / Productivity are
+       real. Productivity (Phase 5, 2026-08-25) is a real % of classified
+       activity samples, from monitor_app_usage -- stays "Not available
+       yet" until today's samples include at least one whitelisted app
+       (see monLoadAppUsage). Active Projects stays honestly "Not
+       available yet": no project/task table exists. -->
+  <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px">
+    <div class="card" style="flex:1;min-width:170px">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+        <span style="width:32px;height:32px;border-radius:9px;background:#eaf0fd;color:#3b6fd6;display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0">🕐</span>
+        <span style="font-size:10px;color:var(--mut);font-weight:800;letter-spacing:.04em;text-transform:uppercase">Today's Hours</span>
+      </div>
+      <div id="mon-today-hours" style="font-size:22px;font-weight:900;font-family:ui-monospace,monospace">—</div>
+      <div style="font-size:10px;color:var(--mut);font-weight:600;margin-top:3px">Tracked time today</div>
+    </div>
+    <div class="card" style="flex:1;min-width:170px">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+        <span style="width:32px;height:32px;border-radius:9px;background:#efe9fb;color:#7a5bc9;display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0">📅</span>
+        <span style="font-size:10px;color:var(--mut);font-weight:800;letter-spacing:.04em;text-transform:uppercase">This Week</span>
+      </div>
+      <div id="mon-week-hours" style="font-size:22px;font-weight:900;font-family:ui-monospace,monospace">—</div>
+      <div style="font-size:10px;color:var(--mut);font-weight:600;margin-top:3px">Tracked this week</div>
+    </div>
+    <div class="card" id="mon-status-card" style="flex:1;min-width:170px;border-color:var(--line)">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+        <span id="mon-status-icon" style="width:32px;height:32px;border-radius:9px;background:var(--mut,#f0f1f6);color:#fff;display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0">●</span>
+        <span style="font-size:10px;color:var(--mut);font-weight:800;letter-spacing:.04em;text-transform:uppercase">Status</span>
+      </div>
+      <div id="mon-status-pill" style="font-size:18px;font-weight:900">—</div>
+      <div id="mon-status-caption" style="font-size:10px;color:var(--mut);font-weight:600;margin-top:3px">—</div>
+    </div>
+    <div class="card" style="flex:1;min-width:170px">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+        <span style="width:32px;height:32px;border-radius:9px;background:#fbeee0;color:#c9862e;display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0">💼</span>
+        <span style="font-size:10px;color:var(--mut);font-weight:800;letter-spacing:.04em;text-transform:uppercase">Active Projects</span>
+      </div>
+      <div style="font-size:14px;font-weight:800;color:var(--mut)" title="No project/task tracking exists yet -- this card is a real placeholder, not a made-up number.">Not available yet</div>
+      <div style="font-size:10px;color:var(--mut);font-weight:600;margin-top:3px">Projects assigned</div>
+    </div>
+    <div class="card" style="flex:1;min-width:170px">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+        <span style="width:32px;height:32px;border-radius:9px;background:#eaf0fd;color:#3b6fd6;display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0">📈</span>
+        <span style="font-size:10px;color:var(--mut);font-weight:800;letter-spacing:.04em;text-transform:uppercase">Productivity</span>
+      </div>
+      <div id="mon-productivity" style="font-size:22px;font-weight:900;font-family:ui-monospace,monospace;color:var(--mut)">—</div>
+      <div style="font-size:10px;color:var(--mut);font-weight:600;margin-top:3px">Productivity score</div>
+    </div>
+  </div>
+
+  <div style="display:grid;grid-template-columns:minmax(280px,1fr) minmax(280px,1fr);gap:16px;margin-bottom:16px">
+    <!-- App Usage breakdown -- real, from today's monitor_activity_samples
+         joined against the app whitelist (monitor_app_rules). An app with
+         no rule shows as "Unclassified", never guessed into a category.
+         handleMonitorAppUsage returns every distinct app seen today, no
+         cap -- on a day with a lot of window-switching that's an unbounded
+         list, so the container scrolls after ~5 rows (2026-08-26) instead
+         of growing the card forever. Nothing is dropped, just scrolled to. -->
+    <div class="card" id="mon-appusage-card" style="min-width:0">
+      <h3 style="margin:0 0 4px;font-family:Montserrat;font-size:13px;font-weight:800">App Usage — Today</h3>
+      <div style="font-size:10.5px;color:var(--mut);font-weight:600;margin-bottom:10px">Approximate — one sample per heartbeat (default every 60s) while clocked in and monitored.</div>
+      <div id="mon-appusage-list" style="max-height:150px;overflow-y:auto">Loading…</div>
+    </div>
+
+    <!-- Time tracking. Buttons call the SAME workforceClockIn/
+         workforceClockOut/workforceBreakToggle functions the Time Clock
+         page and top-bar widget already use -- one place talks to
+         workforce_clock/workforce_break, this dashboard just repaints
+         from the same state (see hlMonSyncFromWorkforce below). Reset
+         does not touch any backend record -- it re-syncs this card's
+         display from the server, for when it looks stuck. -->
+    <div class="card" style="min-width:0">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+        <h3 style="margin:0;font-family:Montserrat;font-size:13px;font-weight:800">Time Tracking</h3>
+      </div>
+      <div id="mon-clock-note" style="font-size:11px;color:var(--mut);font-weight:600;margin-bottom:6px"></div>
+      <div id="mon-timer" style="font-size:32px;font-weight:900;font-family:ui-monospace,monospace;color:var(--ink,#161e2e);margin-bottom:12px">00:00:00</div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <button class="lg-btn" id="mon-clockin-btn" style="flex:1;min-width:100px;display:none;align-items:center;justify-content:center;gap:8px;padding:12px 16px;border:none;border-radius:10px;background:var(--green);color:#fff;font-weight:800;font-size:13px;cursor:pointer;font-family:Montserrat" onclick="workforceClockIn()"><svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg><span>Start</span></button>
+        <button class="lg-btn" id="mon-break-btn" style="flex:1;min-width:100px;display:none;align-items:center;justify-content:center;gap:8px;padding:12px 16px;border:none;border-radius:10px;background:var(--amber);color:#fff;font-weight:800;font-size:13px;cursor:pointer;font-family:Montserrat" onclick="workforceBreakToggle()"><svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><path d="M4 3h14v2h1.5A2.5 2.5 0 0 1 22 7.5v3a2.5 2.5 0 0 1-2.5 2.5H18v1a5 5 0 0 1-5 5H9a5 5 0 0 1-5-5V3Zm14 4v4h1.5a1.5 1.5 0 0 0 1.5-1.5v-1A1.5 1.5 0 0 0 19.5 7H18Z"></path></svg><span>Start Break</span></button>
+        <button class="lg-btn" id="mon-clockout-btn" style="flex:1;min-width:100px;display:none;align-items:center;justify-content:center;gap:8px;padding:12px 16px;border:none;border-radius:10px;background:var(--red);color:#fff;font-weight:800;font-size:13px;cursor:pointer;font-family:Montserrat" onclick="workforceClockOut()"><svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="2"></rect></svg><span>Stop</span></button>
+      </div>
+    </div>
+  </div>
+
+  <!-- EOD. Posts to the SAME workforce_summary endpoint/table the Time
+       Clock page's EOD form already uses -- separate field ids (this view
+       and #workforce can both be in the DOM at once) but one backend row. -->
+  <div class="card" id="mon-eod-card" style="margin-bottom:16px;display:none">
+    <h3 style="margin:0 0 4px;font-family:Montserrat;font-size:13px;font-weight:800">End-of-Day Report <span style="font-weight:600;color:var(--mut);font-size:11px">— required before you can Stop</span></h3>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;margin:10px 0">
+      <div><label style="display:block;font-size:11px;font-weight:700;margin-bottom:4px">Completed Tasks</label><textarea id="mon-eod-tasks" oninput="this.dataset.monDirty='1'" rows="2" placeholder="What did you accomplish today?" style="width:100%;box-sizing:border-box;padding:8px 10px;border:1px solid var(--line);border-radius:8px;font-size:12.5px;font-family:Montserrat"></textarea></div>
+      <div><label style="display:block;font-size:11px;font-weight:700;margin-bottom:4px">Plans for Tomorrow</label><textarea id="mon-eod-plans" oninput="this.dataset.monDirty='1'" rows="2" placeholder="What are your top priorities?" style="width:100%;box-sizing:border-box;padding:8px 10px;border:1px solid var(--line);border-radius:8px;font-size:12.5px;font-family:Montserrat"></textarea></div>
+      <div><label style="display:block;font-size:11px;font-weight:700;margin-bottom:4px">Issues / Blockers</label><textarea id="mon-eod-blockers" oninput="this.dataset.monDirty='1'" rows="2" placeholder="What's preventing your progress?" style="width:100%;box-sizing:border-box;padding:8px 10px;border:1px solid var(--line);border-radius:8px;font-size:12.5px;font-family:Montserrat"></textarea></div>
+      <div><label style="display:block;font-size:11px;font-weight:700;margin-bottom:4px">Support Needed</label><textarea id="mon-eod-support" oninput="this.dataset.monDirty='1'" rows="2" placeholder="What help do you need?" style="width:100%;box-sizing:border-box;padding:8px 10px;border:1px solid var(--line);border-radius:8px;font-size:12.5px;font-family:Montserrat"></textarea></div>
+    </div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap">
+      <button class="lg-btn" style="width:auto;padding:10px 18px;background:#fff;border:1px solid var(--line);color:var(--ink,#161e2e)" onclick="monSaveEodDraft()">📋 Save as Draft</button>
+      <button class="lg-btn" style="width:auto;padding:10px 18px" onclick="monSubmitEod()">📨 Submit EOD</button>
+    </div>
+    <div id="mon-eod-result" style="margin-top:10px;font-size:11.5px;font-weight:700"></div>
+  </div>
+
+  <div class="card" style="margin-bottom:16px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+      <h3 style="margin:0;font-family:Montserrat;font-size:13px;font-weight:800">Activity &amp; Screenshot Review</h3>
+    </div>
+    <div style="font-size:11px;color:var(--mut);font-weight:600;margin-bottom:12px">Activity level + screenshots, captured only while someone is clocked in. Click "View All" to see full sessions.</div>
+    <!-- One row per employee, no cap -- same unbounded-list issue as App
+         Usage above, same fix (2026-08-26): scrolls after ~5 rows instead
+         of growing the card as the roster grows. overflow-x is unchanged
+         (the table itself can still be wider than the card on a narrow
+         screen); overflow-y is the new part. -->
+    <div id="mon-roster" style="overflow-x:auto;overflow-y:auto;max-height:225px">Loading…</div>
+  </div>
+
+  <div id="mon-tz-footer" style="text-align:center;font-size:10.5px;color:var(--mut);font-weight:600;margin:4px 0 20px"></div>
+
+  <script>
+  (function(){
+    // ---------------------------------------------------------------------
+    // Monitor design tokens (2026-08-25). One source of truth for the
+    // Monitor module's own color values -- the ones that don't already
+    // have a semantic var(--x) in the app's global theme (badges, chips,
+    // category colors). This mirrors the VOIP_UI pattern already proven in
+    // this codebase (public/hiveconnect/voip-panel.js) -- Monitor gets its
+    // own copy scoped to this module, not a site-wide framework swap.
+    //
+    // Style guide for anyone extending Monitor:
+    //   - Text/border colors that should respect light/dark theme
+    //     (green/red/amber/mut/line/ink) stay on the app's global
+    //     var(--green) etc. -- do NOT hardcode a hex for those, it would
+    //     silently break dark mode.
+    //   - MON_UI is for values with no existing semantic var: stat-card
+    //     icon chips, whitelist category colors, agent-version badges,
+    //     pairing/installation-status badges.
+    //   - Card shell: <div class="card"> is the app-wide container: white
+    //     bg, rounded corners, border, shadow -- reuse it, don't
+    //     reinvent a card style per component.
+    //   - Icon chips: 32x32px, 9px radius, colored bg + colored icon,
+    //     see any dashboard stat card for the exact pattern.
+    // ---------------------------------------------------------------------
+    window.MON_UI = window.MON_UI || {
+      chipBlue: '#3b6fd6', chipBlueBg: '#eaf0fd',
+      chipPurple: '#7a5bc9', chipPurpleBg: '#efe9fb',
+      chipOrange: '#c9862e', chipOrangeBg: '#fbeee0',
+      // App whitelist categories (Phase 5) -- one definition shared by the
+      // Whitelist modal and anywhere else a category needs a color.
+      category: {
+        productive: { color: '#1B7A50', bg: '#e6f2ec' },
+        neutral: { color: '#5d657b', bg: '#f0f1f6' },
+        unproductive: { color: '#c65b4e', bg: '#faeeec' },
+      },
+      // Desktop agent build-version badge (roster tables).
+      version: {
+        current: { color: '#1B7A50', bg: '#e6f2ec' },
+        stale: { color: '#9a5b12', bg: '#fdf0e3' },
+        unknown: { color: '#59718a', bg: '#e9eff4' },
+      },
+      // Pairing / installation status (Settings roster).
+      pairing: {
+        paired: { color: '#1B7A50', bg: '#e6f2ec' },
+        not_installed: { color: '#8b92a8', bg: '#f0f1f6' },
+        not_paired: { color: '#b8791f', bg: '#fdf3e2' },
+      },
+      // Activity-level bucket (dashboard roster + real-time bar).
+      activity: {
+        high: '#1B7A50', medium: '#b8791f', low: '#c65b4e', none: '#c7cfdb',
+      },
+    };
+
+    var monTimerInterval = null;
+    var monLastSession = null;
+    var MON_EOD_DRAFT_KEY = 'hl_mon_eod_draft';
+
+    function pad2(n){ return String(n).padStart(2, '0'); }
+    function fmtHMS(totalSeconds){
+      var s = Math.max(0, Math.floor(totalSeconds));
+      return pad2(Math.floor(s/3600)) + ':' + pad2(Math.floor((s%3600)/60)) + ':' + pad2(s%60);
+    }
+    function fmtHoursShort(totalSeconds){
+      var s = Math.max(0, Math.floor(totalSeconds));
+      return Math.floor(s/3600) + 'h ' + Math.floor((s%3600)/60) + 'm';
+    }
+
+    function tickTimer(){
+      var el = document.getElementById('mon-timer');
+      if (!el) return;
+      if (!monLastSession || !monLastSession.clock_in) { el.textContent = '00:00:00'; return; }
+      var startMs = new Date(monLastSession.clock_in).getTime();
+      var breakSec = monLastSession.total_break_seconds || 0;
+      if (monLastSession.on_break && monLastSession.break_started_at) {
+        // Worked time is frozen at the moment the break started -- matches
+        // total_break_seconds' own accounting (only finalized when a break
+        // ends), so this never drifts from what clocking out will record.
+        var atBreakMs = new Date(monLastSession.break_started_at).getTime();
+        el.textContent = fmtHMS(Math.round((atBreakMs - startMs) / 1000) - breakSec);
+        return;
+      }
+      el.textContent = fmtHMS(Math.round((Date.now() - startMs) / 1000) - breakSec);
+    }
+
+    function renderClockPill(){
+      var el = document.getElementById('mon-clock-pill');
+      if (!el) return;
+      var now = new Date();
+      var time = now.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+      var date = now.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+      var tz = '';
+      try { tz = Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch (e) {}
+      el.textContent = time + ' · ' + date + (tz ? ' · ' + tz : '');
+      var footer = document.getElementById('mon-tz-footer');
+      if (footer) footer.textContent = tz ? ('All times in ' + tz) : '';
+    }
+
+    // Highlights the Status card to match its state -- green/working,
+    // amber/on break, neutral otherwise -- mirroring how the mockup's
+    // "Working" card gets a green border+icon while idle states stay
+    // plain. Purely presentational; the actual state always comes from
+    // hlMonSyncFromWorkforce's caller (workforce_status).
+    function applyStatusCard(label, caption, color, bg){
+      var card = document.getElementById('mon-status-card');
+      var icon = document.getElementById('mon-status-icon');
+      var pill = document.getElementById('mon-status-pill');
+      var cap = document.getElementById('mon-status-caption');
+      if (pill) { pill.textContent = label; pill.style.color = color; }
+      if (cap) cap.textContent = caption;
+      if (icon) { icon.style.background = color; icon.textContent = '●'; }
+      if (card) card.style.borderColor = bg ? color : 'var(--line)';
+    }
+
+    function fillEodField(id, val){
+      var e = document.getElementById(id);
+      // Never stomp text someone is mid-typing -- a poll landing between
+      // keystrokes must not overwrite it.
+      if (e && !e.dataset.monDirty) e.value = val || '';
+    }
+
+    function loadLocalDraftIfEmpty(){
+      try {
+        var raw = localStorage.getItem(MON_EOD_DRAFT_KEY);
+        if (!raw) return;
+        var draft = JSON.parse(raw);
+        if (!draft) return;
+        fillEodField('mon-eod-tasks', draft.tasks);
+        fillEodField('mon-eod-plans', draft.plans);
+        fillEodField('mon-eod-blockers', draft.blockers);
+        fillEodField('mon-eod-support', draft.support);
+      } catch (e) {}
+    }
+
+    // Fed by the #workforce IIFE (public/index.html) right after it derives
+    // currentSession/isOwner/todaySummary from workforce_status -- this view
+    // never polls that endpoint itself. See the hook added at the end of
+    // workforceRefresh().
+    window.hlMonSyncFromWorkforce = function(session, isOwner, todaySummary){
+      monLastSession = session;
+      var inBtn = document.getElementById('mon-clockin-btn');
+      var breakBtn = document.getElementById('mon-break-btn');
+      var outBtn = document.getElementById('mon-clockout-btn');
+      var statusPill = document.getElementById('mon-status-pill');
+      var noteEl = document.getElementById('mon-clock-note');
+      var ownerNote = document.getElementById('mon-owner-note');
+      var eodCard = document.getElementById('mon-eod-card');
+      var timerEl = document.getElementById('mon-timer');
+      if (!inBtn || !breakBtn || !outBtn || !statusPill) return; // view not mounted yet
+
+      if (isOwner) {
+        inBtn.style.display = 'none'; breakBtn.style.display = 'none'; outBtn.style.display = 'none';
+        applyStatusCard('Owner', 'Not on the timeclock', 'var(--mut)', false);
+        if (ownerNote) { ownerNote.style.display = 'block'; ownerNote.textContent = 'Owner account — not on the timeclock. Nothing is monitored or recorded for this account.'; }
+        if (eodCard) eodCard.style.display = 'none';
+        if (noteEl) noteEl.textContent = '';
+        clearInterval(monTimerInterval); monTimerInterval = null;
+        if (timerEl) timerEl.textContent = '00:00:00';
+        return;
+      }
+      if (ownerNote) ownerNote.style.display = 'none';
+
+      if (!session) {
+        inBtn.style.display = 'flex'; breakBtn.style.display = 'none'; outBtn.style.display = 'none';
+        applyStatusCard('Offline', 'Not clocked in', 'var(--mut)', false);
+        if (eodCard) eodCard.style.display = 'none';
+        if (noteEl) noteEl.textContent = '';
+        clearInterval(monTimerInterval); monTimerInterval = null;
+        if (timerEl) timerEl.textContent = '00:00:00';
+        return;
+      }
+
+      inBtn.style.display = 'none'; breakBtn.style.display = 'flex'; outBtn.style.display = 'flex';
+      // Set the label on the <span>, never the button itself -- breakBtn's
+      // markup is an <svg> icon + <span>label</span>, and .textContent on
+      // the button would wipe the icon out along with the old label every
+      // time this sync runs (it does, on load and on every refresh).
+      var breakLabel = breakBtn.querySelector('span');
+      if (session.on_break) {
+        applyStatusCard('On Break', 'Break in progress', 'var(--amber)', true);
+        if (breakLabel) breakLabel.textContent = 'End Break'; else breakBtn.textContent = 'End Break';
+        outBtn.disabled = true; outBtn.style.opacity = '0.5'; outBtn.title = 'End your break before stopping.';
+        if (noteEl) noteEl.textContent = 'On break since ' + new Date(session.break_started_at).toLocaleTimeString();
+      } else {
+        applyStatusCard('Working', 'Monitoring active', 'var(--green)', true);
+        if (breakLabel) breakLabel.textContent = 'Start Break'; else breakBtn.textContent = 'Start Break';
+        outBtn.disabled = false; outBtn.style.opacity = '1'; outBtn.title = '';
+        if (noteEl) noteEl.textContent = 'Clocked in since ' + new Date(session.clock_in).toLocaleTimeString();
+      }
+
+      if (eodCard) eodCard.style.display = 'block';
+      if (todaySummary) {
+        fillEodField('mon-eod-tasks', todaySummary.tasks_completed);
+        fillEodField('mon-eod-plans', todaySummary.plans_tomorrow);
+        fillEodField('mon-eod-blockers', todaySummary.blockers);
+        fillEodField('mon-eod-support', todaySummary.support_needed);
+      } else {
+        loadLocalDraftIfEmpty();
+      }
+
+      clearInterval(monTimerInterval);
+      tickTimer();
+      monTimerInterval = setInterval(tickTimer, 1000);
+    };
+
+    async function monLoadWeekSummary(){
+      return hlRequireSession(async function(sess){
+        var r = await fetch('/api/track1?resource=workforce_week_summary', { headers: { Authorization: 'Bearer ' + sess.access_token } });
+        var data = await r.json().catch(function(){ return null; });
+        var todayEl = document.getElementById('mon-today-hours');
+        var weekEl = document.getElementById('mon-week-hours');
+        if (!data || data.ok === false || data.tablesReady === false) {
+          if (todayEl) todayEl.textContent = '—';
+          if (weekEl) weekEl.textContent = '—';
+          return;
+        }
+        if (todayEl) todayEl.textContent = fmtHoursShort(data.todaySeconds || 0);
+        if (weekEl) weekEl.textContent = fmtHoursShort(data.weekSeconds || 0);
+      }, function(){});
+    }
+
+    // Phase 5 (2026-08-25): real productivity % + app-usage breakdown for
+    // today, from monitor_activity_samples joined against the app
+    // whitelist (monitor_app_rules). See handleMonitorAppUsage.
+    var MON_CATEGORY_META = {
+      productive: { label: 'Productive', color: 'var(--green)' },
+      unproductive: { label: 'Unproductive', color: 'var(--red)' },
+      neutral: { label: 'Neutral', color: 'var(--mut)' },
+      unclassified: { label: 'Unclassified', color: 'var(--mut)' },
+    };
+    async function monLoadAppUsage(){
+      return hlRequireSession(async function(sess){
+        var r = await fetch('/api/track1?resource=monitor_app_usage', { headers: { Authorization: 'Bearer ' + sess.access_token } });
+        var data = await r.json().catch(function(){ return null; });
+        var prodEl = document.getElementById('mon-productivity');
+        var listEl = document.getElementById('mon-appusage-list');
+        if (!data || data.ok === false || data.tablesReady === false) {
+          if (prodEl) prodEl.textContent = '—';
+          if (listEl) listEl.innerHTML = '<div style="color:var(--mut);font-size:12px">Could not load app usage.</div>';
+          return;
+        }
+        if (prodEl) prodEl.textContent = (data.productivityPercent == null) ? 'Not available yet' : (data.productivityPercent + '%');
+        if (prodEl) prodEl.style.fontSize = (data.productivityPercent == null) ? '14px' : '20px';
+        if (!listEl) return;
+        var apps = data.apps || [];
+        if (!apps.length) { listEl.innerHTML = '<div style="text-align:center;padding:24px 6px;color:var(--mut)"><div style="font-size:26px;margin-bottom:8px;opacity:.6">🖥️</div><div style="font-weight:800;font-size:12.5px;margin-bottom:2px">No app activity recorded yet.</div><div style="font-size:11px">App usage will appear here once activity is detected.</div></div>'; return; }
+        var total = data.sampleCount || apps.reduce(function(s, a){ return s + a.sampleCount; }, 0);
+        listEl.innerHTML = apps.map(function(a){
+          var pct = total > 0 ? Math.round((a.sampleCount / total) * 100) : 0;
+          var meta = MON_CATEGORY_META[a.category] || MON_CATEGORY_META.unclassified;
+          return '<div style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--line)">'
+            + '<span style="flex:1;font-size:12.5px;font-weight:700">' + (window.esc ? esc(a.appName) : a.appName) + '</span>'
+            + '<span style="font-size:10px;font-weight:800;color:' + meta.color + ';text-transform:uppercase">' + meta.label + '</span>'
+            + '<span style="font-size:11px;color:var(--mut);font-weight:700;width:56px;text-align:right">' + fmtHoursShort(a.sampleCount * 60) + '</span>'
+            + '<span style="font-size:11px;color:var(--mut);font-weight:700;width:40px;text-align:right">' + pct + '%</span>'
+            + '</div>';
+        }).join('');
+      }, function(){});
+    }
+
+    window.monSaveEodDraft = function(){
+      try {
+        localStorage.setItem(MON_EOD_DRAFT_KEY, JSON.stringify({
+          tasks: (document.getElementById('mon-eod-tasks') || {}).value || '',
+          plans: (document.getElementById('mon-eod-plans') || {}).value || '',
+          blockers: (document.getElementById('mon-eod-blockers') || {}).value || '',
+          support: (document.getElementById('mon-eod-support') || {}).value || '',
+          savedAt: new Date().toISOString(),
+        }));
+        var r = document.getElementById('mon-eod-result');
+        if (r) { r.style.color = 'var(--mut)'; r.textContent = 'Draft saved on this device.'; }
+      } catch (e) {}
+    };
+
+    window.monSubmitEod = function(){
+      return hlRequireSession(async function(sess){
+        var r = document.getElementById('mon-eod-result');
+        if (r) { r.style.color = 'var(--mut)'; r.textContent = 'Submitting…'; }
+        var body = {
+          tasks_completed: (document.getElementById('mon-eod-tasks') || {}).value || '',
+          plans_tomorrow: (document.getElementById('mon-eod-plans') || {}).value || '',
+          blockers: (document.getElementById('mon-eod-blockers') || {}).value || '',
+          support_needed: (document.getElementById('mon-eod-support') || {}).value || '',
+        };
+        var res = await fetch('/api/track1?resource=workforce_summary', {
+          method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + sess.access_token }, body: JSON.stringify(body),
+        });
+        var data = await res.json().catch(function(){ return null; });
+        if (!data || data.ok === false) {
+          if (r) { r.style.color = 'var(--red)'; r.textContent = (data && data.error) || 'Could not save your report.'; }
+          return;
+        }
+        if (r) { r.style.color = 'var(--green)'; r.textContent = 'End-of-day report saved.'; }
+        ['mon-eod-tasks', 'mon-eod-plans', 'mon-eod-blockers', 'mon-eod-support'].forEach(function(id){
+          var e = document.getElementById(id); if (e) delete e.dataset.monDirty;
+        });
+        try { localStorage.removeItem(MON_EOD_DRAFT_KEY); } catch (e) {}
+      }, function(){});
+    };
+
+    // Single entry point for opening this tab: repaints the clock pill,
+    // loads real Today/This-Week totals, and re-runs the existing
+    // workforceRefresh()/mgrMonRefresh() -- which is what actually talks to
+    // workforce_status/workforce_team/monitor_review and, via the hook
+    // above, repaints this view's own controls. No duplicate polling.
+    window.monRefresh = function(){
+      renderClockPill();
+      monLoadWeekSummary();
+      monLoadAppUsage();
+      if (typeof window.workforceRefresh === 'function') window.workforceRefresh();
+      if (typeof window.mgrMonRefresh === 'function') window.mgrMonRefresh();
+    };
+
+    setInterval(renderClockPill, 30000);
+  })();
+  </script>
 </div>
 
 <!-- DEV TO-DO -- the team's exception queue.  It contains only verified
@@ -6632,100 +7103,200 @@ function devTodoLoad(){
 
 <script>
 (function(){
+  function fmtRelative(iso){
+    if (!iso) return 'never';
+    var mins = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60000));
+    if (mins < 1) return 'just now';
+    if (mins === 1) return '1 min ago';
+    if (mins < 60) return mins + ' min ago';
+    var hrs = Math.round(mins / 60);
+    return hrs + (hrs === 1 ? ' hr ago' : ' hrs ago');
+  }
+  // Keyed by employeeId, filled by mgrMonRefresh -- the "EOD Today" badge's
+  // click handler reads from here instead of carrying the report text in an
+  // HTML attribute. That exact mistake (JSON.stringify() spliced into an
+  // onclick=""), on this same roster table, corrupted the whole page once
+  // already (2026-08-25, the Manage Whitelist button bug) -- not repeating it.
+  window.__mgrMonEodByEmployee = {};
+
   window.mgrMonRefresh = function(){
     var el = document.getElementById('mon-roster');
     if(!el) return;
     el.textContent = 'Loading…';
     return hlRequireSession(async function(sess){
+      // workforce_team rides along for the EOD compliance column
+      // (2026-08-26) -- same admin/superadmin-gated endpoint the Time Clock
+      // page's Team card already uses (summarySubmitted + the full report
+      // text), just not previously surfaced inside Monitor. No new backend:
+      // this merges two already-real, already-gated datasets by employeeId.
+      var teamPromise = fetch('/api/track1?resource=workforce_team', { headers:{ Authorization:'Bearer '+sess.access_token } })
+        .then(function(tr){ return tr.json(); }).catch(function(){ return null; });
       var r = await fetch('/api/track1?resource=monitor_review', { headers:{ Authorization:'Bearer '+sess.access_token } });
       var data = await r.json().catch(function(){return null;});
+      var teamData = await teamPromise;
       if(!data || data.ok===false){ el.textContent = (data&&data.error) || 'Could not load Monitor data.'; return; }
       var roster = data.roster || [];
       if(!roster.length){ el.innerHTML = '<div style="font-size:12px;color:var(--mut);font-weight:600">No one has set up HiveLogic Monitor yet — it shows up here the moment someone pairs the desktop app.</div>'; return; }
-      var wrap = document.createElement('div'); wrap.style.cssText='display:flex;flex-direction:column;gap:6px';
-      roster.forEach(function(p){
-        var row = document.createElement('div');
-        row.style.cssText='display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--line);border-radius:10px;cursor:pointer';
-        row.onclick = function(){ mgrMonOpenEmployee(p.employeeId, p.name); };
-        var dot = document.createElement('span');
-        dot.style.cssText='width:8px;height:8px;border-radius:50%;background:' + (p.status==='active' ? 'var(--green)' : '#c7cfdb');
-        var name = document.createElement('span'); name.style.cssText='font-weight:800;font-size:12.5px;flex:1'; name.textContent = p.name;
-        var meta = document.createElement('span'); meta.style.cssText='font-size:10.5px;color:var(--mut);font-weight:700';
-        meta.textContent = (p.platform||'—') + ' · last seen ' + (p.lastSeenAt ? new Date(p.lastSeenAt).toLocaleString() : 'never');
-        // The API has sent agentVersion/agentVersionState since the version
-        // reporting shipped, and this row dropped both on the floor -- so the
-        // only place anyone could read which build a machine runs was the
-        // database. That is the same half-shipped shape the version reporting
-        // was built to end, one layer up. 'unknown' is deliberately not 'stale':
-        // an agent from before the reporting existed tells us nothing, and
-        // guessing would be the unfounded claim this whole mechanism prevents.
-        // A machine that has never checked in has no agent to have a version.
-        // Badging it "version unknown" implies an agent whose build we cannot
-        // determine, when the truth is simpler and already on the row: nothing
-        // has ever run there. The row says "last seen never"; that is the whole
-        // statement. (Visible on 2026-08-18: two never-paired people carried
-        // grey version badges alongside a real one, which read as three agents
-        // in the same unknown state rather than one.)
-        var ver = document.createElement('span');
+      var eodByEmployee = {};
+      (teamData && teamData.ok ? teamData.team : []).forEach(function(t){ eodByEmployee[t.id] = t; });
+      window.__mgrMonEodByEmployee = eodByEmployee;
+      var canViewShots = !!(window.hlWorkforceCanViewScreenshots && window.hlWorkforceCanViewScreenshots());
+      // Table layout (2026-08-25): STATUS (real online/offline from
+      // "last heartbeat within the alive window", not just 'paired' vs
+      // not), LAST SEEN, OS / AGENT (platform + version, honestly labeled
+      // per the comment below), ACTIVITY LEVEL (real, bounded -- see
+      // handleMonitorReview's activityByEmployee -- null/"—" when there's
+      // no open session or no samples yet, never guessed), EOD TODAY
+      // (2026-08-26, from workforce_team, above), and a View All button
+      // into the existing per-employee detail (mgrMonOpenEmployee) --
+      // disabled with an honest reason for anyone who isn't Superadmin/
+      // Owner, matching what the server itself will refuse.
+      var th = function(label){ return '<th style="padding:8px 10px;font-size:9.5px;color:var(--mut);font-weight:800;letter-spacing:.05em;text-transform:uppercase;text-align:left;white-space:nowrap">'+label+'</th>'; };
+      // Missing-EOD rows float to the top -- "who hasn't submitted" should
+      // be scannable at a glance, not something you hunt for in a longer
+      // roster. Everyone else keeps the order the API already sent.
+      var rosterSorted = roster.slice().sort(function(a, b){
+        var aEod = eodByEmployee[a.employeeId], bEod = eodByEmployee[b.employeeId];
+        var aMissing = aEod ? !aEod.summarySubmitted : false;
+        var bMissing = bEod ? !bEod.summarySubmitted : false;
+        return (bMissing ? 1 : 0) - (aMissing ? 1 : 0);
+      });
+      var rows = rosterSorted.map(function(p){
         var vState = p.lastSeenAt ? (p.agentVersionState || 'unknown') : null;
-        var vStyle = vState === 'current' ? 'background:#e6f2ec;color:#1B7A50'
-                   : vState === 'stale'   ? 'background:#fdf0e3;color:#9a5b12'
-                   :                        'background:#e9eff4;color:#59718a';
-        ver.style.cssText = 'font-size:9.5px;font-weight:800;border-radius:99px;padding:3px 9px;white-space:nowrap;' + vStyle;
-        ver.textContent = vState === 'unknown' ? 'version unknown'
-                        : vState === 'stale'   ? ('v' + p.agentVersion + ' · update pending')
-                        :                        ('v' + p.agentVersion);
-        ver.title = vState === 'unknown'
+        // The API has sent agentVersion/agentVersionState since the version
+        // reporting shipped. 'unknown' is deliberately not 'stale': an agent
+        // from before the reporting existed tells us nothing, and guessing
+        // would be the unfounded claim this whole mechanism prevents. A
+        // machine that has never checked in has no agent to have a version.
+        var agentLabel = !p.lastSeenAt ? '—'
+          : (p.platform || '—') + (vState === 'unknown' ? ' · version unknown' : vState === 'stale' ? (' · v'+p.agentVersion+' (update pending)') : (' · v'+p.agentVersion));
+        // What "update pending" is measured against -- named, not implied,
+        // so the badge never reads as a lie in a nicer colour.
+        var agentTitle = vState === 'unknown'
           ? 'This agent is running a build from before it reported its version, so we do not know which one.'
           : vState === 'stale'
             ? ('Running v' + p.agentVersion + '; the current build is v' + (data.expectedAgentVersion || '?') + '. Agents update at startup and every 30 minutes.')
-            : 'Running the current build.';
-        row.appendChild(dot); row.appendChild(name);
-        if (vState) row.appendChild(ver);
-        row.appendChild(meta);
-        wrap.appendChild(row);
-      });
-      el.innerHTML=''; el.appendChild(wrap);
+            : (vState === 'current' ? 'Running the current build.' : '');
+        var actLevel = p.activityLevel;
+        var actLabel = actLevel == null ? '—' : (actLevel >= 66 ? 'High' : actLevel >= 26 ? 'Medium' : actLevel > 0 ? 'Low' : 'None');
+        var actColor = actLevel == null ? MON_UI.activity.none : (actLevel >= 66 ? MON_UI.activity.high : actLevel >= 26 ? MON_UI.activity.medium : MON_UI.activity.low);
+        var segs = 5, filled = actLevel == null ? 0 : Math.max(0, Math.min(segs, Math.round((actLevel/100)*segs)));
+        var bar = '<span style="display:inline-flex;gap:2px;vertical-align:middle;margin-right:6px">' + Array.from({length:segs}).map(function(_, i){
+          return '<span style="width:8px;height:8px;border-radius:2px;background:' + (i < filled ? actColor : '#e3e5ec') + '"></span>';
+        }).join('') + '</span>';
+        var nameForOnclick = String(p.name||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/"/g,'&quot;');
+        // EOD Today (2026-08-26): eodByEmployee comes from workforce_team,
+        // which only knows about people who have a profile row -- someone
+        // who has paired an agent but has no matching profile (shouldn't
+        // happen, but this table has been burned by an unguarded lookup
+        // before) shows honestly as "—", never guessed into either state.
+        var eod = eodByEmployee[p.employeeId];
+        var eodCell = !eod
+          ? '<span style="font-size:10.5px;color:var(--mut);font-weight:700">—</span>'
+          : eod.summarySubmitted
+            ? '<button onclick="mgrMonOpenEodReport(\''+p.employeeId+'\', \''+nameForOnclick+'\')" style="border:1px solid var(--green);background:var(--green);color:#fff;font-weight:800;font-size:10px;padding:5px 12px;border-radius:7px;cursor:pointer;font-family:Montserrat">Submitted</button>'
+            : '<span style="font-size:10.5px;font-weight:800;color:var(--red)">Missing</span>';
+        // View All (2026-08-26): disabled with the real reason for anyone
+        // who isn't Superadmin/Owner, matching what handleMonitorReview
+        // will refuse server-side -- an honest disabled button, not a
+        // clickable one that just 403s.
+        var viewAllBtn = canViewShots
+          ? '<button onclick="mgrMonOpenEmployee(\''+p.employeeId+'\', \''+nameForOnclick+'\')" style="border:1px solid var(--line);background:#fff;color:var(--ink,#161e2e);font-weight:800;font-size:10px;padding:5px 12px;border-radius:7px;cursor:pointer;font-family:Montserrat">View All</button>'
+          : '<button disabled title="Screenshots are restricted to Superadmin/Owner" style="border:1px solid var(--line);background:#f5f6fa;color:var(--mut);font-weight:800;font-size:10px;padding:5px 12px;border-radius:7px;cursor:not-allowed;font-family:Montserrat">View All</button>';
+        return '<tr style="border-top:1px solid var(--line)">'
+          + '<td style="padding:9px 10px;font-weight:800;font-size:12px;white-space:nowrap">'+ (window.esc?esc(p.name):p.name) +'</td>'
+          + '<td style="padding:9px 10px;white-space:nowrap"><span style="display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:700;color:'+(p.online?'var(--green)':'var(--mut)')+'"><span style="width:7px;height:7px;border-radius:50%;background:'+(p.online?'var(--green)':'#c7cfdb')+'"></span>'+(p.online?'Online':'Offline')+'</span></td>'
+          + '<td style="padding:9px 10px;font-size:11px;color:var(--mut);font-weight:600;white-space:nowrap">'+(p.lastSeenAt ? fmtRelative(p.lastSeenAt) : 'never')+'</td>'
+          + '<td style="padding:9px 10px;font-size:11px;color:var(--mut);font-weight:600;white-space:nowrap" title="'+agentTitle.replace(/"/g,'&quot;')+'">'+agentLabel+'</td>'
+          + '<td style="padding:9px 10px;white-space:nowrap">'+bar+'<span style="font-size:10.5px;font-weight:800;color:'+actColor+'">'+actLabel+'</span></td>'
+          + '<td style="padding:9px 10px;white-space:nowrap">'+eodCell+'</td>'
+          + '<td style="padding:9px 10px;text-align:right;white-space:nowrap">'+viewAllBtn+'</td>'
+          + '</tr>';
+      }).join('');
+      el.innerHTML = '<table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr>'+th('User')+th('Status')+th('Last Seen')+th('OS / Agent')+th('Activity Level')+th('EOD Today')+th('')+'</tr></thead><tbody>'+rows+'</tbody></table>';
     }, function(){ el.textContent='Sign in to view this.'; });
   };
 
+  // EOD report read-out (2026-08-26): the text is already sitting in
+  // window.__mgrMonEodByEmployee from the same fetch that built the roster
+  // (workforce_team's summary object) -- no second network call, opens
+  // instantly. Read-only: this is for an admin/owner to see what someone
+  // reported, not to edit it.
+  window.mgrMonOpenEodReport = function(employeeId, name){
+    var eod = window.__mgrMonEodByEmployee && window.__mgrMonEodByEmployee[employeeId];
+    var s = eod && eod.summary;
+    if (!s) { hlModal('📋 ' + name, '<div style="font-size:12px;color:#8b92a8;font-weight:600;padding:6px 0">No report on file.</div>'); return; }
+    var field = function(label, value){
+      return '<div style="margin-bottom:12px"><div style="font-size:9px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:#8b92a8;margin-bottom:3px">'+label+'</div>'
+        + '<div style="font-size:12.5px;color:var(--ink,#161e2e);white-space:pre-wrap">'+(window.esc?esc(value||'—'):(value||'—'))+'</div></div>';
+    };
+    var submittedLabel = s.submitted_at ? new Date(s.submitted_at).toLocaleString() : 'Unknown time';
+    hlModal('📋 ' + name + ' — EOD Report', '<div style="font-size:10.5px;color:var(--mut);font-weight:700;margin-bottom:14px">Submitted ' + submittedLabel + '</div>'
+      + field('Completed Tasks', s.tasks_completed)
+      + field('Plans for Tomorrow', s.plans_tomorrow)
+      + field('Issues / Blockers', s.blockers)
+      + field('Support Needed', s.support_needed)
+      + field('Hours Worked', s.hours_worked));
+  };
+
+  // "View All" (2026-08-25): a real popup (hlModal, the same modal utility
+  // Monitor Settings/App Whitelist already use) instead of the old inline
+  // panel below the roster table. Screenshots are grouped by the real
+  // calendar date they were captured on (capturedAt, local time) -- one
+  // heading per day, newest first -- rather than one flat grid.
   window.mgrMonOpenEmployee = function(employeeId, name){
-    var card = document.getElementById('mon-detail-card'); if(card) card.style.display='block';
-    var el = document.getElementById('mon-detail'); if(!el) return;
-    el.textContent = 'Loading ' + name + '…';
+    hlModal('🖼️ ' + name, '<div style="font-size:12px;color:#8b92a8;font-weight:600;padding:6px 0">Loading…</div>');
+    // Wider than hlModal's 560px default -- a screenshot gallery needs more
+    // room than a settings form. Scoped to this one modal instance only.
+    var card = document.querySelector('#hlmodal > div'); if (card) card.style.width = '820px';
     return hlRequireSession(async function(sess){
+      var body = document.getElementById('hlmodal-body');
       var r = await fetch('/api/track1?resource=monitor_review&employeeId=' + encodeURIComponent(employeeId), { headers:{ Authorization:'Bearer '+sess.access_token } });
       var data = await r.json().catch(function(){return null;});
-      if(!data || data.ok===false){ el.textContent = (data&&data.error) || 'Could not load that employee.'; return; }
+      if(!data || data.ok===false){ if(body) body.textContent = (data&&data.error) || 'Could not load that employee.'; return; }
       var sessions = data.sessions || [], shots = data.screenshots || [], samples = data.activitySamples || [];
       var avgActivity = samples.length ? Math.round(samples.reduce(function(a,s){return a+(s.activity_level||0);},0)/samples.length) : null;
-      el.innerHTML='';
-      var head = document.createElement('div'); head.style.cssText='display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px';
-      var h = document.createElement('h3'); h.style.cssText='margin:0;font-family:Montserrat;font-size:13px;font-weight:900'; h.textContent = name;
-      var stat = document.createElement('span'); stat.style.cssText='font-size:11px;font-weight:800;color:var(--mut)'; stat.textContent = avgActivity!==null ? ('Avg activity: '+avgActivity+'%') : 'No activity samples yet';
-      head.appendChild(h); head.appendChild(stat); el.appendChild(head);
+      if (!body) return;
+
+      var headHtml = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:8px">'
+        + '<span style="font-size:11px;font-weight:800;color:var(--mut)">' + shots.length + ' screenshot' + (shots.length===1?'':'s') + ' · ' + sessions.length + ' session' + (sessions.length===1?'':'s') + '</span>'
+        + '<span style="font-size:11px;font-weight:800;color:var(--mut)">' + (avgActivity!==null ? ('Avg activity: '+avgActivity+'%') : 'No activity samples yet') + '</span>'
+        + '</div>';
+
       if(!sessions.length){
-        var none = document.createElement('div'); none.style.cssText='font-size:12px;color:var(--mut);font-weight:600'; none.textContent='No monitored sessions yet — they need to clock in with the desktop agent running.';
-        el.appendChild(none);
-      } else {
-        var grid = document.createElement('div'); grid.style.cssText='display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px';
-        shots.forEach(function(s){
-          var t = document.createElement('a'); t.href = s.url || '#'; t.target='_blank'; t.rel='noopener';
-          t.style.cssText='display:block;border:1px solid var(--line);border-radius:8px;overflow:hidden;text-decoration:none;color:inherit';
-          if(s.url){
-            var img = document.createElement('img'); img.src = s.url; img.style.cssText='width:100%;height:90px;object-fit:cover;display:block;background:#eef1f5'; t.appendChild(img);
-          }
-          var cap = document.createElement('div'); cap.style.cssText='font-size:9.5px;font-weight:700;color:var(--mut);padding:4px 6px'; cap.textContent = new Date(s.capturedAt).toLocaleTimeString() + ' · display ' + s.displayIndex;
-          t.appendChild(cap);
-          grid.appendChild(t);
-        });
-        el.appendChild(grid);
-        if(!shots.length){
-          var noshot = document.createElement('div'); noshot.style.cssText='font-size:12px;color:var(--mut);font-weight:600;margin-top:8px'; noshot.textContent='No screenshots yet for this employee.';
-          el.appendChild(noshot);
-        }
+        body.innerHTML = headHtml + '<div style="font-size:12px;color:#8b92a8;font-weight:600;text-align:center;padding:20px 0">No monitored sessions yet — they need to clock in with the desktop agent running.</div>';
+        return;
       }
-    }, function(){ el.textContent='Sign in to view this.'; });
+
+      // Group by the local calendar date each screenshot was captured on.
+      var byDate = {}; // 'YYYY-MM-DD' -> [{shot, dateObj}]
+      var order = [];
+      shots.forEach(function(s){
+        var d = new Date(s.capturedAt);
+        var key = isNaN(d.getTime()) ? 'unknown' : (d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'));
+        if (!byDate[key]) { byDate[key] = []; order.push(key); }
+        byDate[key].push(s);
+      });
+      order.sort(function(a,b){ return a < b ? 1 : -1; }); // newest date first
+
+      var sectionsHtml = order.map(function(key){
+        var dayShots = byDate[key];
+        var dateLabel = key === 'unknown' ? 'Unknown date' : new Date(key + 'T00:00:00').toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+        var gridItems = dayShots.map(function(s){
+          var time = new Date(s.capturedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+          return '<a href="'+(s.url||'#')+'" target="_blank" rel="noopener" style="display:block;border:1px solid var(--line);border-radius:8px;overflow:hidden;text-decoration:none;color:inherit">'
+            + (s.url ? '<img src="'+s.url+'" style="width:100%;height:90px;object-fit:cover;display:block;background:#eef1f5">' : '<div style="width:100%;height:90px;background:#eef1f5"></div>')
+            + '<div style="font-size:9.5px;font-weight:700;color:var(--mut);padding:4px 6px">'+time+' · display '+s.displayIndex+'</div>'
+            + '</a>';
+        }).join('');
+        return '<div style="margin-bottom:18px">'
+          + '<div style="font-size:11px;font-weight:800;color:var(--ink,#161e2e);margin-bottom:8px;padding-bottom:6px;border-bottom:1px solid var(--line)">'+dateLabel+' <span style="color:var(--mut);font-weight:700">· '+dayShots.length+'</span></div>'
+          + '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px">'+gridItems+'</div>'
+          + '</div>';
+      }).join('');
+
+      body.innerHTML = headHtml + (shots.length ? sectionsHtml : '<div style="font-size:12px;color:#8b92a8;font-weight:600;text-align:center;padding:20px 0">No screenshots yet for this employee.</div>');
+    }, function(){ var m=document.getElementById('hlmodal'); if(m) m.remove(); if(window.chirpToast) chirpToast('Sign in to view this.'); });
   };
 })();
 </script>
@@ -17988,7 +18559,7 @@ function showView(v){
   if(v==='ajx' && typeof ajxLoad==='function') ajxLoad();
   if(v==='gpux' && typeof mgrGhRefresh==='function') mgrGhRefresh();
   if(v==='mpmx' && typeof mgrMatRefresh==='function') mgrMatRefresh();
-  if(v==='mon' && typeof mgrMonRefresh==='function') mgrMonRefresh();
+  if(v==='mon'){ if (typeof window.monRefresh==='function') window.monRefresh(); else if (typeof mgrMonRefresh==='function') mgrMonRefresh(); }
   if(v==='devtodo' && typeof devTodoLoad==='function') devTodoLoad();
   if(v==='council' && typeof window.hlInitReinaCouncil==='function') window.hlInitReinaCouncil();
   if(v==='vi') hlEnsureHiveSight();
@@ -26166,7 +26737,7 @@ function hlModal(title, body){
   var old=document.getElementById('hlmodal'); if(old) old.remove();
   var d=document.createElement('div'); d.id='hlmodal';
   d.style.cssText='position:fixed;inset:0;background:rgba(22,30,46,.55);z-index:9500;display:flex;align-items:center;justify-content:center;padding:20px';
-  d.innerHTML='<div style="background:#fff;border-radius:16px;width:560px;max-width:96%;max-height:88vh;overflow-y:auto;font-family:\'Montserrat\',sans-serif"><div style="display:flex;align-items:center;padding:16px 20px;border-bottom:1px solid #dadde8;position:sticky;top:0;background:#fff;z-index:2"><b style="font-size:14px;color:#161e2e">'+title+'</b><span onclick="document.getElementById(\'hlmodal\').remove()" style="margin-left:auto;cursor:pointer;font-size:16px;font-weight:800;color:#5d657b">✕</span></div><div style="padding:18px 20px">'+body+'</div></div>';
+  d.innerHTML='<div style="background:#fff;border-radius:16px;width:560px;max-width:96%;max-height:88vh;overflow-y:auto;font-family:\'Montserrat\',sans-serif"><div style="display:flex;align-items:center;padding:16px 20px;border-bottom:1px solid #dadde8;position:sticky;top:0;background:#fff;z-index:2"><b style="font-size:14px;color:#161e2e">'+title+'</b><span onclick="document.getElementById(\'hlmodal\').remove()" style="margin-left:auto;cursor:pointer;font-size:16px;font-weight:800;color:#5d657b">✕</span></div><div id="hlmodal-body" style="padding:18px 20px">'+body+'</div></div>';
   d.addEventListener('click',function(e){ if(e.target===d) d.remove(); });
   document.body.appendChild(d);
 }
@@ -26336,17 +26907,189 @@ window.hlMonitorSettingsOpen = function(){
        Chris out three times on 2026-08-18 while he was working. Monitored now
        means agreeing is a condition of being on the clock; the exempt case is
        simply not monitored. */
-    var rosterHtml = roster.length ? roster.map(function(p){
+    // Scales past a handful of people (2026-08-25): each row carries a
+    // data-name for hlMonitorRosterFilter, and the list itself scrolls
+    // instead of growing the whole modal -- a roster of 50 no longer
+    // pushes Save Settings off the bottom of the screen.
+    // Table layout (2026-08-25): Agent Status (real online/offline, same
+    // "last heartbeat within the alive window" signal the dashboard's
+    // roster table uses) is its own column, separate from Pairing/
+    // Installation Status (paired / not paired / not installed yet) --
+    // the mockup's two-status split matches two genuinely different
+    // facts (is the agent alive right now vs. has it ever been set up).
+    var rosterTh = function(label){ return '<th style="padding:6px 8px;font-size:9px;color:#8b92a8;font-weight:800;letter-spacing:.05em;text-transform:uppercase;text-align:left;white-space:nowrap">'+label+'</th>'; };
+    var rosterRows = roster.length ? roster.map(function(p){
       var on = !!p.monitoringEnabled;
-      return '<div style="'+_row+'">'+p.name
-        + '<span style="font-size:9px;color:#8b92a8;font-weight:700;margin-left:6px">'+(p.status==='active'?'paired':'not paired')+'</span>'
-        + '<span style="margin-left:auto;display:flex;align-items:center;gap:14px">'
-        +   '<label style="display:flex;align-items:center;gap:5px;font-size:9px;font-weight:800;color:#8b92a8;text-transform:uppercase" title="Monitored people must approve the prompt to stay clocked in. Turn this off and they are not monitored at all -- and the idle timeout does not apply to them, because nothing is watching their machine.">Monitor'
-        +     '<input type="checkbox" '+(on?'checked':'')+' onchange="hlMonitorUserToggle(\''+p.employeeId+'\', {monitoringEnabled:this.checked}, this)" style="'+_sw+'"></label>'
-        + '</span></div>';
-    }).join('') : '<div style="font-size:11px;color:#8b92a8;font-weight:600;padding:6px 0">No one has paired HiveLogic Monitor yet.</div>';
-    hlModal('🖥️ Monitor Settings', '<span style="'+_lbl+'">Screenshot frequency</span><select id="hlmon-interval" style="'+_inp+'">'+opts+'</select><span style="'+_lbl+'">Privacy</span><div style="'+_row+'">Blur screenshots<input type="checkbox" id="hlmon-blur" '+(data.blurScreenshots?'checked':'')+' style="'+_sw+'"></div><span style="'+_lbl+'">Monitoring per person</span><div style="font-size:9px;color:#8b92a8;font-weight:600;line-height:1.5;margin:2px 0 6px"><b>Monitor</b> — on means this person is recorded while clocked in, and must approve the prompt to stay clocked in. Off means they are not monitored at all, and the idle timeout does not apply to them. Nothing is ever recorded without their yes, and nothing is recorded while they are clocked out.</div>'+rosterHtml+'<button onclick="hlMonitorSettingsSave()" style="width:100%;margin-top:14px;padding:12px;border:none;border-radius:9px;background:#59718a;color:#fff;font-family:\'Montserrat\',sans-serif;font-weight:900;font-size:11px;letter-spacing:.06em;text-transform:uppercase;cursor:pointer">Save settings</button>');
+      var pairKey = p.status==='active' ? 'paired' : (p.status==='not_installed' ? 'not_installed' : 'not_paired');
+      var pairLabel = pairKey==='paired' ? 'Paired' : (pairKey==='not_installed' ? 'Not installed yet' : 'Not paired');
+      var pairColor = MON_UI.pairing[pairKey].color, pairBg = MON_UI.pairing[pairKey].bg;
+      return '<tr class="hlmon-roster-row" data-name="'+(p.name||'').toLowerCase().replace(/"/g,'&quot;')+'" style="border-top:1px solid #e3e5ec">'
+        + '<td style="padding:8px;font-weight:800;font-size:11.5px;white-space:nowrap">'+p.name+'</td>'
+        + '<td style="padding:8px;white-space:nowrap"><span style="display:inline-flex;align-items:center;gap:5px;font-size:10px;font-weight:700;color:'+(p.online?'#1B7A50':'#8b92a8')+'"><span style="width:6px;height:6px;border-radius:50%;background:'+(p.online?'#1B7A50':'#c7cfdb')+'"></span>'+(p.online?'Online':'Offline')+'</span></td>'
+        + '<td style="padding:8px;white-space:nowrap"><span style="font-size:9px;font-weight:800;border-radius:99px;padding:3px 9px;background:'+pairBg+';color:'+pairColor+'">'+pairLabel+'</span></td>'
+        + '<td style="padding:8px;text-align:right"><label title="Monitored people must approve the prompt to stay clocked in. Turn this off and they are not monitored at all -- and the idle timeout does not apply to them, because nothing is watching their machine."><input type="checkbox" '+(on?'checked':'')+' onchange="hlMonitorUserToggle(\''+p.employeeId+'\', {monitoringEnabled:this.checked}, this)" style="'+_sw+'"></label></td>'
+        + '</tr>';
+    }).join('') : '';
+    var rosterHtml = roster.length
+      ? '<table style="width:100%;border-collapse:collapse"><thead><tr>'+rosterTh('Name')+rosterTh('Agent Status')+rosterTh('Pairing / Installation Status')+rosterTh('Monitor')+'</tr></thead><tbody>'+rosterRows+'</tbody></table>'
+      : '<div style="font-size:11px;color:#8b92a8;font-weight:600;padding:6px 0">No employees found.</div>';
+    var rosterSearch = roster.length > 6
+      ? '<input id="hlmon-roster-search" type="text" placeholder="Search '+roster.length+' people…" oninput="hlMonitorRosterFilter(this.value)" style="'+_inp+';margin-bottom:6px"/>'
+      : '';
+    // Pair Device (2026-08-26): self-service only -- monitor_pairing_code
+    // always mints the code for whoever is signed in and clicked it
+    // (getRequestingProfile(req).id server-side), so this can only re-pair
+    // the admin's OWN machine, never someone else's. Before this, the only
+    // way to reach the pairing screen at all was the one-time banner that
+    // fires right after logging in -- if you dismissed it, missed it, or
+    // (like Marvin, 2026-08-26) unpaired an already-set-up device, the only
+    // way back was logging out and back in. This reuses the exact same
+    // hlMonitorOpenPairingModal() the banner's "Get Pairing Code" button
+    // calls, just reachable on demand.
+    var pairDeviceHtml = '<span style="'+_lbl+'">Your device</span><div style="'+_row+'">Re-pair the HiveLogic Monitor app on this computer<button onclick="hlMonitorOpenPairingModal()" style="margin-left:auto;padding:7px 14px;border:1px solid #59718a;background:#fff;color:#59718a;border-radius:7px;font-size:9px;font-weight:800;text-transform:uppercase;cursor:pointer;font-family:Montserrat;white-space:nowrap">Pair Device</button></div>';
+    hlModal('🖥️ Monitor Settings', pairDeviceHtml + '<span style="'+_lbl+'">Screenshot frequency</span><select id="hlmon-interval" style="'+_inp+'">'+opts+'</select><span style="'+_lbl+'">Privacy</span><div style="'+_row+'">Blur screenshots<input type="checkbox" id="hlmon-blur" '+(data.blurScreenshots?'checked':'')+' style="'+_sw+'"></div><span style="'+_lbl+'">Monitoring per person</span><div style="font-size:9px;color:#8b92a8;font-weight:600;line-height:1.5;margin:2px 0 6px"><b>Monitor</b> — on means this person is recorded while clocked in, and must approve the prompt to stay clocked in. Off means they are not monitored at all, and the idle timeout does not apply to them. Nothing is ever recorded without their yes, and nothing is recorded while they are clocked out.</div>'+rosterSearch+'<div id="hlmon-roster-list" style="max-height:260px;overflow-y:auto">'+rosterHtml+'</div><span style="'+_lbl+'">App whitelist (productivity)</span><div style="'+_row+';border-bottom:none">Classify apps as Productive / Neutral / Unproductive<button onclick="hlMonitorWhitelistOpen()" style="margin-left:auto;padding:7px 14px;border:1px solid #59718a;background:#fff;color:#59718a;border-radius:7px;font-size:9px;font-weight:800;text-transform:uppercase;cursor:pointer;font-family:Montserrat;white-space:nowrap">Manage Whitelist</button></div><button onclick="hlMonitorSettingsSave()" style="width:100%;margin-top:14px;padding:12px;border:none;border-radius:9px;background:#59718a;color:#fff;font-family:\'Montserrat\',sans-serif;font-weight:900;font-size:11px;letter-spacing:.06em;text-transform:uppercase;cursor:pointer">Save settings</button>');
   }, function(){ if(window.chirpToast) chirpToast('Sign in to view this.'); });
+};
+window.hlMonitorRosterFilter = function(q){
+  var needle = (q||'').trim().toLowerCase();
+  document.querySelectorAll('.hlmon-roster-row').forEach(function(row){
+    row.style.display = (!needle || (row.dataset.name||'').indexOf(needle) !== -1) ? '' : 'none';
+  });
+};
+
+// Phase 5 (2026-08-25): App whitelist -- split into its own modal (2026-08-25
+// scaling pass) rather than living inline in Monitor Settings, so a roster
+// of 50 people and a whitelist of 200 apps can each grow without turning
+// one modal into a mile-long scroll. Search box + a category-then-name
+// sort (Unproductive first -- the rows someone is most likely checking)
+// + a capped-height scrolling list, same pattern as the roster above.
+var MON_CATEGORY_ORDER = { unproductive: 0, neutral: 1, productive: 2 };
+// Colors come from MON_UI.category (public/index.html's Monitor dashboard
+// script) -- one definition shared by the dashboard and this modal.
+window.__hlMonWhitelistCategory = 'all';
+window.hlMonitorWhitelistOpen = function(){
+  return hlRequireSession(async function(sess){
+    hlModal('🗂️ App Whitelist', '<div style="font-size:11px;color:#8b92a8;font-weight:600;padding:6px 0">Loading…</div>');
+    // Belt-and-braces (2026-08-25): this whole callback is async with no
+    // surrounding try/catch, so any thrown error (a bad selector, a
+    // rendering bug) used to reject silently -- the modal would open on
+    // "Loading…" and just sit there with nothing in the console pointing
+    // at why. Now it reports itself instead of failing invisibly.
+    try {
+    var r = await fetch('/api/track1?resource=monitor_app_rules', { headers:{ Authorization:'Bearer '+sess.access_token } });
+    var d = await r.json().catch(function(){return null;});
+    if(!d || d.ok===false){ var m0=document.getElementById('hlmodal'); if(m0) m0.remove(); if(window.chirpToast) chirpToast('⚠️ ' + ((d&&d.error)||'Could not load the whitelist.')); return; }
+    window.__hlMonRules = (d.rules || []).slice().sort(function(a, b){
+      return (MON_CATEGORY_ORDER[a.category] - MON_CATEGORY_ORDER[b.category]) || a.appName.localeCompare(b.appName);
+    });
+    window.__hlMonWhitelistCategory = 'all';
+    var catOpts = function(current){
+      return ['productive','neutral','unproductive'].map(function(c){
+        return '<option value="'+c+'"'+(c===current?' selected':'')+'>'+c.charAt(0).toUpperCase()+c.slice(1)+'</option>';
+      }).join('');
+    };
+    var addRuleHtml = '<div style="display:flex;gap:6px;margin-bottom:12px">'
+      + '<input id="hlmon-newapp-name" type="text" placeholder="App name (e.g. Google Chrome)" style="'+_inp+';flex:1"/>'
+      + '<select id="hlmon-newapp-category" style="'+_inp+';width:auto">'+catOpts('neutral')+'</select>'
+      + '<button onclick="hlMonitorAppRuleAdd()" style="padding:0 16px;border:none;border-radius:7px;background:#3b6fd6;color:#fff;font-weight:800;font-size:10.5px;cursor:pointer;font-family:Montserrat;white-space:nowrap">+ Add App</button>'
+      + '</div>';
+    var searchHtml = '<input id="hlmon-whitelist-search" type="text" placeholder="Search apps…" oninput="hlMonitorWhitelistFilter()" style="'+_inp+'"/>';
+    var tabsHtml = '<div id="hlmon-whitelist-tabs" style="display:flex;gap:4px;flex-wrap:wrap"></div>';
+    var countHtml = '<span id="hlmon-whitelist-count" style="font-size:10px;color:#8b92a8;font-weight:700;white-space:nowrap"></span>';
+    hlModal('🗂️ App Whitelist', '<div style="font-size:9px;color:#8b92a8;font-weight:600;line-height:1.5;margin-bottom:10px">Classifies apps as Productive / Neutral / Unproductive. Powers the Monitor dashboard\'s Productivity % and the desktop agent\'s "not productive" notification. An app with no rule here shows as Unclassified, never guessed.</div>'+addRuleHtml+'<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px">'+searchHtml+tabsHtml+countHtml+'</div><div id="hlmon-whitelist-list" style="max-height:320px;overflow-y:auto"></div><div style="margin-top:10px;padding-top:10px;border-top:1px solid #e3e5ec;font-size:9.5px;color:#8b92a8;font-weight:600">ℹ️ Changes take effect immediately on all connected agents.</div>');
+    hlMonitorWhitelistRenderTabs();
+    hlMonitorWhitelistFilter();
+    } catch (e) {
+      console.error('hlMonitorWhitelistOpen failed:', e);
+      var m1=document.getElementById('hlmodal'); if(m1) m1.remove();
+      if(window.chirpToast) chirpToast('⚠️ Could not open the whitelist: ' + (e && e.message || e));
+    }
+  }, function(){ if(window.chirpToast) chirpToast('Sign in to view this.'); });
+};
+function hlMonitorWhitelistRenderTabs(){
+  var el = document.getElementById('hlmon-whitelist-tabs');
+  if (!el) return;
+  var cats = [['all','All'], ['productive','Productive'], ['neutral','Neutral'], ['unproductive','Unproductive']];
+  var active = window.__hlMonWhitelistCategory || 'all';
+  el.innerHTML = cats.map(function(pair){
+    var isOn = pair[0] === active;
+    return '<button onclick="hlMonitorWhitelistSetCategory(\''+pair[0]+'\')" style="border:none;border-radius:7px;padding:6px 12px;font-size:10px;font-weight:800;cursor:pointer;font-family:Montserrat;background:'+(isOn?MON_UI.chipBlueBg:'transparent')+';color:'+(isOn?MON_UI.chipBlue:'#5d657b')+'">'+pair[1]+'</button>';
+  }).join('');
+}
+window.hlMonitorWhitelistSetCategory = function(cat){
+  window.__hlMonWhitelistCategory = cat;
+  hlMonitorWhitelistRenderTabs();
+  hlMonitorWhitelistFilter();
+};
+// Colored initial avatar instead of a fake per-app brand logo -- this
+// codebase does not bundle real app icon assets, and guessing at a
+// Chrome/VS Code/etc. logo would be exactly the kind of invented detail
+// the rest of Monitor deliberately avoids.
+function hlMonAppAvatar(name){
+  var initial = (name || '?').trim().charAt(0).toUpperCase() || '?';
+  var hue = 0; for (var i=0;i<name.length;i++) hue = (hue + name.charCodeAt(i)) % 360;
+  return '<span style="width:26px;height:26px;border-radius:7px;background:hsl('+hue+',55%,92%);color:hsl('+hue+',45%,38%);display:inline-flex;align-items:center;justify-content:center;font-weight:800;font-size:11px;flex-shrink:0">'+initial+'</span>';
+}
+function hlMonitorWhitelistRender(rules){
+  var el = document.getElementById('hlmon-whitelist-list');
+  var countEl = document.getElementById('hlmon-whitelist-count');
+  if (countEl) countEl.textContent = rules.length + ' app' + (rules.length===1?'':'s');
+  if (!el) return;
+  var catOpts = function(current){
+    return ['productive','neutral','unproductive'].map(function(c){
+      return '<option value="'+c+'"'+(c===current?' selected':'')+'>'+c.charAt(0).toUpperCase()+c.slice(1)+'</option>';
+    }).join('');
+  };
+  if (!rules.length) { el.innerHTML = '<div style="font-size:11px;color:#8b92a8;font-weight:600;padding:16px 0;text-align:center">No app rules match. Add one above.</div>'; return; }
+  var th = function(label){ return '<th style="padding:6px 8px;font-size:9px;color:#8b92a8;font-weight:800;letter-spacing:.05em;text-transform:uppercase;text-align:left">'+label+'</th>'; };
+  var rows = rules.map(function(rule){
+    return '<tr style="border-top:1px solid #e3e5ec">'
+      + '<td style="padding:8px;white-space:nowrap"><span style="display:flex;align-items:center;gap:9px;font-weight:700;font-size:12px">'+hlMonAppAvatar(rule.appName)+(window.esc?esc(rule.appName):rule.appName)+'</span></td>'
+      + '<td style="padding:8px"><select onchange="hlMonitorAppRuleSet(\''+rule.appName.replace(/'/g,"\\'")+'\', this.value)" style="'+_inp+';width:auto;padding:5px 9px;font-size:10px;background:'+(MON_UI.category[rule.category]||MON_UI.category.neutral).bg+';color:'+(MON_UI.category[rule.category]||MON_UI.category.neutral).color+';border:none;font-weight:800">'+catOpts(rule.category)+'</select></td>'
+      + '<td style="padding:8px;text-align:right"><button onclick="hlMonitorAppRuleDelete(\''+rule.id+'\')" title="Remove rule" style="border:1px solid #f0cec7;background:#faeeec;color:#c65b4e;font-weight:900;cursor:pointer;font-size:12px;width:26px;height:26px;border-radius:7px">🗑</button></td>'
+      + '</tr>';
+  }).join('');
+  el.innerHTML = '<table style="width:100%;border-collapse:collapse"><thead><tr>'+th('App Name')+th('Category')+th('')+'</tr></thead><tbody>'+rows+'</tbody></table>';
+}
+window.hlMonitorWhitelistFilter = function(){
+  var searchEl = document.getElementById('hlmon-whitelist-search');
+  var needle = ((searchEl && searchEl.value) || '').trim().toLowerCase();
+  var cat = window.__hlMonWhitelistCategory || 'all';
+  var all = window.__hlMonRules || [];
+  var filtered = all.filter(function(r){
+    return (cat === 'all' || r.category === cat) && (!needle || r.appName.toLowerCase().indexOf(needle) !== -1);
+  });
+  hlMonitorWhitelistRender(filtered);
+};
+window.hlMonitorAppRuleAdd = function(){
+  return hlRequireSession(async function(sess){
+    var nameEl = document.getElementById('hlmon-newapp-name');
+    var catEl = document.getElementById('hlmon-newapp-category');
+    var appName = nameEl ? nameEl.value.trim() : '';
+    if (!appName) { if(window.chirpToast) chirpToast('Enter an app name first.'); return; }
+    var r = await fetch('/api/track1?resource=monitor_app_rules', { method:'POST', headers:{ 'Content-Type':'application/json', Authorization:'Bearer '+sess.access_token }, body: JSON.stringify({ appName: appName, category: catEl ? catEl.value : 'neutral' }) });
+    var d = await r.json().catch(function(){return null;});
+    if(!d || d.ok===false){ if(window.chirpToast) chirpToast('⚠️ ' + ((d&&d.error)||'Could not add the rule.')); return; }
+    if(window.chirpToast) chirpToast('✅ Rule saved.');
+    window.hlMonitorWhitelistOpen();
+  });
+};
+window.hlMonitorAppRuleSet = function(appName, category){
+  return hlRequireSession(async function(sess){
+    var r = await fetch('/api/track1?resource=monitor_app_rules', { method:'POST', headers:{ 'Content-Type':'application/json', Authorization:'Bearer '+sess.access_token }, body: JSON.stringify({ appName: appName, category: category }) });
+    var d = await r.json().catch(function(){return null;});
+    if(!d || d.ok===false){ if(window.chirpToast) chirpToast('⚠️ ' + ((d&&d.error)||'Could not update the rule.')); return; }
+    if(window.chirpToast) chirpToast('✅ Updated.');
+  });
+};
+window.hlMonitorAppRuleDelete = function(id){
+  return hlRequireSession(async function(sess){
+    var r = await fetch('/api/track1?resource=monitor_app_rules&id='+encodeURIComponent(id), { method:'DELETE', headers:{ Authorization:'Bearer '+sess.access_token } });
+    var d = await r.json().catch(function(){return null;});
+    if(!d || d.ok===false){ if(window.chirpToast) chirpToast('⚠️ ' + ((d&&d.error)||'Could not remove the rule.')); return; }
+    if(window.chirpToast) chirpToast('🗑️ Rule removed.');
+    window.hlMonitorWhitelistOpen();
+  });
 };
 window.hlMonitorSettingsSave = function(){
   return hlRequireSession(async function(sess){
@@ -31296,6 +32039,130 @@ function hlWorkforceModal(title, bodyHtml, buttons){
   return modal;
 }
 
+// Manual clock out (2026-08-25, Chris: "if the employee was not able to
+// clock out, the system must prompt the employee to input manual clock
+// out"). A real form (not hlWorkforceModal's fire-and-close buttons,
+// since this needs to validate before closing) that posts
+// { action:'out', manualClockOutAt } to the SAME workforce_clock endpoint
+// workforceClockOut() already uses -- api/track1.js validates it cannot
+// predate this session's clock_in or land in the future, and still
+// enforces the EOD-report gate identically. `required:true` (the stale-
+// session case) removes the Cancel button and darkens the backdrop
+// without a click-to-dismiss, since leaving a day-old open session
+// uncorrected is not a valid choice there.
+function hlWorkforceManualClockOutOpen(opts){
+  opts = opts || {};
+  var existing = document.getElementById('hlwf-manual-modal'); if (existing) existing.remove();
+  var modal = document.createElement('div');
+  modal.id = 'hlwf-manual-modal';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(10,14,22,.6);z-index:10060;display:flex;align-items:center;justify-content:center';
+  if (!opts.required) modal.addEventListener('click', function(ev){ if (ev.target === modal) modal.remove(); });
+  var nowD = new Date();
+  var dateVal = opts.defaultDate || (nowD.getFullYear() + '-' + String(nowD.getMonth()+1).padStart(2,'0') + '-' + String(nowD.getDate()).padStart(2,'0'));
+  var card = document.createElement('div');
+  card.style.cssText = 'background:#fff;border-radius:16px;padding:22px;max-width:360px;width:90%;font-family:Montserrat';
+  card.innerHTML =
+    '<div style="font-weight:900;font-size:15px;margin-bottom:8px">Manual clock out</div>'
+    + '<div style="font-size:12.5px;color:var(--mut);font-weight:600;line-height:1.5;margin-bottom:14px">' + (opts.message || 'Enter the date and time you actually stopped working.') + '</div>'
+    + '<label style="display:block;font-size:11px;font-weight:700;margin-bottom:4px">Date</label>'
+    + '<input id="hlwf-manual-date" type="date" value="' + dateVal + '" style="width:100%;box-sizing:border-box;padding:9px 11px;border:1px solid var(--line);border-radius:8px;font-size:13px;margin-bottom:10px;font-family:Montserrat"/>'
+    + '<label style="display:block;font-size:11px;font-weight:700;margin-bottom:4px">Time</label>'
+    + '<input id="hlwf-manual-time" type="time" style="width:100%;box-sizing:border-box;padding:9px 11px;border:1px solid var(--line);border-radius:8px;font-size:13px;margin-bottom:6px;font-family:Montserrat"/>'
+    + '<div id="hlwf-manual-err" style="font-size:11px;color:#c65b4e;font-weight:700;min-height:14px;margin-bottom:6px"></div>'
+    + '<div style="display:flex;gap:8px;margin-top:8px">'
+    + (opts.required ? '' : '<button id="hlwf-manual-cancel" style="flex:1;font-size:11.5px;font-weight:800;padding:10px;border-radius:8px;cursor:pointer;border:1px solid var(--line);background:#fff;color:#161e2e">Cancel</button>')
+    + '<button id="hlwf-manual-submit" style="flex:1;font-size:11.5px;font-weight:800;padding:10px;border-radius:8px;cursor:pointer;border:none;background:#161e2e;color:#fff">Submit</button>'
+    + '</div>';
+  modal.appendChild(card);
+  document.body.appendChild(modal);
+  var cancelBtn = document.getElementById('hlwf-manual-cancel');
+  if (cancelBtn) cancelBtn.onclick = function(){ modal.remove(); };
+  document.getElementById('hlwf-manual-submit').onclick = async function(){
+    var dateEl = document.getElementById('hlwf-manual-date');
+    var timeEl = document.getElementById('hlwf-manual-time');
+    var errEl = document.getElementById('hlwf-manual-err');
+    var dateStr = dateEl.value, timeStr = timeEl.value;
+    if (!dateStr || !timeStr) { errEl.textContent = 'Enter both a date and a time.'; return; }
+    var manualDate = new Date(dateStr + 'T' + timeStr + ':00');
+    if (isNaN(manualDate.getTime())) { errEl.textContent = 'That date/time is not valid.'; return; }
+    if (manualDate.getTime() > Date.now() + 60000) { errEl.textContent = 'That time is in the future.'; return; }
+    var btn = document.getElementById('hlwf-manual-submit');
+    btn.disabled = true; btn.textContent = 'Submitting…';
+    var sess = (await sb.auth.getSession()).data.session;
+    if (!sess) { errEl.textContent = 'Sign in and try again.'; btn.disabled = false; btn.textContent = 'Submit'; return; }
+    var res, data;
+    try {
+      res = await fetch('/api/track1?resource=workforce_clock', {
+        method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + sess.access_token },
+        body: JSON.stringify({ action: 'out', manualClockOutAt: manualDate.toISOString() }),
+      });
+      data = await res.json().catch(function(){ return null; });
+    } catch (e) {
+      errEl.textContent = 'Network error. Try again.'; btn.disabled = false; btn.textContent = 'Submit'; return;
+    }
+    if (!data || data.ok === false) {
+      if (data && (data.needsEodReport || /End-of-Day report/i.test(String(data.error || '')))) {
+        modal.remove();
+        if (window.chirpToast) chirpToast('📝 Please complete your End-of-Day report before clocking out.');
+        if (typeof window.hlWfGoToEodForm === 'function') window.hlWfGoToEodForm();
+        return;
+      }
+      errEl.textContent = (data && data.error) || 'Could not save. Try again.';
+      btn.disabled = false; btn.textContent = 'Submit';
+      return;
+    }
+    modal.remove();
+    hlWfEodPromptShown = false;
+    try { hlDismissForToday('wfEodDismissed', 'hlWfEodDismissed'); } catch (e) {}
+    if (window.chirpToast) chirpToast('✅ Clocked out at the time you entered.');
+    if (window.workforceRefresh) workforceRefresh();
+  };
+}
+
+// Missed-clock-out detector (2026-08-25): the idle timeout and the
+// browser-close beacon already auto-correct MOST of these cases, but
+// neither fires if the machine loses power, sleeps without waking, or the
+// tab is killed outright -- an open session can then just sit there,
+// silently accumulating wrong hours, with no path to fix it except
+// someone noticing. If the active session's clock_in is from a PRIOR
+// calendar day, in the EMPLOYEE'S OWN timezone, by the time a page loads,
+// "clock out now" would badly overcount their hours -- so this is the one
+// prompt with no normal clock-out button at all, only the manual-time
+// form, required.
+//
+// This used to compare calendar dates in a hardcoded America/New_York
+// regardless of where the employee actually was (2026-08-26: an employee
+// in Manila is far enough ahead of ET that a completely normal
+// Manila-morning clock-in could already read as "yesterday" in ET, wrongly
+// forcing this mandatory flow mid-shift). Both sides of the comparison now
+// use the SAME zone -- the employee's own -- so "previous day" means their
+// previous day, not the business's.
+function hlWorkforceArmStaleSessionPrompt(){
+  var shown = false;
+  setInterval(function(){
+    if (shown) return;
+    if (!window.hlWorkforceIsClockedIn || !window.hlWorkforceIsClockedIn()) return;
+    if (window.hlWorkforceIsOwner && window.hlWorkforceIsOwner()) return;
+    var session = window.hlWorkforceActiveSession && window.hlWorkforceActiveSession();
+    if (!session || !session.clock_in) return;
+    var myTz = hlWfMyTimezone();
+    var parts;
+    try {
+      parts = new Intl.DateTimeFormat('en-US', { timeZone: myTz, year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date(session.clock_in));
+    } catch (e) { return; }
+    var map = {}; parts.forEach(function(p){ map[p.type] = p.value; });
+    var clockInDateStr = map.year + '-' + map.month + '-' + map.day;
+    var nowLocal = hlWfNowInTz(myTz);
+    if (!nowLocal.dateStr || clockInDateStr >= nowLocal.dateStr) return; // same day (or unknown) -- the normal EOD prompt covers that
+    shown = true;
+    hlWorkforceManualClockOutOpen({
+      required: true,
+      defaultDate: clockInDateStr,
+      message: "You're still clocked in from a previous day (since " + new Date(session.clock_in).toLocaleString() + "). What time did you actually stop working that day?",
+    });
+  }, 5000);
+}
+
 async function hlWorkforceLoadSettings(){
   try {
     var sess = (await sb.auth.getSession()).data.session;
@@ -31304,6 +32171,10 @@ async function hlWorkforceLoadSettings(){
     var data = await r.json().catch(function(){ return null; });
     if (!data || data.ok === false) return null;
     hlWfSettings = data;
+    // Auto-detect timezone (2026-08-26): reported once per session, same
+    // fire-and-forget pattern as everything else in this function's
+    // caller -- see hlWfReportTimezone.
+    hlWfReportTimezone(sess);
     return data;
   } catch (e) { return null; }
 }
@@ -31473,15 +32344,73 @@ function hlWorkforceArmIdleTimer(){
   }, 30000);
 }
 
+// The monitored workday (2026-08-25: "monitor the 7:00 am to 3:00 pm est
+// clock in and out") used to be hardcoded to America/New_York regardless of
+// where the employee actually was. Chris/the user, 2026-08-26: "make it
+// flexible so anyone who will be monitored regardless of the location and
+// timezone... the system must automatically detect my location and
+// timezone." One shared 7:00 AM-3:30 PM wall-clock schedule now applies in
+// EACH PERSON'S OWN local time -- hlWfNowInTz(tz) takes that zone as a
+// parameter instead of assuming it, mirroring the server's
+// workdayWindowInTz() (api/_lib/workday.js).
+function hlWfNowInTz(tz){
+  try {
+    var parts = new Intl.DateTimeFormat('en-US', {
+      timeZone: tz, hour: 'numeric', minute: 'numeric', hour12: false,
+      year: 'numeric', month: '2-digit', day: '2-digit',
+    }).formatToParts(new Date());
+    var map = {}; parts.forEach(function(p){ map[p.type] = p.value; });
+    var hour = Number(map.hour); if (hour === 24) hour = 0; // some locales format midnight as "24"
+    return { hour: hour, minute: Number(map.minute), dateStr: map.year + '-' + map.month + '-' + map.day };
+  } catch (e) {
+    var d = new Date(); // Intl/bad zone -- fall back to local time rather than crash the prompt loop
+    return { hour: d.getHours(), minute: d.getMinutes(), dateStr: null };
+  }
+}
+
+// The browser always knows its OWN timezone live, with no server round
+// trip -- this is also what's reported to /api/user-settings so an admin
+// can see it (see hlWfReportTimezone below). America/New_York is only a
+// last-resort fallback if Intl itself is unavailable, matching
+// api/_lib/workday.js's DEFAULT_TIMEZONE.
+function hlWfMyTimezone(){
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/New_York';
+  } catch (e) { return 'America/New_York'; }
+}
+
+// Reports the detected timezone once per session load, via the existing
+// per-user settings endpoint (api/user-settings.js -- "settings follow the
+// user, not the device," CLAUDE.md) rather than a Monitor-specific
+// mechanism. Fire-and-forget: this is a nice-to-have for admin visibility,
+// never something a prompt should wait on or fail loudly over.
+function hlWfReportTimezone(sess){
+  try {
+    var tz = hlWfMyTimezone();
+    if (!tz) return;
+    fetch('/api/user-settings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + sess.access_token },
+      body: JSON.stringify({ settings: { timezone: tz } }),
+    }).catch(function(){});
+  } catch (e) {}
+}
+
 function hlWorkforceArmEodPrompt(){
   setInterval(function(){
     if (!window.hlWorkforceIsClockedIn || !window.hlWorkforceIsClockedIn()) return;
     if (!hlWfSettings || hlWfEodPromptShown) return;
     try { if (hlDismissedToday('wfEodDismissed', 'hlWfEodDismissed')) return; } catch (e) {}
-    var now = new Date();
+    // The 7:00 AM-3:30 PM workday is one shared wall-clock schedule,
+    // applied in the EMPLOYEE'S OWN timezone (2026-08-26) -- this used to
+    // compare against hlWfNowInET() unconditionally, which meant someone
+    // outside America/New_York got this prompt at the wrong wall-clock
+    // moment for them (hours early or late, depending which side of ET
+    // they're on), or not at the moment their own workday actually ends.
+    var nowLocal = hlWfNowInTz(hlWfMyTimezone());
     var endHour = Number.isFinite(hlWfSettings.workdayEndHour) ? hlWfSettings.workdayEndHour : 15;
     var endMin = Number.isFinite(hlWfSettings.workdayEndMinute) ? hlWfSettings.workdayEndMinute : 30;
-    if (now.getHours() > endHour || (now.getHours() === endHour && now.getMinutes() >= endMin)) {
+    if (nowLocal.hour > endHour || (nowLocal.hour === endHour && nowLocal.minute >= endMin)) {
       hlWfEodPromptShown = true;
       var timeLabel = new Date(0,0,0,endHour,endMin).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
       hlWorkforceModal(
@@ -31489,6 +32418,7 @@ function hlWorkforceArmEodPrompt(){
         "It's past " + timeLabel + ", our typical end of day. Want to clock out, or keep working?",
         [
           { label: 'Stay clocked in', onClick: function(){ hlDismissForToday('wfEodDismissed', 'hlWfEodDismissed'); } },
+          { label: 'Enter exit time', onClick: function(){ hlWorkforceManualClockOutOpen(); } },
           { label: 'Clock out', primary: true, onClick: function(){ if (window.workforceClockOut) workforceClockOut(); } },
         ]
       );
@@ -31524,6 +32454,7 @@ async function hlWorkforceInitGlobalWidgets(){
   hlWorkforceArmIdleTimer();
   hlWorkforceArmEodPrompt();
   hlWorkforceArmClockInPrompt();
+  hlWorkforceArmStaleSessionPrompt();
   setInterval(function(){ if (window.workforceRefresh) workforceRefresh(); }, 60000);
 }
 window.hlWorkforceInitGlobalWidgets = hlWorkforceInitGlobalWidgets;
