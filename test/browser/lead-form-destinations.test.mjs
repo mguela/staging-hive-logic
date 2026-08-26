@@ -104,8 +104,11 @@ after(async () => {
   if (server) await server.close();
 });
 
-// Open the form and type a name, which is the one thing the save refuses
-// without. Reset between tests so one press cannot leak into the next.
+// Open the form and fill in every field nlValidateRequired now demands --
+// a name, a phone (satisfying the phone-or-email pair), a service address,
+// and what they need. 2026-08-26: this form used to save on a name alone;
+// leaving the other three blank here would block every destination test
+// below on unrelated validation, not on what each test actually presses.
 async function openLeadForm(name = 'Test Caller') {
   leadPosts = []; appts = [];
   await page.evaluate((n) => {
@@ -124,6 +127,8 @@ async function openLeadForm(name = 'Test Caller') {
     const parts = n.split(' ');
     document.getElementById('nl-first').value = parts[0] || '';
     document.getElementById('nl-last').value = parts[1] || '';
+    document.getElementById('nl-phone').value = '(914) 555-0100';
+    document.getElementById('nl-addr').value = '14 Maple Ave';
     document.getElementById('nl-need').value = 'Back door will not latch';
     const ap = document.getElementById('nl-approx'); if (ap) ap.value = '850';
   }, name);

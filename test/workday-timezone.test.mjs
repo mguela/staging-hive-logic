@@ -40,8 +40,17 @@ test('workdayWindowInTz: 7:00 AM-3:30 PM in Asia/Manila (no DST) resolves to the
 });
 
 test('workdayWindowInTz: the same 7:00 AM-3:30 PM in America/New_York lands ~12-13 hours later than Manila', () => {
-  const manila = workdayWindowInTz('Asia/Manila', 7, 0, 15, 30);
-  const newYork = workdayWindowInTz('America/New_York', 7, 0, 15, 30);
+  // Pinned to a fixed instant (2026-08-27 noon UTC), not real "now" -- each
+  // zone resolves ITS OWN calendar day independently (by design: one
+  // shared wall-clock schedule per employee's own local day), and for
+  // roughly half of every real day Manila and New York are already on
+  // different calendar dates from each other. Comparing against live "now"
+  // made this test genuinely flaky right at that boundary, which is
+  // exactly what happened running this suite a day later than it was
+  // written -- not a bug in workdayWindowInTz, a bug in the test.
+  const fixedNow = new Date('2026-08-27T12:00:00Z');
+  const manila = workdayWindowInTzAt('Asia/Manila', 7, 0, 15, 30, fixedNow);
+  const newYork = workdayWindowInTzAt('America/New_York', 7, 0, 15, 30, fixedNow);
   const diffHours = (newYork.startUtc.getTime() - manila.startUtc.getTime()) / 3600000;
   // Manila is UTC+8 year-round; New York is UTC-4 (EDT) or UTC-5 (EST), so
   // the same wall-clock 7:00 AM is always 12 or 13 real hours apart.

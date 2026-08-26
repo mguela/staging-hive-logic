@@ -19,7 +19,7 @@
  * monitor_my_status poll, so "is this person running current code" is a
  * question the database can answer. Do not hand-edit it -- run
  * `node scripts/stamp-page-build.mjs`. */
-var HL_PAGE_BUILD = 'a06a722dbb024d7d';
+var HL_PAGE_BUILD = '4eca4ee8837a70ca';
 </script>
 <script>
 (function () { // HL_FETCH_DEDUPE_V1 — single wrapper: GET /api/ dedupe + 60s cache + write-invalidate
@@ -198,7 +198,7 @@ var HL_PAGE_BUILD = 'a06a722dbb024d7d';
   .tagline{display:block;font-size:6.8px;font-weight:700;letter-spacing:.22em;color:#5f7492;margin-top:3px;font-family:var(--mono)}
   .logo .word b{color:#fff}
   .logo .word span{color:#8ba4c4}
-  .bee{width:54px;height:42px;flex-shrink:0}
+  .bee{width:42px;height:auto;flex-shrink:0;object-fit:contain}
   .nav{display:flex;align-items:center;gap:11px;padding:10px 12px;border-radius:9px;font-size:13px;font-weight:600;cursor:pointer;color:#eef3f7}
   .nav:hover{background:rgba(255,255,255,.09);color:#fff}
   .nav.on{background:rgba(116,138,158,.4);color:#fff;border:1px solid rgba(181,201,213,.55);font-weight:700}
@@ -639,6 +639,9 @@ var HL_PAGE_BUILD = 'a06a722dbb024d7d';
   .fld input,.fld select,.fld textarea{border:1.5px solid var(--line);border-radius:9px;padding:10px 12px;font-family:var(--sans);font-size:13px;color:var(--ink);outline:none;background:#fff}
   .fld input:focus,.fld select:focus,.fld textarea:focus{border-color:#748a9e}
   .fld textarea{resize:vertical;min-height:64px}
+  .fld label .req{color:var(--red);margin-left:2px}
+  .fld input.nl-invalid,.fld select.nl-invalid,.fld textarea.nl-invalid{border-color:var(--red);box-shadow:0 0 0 3px rgba(198,40,40,.12)}
+  .nl-req-hint{font-size:9.5px;font-weight:700;color:var(--mut);margin:-6px 0 10px}
   /* Searchable client picker (hlFillClientSel combobox mode). */
   .hlcb{position:relative}
   .hlcb-in{width:100%;border:1.5px solid var(--line);border-radius:9px;padding:10px 12px;font-family:var(--sans);font-size:13px;color:var(--ink);outline:none;background:#fff}
@@ -682,6 +685,11 @@ var HL_PAGE_BUILD = 'a06a722dbb024d7d';
   .ajx-pill.unsched{background:#fbf1e3;color:#a8702a}
   .ajx-money{font-family:var(--mono);font-size:12px;font-weight:800;color:#161e2e;text-align:right;white-space:nowrap}
   .ajx-empty{padding:26px 14px;text-align:center;color:var(--mut);font-size:12.5px;font-weight:600}
+  /* 2026-08-25: "in active jobs, when clicking on a job, there should be an
+     option to 'close job'... make it bold or even change the font color." */
+  .ajx-tbl tr.ajx-closed td{font-weight:800;color:#1B7A50}
+  .ajx-tbl tr.ajx-closed td.ajx-num,.ajx-tbl tr.ajx-closed td.ajx-money{color:#1B7A50}
+  .ajx-pill.closed{background:#e7f3ec;color:#1B7A50}
   .ajv{position:fixed;inset:0;background:rgba(22,30,46,.5);backdrop-filter:blur(6px);z-index:57;display:none;align-items:flex-start;justify-content:center;padding:50px 20px;overflow-y:auto}
   .ajv.open{display:flex}
   .ajv-card{width:min(760px,100%);background:#fff;border-radius:16px;box-shadow:0 30px 70px rgba(0,0,0,.3);overflow:hidden}
@@ -1030,10 +1038,10 @@ var HL_PAGE_BUILD = 'a06a722dbb024d7d';
   .efl-head h1{font-size:26px;font-weight:800;letter-spacing:-.02em}
   .efl-cards{display:grid;grid-template-columns:1.15fr 1fr 1fr 1fr 1.3fr;gap:13px;margin-bottom:20px}
   @media(max-width:1400px){.efl-cards{grid-template-columns:repeat(3,1fr)}}
-  .efl-card{background:#fff;border:1px solid var(--line);border-radius:14px;padding:15px 16px;min-width:0}
-  .efl-card h4{font-size:12px;font-weight:800;margin-bottom:9px;display:flex;align-items:center;gap:6px}
+  .efl-card{background:#fff;border:1px solid var(--line);border-radius:10px;padding:15px 16px;min-width:0;box-shadow:0 1px 3px rgba(0,0,0,.04)}
+  .efl-card h4{font-size:9px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--mut);margin-bottom:2px;display:flex;align-items:center;gap:6px}
   .efl-card .sub{font-size:9.5px;color:var(--mut);font-weight:700;margin-bottom:6px}
-  .efl-card .big{font-size:24px;font-weight:800;font-family:var(--mono);letter-spacing:-.02em;display:flex;align-items:center;gap:8px}
+  .efl-card .big{font-size:22px;font-weight:900;font-family:var(--sans);letter-spacing:-.02em;display:flex;align-items:center;gap:8px}
   .efl-card .under{font-size:10px;color:var(--mut);font-weight:700;font-family:var(--mono);margin-top:3px}
   .efl-trend{font-size:9px;font-weight:800;border-radius:99px;padding:2px 8px;font-family:var(--mono)}
   .efl-trend.dn{background:var(--red-bg);color:#a34237}
@@ -2647,50 +2655,52 @@ button,.dowork,.startday,.back,.cdb-new,.nc-create,.fm-save,.gbtn,.iconbtn,.dw-a
   <div id="hl-mnav-backdrop" onclick="hlMobNavClose()"></div>
 
   <aside class="rail" role="navigation" aria-label="Primary">
+    <!-- 2026-08-26, jomell: "add the ui/ux design for the sidebar" --
+         design-language pass from the coworker's Figma Make redesign.
+         Scoped under .rail so it can never collide with anything outside
+         the sidebar (.foot/.logo/.ic/.nav are reused by unrelated parts of
+         the app -- .rail .foot is already this file's own convention for
+         that, right below). Every real id/onclick (showView, hlGrp,
+         hlGrpAllToggle, hlCompanyPop...) is untouched. -->
+    <style>
+      .rail{background:linear-gradient(180deg,#0a1e30 0%,#0f2d47 55%,#0a1c2e 100%)}
+      .rail .nav{border-radius:7px;font-weight:600}
+      .rail .nav:hover{background:rgba(255,255,255,.09)}
+      .rail .nav.on{background:linear-gradient(90deg,#35536d,#49647b);border:none;font-weight:700}
+      .rail .logo .tagline{color:rgba(180,210,225,.75)}
+      /* 2026-08-26, jomell: "what i mean by logo is including the 'HiveLogic
+         CONTROL THE CHAOS'" -- sampled the real wordmark colors out of the
+         coworker's source PNG (Downloads/hivelogic-logo.png): "Logic" is a
+         vivid blue (~#5A8CDB at the top of its gradient), not the app's old
+         pale slate-blue. The tagline in that PNG is a dark navy meant for a
+         white background (~#1B498E) -- unreadable on this dark sidebar, so
+         it keeps the light, translucent treatment above instead of a literal
+         color port. "Hive" was already solid white, matching the source. */
+      .rail .logo .word span{color:#5b8cdb}
+    </style>
     <div class="logo">
-      <svg class="bee" viewBox="36 2 152 116">
-        <defs>
-          <linearGradient id="silver" x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0" stop-color="#f0f4f9"/><stop offset=".55" stop-color="#b9c6d6"/><stop offset="1" stop-color="#8698b0"/>
-          </linearGradient>
-          <linearGradient id="steel" x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0" stop-color="#7f99b8"/><stop offset="1" stop-color="#4a6182"/>
-          </linearGradient>
-          <linearGradient id="hbar" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0" stop-color="#e9eef5"/><stop offset=".5" stop-color="#aebccd"/><stop offset="1" stop-color="#d5dde8"/>
-          </linearGradient>
-        </defs>
-        <polygon points="52.0,29.0 62.4,35.0 62.4,47.0 52.0,53.0 41.6,47.0 41.6,35.0" fill="#232d42" stroke="#3b4d6b" stroke-width="1"/>
-        <polygon points="52.0,53.0 62.4,59.0 62.4,71.0 52.0,77.0 41.6,71.0 41.6,59.0" fill="none" stroke="url(#steel)" stroke-width="2"/>
-        <polygon points="172.0,29.0 182.4,35.0 182.4,47.0 172.0,53.0 161.6,47.0 161.6,35.0" fill="none" stroke="url(#steel)" stroke-width="2"/>
-        <polygon points="172.0,53.0 182.4,59.0 182.4,71.0 172.0,77.0 161.6,71.0 161.6,59.0" fill="#232d42" stroke="#3b4d6b" stroke-width="1"/>
-        <polygon points="112.0,12.0 122.4,18.0 122.4,30.0 112.0,36.0 101.6,30.0 101.6,18.0" fill="none" stroke="#38496a" stroke-width="1.1" opacity=".55"/>
-        <polygon points="91.2,24.0 101.6,30.0 101.6,42.0 91.2,48.0 80.8,42.0 80.8,30.0" fill="none" stroke="#38496a" stroke-width="1.1" opacity=".55"/>
-        <polygon points="132.8,24.0 143.2,30.0 143.2,42.0 132.8,48.0 122.4,42.0 122.4,30.0" fill="none" stroke="#38496a" stroke-width="1.1" opacity=".55"/>
-        <polygon points="91.2,72.0 101.6,78.0 101.6,90.0 91.2,96.0 80.8,90.0 80.8,78.0" fill="none" stroke="#38496a" stroke-width="1.1" opacity=".55"/>
-        <polygon points="132.8,72.0 143.2,78.0 143.2,90.0 132.8,96.0 122.4,90.0 122.4,78.0" fill="none" stroke="#38496a" stroke-width="1.1" opacity=".55"/>
-        <polygon points="112.0,84.0 122.4,90.0 122.4,102.0 112.0,108.0 101.6,102.0 101.6,90.0" fill="none" stroke="#38496a" stroke-width="1.1" opacity=".55"/>
-        <polygon points="112.0,6.0 158.8,33.0 158.8,87.0 112.0,114.0 65.2,87.0 65.2,33.0" fill="none" stroke="url(#silver)" stroke-width="7"/>
-        <polygon points="112.0,14.0 151.8,37.0 151.8,83.0 112.0,106.0 72.2,83.0 72.2,37.0" fill="none" stroke="url(#steel)" stroke-width="1.6" opacity=".7"/>
-        <polygon points="86,28 98,34 98,86 86,92" fill="url(#hbar)"/>
-        <polygon points="138,28 126,34 126,86 138,92" fill="url(#hbar)"/>
-        <rect x="98" y="54" width="28" height="12" fill="url(#silver)"/>
-      </svg>
+      <!-- 2026-08-26, jomell: "lets also change the hivelogic logo on the
+           upperleft" -- the coworker's new hexagon mark, cropped from their
+           full lockup image (public/images/hivelogic-icon.png) and resized
+           to a real sidebar-appropriate asset (41KB, not the 596KB original).
+           The wordmark stays real text (.word), not part of the image, so
+           it keeps its existing color/theming and crispness at any zoom. -->
+      <img class="bee" src="/images/hivelogic-icon.png" alt="HiveLogic" width="240" height="225">
       <div class="word"><b>Hive</b><span>Logic</span><small class="tagline">CONTROL THE CHAOS.</small></div>
     </div>
 
     <div id="nav-grpall-btn" onclick="hlGrpAllToggle()" style="font-family:'JetBrains Mono',monospace;font-size:9px;font-weight:800;letter-spacing:.05em;text-align:center;color:#9fb0c9;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);border-radius:99px;margin:2px 8px 10px;padding:7px 0;cursor:pointer;user-select:none">▾ EXPAND ALL</div>
-    <div class="nav" id="nav-cc" onclick="showView('cc')"><span class="ic"><svg viewBox="0 0 24 24" stroke="#FFC94B"><path d="M4 15a8 8 0 0 1 16 0"/><path d="M4 15h2M18 15h2M12 7v2M6.6 9.6l1.4 1.4M17.4 9.6L16 11"/><path d="M12 15l3.5-3.5"/><circle cx="12" cy="15" r="1.6" fill="#FFC94B"/></svg></span>Command Center</div>
-    <div class="nav" id="nav-sched" onclick="showView('schedule')"><span class="ic"><svg viewBox="0 0 24 24" stroke="#6EA8DC"><rect x="3.5" y="5" width="17" height="16" rx="2.5"/><path d="M3.5 10h17M8 2.5V6M16 2.5V6"/><circle cx="8.5" cy="14" r="1" fill="#6EA8DC"/><circle cx="12" cy="14" r="1" fill="#6EA8DC"/><circle cx="15.5" cy="14" r="1" fill="#6EA8DC"/></svg></span>Schedule</div>
-    <div class="nav" onclick="hlGrp('sales')" style="font-weight:800"><span class="ic" style="font-size:13px;display:flex;align-items:center;justify-content:center">🧲</span>Sales<span id="grpar-sales" style="margin-left:auto;font-size:10px;color:#5d7290">▸</span></div>
+    <div class="nav" id="nav-cc" onclick="showView('cc')"><span class="ic"><svg viewBox="0 0 24 24" stroke="#ffc000"><path d="M3 3h7v7H3z"/><path d="M14 3h7v7h-7z"/><path d="M3 14h7v7H3z"/><path d="M14 18h7M17.5 14v7"/></svg></span>Command Center</div>
+    <div class="nav" id="nav-sched" onclick="showView('schedule')"><span class="ic"><svg viewBox="0 0 24 24" stroke="#ffc000"><path d="M3 5h18v16H3z"/><path d="M8 3v4M16 3v4M3 10h18"/></svg></span>Schedule</div>
+    <div class="nav" onclick="hlGrp('sales')" style="font-weight:800"><span class="ic"><img src="/images/nav-sales.png" alt="" style="width:17px;height:17px;object-fit:contain"></span>Sales<span id="grpar-sales" style="margin-left:auto;font-size:10px;color:#5d7290">▸</span></div>
     <div id="grp-sales" style="display:none">
       <div class="nav" style="padding-left:26px;font-size:12px" id="nav-leads" onclick="showView('leads')"><span class="ic"><svg viewBox="0 0 24 24" stroke="#6FBF8B"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.5"/><circle cx="12" cy="12" r="1" fill="#6FBF8B"/></svg></span>Leads</div>
       <div class="nav" style="padding-left:26px;font-size:12px" id="nav-estimates" onclick="showView('estimates')"><span class="ic"><svg viewBox="0 0 24 24" stroke="#8FD48F"><path d="M6 3h9l4 4v14H6z"/><path d="M15 3v4h4"/><path d="M9 11h6M9 14.5h6M9 18h3.5"/></svg></span>Estimates</div>
       <div class="nav" id="nav-tox" onclick="showView('tox')" style="padding-left:26px;font-size:12px"><span class="ic" style="font-size:12px;display:flex;align-items:center;justify-content:center">📐</span>HiveGrid</div>
       <div class="nav" id="nav-prx" onclick="showView('prx')" style="padding-left:26px;font-size:12px"><span class="ic" style="font-size:12px;display:flex;align-items:center;justify-content:center">🎨</span>Presentations</div>
     </div>
-    <div class="nav" id="nav-marketing-cc" onclick="openMarketingCC()" style="font-weight:800"><span class="ic" style="font-size:13px;display:flex;align-items:center;justify-content:center">🐝</span>Hive Marketing</div>
-    <div class="nav" onclick="hlGrp('jobs')" style="font-weight:800"><span class="ic" style="font-size:13px;display:flex;align-items:center;justify-content:center">🚦</span>Jobs<span id="grpar-jobs" style="margin-left:auto;font-size:10px;color:#5d7290">▸</span></div>
+    <div class="nav" id="nav-marketing-cc" onclick="openMarketingCC()" style="font-weight:800"><span class="ic"><img src="/images/nav-hive-marketing.png" alt="" style="width:17px;height:17px;object-fit:contain"></span>Hive Marketing</div>
+    <div class="nav" onclick="hlGrp('jobs')" style="font-weight:800"><span class="ic"><svg viewBox="0 0 24 24" stroke="#ffc000"><path d="M3 6h18v14H3z"/><path d="M8 6V4h8v2"/></svg></span>Jobs<span id="grpar-jobs" style="margin-left:auto;font-size:10px;color:#5d7290">▸</span></div>
     <div id="grp-jobs" style="display:none">
       <div class="nav" style="padding-left:26px;font-size:12px" id="nav-jobs" onclick="showView('jobs')"><span class="ic"><svg viewBox="0 0 24 24" stroke="#E0906B"><path d="M13.5 6.5l4 4L9 19l-4 1 1-4z"/><path d="M12 5l2-2 6 6-2 2"/><path d="M14 3l4 4"/></svg></span>Jobs</div>
       <div class="nav" id="nav-ajx" onclick="showView('ajx')" style="padding-left:26px;font-size:12px"><span class="ic" style="font-size:12px;display:flex;align-items:center;justify-content:center">&#128203;</span>Active Jobs</div>
@@ -2698,7 +2708,7 @@ button,.dowork,.startday,.back,.cdb-new,.nc-create,.fm-save,.gbtn,.iconbtn,.dw-a
       <div class="nav" id="nav-ldx" onclick="showView('ldx')" style="padding-left:26px;font-size:12px"><span class="ic" style="font-size:12px;display:flex;align-items:center;justify-content:center">📍</span>Live Dispatch</div>
       <div class="nav" id="nav-tmx" onclick="showView('tmx')" style="padding-left:26px;font-size:12px" title="Partial prototype — live meter and rates; ticket workflow is not connected"><span class="ic" style="font-size:12px;display:flex;align-items:center;justify-content:center">🎫</span>T&amp;M / Service Lane</div>
     </div>
-    <div class="nav" onclick="hlGrp('money')" style="font-weight:800"><span class="ic" style="font-size:13px;display:flex;align-items:center;justify-content:center">💰</span>Finances<span id="grpar-money" style="margin-left:auto;font-size:10px;color:#5d7290">▸</span></div>
+    <div class="nav" onclick="hlGrp('money')" style="font-weight:800"><span class="ic"><svg viewBox="0 0 24 24" stroke="#22c55e"><path d="M12 1v22"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg></span>Finances<span id="grpar-money" style="margin-left:auto;font-size:10px;color:#5d7290">▸</span></div>
     <div id="grp-money" style="display:none">
       <div class="nav" style="padding-left:26px;font-size:12px" id="nav-financial" onclick="showView('financial')"><span class="ic"><svg viewBox="0 0 24 24" stroke="#7DD3A8"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5v9"/><path d="M14.5 9.2c0-1-1.1-1.7-2.5-1.7s-2.5.7-2.5 1.7 1.2 1.5 2.5 1.8 2.5.8 2.5 1.8-1.1 1.7-2.5 1.7-2.5-.7-2.5-1.7"/></svg></span>Financial</div>
       <div class="nav" id="nav-invx" onclick="showView('invx')" style="padding-left:26px;font-size:12px"><span class="ic" style="font-size:12px;display:flex;align-items:center;justify-content:center">🧾</span>Invoicing & AR</div>
@@ -2708,32 +2718,32 @@ button,.dowork,.startday,.back,.cdb-new,.nc-create,.fm-save,.gbtn,.iconbtn,.dw-a
       <div class="nav" id="nav-fix" onclick="showView('fix')" style="padding-left:26px;font-size:12px"><span class="ic" style="font-size:12px;display:flex;align-items:center;justify-content:center">🧠</span>Financial Intelligence</div>
       <div class="nav" id="nav-vcx" onclick="showView('vcx')" style="padding-left:26px;font-size:12px"><span class="ic" style="font-size:12px;display:flex;align-items:center;justify-content:center">🛒</span>Vendor Catalog</div>
     </div>
-    <div class="nav" onclick="hlGrp('insights')" style="font-weight:800"><span class="ic" style="font-size:13px;display:flex;align-items:center;justify-content:center">📊</span>Reports<span id="grpar-insights" style="margin-left:auto;font-size:10px;color:#5d7290">▸</span></div>
+    <div class="nav" onclick="hlGrp('insights')" style="font-weight:800"><span class="ic"><svg viewBox="0 0 24 24" stroke="#ffc000"><path d="M4 20V10"/><path d="M10 20V4"/><path d="M16 20v-7"/><path d="M22 20H2"/></svg></span>Reports<span id="grpar-insights" style="margin-left:auto;font-size:10px;color:#5d7290">▸</span></div>
     <div id="grp-insights" style="display:none">
       <div class="nav" style="padding-left:26px;font-size:12px" id="nav-reports" onclick="showView('reports')"><span class="ic"><svg viewBox="0 0 24 24" stroke="#9FB6D9"><path d="M4 20V4"/><path d="M4 20h16"/><path d="M7.5 15.5l3.5-3.5 2.5 2.5 5-5.5"/><path d="M15.5 9h3v3"/></svg></span>Reports</div>
     </div>
-    <div class="nav" onclick="hlGrp('crm')" style="font-weight:800"><span class="ic" style="font-size:13px;display:flex;align-items:center;justify-content:center">🤝</span>Clients<span id="grpar-crm" style="margin-left:auto;font-size:10px;color:#5d7290">▸</span></div>
+    <div class="nav" onclick="hlGrp('crm')" style="font-weight:800"><span class="ic"><svg viewBox="0 0 24 24" stroke="#ff8b19"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg></span>Clients<span id="grpar-crm" style="margin-left:auto;font-size:10px;color:#5d7290">▸</span></div>
     <div id="grp-crm" style="display:none">
       <div class="nav" style="padding-left:26px;font-size:12px" id="nav-clients" onclick="showView('clients')"><span class="ic"><svg viewBox="0 0 24 24" stroke="#7FB2E5"><path d="M3.5 10.5L12 4l8.5 6.5"/><path d="M6 9.5V20h12V9.5"/><circle cx="12" cy="12.8" r="1.9"/><path d="M9 19c.3-2.2 1.5-3.3 3-3.3s2.7 1.1 3 3.3"/></svg></span>Clients</div>
     </div>
-    <div class="nav" onclick="hlGrp('vendors')" style="font-weight:800"><span class="ic"><svg viewBox="0 0 24 24" stroke="#D9A85C"><path d="M2.5 7h11v10h-11z"/><path d="M13.5 10h4l3.5 3.5V17h-7.5"/><circle cx="6.5" cy="18.5" r="1.8"/><circle cx="16.5" cy="18.5" r="1.8"/></svg></span>Vendors & Subs<span id="grpar-vendors" style="margin-left:auto;font-size:10px;color:#5d7290">▸</span></div>
+    <div class="nav" onclick="hlGrp('vendors')" style="font-weight:800"><span class="ic"><svg viewBox="0 0 24 24" stroke="#00d7df"><path d="M3 7h11v9H3z"/><path d="M14 10h4l3 3v3h-7"/><path d="M7 18a2 2 0 100-4 2 2 0 000 4z"/><path d="M18 18a2 2 0 100-4 2 2 0 000 4z"/></svg></span>Vendors & Subs<span id="grpar-vendors" style="margin-left:auto;font-size:10px;color:#5d7290">▸</span></div>
     <div id="grp-vendors" style="display:none">
       <div class="nav" style="padding-left:26px;font-size:12px" id="nav-subs" onclick="showView('subs');if(window.subsRefresh)subsRefresh();"><span class="ic"><svg viewBox="0 0 24 24" stroke="#D9A85C"><path d="M2.5 7h11v10h-11z"/><path d="M13.5 10h4l3.5 3.5V17h-7.5"/><circle cx="6.5" cy="18.5" r="1.8"/><circle cx="16.5" cy="18.5" r="1.8"/></svg></span>Subs &amp; Suppliers</div>
     </div>
-    <div class="nav" onclick="hlGrp('people')" style="font-weight:800"><span class="ic" style="font-size:13px;display:flex;align-items:center;justify-content:center">👥</span>Team<span id="grpar-people" style="margin-left:auto;font-size:10px;color:#5d7290">▸</span></div>
+    <div class="nav" onclick="hlGrp('people')" style="font-weight:800"><span class="ic"><svg viewBox="0 0 24 24" stroke="#00d7df"><path d="M3 20c0-4 2-7 6-7s6 3 6 7"/><path d="M14 13c4 0 8 2 8 7"/><path d="M8 8a3 3 0 100-6 3 3 0 000 6z"/><path d="M17 9a2.5 2.5 0 100-5 2.5 2.5 0 000 5z"/></svg></span>Team<span id="grpar-people" style="margin-left:auto;font-size:10px;color:#5d7290">▸</span></div>
     <div id="grp-people" style="display:none">
       <div class="nav" id="nav-ttx" onclick="showView('ttx')" style="padding-left:26px;font-size:12px"><span class="ic" style="font-size:12px;display:flex;align-items:center;justify-content:center">⏱</span>Time & Timesheets</div>
       <div class="nav" id="nav-agents" onclick="window.open('/agents/','_blank')" style="padding-left:26px;font-size:12px"><span class="ic" style="font-size:12px;display:flex;align-items:center;justify-content:center">💻</span>Automation Devices</div>
       <div class="nav" id="nav-team" onclick="showView('');go('team');if(window.teamRefreshList)teamRefreshList();if(window.crewRosterRefresh)crewRosterRefresh();" style="padding-left:26px;font-size:12px"><span class="ic" style="font-size:12px;display:flex;align-items:center;justify-content:center">🔑</span>Team &amp; Access</div>
     </div>
-    <div class="nav" onclick="hlGrp('portal')" style="font-weight:800"><span class="ic" style="font-size:13px;display:flex;align-items:center;justify-content:center">🌐</span>Portals & Field<span id="grpar-portal" style="margin-left:auto;font-size:10px;color:#5d7290">▸</span></div>
+    <div class="nav" onclick="hlGrp('portal')" style="font-weight:800"><span class="ic"><svg viewBox="0 0 24 24" stroke="#20df62"><path d="M5 3h14a2 2 0 012 2v16H3V5a2 2 0 012-2z"/><path d="M9 12l2 2 4-4"/><path d="M9 3v3h6V3"/></svg></span>Portals & Field<span id="grpar-portal" style="margin-left:auto;font-size:10px;color:#5d7290">▸</span></div>
     <div id="grp-portal" style="display:none">
       <div class="nav" id="nav-psx" onclick="showView('psx')" style="padding-left:26px;font-size:12px"><span class="ic" style="font-size:12px;display:flex;align-items:center;justify-content:center">🔧</span>Sub Portal</div>
     </div>
-    <div class="nav" id="nav-docs" onclick="showView('docs')"><span class="ic">📁</span>Documents</div>
-    <div class="nav" id="nav-vi" onclick="showView('vi')"><span class="ic" style="font-size:13px;display:flex;align-items:center;justify-content:center">📸</span>HiveSight</div>
-    <div class="nav" id="nav-hiveconnect" onclick="openHiveConnectNewTab()" style="position:relative"><span class="ic">🐝</span>HiveConnect<span id="hiveconnect-badge" style="margin-left:auto;font-family:'JetBrains Mono',monospace;font-size:8px;font-weight:800;background:#6a3fb5;color:#fff;border-radius:99px;padding:2px 7px;display:none"></span></div>
-    <div class="nav" onclick="hlGrp('manager')" style="font-weight:800"><span class="ic" style="font-size:13px;display:flex;align-items:center;justify-content:center">📋</span>Manager's<span id="grpar-manager" style="margin-left:auto;font-size:10px;color:#5d7290">▸</span></div>
+    <div class="nav" id="nav-docs" onclick="showView('docs')"><span class="ic">📸</span>Documents</div>
+    <div class="nav" id="nav-vi" onclick="showView('vi')"><span class="ic"><svg viewBox="0 0 24 24" stroke="#ffc000"><path d="M2 12s4-6 10-6 10 6 10 6-4 6-10 6S2 12 2 12z"/><path d="M12 9a3 3 0 100 6 3 3 0 000-6z"/></svg></span>HiveSight</div>
+    <div class="nav" id="nav-hiveconnect" onclick="openHiveConnectNewTab()" style="position:relative"><span class="ic"><svg viewBox="0 0 24 24" stroke="#ff2c95"><path d="M8 6h8"/><path d="M18 7v9"/><path d="M16 18H8"/><path d="M6 16V8"/><path d="M6 6a2 2 0 100-4 2 2 0 000 4z"/><path d="M18 6a2 2 0 100-4 2 2 0 000 4z"/><path d="M18 22a2 2 0 100-4 2 2 0 000 4z"/><path d="M6 22a2 2 0 100-4 2 2 0 000 4z"/></svg></span>HiveConnect<span id="hiveconnect-badge" style="margin-left:auto;font-family:'JetBrains Mono',monospace;font-size:8px;font-weight:800;background:#6a3fb5;color:#fff;border-radius:99px;padding:2px 7px;display:none"></span></div>
+    <div class="nav" onclick="hlGrp('manager')" style="font-weight:800"><span class="ic"><svg viewBox="0 0 24 24" stroke="#ff8b19"><path d="M12 2a5 5 0 100 10A5 5 0 0012 2z"/><path d="M4 21c.7-5 3.5-8 8-8s7.3 3 8 8"/><path d="M17 8l2 2-2 2"/></svg></span>Manager's<span id="grpar-manager" style="margin-left:auto;font-size:10px;color:#5d7290">▸</span></div>
     <div id="grp-manager" style="display:none">
       <div class="nav" id="nav-council" onclick="showView('council')" style="padding-left:26px;font-size:12px"><span class="ic" style="font-size:12px;display:flex;align-items:center;justify-content:center">B</span>The Boardroom</div>
       <div class="nav" id="nav-gpux" onclick="showView('gpux')" style="padding-left:26px;font-size:12px"><span class="ic" style="font-size:12px;display:flex;align-items:center;justify-content:center">🏗️</span>Project Updates</div>
@@ -2746,7 +2756,7 @@ button,.dowork,.startday,.back,.cdb-new,.nc-create,.fm-save,.gbtn,.iconbtn,.dw-a
            default and revealed in hlApplyRolePermissions(). -->
       <div class="nav" id="nav-devtodo" onclick="showView('devtodo')" style="padding-left:26px;font-size:12px;display:none"><span class="ic" style="font-size:12px;display:flex;align-items:center;justify-content:center">🛠️</span>Dev To-Do</div>
     </div>
-    <div class="nav" onclick="hlGrp('ops')" style="font-weight:800"><span class="ic" style="font-size:13px;display:flex;align-items:center;justify-content:center">⚙️</span>Settings<span id="grpar-ops" style="margin-left:auto;font-size:10px;color:#5d7290">▸</span></div>
+    <div class="nav" onclick="hlGrp('ops')" style="font-weight:800"><span class="ic"><svg viewBox="0 0 24 24" stroke="#00d7df"><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/><path d="M4.93 4.93l2.12 2.12M16.95 16.95l2.12 2.12M4.93 19.07l2.12-2.12M16.95 7.05l2.12-2.12"/><path d="M12 9a3 3 0 100 6 3 3 0 000-6z"/></svg></span>Settings<span id="grpar-ops" style="margin-left:auto;font-size:10px;color:#5d7290">▸</span></div>
     <div id="grp-ops" style="display:none">
       <div class="nav" id="nav-csx" onclick="showView('csx')" style="padding-left:26px;font-size:12px"><span class="ic" style="font-size:12px;display:flex;align-items:center;justify-content:center">🧬</span>Company Setup</div>
       <div class="nav" id="nav-desktop-app" onclick="window.open(&#39;https://github.com/csk5369/hivelogic-desktop/releases/latest/download/HiveLogic-Setup.exe&#39;,&#39;_blank&#39;)" style="padding-left:26px;font-size:12px" title="Install the HiveLogic desktop app on your PC"><span class="ic" style="font-size:12px;display:flex;align-items:center;justify-content:center"><svg viewBox="0 0 24 24" stroke="currentColor" fill="none" width="12" height="12"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg></span>Get Desktop App</div>
@@ -5427,6 +5437,36 @@ function ninvSave(){ var amt = parseFloat(document.getElementById('ninv-amt').va
 <div id="workforce">
   <style>@keyframes wfPulse{0%{opacity:1}50%{opacity:.35}100%{opacity:1}}</style>
   <button class="back" onclick="showView('cc')">← COMMAND CENTER</button>
+
+  <!-- 2026-08-26, jomell: "lets start with the timesheet. the screenshot is
+       from jobber and we will copy it into our own... in the timesheets the
+       user can click on their name and a table would appear and once
+       clicked on an empty date, a window will popup its the 'create
+       timesheet entry'." Only the Timesheets tab itself for now -- "for now
+       lets not add the 'approve timesheets' and 'confirm payroll' tab."
+       2026-08-26: "everyone needs to have access to the timesheet because
+       they will be the one to enter their start time and end time" --
+       shown to every signed-in user (not gated on isOwner the way
+       wf-team-card below is), toggled visible by workforceRefresh(). -->
+  <div class="card" id="ts-card" style="margin-bottom:16px;display:none">
+    <h2 style="margin:0 0 4px;font-family:Montserrat;font-size:15px;font-weight:900">Timesheets</h2>
+    <div style="font-size:11px;color:var(--mut);font-weight:600;margin-bottom:14px">Click an employee to see their week. Click an empty date to log time for them.</div>
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px">
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        <button onclick="tsShiftWeek(-1)" style="border:1px solid var(--line);background:#fff;border-radius:8px;width:30px;height:30px;font-size:14px;font-weight:800;cursor:pointer;color:var(--ink)">&#8249;</button>
+        <div id="ts-range-label" style="font-weight:800;font-size:13px;min-width:170px;text-align:center;border:1px solid var(--line);border-radius:8px;padding:6px 12px">&nbsp;</div>
+        <button onclick="tsShiftWeek(1)" style="border:1px solid var(--line);background:#fff;border-radius:8px;width:30px;height:30px;font-size:14px;font-weight:800;cursor:pointer;color:var(--ink)">&#8250;</button>
+        <button onclick="tsGoToday()" style="border:1px solid var(--line);background:#fff;border-radius:8px;padding:7px 14px;font-size:11.5px;font-weight:800;cursor:pointer;color:var(--ink)">Today</button>
+        <span title="Day view isn't built yet -- Week is the only view for now" style="border:1px solid var(--line);border-right:none;border-radius:8px 0 0 8px;padding:7px 14px;font-size:11.5px;font-weight:800;color:var(--mut);cursor:not-allowed">Day</span>
+        <span style="border:1.5px solid var(--green);border-radius:0 8px 8px 0;padding:6.5px 14px;font-size:11.5px;font-weight:800;color:var(--green)">Week</span>
+      </div>
+      <button onclick="tsExpandAll()" style="border:1px solid var(--line);background:#fff;border-radius:8px;padding:7px 14px;font-size:11.5px;font-weight:800;cursor:pointer;color:var(--ink)">+ Expand all</button>
+    </div>
+    <div id="ts-table-wrap" style="overflow-x:auto;border:1px solid var(--line);border-radius:10px">
+      <div style="padding:26px;text-align:center;color:var(--mut);font-size:12px;font-weight:700">Loading timesheets&hellip;</div>
+    </div>
+  </div>
+
   <div class="card" style="margin-bottom:16px">
     <h2 style="margin:0 0 4px;font-family:Montserrat;font-size:15px;font-weight:900">Time Clock</h2>
     <div style="font-size:11px;color:var(--mut);font-weight:600;margin-bottom:14px">Clock in, track breaks, and submit your end-of-day report — replaces the old Google Form.</div>
@@ -5678,6 +5718,16 @@ function ninvSave(){ var amt = parseFloat(document.getElementById('ninv-amt').va
          guesses. */
       window.hlWorkforceIsOwner = function(){ return isOwner; };
       window.hlWorkforceCanViewScreenshots = function(){ return canViewScreenshots; };
+      // jomell, 2026-08-26: "everyone needs to have access to the timesheet
+      // because they will be the one to enter their start time and end
+      // time" -- shown to every signed-in user, not just owners. The API
+      // (resource=timesheet_week / create_timesheet_entry) already only
+      // requires a signed-in session, so this is a pure visibility change.
+      var tsCard = document.getElementById('ts-card');
+      if (tsCard) {
+        tsCard.style.display = 'block';
+        if (typeof window.tsLoad === 'function') window.tsLoad();
+      }
       renderClockState();
       if (data && data.lastClosed) hlWfExplainClockOut(data.lastClosed);
 
@@ -5981,6 +6031,338 @@ function ninvSave(){ var amt = parseFloat(document.getElementById('ninv-amt').va
       });
     };
   })();
+  </script>
+
+  <script>
+  // ---- Timesheets (2026-08-26, jomell) ----------------------------------
+  // "the screenshot is from jobber and we will copy it into our own." Real
+  // data from time_sheet_entries (api/track1.js's timesheet_week/
+  // create_timesheet_entry), same roster as resource=users. Entries this
+  // app creates itself use their own HL-TSE- id namespace so the Jobber
+  // sync's own upsert never touches or collides with one.
+  var TS = { weekStart: null, users: [], entries: [], expanded: {}, jobsAll: null };
+
+  function tsEtDateStr(iso) {
+    return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(iso));
+  }
+  // The reverse of tsEtToUTC's wall-clock-in direction: a stored UTC instant
+  // out as the ET "HH:MM" a <input type="time"> expects, for prefilling the
+  // edit modal from a real saved entry.
+  function tsEtTimeStr(iso) {
+    return new Intl.DateTimeFormat('en-GB', { timeZone: 'America/New_York', hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date(iso));
+  }
+  // Same DST-safe probe nlEtToUTC uses (New Lead form's site-visit booking),
+  // extended to carry minutes -- a wall-clock ET date+time in, a UTC instant out.
+  function tsEtToUTC(ymd, hour, minute) {
+    var probe = new Date(ymd + 'T12:00:00Z');
+    var etHour = parseInt(new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', hour: '2-digit', hour12: false }).format(probe), 10);
+    var offset = 12 - etHour;
+    var d = new Date(ymd + 'T00:00:00Z');
+    d.setUTCHours((hour || 0) + offset, minute || 0, 0, 0);
+    return d;
+  }
+  function tsAddDays(ymd, n) {
+    var d = new Date(ymd + 'T12:00:00Z');
+    d.setUTCDate(d.getUTCDate() + n);
+    return d.toISOString().slice(0, 10);
+  }
+  function tsMondayOf(ymd) {
+    var d = new Date(ymd + 'T12:00:00Z');
+    var dow = d.getUTCDay(); // 0=Sun..6=Sat
+    var back = dow === 0 ? 6 : dow - 1;
+    return tsAddDays(ymd, -back);
+  }
+  function tsFmtDur(seconds) {
+    if (!seconds) return '&#8212;';
+    var h = Math.floor(seconds / 3600), m = Math.round((seconds % 3600) / 60);
+    return h + 'h ' + m + 'm';
+  }
+  function tsFmtRangeLabel(mondayYmd) {
+    var start = new Date(mondayYmd + 'T12:00:00Z');
+    var end = new Date(tsAddDays(mondayYmd, 6) + 'T12:00:00Z');
+    var sameMonth = start.getUTCMonth() === end.getUTCMonth();
+    var opt1 = { month: 'short', day: 'numeric', timeZone: 'UTC' };
+    var opt2 = sameMonth ? { day: 'numeric', timeZone: 'UTC' } : opt1;
+    var s = start.toLocaleDateString('en-US', opt1);
+    var e = sameMonth ? end.toLocaleDateString('en-US', opt2) : end.toLocaleDateString('en-US', opt1);
+    return s + ' &#8211; ' + e + ', ' + end.getUTCFullYear();
+  }
+  // Safe embedding of a JS argument inside an onclick="..." attribute built
+  // by string concatenation. JSON.stringify(v) here would inject literal
+  // double-quote characters into a double-quoted HTML attribute and break
+  // it outright -- this instead matches the single-quoted-argument pattern
+  // already used throughout this file (e.g. coSend(\'id\')).
+  function tsJsArg(v) { return v === null || v === undefined ? 'null' : "'" + String(v).replace(/\\/g, '\\\\').replace(/'/g, "\\'") + "'"; }
+
+  function tsGoToday() { TS.weekStart = tsMondayOf(new Date().toISOString().slice(0, 10)); tsLoad(); }
+  function tsShiftWeek(n) { TS.weekStart = tsAddDays(TS.weekStart || tsMondayOf(new Date().toISOString().slice(0, 10)), n * 7); tsLoad(); }
+  function tsExpandAll() { TS.users.forEach(function (u) { TS.expanded[u.id] = true; }); tsRender(); }
+
+  function tsLoad() {
+    if (!TS.weekStart) TS.weekStart = tsMondayOf(new Date().toISOString().slice(0, 10));
+    var label = document.getElementById('ts-range-label');
+    if (label) label.innerHTML = tsFmtRangeLabel(TS.weekStart);
+    var startAt = tsEtToUTC(TS.weekStart, 0, 0).toISOString();
+    var endAt = tsEtToUTC(tsAddDays(TS.weekStart, 7), 0, 0).toISOString();
+    Promise.all([
+      fetch('/api/track1?resource=users').then(function (r) { return r.json(); }).catch(function () { return null; }),
+      fetch('/api/track1?resource=timesheet_week&startAt=' + encodeURIComponent(startAt) + '&endAt=' + encodeURIComponent(endAt))
+        .then(function (r) { return r.json(); }).catch(function () { return null; })
+    ]).then(function (res) {
+      var usersData = res[0], weekData = res[1];
+      // resource=users returns the shaped array under a key named after the
+      // resource itself ({ok:true, users:[...]}), same as every other
+      // RESOURCE_CONFIG-backed resource (resource=quotes -> d.quotes, etc.)
+      // -- NOT under .records, which is only the shape of the internal
+      // getTrackResourceData() helper chat.js reuses.
+      TS.users = (usersData && usersData.users) ? usersData.users : [];
+      TS.entries = (weekData && weekData.ok) ? weekData.entries : [];
+      tsRender();
+    });
+  }
+
+  function tsRender() {
+    var wrap = document.getElementById('ts-table-wrap');
+    if (!wrap) return;
+    if (!TS.users.length) { wrap.innerHTML = '<div style="padding:26px;text-align:center;color:var(--mut);font-size:12px;font-weight:700">No team members synced yet.</div>'; return; }
+
+    var days = []; for (var i = 0; i < 7; i++) days.push(tsAddDays(TS.weekStart, i));
+    var dayLabels = days.map(function (ymd) { return new Date(ymd + 'T12:00:00Z').toLocaleDateString('en-US', { weekday: 'short', timeZone: 'UTC' }) + ' ' + Number(ymd.slice(8, 10)); });
+
+    var byUser = {};
+    TS.entries.forEach(function (e) {
+      (byUser[e.userId] = byUser[e.userId] || []).push(e);
+    });
+
+    var h = '<table style="width:100%;border-collapse:collapse;font-size:12.5px;min-width:820px">';
+    h += '<thead><tr style="border-bottom:1.5px solid var(--line)">';
+    h += '<th style="text-align:left;padding:10px 12px;color:var(--mut);font-size:10px;letter-spacing:.04em;font-weight:800">EMPLOYEE</th>';
+    dayLabels.forEach(function (lbl) { h += '<th style="text-align:right;padding:10px 12px;color:var(--mut);font-size:10.5px;font-weight:800;white-space:nowrap">' + hlEsc(lbl) + '</th>'; });
+    h += '<th style="text-align:right;padding:10px 12px;color:var(--mut);font-size:10px;letter-spacing:.04em;font-weight:800">TOTAL</th></tr></thead><tbody>';
+
+    TS.users.forEach(function (u) {
+      // Totals are always derived from the per-day buckets actually shown,
+      // never a raw sum over every entry this user has -- start_at is
+      // already scoped to this week server-side, but deriving the total
+      // from what's on screen keeps the two impossible to disagree even if
+      // that ever stops being true.
+      var mine = byUser[u.id] || [];
+      var perDay = days.map(function (ymd) {
+        return mine.filter(function (e) { return tsEtDateStr(e.startAt) === ymd; }).reduce(function (s, e) { return s + (e.durationSeconds || 0); }, 0);
+      });
+      var weekTotal = perDay.reduce(function (s, v) { return s + v; }, 0);
+      var open = !!TS.expanded[u.id];
+      h += '<tr style="background:#f7f8fa;border-bottom:1px solid var(--line);cursor:pointer" onclick="tsToggleEmployee(' + tsJsArg(u.id) + ')">'
+        + '<td style="padding:10px 12px;font-weight:800"><span style="display:inline-block;width:14px;transform:rotate(' + (open ? '90' : '0') + 'deg);transition:transform .15s">&#8250;</span> ' + hlEsc(u.name || 'Unknown') + '</td>';
+      perDay.forEach(function (secs) { h += '<td style="text-align:right;padding:10px 12px;color:var(--ink);font-weight:600">' + tsFmtDur(secs) + '</td>'; });
+      h += '<td style="text-align:right;padding:10px 12px;font-weight:900">' + tsFmtDur(weekTotal) + '</td></tr>';
+
+      if (open) {
+        var byCat = {};
+        mine.forEach(function (e) {
+          var key = e.jobId || 'general';
+          (byCat[key] = byCat[key] || { label: e.jobId ? e.jobLabel : 'General', jobId: e.jobId, entries: [] }).entries.push(e);
+        });
+        if (!Object.keys(byCat).length) byCat.general = { label: 'General', jobId: null, entries: [] };
+        Object.keys(byCat).forEach(function (key) {
+          var cat = byCat[key];
+          var catTotal = 0;
+          var rowHtml = '<tr style="border-bottom:1px solid var(--line)"><td style="padding:8px 12px 8px 30px;color:var(--mut);font-weight:700">' + hlEsc(cat.label) + '</td>';
+          days.forEach(function (ymd) {
+            var dayEntries = cat.entries.filter(function (e) { return tsEtDateStr(e.startAt) === ymd; });
+            var secs = dayEntries.reduce(function (s, e) { return s + (e.durationSeconds || 0); }, 0);
+            catTotal += secs;
+            if (dayEntries.length) {
+              // Jobber's own crew grid is one entry per employee/job/day; if
+              // more than one ever lands in the same cell, editing opens the
+              // first -- rare enough that a picker isn't worth building yet.
+              rowHtml += '<td style="text-align:right;padding:6px 12px"><div onclick="event.stopPropagation();tsOpenEditModal(' + tsJsArg(dayEntries[0].id) + ')" title="Edit this timesheet entry" style="display:inline-block;padding:7px 10px;border:1.5px solid var(--line);border-radius:8px;font-weight:700;background:#fff;cursor:pointer">' + tsFmtDur(secs) + '</div></td>';
+            } else {
+              rowHtml += '<td style="text-align:right;padding:6px 12px"><div onclick="event.stopPropagation();tsOpenCreateModal(' + tsJsArg(u.id) + ',' + tsJsArg(cat.jobId) + ',' + tsJsArg(ymd) + ')" title="Add a timesheet entry" style="display:inline-block;width:64px;height:30px;border:1.5px dashed var(--line);border-radius:8px;cursor:pointer"></div></td>';
+            }
+          });
+          h += rowHtml + '<td style="text-align:right;padding:8px 12px;font-weight:800;color:var(--mut)">' + tsFmtDur(catTotal) + '</td></tr>';
+        });
+        h += '<tr style="border-bottom:1px solid var(--line)"><td style="padding:8px 12px 8px 30px;font-weight:900">Total</td>';
+        perDay.forEach(function (secs) { h += '<td style="text-align:right;padding:8px 12px;font-weight:900">' + tsFmtDur(secs) + '</td>'; });
+        h += '<td style="text-align:right;padding:8px 12px;font-weight:900">' + tsFmtDur(weekTotal) + '</td></tr>';
+        h += '<tr><td colspan="9" style="padding:10px 12px 14px 30px"><button onclick="event.stopPropagation();tsOpenCreateModal(' + tsJsArg(u.id) + ',null,null)" style="border:1.5px dashed var(--line);background:#fff;border-radius:8px;padding:8px 16px;font-size:11.5px;font-weight:800;color:var(--green);cursor:pointer">+ Add entry</button></td></tr>';
+      }
+    });
+    h += '</tbody></table>';
+    wrap.innerHTML = h;
+  }
+
+  function tsToggleEmployee(userId) { TS.expanded[userId] = !TS.expanded[userId]; tsRender(); }
+
+  // ---- Create Timesheet Entry popup --------------------------------------
+  function tsFillJobs(cb) {
+    if (TS.jobsAll) { if (cb) cb(); return; }
+    fetch((window.API || '') + '/api/jobs?limit=500').then(function (r) { return r.json(); }).then(function (d) {
+      TS.jobsAll = (d && d.ok && d.jobs) ? d.jobs : [];
+      if (cb) cb();
+    }).catch(function () { TS.jobsAll = []; if (cb) cb(); });
+  }
+  function tsFilterJobs() {
+    var q = ((document.getElementById('ts-ce-job-q') || {}).value || '').trim().toLowerCase();
+    var box = document.getElementById('ts-ce-job-results');
+    if (!box) return;
+    if (!q || 'general'.indexOf(q) === 0) {
+      box.innerHTML = '<div onclick="tsPickJob(null,\'General\')" style="padding:8px 11px;cursor:pointer;font-weight:700">General &mdash; not tied to a job</div>';
+    } else {
+      box.innerHTML = '';
+    }
+    var matches = (TS.jobsAll || []).filter(function (j) {
+      return String(j.jobNumber || '').toLowerCase().indexOf(q) > -1 || String(j.title || '').toLowerCase().indexOf(q) > -1 || String(j.clientName || '').toLowerCase().indexOf(q) > -1;
+    }).slice(0, 25);
+    matches.forEach(function (j) {
+      var lbl = (j.jobNumber ? ('#' + j.jobNumber + ' ') : '') + (j.title || 'Untitled') + (j.clientName ? (' &mdash; ' + hlEsc(j.clientName)) : '');
+      box.innerHTML += '<div onclick="tsPickJob(' + tsJsArg(j.id) + ',' + tsJsArg((j.jobNumber ? ('#' + j.jobNumber + ' ') : '') + (j.title || 'Untitled')) + ')" style="padding:8px 11px;cursor:pointer;border-top:1px solid var(--line)">' + lbl + '</div>';
+    });
+    box.style.display = 'block';
+  }
+  function tsPickJob(jobId, label) {
+    document.getElementById('ts-ce-job-id').value = jobId || '';
+    document.getElementById('ts-ce-job-q').value = label;
+    document.getElementById('ts-ce-job-results').style.display = 'none';
+  }
+  function tsRecalcDuration() {
+    var st = (document.getElementById('ts-ce-start') || {}).value;
+    var et = (document.getElementById('ts-ce-end') || {}).value;
+    var out = document.getElementById('ts-ce-dur');
+    if (!out) return;
+    if (!st || !et) { out.textContent = ''; return; }
+    var s = st.split(':'), e = et.split(':');
+    var mins = (parseInt(e[0], 10) * 60 + parseInt(e[1], 10)) - (parseInt(s[0], 10) * 60 + parseInt(s[1], 10));
+    if (mins <= 0) { out.textContent = 'End time must be after start time.'; out.style.color = '#c65b4e'; return; }
+    out.style.color = 'var(--mut)';
+    out.textContent = Math.floor(mins / 60) + 'h ' + (mins % 60) + 'm';
+  }
+
+  function tsOpenCreateModal(userId, jobId, ymd) {
+    tsFillJobs(function () {
+      var dateVal = ymd || new Date().toISOString().slice(0, 10);
+      var jobLabel = 'General';
+      if (jobId) { var j = (TS.jobsAll || []).find(function (x) { return x.id === jobId; }); if (j) jobLabel = (j.jobNumber ? ('#' + j.jobNumber + ' ') : '') + (j.title || 'Untitled'); }
+      var userOptions = TS.users.map(function (u) { return '<option value="' + hlEsc(u.id) + '"' + (u.id === userId ? ' selected' : '') + '>' + hlEsc(u.name || 'Unknown') + '</option>'; }).join('');
+      var body = '<div id="ts-ce-body">'
+        + '<label style="' + _lbl + '">Employee</label>'
+        + '<select id="ts-ce-emp" style="' + _inp + ';margin-bottom:12px">' + userOptions + '</select>'
+        + '<label style="' + _lbl + '">Search jobs, assessments, or categories</label>'
+        + '<div style="position:relative;margin-bottom:12px">'
+        + '<input id="ts-ce-job-q" type="text" value="' + hlEsc(jobLabel) + '" onfocus="tsFilterJobs()" oninput="tsFilterJobs()" style="' + _inp + '">'
+        + '<input type="hidden" id="ts-ce-job-id" value="' + hlEsc(jobId || '') + '">'
+        + '<div id="ts-ce-job-results" style="display:none;position:absolute;z-index:10;left:0;right:0;top:100%;background:#fff;border:1px solid #dadde8;border-radius:8px;max-height:200px;overflow:auto;box-shadow:0 8px 24px rgba(0,0,0,.12);font-size:12px"></div>'
+        + '</div>'
+        + '<label style="' + _lbl + '">Start Date</label>'
+        + '<input id="ts-ce-date" type="date" value="' + hlEsc(dateVal) + '" style="' + _inp + ';margin-bottom:12px">'
+        + '<div style="display:flex;gap:10px;margin-bottom:4px"><div style="flex:1"><label style="' + _lbl + '">Start Time</label><input id="ts-ce-start" type="time" value="09:00" oninput="tsRecalcDuration()" style="' + _inp + '"></div><div style="flex:1"><label style="' + _lbl + '">End Time</label><input id="ts-ce-end" type="time" value="17:00" oninput="tsRecalcDuration()" style="' + _inp + '"></div></div>'
+        + '<div id="ts-ce-dur" style="font-size:10.5px;font-weight:700;color:var(--mut);margin-bottom:12px">8h 0m</div>'
+        + '<label style="' + _lbl + '">Notes</label>'
+        + '<textarea id="ts-ce-notes" rows="3" style="' + _inp + ';margin-bottom:12px;resize:vertical"></textarea>'
+        + '<div id="ts-ce-err" style="display:none;color:#c65b4e;font-size:11px;font-weight:700;margin-bottom:10px"></div>'
+        + '<div style="display:flex;gap:9px"><button onclick="_hlTsceSubmit()" style="flex:1;padding:11px;border:none;border-radius:8px;background:#1B7A50;color:#fff;font-weight:900;font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;cursor:pointer;font-family:\'Montserrat\',sans-serif">Save</button><button onclick="document.getElementById(\'hlmodal\').remove()" style="flex:1;padding:11px;border:1px solid #dadde8;border-radius:8px;background:#fff;color:#5d657b;font-weight:900;font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;cursor:pointer;font-family:\'Montserrat\',sans-serif">Cancel</button></div>'
+        + '</div>';
+      hlModal('Create Timesheet Entry', body);
+      window._hlTsceSubmit = function () {
+        var err = document.getElementById('ts-ce-err');
+        var emp = (document.getElementById('ts-ce-emp') || {}).value;
+        var date = (document.getElementById('ts-ce-date') || {}).value;
+        var st = (document.getElementById('ts-ce-start') || {}).value;
+        var et = (document.getElementById('ts-ce-end') || {}).value;
+        var jid = (document.getElementById('ts-ce-job-id') || {}).value || null;
+        var notes = (document.getElementById('ts-ce-notes') || {}).value || '';
+        if (!emp) { err.textContent = 'Pick an employee.'; err.style.display = 'block'; return; }
+        if (!date || !st || !et) { err.textContent = 'Start date, start time, and end time are required.'; err.style.display = 'block'; return; }
+        var sParts = st.split(':'), eParts = et.split(':');
+        var startAt = tsEtToUTC(date, parseInt(sParts[0], 10), parseInt(sParts[1], 10));
+        var endAt = tsEtToUTC(date, parseInt(eParts[0], 10), parseInt(eParts[1], 10));
+        if (endAt <= startAt) { err.textContent = 'End time must be after start time.'; err.style.display = 'block'; return; }
+        hlApiPost('create_timesheet_entry', { userId: emp, jobId: jid, startAt: startAt.toISOString(), endAt: endAt.toISOString(), note: notes }).then(function (d) {
+          if (!d || !d.ok) { err.textContent = (d && d.error) || 'Could not save this entry.'; err.style.display = 'block'; return; }
+          document.getElementById('hlmodal').remove();
+          chirpToast('&#10003; Timesheet entry saved');
+          tsLoad();
+        }).catch(function (e) { err.textContent = 'Network error: ' + e.message; err.style.display = 'block'; });
+      };
+    });
+  }
+
+  // ---- Edit Timesheet Entry popup ----------------------------------------
+  // jomell, 2026-08-26: "lets add an option to edit the timesheet like this
+  // in jobber" (screenshot: Employee greyed out, job/date/start/end/notes
+  // editable, Delete on the left, Cancel/Save on the right). Reuses the
+  // create modal's ts-ce-* field ids (job search, date, start/end time,
+  // duration readout, notes, error line) since only one of these modals is
+  // ever open at once -- tsFilterJobs/tsPickJob/tsRecalcDuration all work
+  // unchanged. Employee is intentionally not editable here (see the comment
+  // on handleUpdateTimesheetEntry) and Hours/Minutes are not separate
+  // editable fields -- duration is always the computed readout, derived
+  // from Start/End Time, matching the "never trust a typed duration" rule
+  // the create modal already follows. A real "Timesheet history" section
+  // like Jobber's is left out: this app has no audit log of who
+  // created/edited an entry to show there, and Law 1 says don't invent one.
+  function tsOpenEditModal(entryId) {
+    var entry = (TS.entries || []).find(function (e) { return e.id === entryId; });
+    if (!entry) { chirpToast('That entry could not be found -- try reloading.'); return; }
+    tsFillJobs(function () {
+      var user = (TS.users || []).find(function (u) { return u.id === entry.userId; });
+      var jobLabel = entry.jobId ? (entry.jobLabel || 'Job') : 'General';
+      var body = '<div id="ts-ee-body">'
+        + '<label style="' + _lbl + '">Employee</label>'
+        + '<div style="' + _inp + ';margin-bottom:12px;background:#eceef4;color:var(--mut)">' + hlEsc(user ? user.name : 'Unknown') + '</div>'
+        + '<label style="' + _lbl + '">Search jobs, assessments, or categories</label>'
+        + '<div style="position:relative;margin-bottom:12px">'
+        + '<input id="ts-ce-job-q" type="text" value="' + hlEsc(jobLabel) + '" onfocus="tsFilterJobs()" oninput="tsFilterJobs()" style="' + _inp + '">'
+        + '<input type="hidden" id="ts-ce-job-id" value="' + hlEsc(entry.jobId || '') + '">'
+        + '<div id="ts-ce-job-results" style="display:none;position:absolute;z-index:10;left:0;right:0;top:100%;background:#fff;border:1px solid #dadde8;border-radius:8px;max-height:200px;overflow:auto;box-shadow:0 8px 24px rgba(0,0,0,.12);font-size:12px"></div>'
+        + '</div>'
+        + '<label style="' + _lbl + '">Start Date</label>'
+        + '<input id="ts-ce-date" type="date" value="' + hlEsc(tsEtDateStr(entry.startAt)) + '" style="' + _inp + ';margin-bottom:12px">'
+        + '<div style="display:flex;gap:10px;margin-bottom:4px"><div style="flex:1"><label style="' + _lbl + '">Start Time</label><input id="ts-ce-start" type="time" value="' + hlEsc(tsEtTimeStr(entry.startAt)) + '" oninput="tsRecalcDuration()" style="' + _inp + '"></div><div style="flex:1"><label style="' + _lbl + '">End Time</label><input id="ts-ce-end" type="time" value="' + hlEsc(tsEtTimeStr(entry.endAt)) + '" oninput="tsRecalcDuration()" style="' + _inp + '"></div></div>'
+        + '<div id="ts-ce-dur" style="font-size:10.5px;font-weight:700;color:var(--mut);margin-bottom:12px">' + tsFmtDur(entry.durationSeconds || 0) + '</div>'
+        + '<label style="' + _lbl + '">Notes</label>'
+        + '<textarea id="ts-ce-notes" rows="3" style="' + _inp + ';margin-bottom:12px;resize:vertical">' + hlEsc(entry.note || '') + '</textarea>'
+        + '<div id="ts-ce-err" style="display:none;color:#c65b4e;font-size:11px;font-weight:700;margin-bottom:10px"></div>'
+        + '<div style="display:flex;gap:9px;align-items:center">'
+        + '<button onclick="_hlTseeDelete()" style="padding:11px 16px;border:1px solid #f0d3ce;border-radius:8px;background:#fff;color:#c65b4e;font-weight:900;font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;cursor:pointer;font-family:\'Montserrat\',sans-serif">Delete</button>'
+        + '<span style="flex:1"></span>'
+        + '<button onclick="document.getElementById(\'hlmodal\').remove()" style="padding:11px 16px;border:1px solid #dadde8;border-radius:8px;background:#fff;color:#5d657b;font-weight:900;font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;cursor:pointer;font-family:\'Montserrat\',sans-serif">Cancel</button>'
+        + '<button onclick="_hlTseeSubmit()" style="padding:11px 16px;border:none;border-radius:8px;background:#1B7A50;color:#fff;font-weight:900;font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;cursor:pointer;font-family:\'Montserrat\',sans-serif">Save</button>'
+        + '</div>'
+        + '</div>';
+      hlModal('Edit Timesheet Entry', body);
+      window._hlTseeSubmit = function () {
+        var err = document.getElementById('ts-ce-err');
+        var date = (document.getElementById('ts-ce-date') || {}).value;
+        var st = (document.getElementById('ts-ce-start') || {}).value;
+        var et = (document.getElementById('ts-ce-end') || {}).value;
+        var jid = (document.getElementById('ts-ce-job-id') || {}).value || null;
+        var notes = (document.getElementById('ts-ce-notes') || {}).value || '';
+        if (!date || !st || !et) { err.textContent = 'Start date, start time, and end time are required.'; err.style.display = 'block'; return; }
+        var sParts = st.split(':'), eParts = et.split(':');
+        var startAt = tsEtToUTC(date, parseInt(sParts[0], 10), parseInt(sParts[1], 10));
+        var endAt = tsEtToUTC(date, parseInt(eParts[0], 10), parseInt(eParts[1], 10));
+        if (endAt <= startAt) { err.textContent = 'End time must be after start time.'; err.style.display = 'block'; return; }
+        hlApiPatch('update_timesheet_entry', { id: entry.id, jobId: jid, startAt: startAt.toISOString(), endAt: endAt.toISOString(), note: notes }).then(function (d) {
+          if (!d || !d.ok) { err.textContent = (d && d.error) || 'Could not save this entry.'; err.style.display = 'block'; return; }
+          document.getElementById('hlmodal').remove();
+          chirpToast('&#10003; Timesheet entry saved');
+          tsLoad();
+        }).catch(function (e) { err.textContent = 'Network error: ' + e.message; err.style.display = 'block'; });
+      };
+      window._hlTseeDelete = function () {
+        if (!window.confirm('Delete this timesheet entry? This cannot be undone.')) return;
+        hlApiDelete('delete_timesheet_entry&id=' + encodeURIComponent(entry.id)).then(function (d) {
+          var err = document.getElementById('ts-ce-err');
+          if (!d || !d.ok) { if (err) { err.textContent = (d && d.error) || 'Could not delete this entry.'; err.style.display = 'block'; } return; }
+          document.getElementById('hlmodal').remove();
+          chirpToast('&#10003; Timesheet entry deleted');
+          tsLoad();
+        }).catch(function (e) { var err = document.getElementById('ts-ce-err'); if (err) { err.textContent = 'Network error: ' + e.message; err.style.display = 'block'; } });
+      };
+    });
+  }
   </script>
 </div>
 
@@ -6920,6 +7302,15 @@ function devTodoLoad(){
 </script>
 
 <div id="view-leads" style="display:none">
+  <!-- 2026-08-26, jomell: design-language pass from the coworker's Figma
+       Make redesign. Scoped under #view-leads -- .kpi is a shared class
+       reused across the app (Active Jobs, this session's own earlier
+       reskin), so nothing outside this view is touched. -->
+  <style>
+    #view-leads .kpi{display:flex;align-items:center;gap:14px}
+    #view-leads .kpi-ic{width:36px;height:36px;border-radius:9px;display:grid;place-items:center;font-size:16px;flex-shrink:0}
+    #view-leads .kpi .v{font-family:var(--sans);font-weight:800}
+  </style>
   <div style="display:flex;align-items:center;gap:8px;background:#fff;border:2px solid var(--gold-deep);border-radius:13px;padding:11px 15px;margin-bottom:14px;flex-wrap:wrap">
     <span style="font-family:'JetBrains Mono',monospace;font-size:8.5px;font-weight:800;letter-spacing:.12em;color:var(--gold-deep)">🧲 LEAD SOURCES · AUTO-INGEST (DESIGN PREVIEW)</span>
     <span style="font-size:10px;font-weight:800;background:#e6f2ec;color:#1B7A50;border-radius:99px;padding:4px 11px">🌐 Website · LIVE · 4 today</span>
@@ -7130,6 +7521,12 @@ function devTodoLoad(){
     <div class="ajv-head"><b id="ajv-title">Job</b><span class="x" onclick="ajxClose()">&#10005;</span></div>
     <div class="ajv-body">
       <div class="ajv-meta" id="ajv-meta"></div>
+      <!-- 2026-08-26: "it should show the connected invoices and change
+           orders in this window." Both filtered server-side to this one
+           job (invoices.job_id / change order jobId, the same key each
+           already carries from creation) -- filled in by ajxOpen(). -->
+      <div id="ajv-invoices" style="margin-bottom:14px"></div>
+      <div id="ajv-cos" style="margin-bottom:14px"></div>
       <label style="font-size:10px;font-weight:800;letter-spacing:.06em;color:var(--mut)">LINE ITEM ACTIVITIES</label>
       <div class="jli-head" style="margin-top:6px"><span>Description</span><span>Qty</span><span>Unit price</span><span>Total</span><span></span></div>
       <div id="ajv-lines"></div>
@@ -7140,12 +7537,31 @@ function devTodoLoad(){
     </div>
     <div class="ajv-foot">
       <button class="ajv-btn ghost" id="ajv-save" onclick="ajvSaveLines()">Save line items</button>
-      <button class="ajv-btn" id="ajv-inv" onclick="ajvMakeInvoice(false)">Create Invoice from this Job</button>
+      <button class="ajv-btn" id="ajv-inv" onclick="ajvOpenCreateInvoiceModal()">Create Invoice from this Job</button>
+      <!-- 2026-08-25: "there should be an option to 'close job' (meaning
+           its done)." Label/style/handler set live in ajxOpen()/
+           ajvToggleClosed() since it's a toggle (Close job <-> Reopen job). -->
+      <button class="ajv-btn ghost" id="ajv-close-toggle" onclick="ajvToggleClosed()">Close job</button>
       <span class="ajv-note" id="ajv-note">Invoices are saved as DRAFT &#8212; nothing is sent to the client.</span>
     </div>
   </div>
 </div>
 <div id="view-jobs" style="display:none">
+    <!-- 2026-08-26, jomell: "Start with Active Jobs and Invoicing & AR" --
+         design-language pass from the coworker's Figma Make redesign. Scoped
+         to #view-jobs only (.kpi/.pcol/.pcard are shared kanban classes also
+         used by Estimates' board), so nothing outside this view is touched. -->
+    <style>
+      #view-jobs .kpis{display:flex;gap:14px}
+      #view-jobs .kpi{flex:1;display:flex;align-items:center;gap:14px;background:#fff;border:1px solid var(--line);border-radius:12px;padding:16px 18px;box-shadow:0 1px 4px rgba(22,30,46,.06)}
+      #view-jobs .kpi-ic{width:44px;height:44px;border-radius:12px;display:grid;place-items:center;flex-shrink:0}
+      #view-jobs .kpi .k{font-size:9px;letter-spacing:.06em}
+      #view-jobs .kpi .v{font-family:var(--sans);font-size:22px;font-weight:900;margin-top:2px}
+      #view-jobs .kpi .s{margin-top:1px}
+      #view-jobs .pcol{background:#f7f8fb;border-color:#eceef4}
+      #view-jobs .pcard{border-radius:10px}
+      #view-jobs .pcard:hover{box-shadow:0 4px 12px rgba(22,30,46,.10)}
+    </style>
     <div class="lsent" style="display:flex;align-items:flex-start;gap:20px">
       <div style="flex:1">
       <div class="vtabs" style="display:flex;align-items:center">
@@ -7169,10 +7585,10 @@ function devTodoLoad(){
     </div>
 
     <div class="kpis">
-      <div class="kpi"><div class="k">ACTIVE PIPELINE VALUE</div><div class="v" id="jwb-kpi-value">&#8212;</div><div class="s" id="jwb-kpi-value-sub">Loading&#8230;</div></div>
-      <div class="kpi"><div class="k">ACTIVE JOBS</div><div class="v" id="jwb-kpi-count">&#8212;</div><div class="s">Not archived</div></div>
-      <div class="kpi"><div class="k">AWAITING DEPOSIT</div><div class="v" id="jwb-kpi-deposit">&#8212;</div><div class="s">Blocking production start</div></div>
-      <div class="kpi"><div class="k">ON HOLD</div><div class="v" id="jwb-kpi-hold">&#8212;</div><div class="s">Needs a decision</div></div>
+      <div class="kpi"><div class="kpi-ic" style="background:#dcfce7"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="2.5"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></div><div><div class="k">ACTIVE PIPELINE VALUE</div><div class="v" id="jwb-kpi-value">&#8212;</div><div class="s" id="jwb-kpi-value-sub">Loading&#8230;</div></div></div>
+      <div class="kpi"><div class="kpi-ic" style="background:#dbeafe"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2.5"><rect x="9" y="2" width="6" height="4" rx="1"/><path d="M5 4h2v2h10V4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"/></svg></div><div><div class="k">ACTIVE JOBS</div><div class="v" id="jwb-kpi-count">&#8212;</div><div class="s">Not archived</div></div></div>
+      <div class="kpi"><div class="kpi-ic" style="background:#fef9c3"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ca8a04" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></div><div><div class="k">AWAITING DEPOSIT</div><div class="v" id="jwb-kpi-deposit">&#8212;</div><div class="s">Blocking production start</div></div></div>
+      <div class="kpi"><div class="kpi-ic" style="background:#fee2e2"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#dc2626" stroke-width="2.5"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg></div><div><div class="k">ON HOLD</div><div class="v" id="jwb-kpi-hold">&#8212;</div><div class="s">Needs a decision</div></div></div>
     </div>
 
     <div class="lgrid">
@@ -7278,6 +7694,15 @@ function devTodoLoad(){
 </div><div id="ef-page"></div></div>
 
 <div id="view-clients" style="display:none">
+    <!-- 2026-08-26, jomell: design-language pass from the coworker's Figma
+         Make redesign. Scoped under #view-clients -- .stat/.statrow/.chip2/
+         .cdb-table are shared classes reused by unrelated parts of the app,
+         so nothing outside this view is touched. -->
+    <style>
+      #view-clients .stat{border-radius:10px;padding:14px 16px}
+      #view-clients .stat b{font-family:var(--sans);font-size:26px;font-weight:900;letter-spacing:-.5px}
+      #view-clients .rav{width:30px;height:30px;border-radius:8px;color:#fff;font-size:10px;font-weight:800;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;font-family:var(--sans)}
+    </style>
     <div class="lsent"><h1>Clients</h1>
     <p>Your full client book, live from Jobber. Search, filter, and open any record.</p></div>
     <div id="rlv-clients-live" style="display:flex;align-items:center;gap:10px;background:#eef8f1;border:2px solid var(--green);border-radius:13px;padding:11px 15px;margin-bottom:14px;flex-wrap:wrap">
@@ -7513,12 +7938,15 @@ function devTodoLoad(){
 <!-- ═══════ V64 MODULES ═══════ -->
 <div id="view-co" style="display:none">
   <div style="max-width:1080px;margin:0 auto;padding:18px 16px 60px">
-    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:18px;flex-wrap:wrap">
+    <!-- 2026-08-26, jomell: design-language pass from the coworker's Figma
+         Make redesign. Kept scoped to this view's own literal styles, not
+         shared CSS classes, so nothing else is affected. -->
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:20px;flex-wrap:wrap">
       <div>
-        <div style="font-family:var(--sans);font-weight:900;font-size:22px;color:#0f172a">Change Orders</div>
-        <div style="color:var(--mut);font-size:12px;font-weight:700;margin-top:2px">Extra work beyond the original scope &mdash; tracked, approved, and rolled into job profit. Live from the change-order engine.</div>
+        <div style="font-family:var(--sans);font-weight:900;font-size:26px;color:#0f172a">Change Orders</div>
+        <div style="color:var(--mut);font-size:13px;font-weight:600;margin-top:5px">Extra work beyond the original scope &mdash; tracked, approved, and rolled into job profit. Live from the change-order engine.</div>
       </div>
-      <button class="btn-save" onclick="coOpenCreate()">+ New Change Order</button>
+      <button onclick="coOpenCreate()" style="padding:10px 20px;background:#1e3a5f;border:none;border-radius:8px;color:#fff;font-family:var(--sans);font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap">+ New Change Order</button>
     </div>
     <div id="co-create" style="display:none"></div>
     <div id="co-list"><div style="color:var(--mut);padding:44px;text-align:center;font-weight:700">Loading&hellip;</div></div>
@@ -7531,7 +7959,7 @@ function coEsc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){ret
 function coMoney(n){ n=+n||0; return '$'+n.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}); }
 function coInp(){ return 'border:1.5px solid var(--line);border-radius:9px;padding:10px 11px;font-family:var(--sans);font-size:12px;font-weight:700;width:100%;outline:none;background:#fff;box-sizing:border-box'; }
 function coBtn(kind){ var b='border:none;border-radius:9px;padding:9px 14px;font-family:var(--sans);font-weight:800;font-size:12px;cursor:pointer;'; if(kind==='ok')return b+'background:#047857;color:#fff'; if(kind==='no')return b+'background:#fee2e2;color:#b91c1c'; if(kind==='ghost')return b+'background:#f1f5f9;color:#475569'; return b+'background:#eef2ff;color:#4338ca'; }
-function coBadge(s){ var m={draft:['#475569','#f1f5f9'],sent:['#b45309','#fef3c7'],approved:['#047857','#d1fae5'],rejected:['#b91c1c','#fee2e2'],overdue:['#b91c1c','#fee2e2'],paid:['#047857','#d1fae5'],partially_paid:['#047857','#d1fae5']}; var c=m[s]||['#475569','#f1f5f9']; return '<span style="background:'+c[1]+';color:'+c[0]+';font-weight:800;font-size:10px;padding:3px 9px;border-radius:99px;text-transform:uppercase;letter-spacing:.04em">'+coEsc((s||'draft').replace(/_/g,' '))+'</span>'; }
+function coBadge(s){ var m={draft:['#6b7280','#f3f4f6'],sent:['#d97706','#fffbeb'],approved:['#059669','#ecfdf5'],rejected:['#dc2626','#fef2f2'],overdue:['#dc2626','#fef2f2'],paid:['#059669','#ecfdf5'],partially_paid:['#059669','#ecfdf5']}; var c=m[s]||['#6b7280','#f3f4f6']; return '<span style="background:'+c[1]+';color:'+c[0]+';border:1px solid '+c[0]+'40;font-weight:800;font-size:10px;padding:2px 8px;border-radius:4px;letter-spacing:.5px">'+coEsc((s||'draft').replace(/_/g,' ').toUpperCase())+'</span>'; }
 function coEmpty(t,s){ return '<div style="border:1.5px dashed var(--line);border-radius:14px;padding:44px;text-align:center;background:#fff"><div style="font-family:var(--sans);font-weight:900;font-size:16px;color:#0f172a">'+coEsc(t)+'</div><div style="color:var(--mut);font-size:12px;font-weight:700;margin-top:6px">'+coEsc(s)+'</div></div>'; }
 function coCard(co){
   var st=co.displayStatus||co.lifecycleStatus||'draft';
@@ -7542,13 +7970,13 @@ function coCard(co){
   if(st==='draft'&&co.kind!=='invoice') acts+='<button style="'+coBtn()+'" onclick="coSend(\''+cid+'\')">Send for approval</button>';
   if(st==='sent'||st==='overdue') acts+='<button style="'+coBtn('ok')+'" onclick="coApprove(\''+cid+'\')">Approve</button><button style="'+coBtn('no')+'" onclick="coRejectForm(\''+cid+'\')">Reject</button>';
   if(st==='approved'||st==='partially_paid'||co.kind==='invoice') acts+='<button style="'+coBtn()+'" onclick="coPayForm(\''+cid+'\')">Record payment</button>';
-  return '<div style="border:1.5px solid var(--line);border-radius:14px;padding:15px 16px;background:#fff">'
-    +'<div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start">'
-    +'<div style="min-width:0"><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span style="font-family:var(--sans);font-weight:900;font-size:14px;color:#0f172a">'+coEsc(co.coNumber||'CO')+'</span>'+coBadge(st)+'</div>'
-    +'<div style="color:#0f172a;font-size:13px;font-weight:700;margin-top:7px">'+coEsc(co.description||'(no description)')+'</div>'
-    +'<div style="color:var(--mut);font-size:11px;font-weight:700;margin-top:4px">'+coEsc(co.jobLabel||co.jobId||'')+' &middot; '+kind+'</div></div>'
-    +'<div style="text-align:right;flex-shrink:0"><div style="font-family:var(--sans);font-weight:900;font-size:18px;color:#0f172a">'+coMoney(amt)+'</div>'
-    +(tot.marginPct!=null?'<div style="color:var(--mut);font-size:11px;font-weight:700;margin-top:2px">'+tot.marginPct+'% margin</div>':'')+'</div></div>'
+  return '<div id="corow-'+cid+'" style="border:1px solid var(--line);border-radius:10px;padding:18px 22px;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.04)">'
+    +'<div style="display:flex;justify-content:space-between;gap:24px;align-items:flex-start">'
+    +'<div style="min-width:0;flex:1"><div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><span style="font-family:var(--sans);font-weight:800;font-size:13px;color:#0f172a;letter-spacing:-.2px">'+coEsc(co.coNumber||'CO')+'</span>'+coBadge(st)+'</div>'
+    +'<div style="color:#0f172a;font-size:14px;font-weight:700;margin-top:6px">'+coEsc(co.description||'(no description)')+'</div>'
+    +'<div style="color:var(--mut);font-size:12px;margin-top:4px;line-height:1.55">'+coEsc(co.jobLabel||co.jobId||'')+' &middot; '+kind+'</div></div>'
+    +'<div style="text-align:right;flex-shrink:0"><div style="font-family:var(--sans);font-weight:900;font-size:22px;color:#0f172a">'+coMoney(amt)+'</div>'
+    +(tot.marginPct!=null?'<div style="color:var(--mut);font-size:12px;margin-top:3px">'+tot.marginPct+'% margin</div>':'')+'</div></div>'
     +(acts?'<div id="coacts-'+cid+'" style="display:flex;gap:8px;margin-top:13px;flex-wrap:wrap">'+acts+'</div>':'')
     +'<div id="cop-'+cid+'" style="display:none;margin-top:12px;border-top:1px solid var(--line);padding-top:12px"></div>'
     +'</div>';
@@ -7671,18 +8099,22 @@ function coAfter(d,okMsg){ if(d&&d.ok){ chirpToast('&#10003; '+okMsg); } else { 
 </script>
 <div id="view-invx" style="display:none">
   <div style="max-width:1080px;margin:0 auto;padding:18px 16px 60px">
+    <!-- 2026-08-26, jomell: "Start with Active Jobs and Invoicing & AR" --
+         design-language pass from the coworker's Figma Make redesign. Kept
+         scoped to this view's own literal styles/markup, not shared CSS
+         classes, so nothing outside Invoicing is affected. -->
     <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:16px;flex-wrap:wrap">
       <div>
-        <div style="font-family:var(--sans);font-weight:900;font-size:22px;color:#0f172a">Invoicing</div>
-        <div style="color:var(--mut);font-size:12px;font-weight:700;margin-top:2px">Real invoices, live from Jobber. Create a draft here; payments are recorded in Jobber/QuickBooks.</div>
+        <div style="font-family:var(--sans);font-weight:900;font-size:26px;color:#0f172a">Invoicing</div>
+        <div style="color:var(--mut);font-size:13px;font-weight:600;margin-top:4px">Real invoices, live from Jobber. Create a draft here; payments are recorded in Jobber/QuickBooks.</div>
       </div>
-      <button class="btn-save" onclick="ivxOpenCreate()">+ New Invoice</button>
+      <button onclick="ivxOpenCreate()" style="padding:10px 22px;background:#1e3a5f;border:none;border-radius:9px;color:#fff;font-family:var(--sans);font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap">+ New Invoice</button>
     </div>
-    <div id="ivx-summary" style="margin-bottom:14px"></div>
+    <div id="ivx-summary" style="margin-bottom:20px"></div>
     <div id="ivx-create" style="display:none"></div>
-    <div style="display:inline-flex;gap:2px;background:#f1f5f9;border-radius:10px;padding:3px;margin-bottom:14px">
-      <button id="ivx-tab-open" onclick="ivxSetMode('open')" style="border:none;border-radius:8px;padding:7px 14px;font-family:var(--sans);font-weight:800;font-size:12px;cursor:pointer;background:#fff;color:#0f172a">Open &amp; drafts</button>
-      <button id="ivx-tab-all" onclick="ivxSetMode('all')" style="border:none;border-radius:8px;padding:7px 14px;font-family:var(--sans);font-weight:800;font-size:12px;cursor:pointer;background:transparent;color:var(--mut)">All recent</button>
+    <div style="display:inline-flex;gap:4px;margin-bottom:20px">
+      <button id="ivx-tab-open" onclick="ivxSetMode('open')" style="border:1.5px solid #d1d5db;border-radius:8px;padding:7px 18px;font-family:var(--sans);font-weight:600;font-size:13px;cursor:pointer;background:#fff;color:#0f172a;box-shadow:0 1px 3px rgba(0,0,0,.08)">Open &amp; drafts</button>
+      <button id="ivx-tab-all" onclick="ivxSetMode('all')" style="border:1.5px solid #d1d5db;border-radius:8px;padding:7px 18px;font-family:var(--sans);font-weight:600;font-size:13px;cursor:pointer;background:transparent;color:var(--mut)">All recent</button>
     </div>
     <div id="ivx-list"><div style="color:var(--mut);padding:44px;text-align:center;font-weight:700">Loading&hellip;</div></div>
   </div>
@@ -7695,7 +8127,7 @@ function ivxFmtDate(s){ if(!s) return ''; var d=new Date(s); if(isNaN(d.getTime(
 function ivxInp(){ return 'border:1.5px solid var(--line);border-radius:9px;padding:10px 11px;font-family:var(--sans);font-size:12px;font-weight:700;width:100%;outline:none;background:#fff;box-sizing:border-box'; }
 function ivxBadge(s){ var m={paid:['#047857','#d1fae5'],past_due:['#b91c1c','#fee2e2'],awaiting_payment:['#b45309','#fef3c7'],draft:['#475569','#f1f5f9'],bad_debt:['#6b7280','#f3f4f6']}; var c=m[s]||['#475569','#f1f5f9']; return '<span style="background:'+c[1]+';color:'+c[0]+';font-weight:800;font-size:10px;padding:3px 9px;border-radius:99px;text-transform:uppercase;letter-spacing:.04em">'+ivxEsc((s||'draft').replace(/_/g,' '))+'</span>'; }
 function ivxEmpty(t,s){ return '<div style="border:1.5px dashed var(--line);border-radius:14px;padding:44px;text-align:center;background:#fff"><div style="font-family:var(--sans);font-weight:900;font-size:16px;color:#0f172a">'+ivxEsc(t)+'</div><div style="color:var(--mut);font-size:12px;font-weight:700;margin-top:6px">'+ivxEsc(s)+'</div></div>'; }
-function ivxSetMode(m){ IVX.mode=m; var o=document.getElementById('ivx-tab-open'), a=document.getElementById('ivx-tab-all'); if(o){ o.style.background=(m==='open'?'#fff':'transparent'); o.style.color=(m==='open'?'#0f172a':'var(--mut)'); } if(a){ a.style.background=(m==='all'?'#fff':'transparent'); a.style.color=(m==='all'?'#0f172a':'var(--mut)'); } ivxRender(); }
+function ivxSetMode(m){ IVX.mode=m; var o=document.getElementById('ivx-tab-open'), a=document.getElementById('ivx-tab-all'); if(o){ o.style.background=(m==='open'?'#fff':'transparent'); o.style.color=(m==='open'?'#0f172a':'var(--mut)'); o.style.boxShadow=(m==='open'?'0 1px 3px rgba(0,0,0,.08)':'none'); } if(a){ a.style.background=(m==='all'?'#fff':'transparent'); a.style.color=(m==='all'?'#0f172a':'var(--mut)'); a.style.boxShadow=(m==='all'?'0 1px 3px rgba(0,0,0,.08)':'none'); } ivxRender(); }
 function ivxLoad(){
   var el=document.getElementById('ivx-list'); if(!el)return;
   el.innerHTML='<div style="color:var(--mut);padding:44px;text-align:center;font-weight:700">Loading&hellip;</div>';
@@ -7721,9 +8153,9 @@ function ivxRender(){
   var ar=arRows.reduce(function(s,i){ return s+(+i.balance||0); },0);
   var pastDue=all.filter(function(i){ return i.status==='past_due'; }).length;
   var drafts=all.filter(function(i){ return i.status==='draft'; }).length;
-  if(sum){ sum.innerHTML='<div style="display:flex;gap:10px;flex-wrap:wrap">'
-    +'<div style="flex:1;min-width:160px;border:1.5px solid var(--line);border-radius:13px;padding:13px 15px;background:#fff"><div style="color:var(--mut);font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.05em">Owed to you</div><div style="font-family:var(--sans);font-weight:900;font-size:22px;color:#0f172a;margin-top:3px">'+ivxMoney(ar)+'</div><div style="color:var(--mut);font-size:11px;font-weight:700">'+arRows.length+' open &middot; '+pastDue+' past due</div></div>'
-    +'<div style="flex:1;min-width:160px;border:1.5px solid var(--line);border-radius:13px;padding:13px 15px;background:#fff"><div style="color:var(--mut);font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.05em">Drafts</div><div style="font-family:var(--sans);font-weight:900;font-size:22px;color:#0f172a;margin-top:3px">'+drafts+'</div><div style="color:var(--mut);font-size:11px;font-weight:700">not sent yet</div></div>'
+  if(sum){ sum.innerHTML='<div style="display:flex;gap:16px;flex-wrap:wrap">'
+    +'<div style="flex:2;min-width:220px;border:1px solid var(--line);border-radius:12px;padding:20px 24px;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.05)"><div style="color:var(--mut);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">Owed to you</div><div style="font-family:var(--sans);font-weight:900;font-size:30px;color:#0f172a;margin-bottom:6px">'+ivxMoney(ar)+'</div><div style="color:var(--mut);font-size:13px">'+arRows.length+' open &middot; '+pastDue+' past due</div></div>'
+    +'<div style="flex:1;min-width:160px;border:1px solid var(--line);border-radius:12px;padding:20px 24px;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.05)"><div style="color:var(--mut);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">Drafts</div><div style="font-family:var(--sans);font-weight:900;font-size:30px;color:#0f172a;margin-bottom:6px">'+drafts+'</div><div style="color:var(--mut);font-size:13px">not sent yet</div></div>'
     +'</div>'; }
   var rows=all.slice();
   if(IVX.mode==='open'){ rows=rows.filter(ivxIsOpen); }
@@ -7750,23 +8182,37 @@ function ivxCard(i){
   else if(i.status==='bad_debt'){ right='<div style="color:#6b7280;font-weight:800;font-size:12px">Written off</div>'; }
   else { right='<div style="color:var(--mut);font-size:11px;font-weight:700;margin-top:2px">Balance '+ivxMoney(i.balance)+'</div>'; }
   var due=i.dueDate?('<div style="color:'+(i.status==='past_due'?'#b91c1c':'var(--mut)')+';font-size:11px;font-weight:700;margin-top:4px">Due '+ivxEsc(ivxFmtDate(i.dueDate))+'</div>'):'';
-  var jobber=i.jobberUrl?('<a href="'+ivxEsc(i.jobberUrl)+'" target="_blank" rel="noopener" style="text-decoration:none"><button style="border:none;border-radius:9px;padding:8px 13px;font-family:var(--sans);font-weight:800;font-size:12px;cursor:pointer;background:#eef2ff;color:#4338ca">Open in Jobber &#8599;</button></a>'):'';
+  var jobber=i.jobberUrl?('<a href="'+ivxEsc(i.jobberUrl)+'" target="_blank" rel="noopener" style="text-decoration:none"><button style="border:1.5px solid #2563eb;border-radius:7px;padding:6px 16px;font-family:var(--sans);font-weight:700;font-size:12px;cursor:pointer;background:#fff;color:#2563eb">Open in Jobber &#8599;</button></a>'):'';
   // Mark-paid is offered ONLY on invoices HiveLogic created itself (id "HL-INV-*").
   // Jobber-synced rows are owned by the sync -- writing invoice_status here would
   // be silently overwritten on the next sync, so those keep "Open in Jobber" and
   // a disabled button that says why, rather than a button that fakes success.
+  //
+  // 2026-08-26: outlined, not filled -- matches the design pass's primary
+  // (filled)/secondary (outlined) hierarchy. Send-to-client stays filled
+  // below since it's the one action here with real weight (money leaves
+  // the building); marking paid or opening Jobber are lighter, secondary.
   var pay='';
   if(ivxIsLocal(i)){
-    if(i.status!=='paid') pay='<button style="border:none;border-radius:9px;padding:8px 13px;font-family:var(--sans);font-weight:800;font-size:12px;cursor:pointer;background:#047857;color:#fff" onclick="ivxMarkPaid(\''+ivxEsc(i.id)+'\')">Mark paid</button>';
+    if(i.status!=='paid') pay='<button style="border:1.5px solid #d1d5db;border-radius:7px;padding:6px 16px;font-family:var(--sans);font-weight:600;font-size:12px;cursor:pointer;background:#fff;color:#0f172a" onclick="ivxMarkPaid(\''+ivxEsc(i.id)+'\')">Mark paid</button>';
   } else if(i.status!=='paid'&&i.status!=='bad_debt'){
-    pay='<button disabled title="Recorded in Jobber/QuickBooks -- HiveLogic mirrors that status, it does not set it." style="border:none;border-radius:9px;padding:8px 13px;font-family:var(--sans);font-weight:800;font-size:12px;cursor:not-allowed;background:#f1f5f9;color:#94a3b8">Mark paid</button>';
+    pay='<button disabled title="Recorded in Jobber/QuickBooks -- HiveLogic mirrors that status, it does not set it." style="border:1.5px solid #e5e7eb;border-radius:7px;padding:6px 16px;font-family:var(--sans);font-weight:600;font-size:12px;cursor:not-allowed;background:#f9fafb;color:#9ca3af">Mark paid</button>';
   }
-  var acts=pay+jobber;
-  return '<div style="border:1.5px solid var(--line);border-radius:14px;padding:15px 16px;background:#fff">'
+  // 2026-08-25: "the client should be informed or mailed about the invoice
+  // since they will be making a deposit for this." Same HL-INV- scoping as
+  // Mark paid, for the same reason -- a Jobber-synced invoice is not this
+  // app's to email about. Offered on any not-yet-paid local invoice, so a
+  // client who lost the first email can be re-sent one.
+  var send='';
+  if(ivxIsLocal(i) && i.status!=='paid' && i.status!=='bad_debt'){
+    send='<button style="border:none;border-radius:9px;padding:8px 13px;font-family:var(--sans);font-weight:800;font-size:12px;cursor:pointer;background:#1B7A50;color:#fff" onclick="ivxSendEmail(\''+ivxEsc(i.id)+'\')" id="ivx-send-'+ivxEsc(i.id)+'">'+(i.status==='draft'?'Send to client':'Resend to client')+'</button>';
+  }
+  var acts=send+pay+jobber;
+  return '<div id="ivxrow-'+ivxEsc(i.id)+'" style="border:1px solid var(--line);border-radius:12px;padding:18px 22px;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.05)">'
     +'<div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start">'
-    +'<div style="min-width:0"><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span style="font-family:var(--sans);font-weight:900;font-size:14px;color:#0f172a">'+ivxEsc(i.invoiceNumber?('#'+i.invoiceNumber):'Invoice')+'</span>'+ivxBadge(i.status)+'</div>'
-    +'<div style="color:#0f172a;font-size:13px;font-weight:700;margin-top:7px">'+ivxEsc(i.subject||name||'Invoice')+'</div>'
-    +(name?'<div style="color:var(--mut);font-size:11px;font-weight:700;margin-top:4px">'+ivxEsc(name)+'</div>':'')+'</div>'
+    +'<div style="min-width:0"><div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><span style="font-family:var(--sans);font-weight:800;font-size:14px;color:#0f172a">'+ivxEsc(i.invoiceNumber?('#'+i.invoiceNumber):'Invoice')+'</span>'+ivxBadge(i.status)+'</div>'
+    +'<div style="color:#0f172a;font-size:15px;font-weight:800;margin-top:8px">'+ivxEsc(i.subject||name||'Invoice')+'</div>'
+    +(name?'<div style="color:var(--mut);font-size:13px;font-weight:600;margin-top:2px">'+ivxEsc(name)+'</div>':'')+'</div>'
     +'<div style="text-align:right;flex-shrink:0"><div style="font-family:var(--sans);font-weight:900;font-size:18px;color:#0f172a">'+ivxMoney(i.total)+'</div>'+right+due+'</div></div>'
     +(acts?'<div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">'+acts+'</div>':'')
     +'</div>';
@@ -7778,6 +8224,19 @@ function ivxMarkPaid(id){
     if(d&&d.ok){ chirpToast('&#10003; Marked paid in HiveLogic &mdash; no payment was processed'); ivxLoad(); }
     else chirpToast('&#9888; '+((d&&d.error)||'Could not mark this invoice paid'));
   }).catch(function(e){ chirpToast('&#9888; '+e.message); });
+}
+// 2026-08-25: "the client should be informed or mailed about the invoice
+// since they will be making a deposit for this." Real email via
+// send_invoice_email (api/track1.js) -- no fake "Pay now" link, the Client
+// Portal's payment flow is explicitly a mockup with no live processor.
+function ivxSendEmail(id){
+  var btn=document.getElementById('ivx-send-'+id);
+  if(btn){ btn.disabled=true; btn.textContent='Sending…'; }
+  var h={'Content-Type':'application/json'}; var t=hlTokenSync(); if(t)h['Authorization']='Bearer '+t;
+  fetch((window.API||'')+'/api/track1?resource=send_invoice_email',{method:'POST',headers:h,body:JSON.stringify({id:id})}).then(function(r){return r.json();}).then(function(d){
+    if(d&&d.ok){ chirpToast('&#10003; Emailed '+d.email); ivxLoad(); }
+    else { chirpToast('&#9888; Could not email the client: '+((d&&d.error)||'unknown error')); if(btn){ btn.disabled=false; btn.textContent='Send to client'; } }
+  }).catch(function(e){ chirpToast('&#9888; '+e.message); if(btn){ btn.disabled=false; btn.textContent='Send to client'; } });
 }
 function ivxOpenCreate(){
   var box=document.getElementById('ivx-create'); if(!box)return;
@@ -7850,10 +8309,10 @@ function ivxSubmitCreate(){
 <style>
   :root{
     --ink:#484f64; --rail:#161e2e; --canvas:#f0f1f6; --card:#fff; --line:#dadde8;
-    --gold:#748a9e; --gold-deep:#59718a; --gold-bg:#e9eff4;
-    --red:#c65b4e; --red-bg:#f9ebe8;
-    --green:#1B7A50; --green-bg:#e6f2ec;
-    --amber:#9a6414; --amber-bg:#fbf1e2;
+    --gold:#748a9e; --gold-deep:#2563eb; --gold-bg:#e9eff4;
+    --red:#dc2626; --red-bg:#fdecec;
+    --green:#16a34a; --green-bg:#e6f9ee;
+    --amber:#b45309; --amber-bg:#fbf1e2;
     --purple:#6a3fb5; --purple-bg:#f3edfb;
     --slate:#5d657b; --mut:#5f6578;
     --mono:'JetBrains Mono',ui-monospace,monospace;
@@ -8250,10 +8709,10 @@ document.addEventListener('click',function(e){
 <style>
   :root{
     --ink:#484f64; --rail:#161e2e; --canvas:#f0f1f6; --card:#fff; --line:#dadde8;
-    --gold:#748a9e; --gold-deep:#59718a; --gold-bg:#e9eff4;
-    --red:#c65b4e; --red-bg:#f9ebe8;
-    --green:#1B7A50; --green-bg:#e6f2ec;
-    --amber:#9a6414; --amber-bg:#fbf1e2;
+    --gold:#748a9e; --gold-deep:#2563eb; --gold-bg:#e9eff4;
+    --red:#dc2626; --red-bg:#fdecec;
+    --green:#16a34a; --green-bg:#e6f9ee;
+    --amber:#b45309; --amber-bg:#fbf1e2;
     --purple:#6a3fb5; --purple-bg:#f3edfb;
     --slate:#5d657b; --mut:#5f6578;
     --mono:'JetBrains Mono',ui-monospace,monospace;
@@ -8721,10 +9180,10 @@ document.addEventListener('click',function(e){
 <style>
   :root{
     --ink:#484f64; --rail:#161e2e; --canvas:#f0f1f6; --card:#fff; --line:#dadde8;
-    --gold:#748a9e; --gold-deep:#59718a; --gold-bg:#e9eff4;
-    --red:#c65b4e; --red-bg:#f9ebe8;
-    --green:#1B7A50; --green-bg:#e6f2ec;
-    --amber:#9a6414; --amber-bg:#fbf1e2;
+    --gold:#748a9e; --gold-deep:#2563eb; --gold-bg:#e9eff4;
+    --red:#dc2626; --red-bg:#fdecec;
+    --green:#16a34a; --green-bg:#e6f9ee;
+    --amber:#b45309; --amber-bg:#fbf1e2;
     --purple:#6a3fb5; --purple-bg:#f3edfb;
     --slate:#5d657b; --mut:#5f6578;
     --mono:'JetBrains Mono',ui-monospace,monospace;
@@ -10250,10 +10709,10 @@ document.addEventListener('click',function(e){
 <style>
   :root{
     --ink:#484f64; --rail:#161e2e; --canvas:#f0f1f6; --card:#fff; --line:#dadde8;
-    --gold:#748a9e; --gold-deep:#59718a; --gold-bg:#e9eff4;
-    --red:#c65b4e; --red-bg:#f9ebe8;
-    --green:#1B7A50; --green-bg:#e6f2ec;
-    --amber:#9a6414; --amber-bg:#fbf1e2;
+    --gold:#748a9e; --gold-deep:#2563eb; --gold-bg:#e9eff4;
+    --red:#dc2626; --red-bg:#fdecec;
+    --green:#16a34a; --green-bg:#e6f9ee;
+    --amber:#b45309; --amber-bg:#fbf1e2;
     --purple:#6a3fb5; --purple-bg:#f3edfb;
     --slate:#5d657b; --mut:#5f6578;
     --mono:'JetBrains Mono',ui-monospace,monospace;
@@ -10780,10 +11239,10 @@ document.addEventListener('click',function(e){
 &lt;style&gt;
   :root{
     --ink:#484f64; --rail:#161e2e; --canvas:#f0f1f6; --card:#fff; --line:#dadde8;
-    --gold:#748a9e; --gold-deep:#59718a; --gold-bg:#e9eff4;
-    --red:#c65b4e; --red-bg:#f9ebe8;
-    --green:#1B7A50; --green-bg:#e6f2ec;
-    --amber:#9a6414; --amber-bg:#fbf1e2;
+    --gold:#748a9e; --gold-deep:#2563eb; --gold-bg:#e9eff4;
+    --red:#dc2626; --red-bg:#fdecec;
+    --green:#16a34a; --green-bg:#e6f9ee;
+    --amber:#b45309; --amber-bg:#fbf1e2;
     --purple:#6a3fb5; --purple-bg:#f3edfb;
     --slate:#5d657b; --mut:#5f6578;
     --mono:'JetBrains Mono',ui-monospace,monospace;
@@ -11303,10 +11762,10 @@ document.addEventListener('click',function(e){
 <style>
   :root{
     --ink:#484f64; --rail:#161e2e; --canvas:#f0f1f6; --card:#fff; --line:#dadde8;
-    --gold:#748a9e; --gold-deep:#59718a; --gold-bg:#e9eff4;
-    --red:#c65b4e; --red-bg:#f9ebe8;
-    --green:#1B7A50; --green-bg:#e6f2ec;
-    --amber:#9a6414; --amber-bg:#fbf1e2;
+    --gold:#748a9e; --gold-deep:#2563eb; --gold-bg:#e9eff4;
+    --red:#dc2626; --red-bg:#fdecec;
+    --green:#16a34a; --green-bg:#e6f9ee;
+    --amber:#b45309; --amber-bg:#fbf1e2;
     --purple:#6a3fb5; --purple-bg:#f3edfb;
     --slate:#5d657b; --mut:#5f6578;
     --mono:'JetBrains Mono',ui-monospace,monospace;
@@ -11592,10 +12051,10 @@ document.addEventListener('click',function(e){
 <style>
   :root{
     --ink:#484f64; --rail:#161e2e; --canvas:#f0f1f6; --card:#fff; --line:#dadde8;
-    --gold:#748a9e; --gold-deep:#59718a; --gold-bg:#e9eff4;
-    --red:#c65b4e; --red-bg:#f9ebe8;
-    --green:#1B7A50; --green-bg:#e6f2ec;
-    --amber:#9a6414; --amber-bg:#fbf1e2;
+    --gold:#748a9e; --gold-deep:#2563eb; --gold-bg:#e9eff4;
+    --red:#dc2626; --red-bg:#fdecec;
+    --green:#16a34a; --green-bg:#e6f9ee;
+    --amber:#b45309; --amber-bg:#fbf1e2;
     --purple:#6a3fb5; --purple-bg:#f3edfb;
     --slate:#5d657b; --mut:#5f6578;
     --mono:'JetBrains Mono',ui-monospace,monospace;
@@ -14862,10 +15321,10 @@ document.addEventListener('click',function(e){
 <style>
   :root{
     --ink:#484f64; --rail:#161e2e; --canvas:#f0f1f6; --card:#fff; --line:#dadde8;
-    --gold:#748a9e; --gold-deep:#59718a; --gold-bg:#e9eff4;
-    --red:#c65b4e; --red-bg:#f9ebe8;
-    --green:#1B7A50; --green-bg:#e6f2ec;
-    --amber:#9a6414; --amber-bg:#fbf1e2;
+    --gold:#748a9e; --gold-deep:#2563eb; --gold-bg:#e9eff4;
+    --red:#dc2626; --red-bg:#fdecec;
+    --green:#16a34a; --green-bg:#e6f9ee;
+    --amber:#b45309; --amber-bg:#fbf1e2;
     --purple:#6a3fb5; --purple-bg:#f3edfb;
     --slate:#5d657b; --mut:#5f6578;
     --mono:'JetBrains Mono',ui-monospace,monospace;
@@ -15282,10 +15741,10 @@ document.addEventListener('click',function(e){
 <style>
   :root{
     --ink:#484f64; --rail:#161e2e; --canvas:#f0f1f6; --card:#fff; --line:#dadde8;
-    --gold:#748a9e; --gold-deep:#59718a; --gold-bg:#e9eff4;
-    --red:#c65b4e; --red-bg:#f9ebe8;
-    --green:#1B7A50; --green-bg:#e6f2ec;
-    --amber:#9a6414; --amber-bg:#fbf1e2;
+    --gold:#748a9e; --gold-deep:#2563eb; --gold-bg:#e9eff4;
+    --red:#dc2626; --red-bg:#fdecec;
+    --green:#16a34a; --green-bg:#e6f9ee;
+    --amber:#b45309; --amber-bg:#fbf1e2;
     --purple:#6a3fb5; --purple-bg:#f3edfb;
     --slate:#5d657b; --mut:#5f6578;
     --mono:'JetBrains Mono',ui-monospace,monospace;
@@ -19405,7 +19864,7 @@ function nlResetForm() {
   // nl-approx was missing here, so an approximate cost typed for one lead was
   // still sitting in the box on the next one -- and it saves silently as that
   // lead's value. A wrong number nobody typed is worse than an empty one.
-  ['nl-search', 'nl-first', 'nl-last', 'nl-phone', 'nl-email', 'nl-addr', 'nl-unit', 'nl-need', 'nl-approx'].forEach(function (id) { var el = document.getElementById(id); if (el) el.value = ''; });
+  ['nl-search', 'nl-first', 'nl-last', 'nl-phone', 'nl-email', 'nl-addr', 'nl-unit', 'nl-need', 'nl-approx'].forEach(function (id) { var el = document.getElementById(id); if (el) { el.value = ''; el.classList.remove('nl-invalid'); } });
   document.getElementById('nl-clientid').value = '';
   document.getElementById('nl-proptype').value = 'residential';
   document.getElementById('nl-match').style.display = 'none';
@@ -19540,16 +19999,45 @@ function nlReadForm() {
   };
 }
 
+function nlClearReq(id) { var e = document.getElementById(id); if (e) e.classList.remove('nl-invalid'); }
+
+// 2026-08-26, jomell: "they fields should have an asterisk or a label that
+// says required and then it cannot be saved if required field is not
+// filled out." Shared by every save path -- the plain Save button AND all
+// five "Where does this go?" buttons funnel through nlSaveLeadCore -- so a
+// lead can't slip through incomplete on one path while being blocked on
+// another. Red-borders every offending field (not just the first) and
+// focuses the first one, so nothing is left for the user to hunt for.
+function nlValidateRequired(f) {
+  ['nl-first', 'nl-last', 'nl-phone', 'nl-email', 'nl-addr', 'nl-need'].forEach(nlClearReq);
+  var missing = [];
+  var firstBadId = null;
+  function bad(ids, label) {
+    ids.forEach(function (id) {
+      var e = document.getElementById(id);
+      if (e) e.classList.add('nl-invalid');
+      if (!firstBadId) firstBadId = id;
+    });
+    missing.push(label);
+  }
+  if (!f.firstName.trim() && !f.lastName.trim()) bad(['nl-first', 'nl-last'], 'a first or last name');
+  if (!f.phone.trim() && !f.email.trim()) bad(['nl-phone', 'nl-email'], 'a phone or email');
+  if (!(document.getElementById('nl-addr').value || '').trim()) bad(['nl-addr'], 'the service address');
+  if (!f.need.trim()) bad(['nl-need'], 'what they need');
+  if (!missing.length) return true;
+  chirpToast('&#9888; Missing: ' + missing.join(', '));
+  var el = document.getElementById(firstBadId);
+  if (el) el.focus();
+  return false;
+}
+
 // Save the lead and hand back what was saved. Resolves with null when the save
 // did not happen, so a caller that was going to send the user somewhere knows
 // not to -- sending them to a prefilled job form off a lead that failed to save
 // is how you get a job with nothing behind it.
 function nlSaveLeadCore(extra) {
   var f = nlReadForm();
-  if (!f.firstName.trim() && !f.lastName.trim()) {
-    chirpToast('&#9888; Enter at least a first or last name');
-    return Promise.resolve(null);
-  }
+  if (!nlValidateRequired(f)) return Promise.resolve(null);
   // The card's headline is the lead's title, falling back to the client's name.
   // This form never sent a title, so every hand-entered lead was headlined with
   // just the customer's name -- and two leads for one customer were
@@ -20010,8 +20498,10 @@ document.addEventListener('keydown',function(e){
             </div>
             <div class="nl-newtoggle" id="nl-search-back" style="display:none;margin-bottom:10px" onclick="nlBackToSearch()">&#8592; Search existing clients instead</div>
             <div id="nl-dupe" style="display:none;background:var(--gold-bg,#fbf1e2);border:1.5px solid #ecd9ae;border-radius:10px;padding:10px 12px;margin-bottom:10px;font-size:11.5px;font-weight:600;color:#484f64;line-height:1.5"></div>
-            <div class="frow"><div class="fld"><label>FIRST NAME</label><input id="nl-first" placeholder="First" oninput="nlDupeCheck()"></div><div class="fld"><label>LAST NAME</label><input id="nl-last" placeholder="Last" oninput="nlDupeCheck()"></div></div>
-            <div class="frow"><div class="fld"><label>PHONE</label><input id="nl-phone" placeholder="(914) 555-0100" oninput="nlDupeCheck()"></div><div class="fld"><label>EMAIL</label><input id="nl-email" placeholder="name@email.com" oninput="nlDupeCheck()"></div></div>
+            <div class="frow"><div class="fld"><label>FIRST NAME</label><input id="nl-first" placeholder="First" oninput="nlDupeCheck();nlClearReq('nl-first')"></div><div class="fld"><label>LAST NAME</label><input id="nl-last" placeholder="Last" oninput="nlDupeCheck();nlClearReq('nl-last')"></div></div>
+            <div class="nl-req-hint">* First or last name required</div>
+            <div class="frow"><div class="fld"><label>PHONE</label><input id="nl-phone" placeholder="(914) 555-0100" oninput="nlDupeCheck();nlClearReq('nl-phone')"></div><div class="fld"><label>EMAIL</label><input id="nl-email" placeholder="name@email.com" oninput="nlDupeCheck();nlClearReq('nl-email')"></div></div>
+            <div class="nl-req-hint">* Phone or email required</div>
             <div class="match" id="nl-match" style="display:none">&#10003; <div id="nl-match-txt"></div><button class="mb" onclick="nlUnlinkClient()">Unlink</button></div>
           </div>
           <div class="sec">
@@ -20019,12 +20509,12 @@ document.addEventListener('keydown',function(e){
             <input type="hidden" id="nl-proptype" value="residential">
             <div class="seg" style="margin-bottom:12px"><div class="opt sel" data-type="residential" onclick="nlPickType(this)">Residential<span>Home, condo, townhouse</span></div><div class="opt" data-type="commercial" onclick="nlPickType(this)">Commercial<span>Office, retail, industrial</span></div></div>
             <div class="frow one" style="margin-bottom:12px"><div class="fld"><label>WHAT KIND OF PROPERTY?</label><select id="nl-propkind"></select></div></div>
-            <div class="frow" style="gap:10px"><div class="fld" style="position:relative;flex:2.2"><label>SERVICE ADDRESS</label><input id="nl-addr" autocomplete="off" placeholder="Start typing &#8212; we&#8217;ll offer matches" oninput="nlAddrInput(this.value)" onfocus="nlAddrInput(this.value)"><div id="nl-addr-state" style="font-size:10.5px;font-weight:800;margin-top:4px;min-height:14px"></div><div id="nl-addr-results" style="display:none;position:absolute;z-index:60;left:0;right:0;top:100%;background:#fff;border:1px solid var(--line);border-radius:9px;max-height:240px;overflow:auto;box-shadow:0 8px 24px rgba(0,0,0,.12)"></div></div><div class="fld" style="flex:1"><label>APT / SUITE / UNIT</label><input id="nl-unit" autocomplete="off" placeholder="e.g. 2B" maxlength="30"><span style="font-size:9.5px;font-weight:700;color:var(--mut);display:block;margin-top:4px">Kept separate so the address still matches</span></div></div>
+            <div class="frow" style="gap:10px"><div class="fld" style="position:relative;flex:2.2"><label>SERVICE ADDRESS <span class="req">*</span></label><input id="nl-addr" autocomplete="off" placeholder="Start typing &#8212; we&#8217;ll offer matches" oninput="nlClearReq('nl-addr');nlAddrInput(this.value)" onfocus="nlAddrInput(this.value)"><div id="nl-addr-state" style="font-size:10.5px;font-weight:800;margin-top:4px;min-height:14px"></div><div id="nl-addr-results" style="display:none;position:absolute;z-index:60;left:0;right:0;top:100%;background:#fff;border:1px solid var(--line);border-radius:9px;max-height:240px;overflow:auto;box-shadow:0 8px 24px rgba(0,0,0,.12)"></div></div><div class="fld" style="flex:1"><label>APT / SUITE / UNIT</label><input id="nl-unit" autocomplete="off" placeholder="e.g. 2B" maxlength="30"><span style="font-size:9.5px;font-weight:700;color:var(--mut);display:block;margin-top:4px">Kept separate so the address still matches</span></div></div>
             <div class="mapbox" id="nl-mapbox"><div class="mappin">&#8962;</div><div class="maplbl" id="nl-maplbl">Enter an address above to preview the map</div></div>
           </div>
           <div class="sec">
             <h3><span class="n">3</span>What do they need?</h3>
-            <div class="frow one"><div class="fld"><label>IN THEIR WORDS</label><textarea id="nl-need" placeholder="What did they ask for?"></textarea></div></div>
+            <div class="frow one"><div class="fld"><label>IN THEIR WORDS <span class="req">*</span></label><textarea id="nl-need" placeholder="What did they ask for?" oninput="nlClearReq('nl-need')"></textarea></div></div>
             <div style="display:flex;gap:7px;margin-bottom:10px">
               <span id="nlm-tm" onclick="nlMode('tm')" style="font-size:10.5px;font-weight:800;padding:8px 16px;border-radius:99px;border:1px solid var(--line);background:#161e2e;color:#fff;cursor:pointer">🔧 T&M / Service</span>
               <span id="nlm-rfq" onclick="nlMode('rfq')" style="font-size:10.5px;font-weight:800;padding:8px 16px;border-radius:99px;border:1px solid var(--line);background:#fff;color:#5d657b;cursor:pointer">📑 Request for Quote</span>
@@ -23452,12 +23942,23 @@ function openRealClient(id){
   document.getElementById('ck-tags').innerHTML=rcStatusChip(c);
   document.getElementById('ck-name').innerHTML=hlEsc(nm);
   var acts='';
+  if(c.phone)acts+='<button class="gbtn" onclick="window.location.href=\'tel:'+hlEsc(c.phone)+'\'">\u260E Call</button>';
   if(c.email)acts+='<button class="gbtn" onclick="window.location.href=\'mailto:'+hlEsc(c.email)+'\'">\u2709 Email</button>';
   if(c.jobberUrl)acts+='<button class="gbtn go" onclick="window.open(\''+hlEsc(c.jobberUrl)+'\',\'_blank\')">\u2197 Open in Jobber</button>';
   document.getElementById('ck-act').innerHTML=acts||'<span style="font-size:11px;color:var(--mut)">No contact info on file.</span>';
   document.getElementById('ck-qb').innerHTML='\u26A1 <b>Reina:</b> Real record synced from Jobber. Job history and property notes aren\'t wired into this view yet \u2014 use \u201COpen in Jobber\u201D for the full record.';
+  // 2026-08-25: "his number is not present anywhere add this and it should
+  // reflect to all clients and future clients" -- this card never had a
+  // Phone row at all (a different modal, the appointment sheet, already
+  // showed "No phone on file" correctly -- this one just omitted it
+  // entirely). Editable here via efOpenEditClientPhoneModal(), writing only
+  // clients.phone (never phone_e164, which the hourly Jobber sync
+  // overwrites every run) -- see handleUpdateClientContact in
+  // api/track1.js. Works the same for every client, synced or
+  // HiveLogic-created, present or future.
   document.getElementById('ck-contact').innerHTML=
-    '<div class="ck-kv"><span>Email</span><b>'+(c.email?hlEsc(c.email):'\u2014')+'</b></div>'
+    '<div class="ck-kv"><span>Phone</span><b>'+(c.phone?hlEsc(c.phone):'<span style="color:var(--mut);font-weight:600">No phone on file</span>')+' <a href="javascript:void(0)" onclick="efOpenEditClientPhoneModal(\''+hlEsc(c.id)+'\')" style="font-size:10px;font-weight:800;color:var(--slate);margin-left:6px">Edit</a></b></div>'
+    +'<div class="ck-kv"><span>Email</span><b>'+(c.email?hlEsc(c.email):'\u2014')+'</b></div>'
     +'<div class="ck-kv"><span>Company</span><b>'+(c.companyName?hlEsc(c.companyName):'\u2014')+'</b></div>'
     +'<div class="ck-kv"><span>Status</span><b>'+(c.isArchived?'Archived':(c.isLead?'Lead':'Active'))+'</b></div>'
     +'<div class="ck-kv"><span>Last updated</span><b>'+rcDate(c.updatedAt)+'</b></div>';
@@ -23472,6 +23973,35 @@ function openRealClient(id){
   document.getElementById('ck-mem').innerHTML='<div style="font-size:11px;color:var(--mut);padding:4px 0">No notes synced into this view yet.</div>';
   document.getElementById('ck-tl').innerHTML='<div class="t"><b>Last updated</b><small>'+rcDate(c.updatedAt)+'</small></div>';
   document.getElementById('ckv').classList.add('open');
+}
+// 2026-08-25: "his number is not present anywhere add this and it should
+// reflect to all clients and future clients" -- own modal (not
+// window.prompt), same pattern as this session's other edit flows. Saves
+// via update_client_contact (api/track1.js), which writes ONLY
+// clients.phone -- never phone_e164, which the hourly Jobber sync
+// overwrites on every run. Updates REAL_CLIENTS in place so the card
+// reflects it immediately without a full refetch.
+function efOpenEditClientPhoneModal(id){
+  var c=null; for(var i=0;i<REAL_CLIENTS.length;i++){ if(String(REAL_CLIENTS[i].id)===String(id)){c=REAL_CLIENTS[i];break;} }
+  if(!c)return;
+  var body='<div id="ecp-body">'
+    +'<label style="'+_lbl+'">Phone</label>'
+    +'<input id="ecp-phone" type="tel" placeholder="e.g. (203) 555-0134" value="'+hlEsc(c.phone||'')+'" style="'+_inp+';margin-bottom:12px">'
+    +'<div id="ecp-err" style="display:none;color:#c65b4e;font-size:11px;font-weight:700;margin-bottom:10px"></div>'
+    +'<div style="display:flex;gap:9px"><button onclick="_hlEcpSubmit()" style="flex:1;padding:11px;border:none;border-radius:8px;background:#1B7A50;color:#fff;font-weight:900;font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;cursor:pointer;font-family:\'Montserrat\',sans-serif">Save</button><button onclick="document.getElementById(\'hlmodal\').remove()" style="flex:1;padding:11px;border:1px solid #dadde8;border-radius:8px;background:#fff;color:#5d657b;font-weight:900;font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;cursor:pointer;font-family:\'Montserrat\',sans-serif">Cancel</button></div>'
+    +'</div>';
+  hlModal('☎ Edit phone', body);
+  window._hlEcpSubmit=function(){
+    var phone=((document.getElementById('ecp-phone')||{}).value||'').trim();
+    var err=document.getElementById('ecp-err');
+    hlApiPost('update_client_contact',{id:id,phone:phone}).then(function(d){
+      if(!d||!d.ok){ err.textContent=(d&&d.error)||'Could not save this number.'; err.style.display='block'; return; }
+      c.phone=phone||null;
+      document.getElementById('hlmodal').remove();
+      chirpToast('✓ Phone number saved');
+      openRealClient(id);
+    }).catch(function(e){ err.textContent='Network error: '+e.message; err.style.display='block'; });
+  };
 }
 var CKHIST={'Handyman':['Punch list & repairs','Door & trim work','Paint touch-up package'],'Electric':['Outlet & switch work','Lighting install','Panel service'],'Design|Build':['Bath renovation','Built-ins & carpentry','Kitchen refresh'],'Plumbing':['Fixture replacement','Water heater service','Leak repair'],'Outdoor':['Patio & stonework','Spring cleanup','Fence & gate work'],'Concierge':['Monthly walkthrough','Seasonal checklist','Vendor coordination'],'HVAC':['Seasonal service','Filter & tune-up','Thermostat upgrade']};
 function ckQbDefault(c){
@@ -24864,7 +25394,14 @@ function nativeEstimateToRow(e){
     // genuine 50/50 split. Carrying the real schedule + total through lets
     // the modal render the estimate's own numbers instead of invented ones.
     paymentSchedule:e.paymentSchedule||[],
-    totalPrice:(e.totals&&e.totals.price)||0
+    totalPrice:(e.totals&&e.totals.price)||0,
+    // 2026-08-25: "send to client" now emails the client an Approve/Reject
+    // link (api/bookkeeping/estimates/send.js + respond.js). Approving
+    // there does NOT touch lifecycleStatus (that stays controller/deposit
+    // gated) -- clientApprovedAt is the only signal staff has that the
+    // client already said yes, so it has to ride through to the summary
+    // modal or the whole point of emailing them is invisible.
+    clientApprovedAt:e.clientApprovedAt||null
   };
 }
 function loadNativeEstimatesLive(){
@@ -24972,22 +25509,24 @@ function efOpenCancelEstimateModal(nid,num){
     }).catch(function(e){ err.textContent='Network error: '+e.message; err.style.display='block'; });
   };
 }
-// 2026-08-25: "i want to delete the ones in the converted tab" -- a real,
-// permanent delete of a converted estimate AND its job (api/bookkeeping/
-// estimates/delete.js), chosen after being told plainly there is no undo and
-// it hits the live production database. Type-to-confirm (the estimate's own
-// number, not a generic "yes") is the one extra guard against a misclick on
-// an action this codebase otherwise never allows -- own modal, not
-// window.confirm, matching every other action in this flow.
-function efOpenHardDeleteEstimateModal(nid,num){
+// 2026-08-25: "i want to delete the ones in the converted tab," then "i just
+// want to have the ability/button to delete these" (any status) -- a real,
+// permanent delete of a native estimate, and its job too when it has one
+// (api/bookkeeping/estimates/delete.js), chosen after being told plainly
+// there is no undo and it hits the live production database. Type-to-confirm
+// (the estimate's own number, not a generic "yes") is the one extra guard
+// against a misclick on an action this codebase otherwise never allows --
+// own modal, not window.confirm, matching every other action in this flow.
+function efOpenHardDeleteEstimateModal(nid,num,hasJob){
+  var jobPart=hasJob?' and the job it created':'';
   var body='<div id="hde-body">'
-    +'<div style="font-size:12px;font-weight:700;color:#484f64;margin-bottom:14px">This <b style="color:#c65b4e">permanently deletes</b> '+esc(num)+' and the job it created. This cannot be undone.</div>'
+    +'<div style="font-size:12px;font-weight:700;color:#484f64;margin-bottom:14px">This <b style="color:#c65b4e">permanently deletes</b> '+esc(num)+jobPart+'. This cannot be undone.</div>'
     +'<label style="'+_lbl+'">Type '+esc(num)+' to confirm</label>'
     +'<input id="hde-confirm" type="text" autocomplete="off" style="'+_inp+';margin-bottom:12px">'
     +'<div id="hde-err" style="display:none;color:#c65b4e;font-size:11px;font-weight:700;margin-bottom:10px"></div>'
     +'<div style="display:flex;gap:9px"><button onclick="_hlHdeSubmit()" style="flex:1;padding:11px;border:none;border-radius:8px;background:#c65b4e;color:#fff;font-weight:900;font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;cursor:pointer;font-family:\'Montserrat\',sans-serif">Delete permanently</button><button onclick="document.getElementById(\'hlmodal\').remove()" style="flex:1;padding:11px;border:1px solid #dadde8;border-radius:8px;background:#fff;color:#5d657b;font-weight:900;font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;cursor:pointer;font-family:\'Montserrat\',sans-serif">Back</button></div>'
     +'</div>';
-  hlModal('&#128465; Delete estimate & job',body);
+  hlModal('&#128465; Delete estimate'+(hasJob?' &amp; job':''),body);
   window._hlHdeSubmit=function(){
     var typed=((document.getElementById('hde-confirm')||{}).value||'').trim();
     var err=document.getElementById('hde-err');
@@ -24998,6 +25537,37 @@ function efOpenHardDeleteEstimateModal(nid,num){
       document.getElementById('hlmodal').remove();
       chirpToast('&#10003; '+(d.note||num+' deleted.'));
       loadNativeEstimatesLive();
+    }).catch(function(e){ err.textContent='Network error: '+e.message; err.style.display='block'; });
+  };
+}
+// 2026-08-25: same request, extended to Jobber-synced quotes. Unlike a
+// native estimate, this only ever removes HiveLogic's cached copy — the
+// daily sync (api/jobber/sync-extended.js) upserts by jobber_id and never
+// deletes, so a quote still open in Jobber itself reappears within ~24h.
+// Said plainly in the modal rather than silently letting it "come back"
+// with no explanation later.
+function efOpenHardDeleteQuoteModal(qid,num){
+  var body='<div id="hdq-body">'
+    +'<div style="font-size:12px;font-weight:700;color:#484f64;margin-bottom:14px">This <b style="color:#c65b4e">permanently deletes</b> '+esc(num)+' from HiveLogic. This cannot be undone.</div>'
+    +'<div style="font-size:11px;font-weight:600;color:#8b92a8;margin-bottom:14px">If this quote still exists in Jobber, the next daily sync will bring it back — this only removes HiveLogic\'s own copy, it does not touch Jobber.</div>'
+    +'<label style="'+_lbl+'">Type '+esc(num)+' to confirm</label>'
+    +'<input id="hdq-confirm" type="text" autocomplete="off" style="'+_inp+';margin-bottom:12px">'
+    +'<div id="hdq-err" style="display:none;color:#c65b4e;font-size:11px;font-weight:700;margin-bottom:10px"></div>'
+    +'<div style="display:flex;gap:9px"><button onclick="_hlHdqSubmit()" style="flex:1;padding:11px;border:none;border-radius:8px;background:#c65b4e;color:#fff;font-weight:900;font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;cursor:pointer;font-family:\'Montserrat\',sans-serif">Delete permanently</button><button onclick="document.getElementById(\'hlmodal\').remove()" style="flex:1;padding:11px;border:1px solid #dadde8;border-radius:8px;background:#fff;color:#5d657b;font-weight:900;font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;cursor:pointer;font-family:\'Montserrat\',sans-serif">Back</button></div>'
+    +'</div>';
+  hlModal('&#128465; Delete quote',body);
+  window._hlHdqSubmit=function(){
+    var typed=((document.getElementById('hdq-confirm')||{}).value||'').trim();
+    var err=document.getElementById('hdq-err');
+    if(typed!==num){ err.textContent='That doesn\'t match '+num+' — type it exactly to confirm.'; err.style.display='block'; return; }
+    err.style.display='none';
+    var h={'Content-Type':'application/json'};
+    var t=hlTokenSync(); if(t) h['Authorization']='Bearer '+t;
+    fetch('/api/jobber/delete-quote',{method:'POST',headers:h,body:JSON.stringify({id:qid})}).then(function(r){return r.json();}).then(function(d){
+      if(!d||!d.ok){ err.textContent=(d&&d.error)||'Could not delete this quote.'; err.style.display='block'; return; }
+      document.getElementById('hlmodal').remove();
+      chirpToast('&#10003; '+(d.note||num+' deleted.'));
+      loadQuotesLive();
     }).catch(function(e){ err.textContent='Network error: '+e.message; err.style.display='block'; });
   };
 }
@@ -25169,7 +25739,7 @@ function efListRender(){
   h+='<div class="efl-head"><h1>Estimates</h1>'
    +'<span class="nc-seg" style="margin-left:14px"><button class="on" onclick="efSetMode(\'list\')">&#128203; Estimates</button><button onclick="efSetMode(\'track\')">&#127919; Quote buildout</button></span>'
    +'<span style="margin-left:auto"></span>'
-   +'<button class="ef-green" onclick="estFormNew(null)">+ New Estimate</button>'
+   +'<button class="ef-green" style="background:#2563eb" onclick="estFormNew(null)">+ New Estimate</button>'
    +'<button class="ef-green" style="background:linear-gradient(135deg,#8a6fb8,#5b4a8a)" onclick="bcOpen()">&#128202; Bid Center</button>'
    +'<span style="position:relative;display:inline-block">'
    +'<button class="ef-ghost" onclick="efMoreMenuToggle(event)">&#8943; More Actions<span id="ef-batch-count" style="font-weight:700"></span></button>'
@@ -25647,7 +26217,7 @@ function efTrackRender(){
   var h='<div class="efl-head"><h1>Estimates</h1>'
    +'<span class="nc-seg" style="margin-left:14px"><button class="'+(efMode==='list'?'on':'')+'" onclick="efSetMode(\'list\')">&#128203; Estimates</button><button class="'+(efMode==='track'?'on':'')+'" onclick="efSetMode(\'track\')">&#127919; Quote buildout</button></span>'
    +'<span style="margin-left:auto"></span>'
-   +'<button class="ef-green" onclick="estFormNew(null)">+ New Estimate</button>'
+   +'<button class="ef-green" style="background:#2563eb" onclick="estFormNew(null)">+ New Estimate</button>'
    +'<button class="ef-green" style="background:linear-gradient(135deg,#8a6fb8,#5b4a8a)" onclick="bcOpen()">&#128202; Bid Center</button>'
    +'<button class="ef-ghost" onclick="chirpToast(\'Import CSV &#183; Export &#183; Print\')">&#8943;</button></div>';
   /* project chips */
@@ -27015,8 +27585,13 @@ document.addEventListener('click',function(e){
       lifecycleBtn='<button onclick="_hlEstSend()" style="flex:1;padding:11px;border:none;border-radius:8px;background:#1B7A50;color:#fff;font-weight:900;font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;cursor:pointer;font-family:\'Montserrat\',sans-serif">&#9993; Send to client</button>';
       window._hlEstSend=function(){
         hlEstApi('send',{id:nid}).then(function(d){
-          if(d&&d.ok){ chirpToast('&#10003; '+num+' sent — awaiting the deposit.'); document.getElementById('hlmodal').remove(); loadNativeEstimatesLive(); }
-          else chirpToast('&#9888; Could not send: '+((d&&d.error)||'unknown error'));
+          if(!d||!d.ok){ chirpToast('&#9888; Could not send: '+((d&&d.error)||'unknown error')); return; }
+          // 2026-08-25: "when clicking 'send to client' i should receive an
+          // email" -- send.js emails the client an Approve/Reject link as
+          // part of this call, best-effort. Say plainly whether it went out.
+          var emailNote=d.clientEmailSent?(' Emailed '+d.clientEmailAddress+'.'):(' Could not email the client: '+(d.clientEmailError||'unknown reason')+'.');
+          chirpToast('&#10003; '+num+' sent — awaiting the deposit.'+emailNote);
+          document.getElementById('hlmodal').remove(); loadNativeEstimatesLive();
         }).catch(function(e){ chirpToast('&#9888; Network error: '+e.message); });
       };
     } else if(nativeRow.lifecycleStatus==='sent'&&!nativeRow.depositSatisfied){
@@ -27058,12 +27633,30 @@ document.addEventListener('click',function(e){
   // (the same one the crew board/scheduling reads) and that staging shares
   // the live production Supabase database, with no existing code anywhere
   // that deletes a job. Asked real hard delete vs. a reversible archive;
-  // chose real hard delete. api/bookkeeping/estimates/delete.js is scoped to
-  // 'converted' only and removes both the job and the estimate — no undo.
-  var hardDeleteBtn=(nativeRow&&nativeRow.lifecycleStatus==='converted')
-    ? '<button onclick="_hlEstHardDelete()" style="padding:11px 16px;border:1px solid #c65b4e;border-radius:8px;background:#fff;color:#c65b4e;font-weight:900;font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;cursor:pointer;font-family:\'Montserrat\',sans-serif">&#128465; Delete estimate &amp; job</button>'
+  // chose real hard delete. Then, looking at the full "All" list (which also
+  // mixes in real Jobber-synced quotes -- Converted 456 / Archived 524, far
+  // more than any test data), asked for the same ability on every row: "i
+  // just want to have the ability/button to delete these." Generalized from
+  // converted-only to any native row (api/bookkeeping/estimates/delete.js
+  // only deletes a job when one actually exists, i.e. lifecycleStatus is
+  // still 'converted').
+  var hardDeleteBtn=nativeRow
+    ? '<button onclick="_hlEstHardDelete()" style="padding:11px 16px;border:1px solid #c65b4e;border-radius:8px;background:#fff;color:#c65b4e;font-weight:900;font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;cursor:pointer;font-family:\'Montserrat\',sans-serif">&#128465; Delete estimate'+(nativeRow.lifecycleStatus==='converted'?' &amp; job':'')+'</button>'
     : '';
-  window._hlEstHardDelete=function(){ document.getElementById('hlmodal').remove(); efOpenHardDeleteEstimateModal(nid,num); };
+  window._hlEstHardDelete=function(){ document.getElementById('hlmodal').remove(); efOpenHardDeleteEstimateModal(nid,num,nativeRow.lifecycleStatus==='converted'); };
+  // Jobber-synced rows ("real:<jobber_id>") have no HiveLogic lifecycle at
+  // all -- they are a daily read-only mirror of the live Jobber account
+  // (api/jobber/sync-extended.js upserts by jobber_id, never deletes). A
+  // manual delete here only removes HiveLogic's cached copy: if the quote
+  // still exists in Jobber, the next daily sync silently re-upserts it.
+  // Surfaced plainly in the modal rather than hidden, since jomell asked for
+  // the delete button after being told this and said to build it anyway.
+  var isRealRow=rowKey.indexOf('real:')===0;
+  var realId=isRealRow?rowKey.slice(5):null;
+  var quoteDeleteBtn=isRealRow
+    ? '<button onclick="_hlEstQuoteDelete()" style="padding:11px 16px;border:1px solid #c65b4e;border-radius:8px;background:#fff;color:#c65b4e;font-weight:900;font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;cursor:pointer;font-family:\'Montserrat\',sans-serif">&#128465; Delete quote</button>'
+    : '';
+  window._hlEstQuoteDelete=function(){ document.getElementById('hlmodal').remove(); efOpenHardDeleteQuoteModal(realId,num); };
   window._hlEstEdit=isLocalRow
     ? function(){ document.getElementById('hlmodal').remove(); efOpenLocalDraft(rowKey.slice(6)); }
     : function(){ document.getElementById('hlmodal').remove(); try{ if(orig.indexOf('estFormNew')>-1){ (new Function(orig))(); } else { estFormNew(cid); } }catch(x){ try{estFormNew(null);}catch(y){} } };
@@ -27117,8 +27710,15 @@ document.addEventListener('click',function(e){
      +'<div style="font-size:9px;font-weight:600;color:#9fb0c8;line-height:1.55;margin-top:9px">Locks with the Proposal Baseline at signature and becomes the job\'s <b style=\'color:#fff\'>live Payment Breakdown</b> — every actual is checked against this plan; any deviation flags a DISCREPANCY the moment it posts. In the coded build the tranches and payout mapping are editable per-activity right here in the builder.</div>'
      +'<button onclick="_hlEstPbk()" style="width:100%;margin-top:10px;padding:9px;border:1px solid #59718a;border-radius:8px;background:transparent;color:#8ba4c4;font-weight:800;font-size:9.5px;letter-spacing:.06em;text-transform:uppercase;cursor:pointer;font-family:\'Montserrat\',sans-serif">💵 See a live job breakdown — Payment Breakdowns →</button></div>';
   }
+  // 2026-08-25: an emailed Approve click (respond.js) only ever stamps
+  // clientApprovedAt -- it never touches lifecycleStatus, since that stays
+  // gated on a controller actor + the deposit being paid. Without this
+  // banner staff would have no way to see the client already said yes.
+  var clientApprovedBanner=(nativeRow&&nativeRow.clientApprovedAt)
+    ? '<div style="background:#e7f3ec;color:#1B7A50;font-size:11px;font-weight:700;padding:8px 12px;border-radius:8px;margin-bottom:10px">&#10003; Client approved via email — '+esc(new Date(nativeRow.clientApprovedAt).toLocaleDateString())+'</div>'
+    : '';
   hlModal('📄 '+num+' — '+(ttl||'Estimate'),
-   '<div style="display:flex;gap:10px;align-items:center;margin-bottom:4px"><b style="font-size:16px;color:#161e2e">'+client+'</b><span style="margin-left:auto;font-family:\'JetBrains Mono\',monospace;font-size:16px;font-weight:900;color:#59718a">'+amt+'</span></div><div style="'+_row+'">Status<b style="margin-left:auto">'+st+'</b></div><div style="'+_row+'">Created<b style="margin-left:auto">'+created+'</b></div><div style="'+_row+';border-bottom:none">Version<b style="margin-left:auto">V1 · locked on send</b></div>'+pbBlock+'<div style="display:flex;gap:9px;margin-top:14px"><button onclick="_hlEstEdit()" style="flex:1;padding:11px;border:none;border-radius:8px;background:#59718a;color:#fff;font-weight:900;font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;cursor:pointer;font-family:\'Montserrat\',sans-serif">✏️ Edit in builder</button><button onclick="_hlEstClient()" style="flex:1;padding:11px;border:1px solid #59718a;border-radius:8px;background:#fff;color:#59718a;font-weight:900;font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;cursor:pointer;font-family:\'Montserrat\',sans-serif">👤 Client record</button>'+lifecycleBtn+cancelBtn+hardDeleteBtn+deleteBtn+'</div>');
+   '<div style="display:flex;gap:10px;align-items:center;margin-bottom:4px"><b style="font-size:16px;color:#161e2e">'+client+'</b><span style="margin-left:auto;font-family:\'JetBrains Mono\',monospace;font-size:16px;font-weight:900;color:#59718a">'+amt+'</span></div>'+clientApprovedBanner+'<div style="'+_row+'">Status<b style="margin-left:auto">'+st+'</b></div><div style="'+_row+'">Created<b style="margin-left:auto">'+created+'</b></div><div style="'+_row+';border-bottom:none">Version<b style="margin-left:auto">V1 · locked on send</b></div>'+pbBlock+'<div style="display:flex;gap:9px;margin-top:14px"><button onclick="_hlEstEdit()" style="flex:1;padding:11px;border:none;border-radius:8px;background:#59718a;color:#fff;font-weight:900;font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;cursor:pointer;font-family:\'Montserrat\',sans-serif">✏️ Edit in builder</button><button onclick="_hlEstClient()" style="flex:1;padding:11px;border:1px solid #59718a;border-radius:8px;background:#fff;color:#59718a;font-weight:900;font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;cursor:pointer;font-family:\'Montserrat\',sans-serif">👤 Client record</button>'+lifecycleBtn+cancelBtn+hardDeleteBtn+quoteDeleteBtn+deleteBtn+'</div>');
 },true);
 function hl63Wire(view,target,label){
   var v=document.getElementById('view-'+view);if(!v)return;
@@ -27868,10 +28468,10 @@ function renderRealLeadsKpis(all, open, pipelineValue, closeRate) {
     return last && (nowMs - Date.parse(last)) > 24 * 3600 * 1000;
   }).length;
   host.innerHTML =
-    '<div class="kpi"><div class="k">PIPELINE VALUE</div><div class="v">$' + pipelineValue.toLocaleString() + '</div><div class="s">' + open.length + ' open lead' + (open.length === 1 ? '' : 's') + '</div></div>' +
-    '<div class="kpi"><div class="k">OPEN LEADS</div><div class="v">' + open.length + '</div><div class="s">of ' + all.length + ' total tracked</div></div>' +
-    '<div class="kpi"><div class="k">CLOSE RATE</div><div class="v">' + (closeRate != null ? closeRate + '%' : '—') + '</div><div class="s">' + (closeRate != null ? 'won vs. lost, all time' : 'not enough decided leads yet') + '</div></div>' +
-    '<div class="kpi"><div class="k">GOING STALE</div><div class="v">' + stale + '</div><div class="s">no contact in 24h+</div></div>';
+    '<div class="kpi"><div class="kpi-ic" style="background:#eef0ff">&#128202;</div><div><div class="k">PIPELINE VALUE</div><div class="v">$' + pipelineValue.toLocaleString() + '</div><div class="s">' + open.length + ' open lead' + (open.length === 1 ? '' : 's') + '</div></div></div>' +
+    '<div class="kpi"><div class="kpi-ic" style="background:#e8f8f0">&#128101;</div><div><div class="k">OPEN LEADS</div><div class="v">' + open.length + '</div><div class="s">of ' + all.length + ' total tracked</div></div></div>' +
+    '<div class="kpi"><div class="kpi-ic" style="background:#fff8e8">&#127919;</div><div><div class="k">CLOSE RATE</div><div class="v">' + (closeRate != null ? closeRate + '%' : '—') + '</div><div class="s">' + (closeRate != null ? 'won vs. lost, all time' : 'not enough decided leads yet') + '</div></div></div>' +
+    '<div class="kpi"><div class="kpi-ic" style="background:#fff0f0">&#9201;</div><div><div class="k">GOING STALE</div><div class="v">' + stale + '</div><div class="s">no contact in 24h+</div></div></div>';
   var bottleneck = document.getElementById('lgrid-bottleneck');
   if (bottleneck) {
     var sentOut = all.filter(function (l) { return l.stage === 'estimate_sent'; });
@@ -33785,12 +34385,18 @@ function ajxRender() {
     var sched = ajxIsScheduled(j)
       ? '<span class="ajx-pill sched">' + ajxDate(j.startAt) + '</span>'
       : '<span class="ajx-pill unsched">not booked</span>';
-    return '<tr onclick="ajxOpen(\'' + String(j.id).replace(/'/g, "\\'") + '\')">'
+    // 2026-08-25: "make it bold or even change the font color" once a job
+    // is closed (HiveLogic's own hl_closed_at, not Jobber's job_status --
+    // see handleSetJobClosed in api/track1.js for why they're kept separate).
+    var statusPill = j.closedAt
+      ? '<span class="ajx-pill closed">✓ Closed</span>'
+      : '<span class="ajx-pill">' + hlEsc(String(j.status || 'unknown').replace(/_/g, ' ')) + '</span>';
+    return '<tr class="' + (j.closedAt ? 'ajx-closed' : '') + '" onclick="ajxOpen(\'' + String(j.id).replace(/'/g, "\\'") + '\')">'
       + '<td class="ajx-num">' + hlEsc(ref) + '</td>'
       + '<td>' + hlEsc(j.title || 'Untitled job') + '</td>'
       + '<td>' + hlEsc(j.clientName || '—') + '</td>'
       + '<td>' + hlEsc(j.divisionCode || '—') + '</td>'
-      + '<td><span class="ajx-pill">' + hlEsc(String(j.status || 'unknown').replace(/_/g, ' ')) + '</span></td>'
+      + '<td>' + statusPill + '</td>'
       + '<td>' + sched + '</td>'
       + '<td class="ajx-money">' + ajxMoney(j.total) + '</td>'
       + '<td>' + ajxDate(j.createdAt) + '</td>'
@@ -33835,14 +34441,21 @@ function ajxOpen(jobId) {
 
   var meta = document.getElementById('ajv-meta');
   if (meta) {
+    // 2026-08-25: "make it bold or even change the font color" once closed
+    // -- same green treatment as the Active Jobs list row.
+    var statusHtml = j.closedAt
+      ? '<b style="color:#1B7A50;font-weight:900">&#10003; Closed ' + ajxDate(j.closedAt) + '</b>'
+      : '<b>' + hlEsc(String(j.status || 'unknown').replace(/_/g, ' ')) + '</b>';
     meta.innerHTML = ''
       + '<div><span>Client</span><b>' + hlEsc(j.clientName || '—') + '</b></div>'
       + '<div><span>Division</span><b>' + hlEsc(j.divisionCode || '—') + '</b></div>'
-      + '<div><span>Status</span><b>' + hlEsc(String(j.status || 'unknown').replace(/_/g, ' ')) + '</b></div>'
+      + '<div><span>Status</span>' + statusHtml + '</div>'
       + '<div><span>Scheduled</span><b>' + (ajxIsScheduled(j) ? ajxDate(j.startAt) : 'Not booked') + '</b></div>'
       + '<div><span>Estimated value</span><b>' + ajxMoney(j.total) + '</b></div>'
       + '<div><span>Created</span><b>' + ajxDate(j.createdAt) + '</b></div>';
   }
+  var closeBtn = document.getElementById('ajv-close-toggle');
+  if (closeBtn) closeBtn.textContent = j.closedAt ? 'Reopen job' : 'Close job';
 
   var note = document.getElementById('ajv-note');
   if (note) note.textContent = 'Invoices are saved as DRAFT — nothing is sent to the client.';
@@ -33850,6 +34463,9 @@ function ajxOpen(jobId) {
   if (host) host.innerHTML = '<div class="ajx-empty" style="padding:12px">Loading line items…</div>';
   var d = document.getElementById('ajv');
   if (d) d.classList.add('open');
+
+  ajvLoadLinkedInvoices(j.id);
+  ajvLoadLinkedChangeOrders(j.id);
 
   fetch('/api/track1?resource=job_line_items&jobRef=' + encodeURIComponent(j.id))
     .then(function (r) { return r.json(); })
@@ -33871,6 +34487,194 @@ function ajxOpen(jobId) {
       // rather than leaving it to chance.
       if (typeof hlFormForget === 'function') hlFormForget('ajv');
     });
+}
+
+// 2026-08-26: "it should show the connected invoices and change orders in
+// this window." Both filtered server-side to this one job --
+// invoices.job_id and a change order's jobId are both set to the job's own
+// jobber_id at creation (handleCreateInvoiceFromJob / the Change Orders
+// form's job picker), the same key AJX.job.id already is here -- no new
+// relationship, just surfacing the one that already exists.
+//
+// 2026-08-26 follow-up: "the invoices and job order should have a title or
+// label rather than just the number... their names should be edittable...
+// also the invoices and change order should be clickable and when it is
+// clicked, it should redirect to the actual invoices page and change
+// orders page for that job." Each row now shows its subject/description,
+// an inline edit pencil, and is itself a click-through to the real
+// Invoicing/Change Orders tab, landing on that exact record via the same
+// poll-then-scroll idiom askGo() already uses for a cross-tab jump
+// (hlOpenClientWhenReady).
+function ajvLoadLinkedInvoices(jobId) {
+  var host = document.getElementById('ajv-invoices'); if (!host) return;
+  host.innerHTML = '<div style="font-size:11px;color:var(--mut);font-weight:700">Loading invoices…</div>';
+  fetch('/api/invoices?jobRef=' + encodeURIComponent(jobId)).then(function (r) { return r.json(); }).then(function (d) {
+    if (!d || !d.ok) { host.innerHTML = ''; return; }
+    var invs = d.invoices || [];
+    var label = '<label style="font-size:10px;font-weight:800;letter-spacing:.06em;color:var(--mut)">INVOICES' + (invs.length ? ' (' + invs.length + ')' : '') + '</label>';
+    if (!invs.length) { host.innerHTML = label + '<div style="font-size:12px;color:var(--mut);font-weight:600;padding:4px 0">No invoices for this job yet.</div>'; return; }
+    var rows = invs.map(function (i) {
+      var idEsc = hlEsc(i.id);
+      return '<div onclick="ajvGoToInvoice(\'' + idEsc + '\',\'' + hlEsc(i.status || '') + '\')" style="cursor:pointer;padding:8px 0;border-bottom:1px solid var(--line)">'
+        + '<div style="display:flex;justify-content:space-between;align-items:center">'
+        + '<div style="display:flex;gap:8px;align-items:center"><b style="font-size:12.5px">' + (i.invoiceNumber ? '#' + hlEsc(i.invoiceNumber) : 'Invoice') + '</b>' + ivxBadge(i.status) + '</div>'
+        + '<div style="font-family:var(--mono);font-weight:800;font-size:12.5px">' + ajxMoney(i.total) + '</div>'
+        + '</div>'
+        + '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:4px">'
+        + '<div style="font-size:12px;font-weight:700;color:#0f172a">' + hlEsc(i.subject || 'Untitled invoice') + '</div>'
+        + (ivxIsLocal(i) && i.status === 'draft' ? ('<button onclick="event.stopPropagation();ajvEditInvoice(\'' + idEsc + '\')" title="Edit title and amount" style="border:none;background:transparent;color:var(--mut);cursor:pointer;font-size:12px;padding:2px 4px;flex-shrink:0">&#9998;&#65039;</button>') : '')
+        + '</div>'
+        + '</div>';
+    }).join('');
+    host.innerHTML = label + rows;
+    invs.forEach(function (i) { window._ajvInvEdit = window._ajvInvEdit || {}; window._ajvInvEdit[i.id] = { subject: i.subject || '', total: i.total }; });
+  }).catch(function () { host.innerHTML = ''; });
+}
+// 2026-08-26 follow-up, jomell: "it should also apply to when im editting
+// an invoice" -- the amount, same as the title, is now editable here too.
+// Only offered while still a draft (see handleUpdateInvoice's own guard):
+// once sent, the client has already seen a specific amount, so this
+// can't silently redefine what "the invoice" actually is anymore.
+function ajvEditInvoice(id) {
+  var current = (window._ajvInvEdit || {})[id] || {};
+  var body = '<div id="eiv-body">'
+    + '<label style="' + _lbl + '">Title</label>'
+    + '<input id="eiv-subject" type="text" placeholder="e.g. Deposit" value="' + hlEsc(current.subject || '') + '" style="' + _inp + ';margin-bottom:12px">'
+    + '<label style="' + _lbl + '">Amount</label>'
+    + '<input id="eiv-amount" type="number" min="0.01" step="0.01" value="' + (current.total ? Number(current.total).toFixed(2) : '') + '" style="' + _inp + ';margin-bottom:12px">'
+    + '<div id="eiv-err" style="display:none;color:#c65b4e;font-size:11px;font-weight:700;margin-bottom:10px"></div>'
+    + '<div style="display:flex;gap:9px"><button onclick="_hlEivSubmit()" style="flex:1;padding:11px;border:none;border-radius:8px;background:#1B7A50;color:#fff;font-weight:900;font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;cursor:pointer;font-family:\'Montserrat\',sans-serif">Save</button><button onclick="document.getElementById(\'hlmodal\').remove()" style="flex:1;padding:11px;border:1px solid #dadde8;border-radius:8px;background:#fff;color:#5d657b;font-weight:900;font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;cursor:pointer;font-family:\'Montserrat\',sans-serif">Cancel</button></div>'
+    + '</div>';
+  hlModal('&#9998;&#65039; Edit invoice', body);
+  window._hlEivSubmit = function () {
+    var subject = ((document.getElementById('eiv-subject') || {}).value || '').trim();
+    var amount = Number((document.getElementById('eiv-amount') || {}).value);
+    var err = document.getElementById('eiv-err');
+    if (!subject) { err.textContent = 'A title is required.'; err.style.display = 'block'; return; }
+    if (!isFinite(amount) || amount <= 0) { err.textContent = 'Enter an amount greater than $0.'; err.style.display = 'block'; return; }
+    hlApiPost('update_invoice', { id: id, subject: subject, amount: amount }).then(function (d) {
+      if (!d || !d.ok) { err.textContent = (d && d.error) || 'Could not save these changes.'; err.style.display = 'block'; return; }
+      document.getElementById('hlmodal').remove();
+      chirpToast('&#10003; Invoice updated');
+      if (AJX.job) ajvLoadLinkedInvoices(AJX.job.id);
+    }).catch(function (e) { err.textContent = 'Network error: ' + e.message; err.style.display = 'block'; });
+  };
+}
+function ajvFlashRow(el) {
+  if (!el) return;
+  el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  var prevBg = el.style.backgroundColor, prevTr = el.style.transition;
+  el.style.transition = 'background-color .3s';
+  el.style.backgroundColor = '#fef3c7';
+  setTimeout(function () { el.style.backgroundColor = prevBg || ''; el.style.transition = prevTr || ''; }, 1600);
+}
+function ajvGoToInvoiceWhenReady(id, attempt) {
+  var el = document.getElementById('ivxrow-' + id);
+  if (el) { ajvFlashRow(el); return; }
+  if ((attempt || 0) < 30) setTimeout(function () { ajvGoToInvoiceWhenReady(id, (attempt || 0) + 1); }, 100);
+  else chirpToast('&#9888; Could not find that invoice in the list &mdash; try "All recent."');
+}
+function ajvGoToInvoice(id, status) {
+  showView('invx');
+  // 2026-08-26 fix (jomell): forcing "All recent" unconditionally sent an
+  // open/draft invoice to the wrong tab -- it already lives in "Open &
+  // drafts" (the view's own default), so only paid/written-off invoices
+  // (hidden by that filter) need the switch to "All recent" to be found at
+  // all. Reuses ivxIsOpen's own definition of "open" rather than
+  // duplicating it.
+  if (typeof ivxSetMode === 'function') ivxSetMode(typeof ivxIsOpen === 'function' && ivxIsOpen({ status: status }) ? 'open' : 'all');
+  if (typeof ivxLoad === 'function') ivxLoad();
+  ajvGoToInvoiceWhenReady(id, 0);
+}
+function ajvLoadLinkedChangeOrders(jobId) {
+  var host = document.getElementById('ajv-cos'); if (!host) return;
+  host.innerHTML = '<div style="font-size:11px;color:var(--mut);font-weight:700">Loading change orders…</div>';
+  fetch('/api/bookkeeping/change-orders/list?jobId=' + encodeURIComponent(jobId)).then(function (r) { return r.json(); }).then(function (d) {
+    if (!d || !d.ok) { host.innerHTML = ''; return; }
+    var cos = d.changeOrders || [];
+    var label = '<label style="font-size:10px;font-weight:800;letter-spacing:.06em;color:var(--mut)">CHANGE ORDERS' + (cos.length ? ' (' + cos.length + ')' : '') + '</label>';
+    if (!cos.length) { host.innerHTML = label + '<div style="font-size:12px;color:var(--mut);font-weight:600;padding:4px 0">No change orders for this job yet.</div>'; return; }
+    var rows = cos.map(function (c) {
+      var amt = (c.totals && (c.totals.cardPrice || c.totals.price)) || 0;
+      var idEsc = hlEsc(c.id);
+      var canEdit = c.lifecycleStatus === 'draft' || c.lifecycleStatus === 'sent';
+      return '<div onclick="ajvGoToChangeOrder(\'' + idEsc + '\')" style="cursor:pointer;padding:8px 0;border-bottom:1px solid var(--line)">'
+        + '<div style="display:flex;justify-content:space-between;align-items:center">'
+        + '<div style="display:flex;gap:8px;align-items:center"><b style="font-size:12.5px">' + hlEsc(c.coNumber || 'Change order') + '</b><span style="font-size:11px;color:var(--mut);font-weight:700;text-transform:uppercase">' + hlEsc(String(c.displayStatus || c.lifecycleStatus || '').replace(/_/g, ' ')) + '</span></div>'
+        + '<div style="font-family:var(--mono);font-weight:800;font-size:12.5px">' + ajxMoney(amt) + '</div>'
+        + '</div>'
+        + '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:4px">'
+        + '<div style="font-size:12px;font-weight:700;color:#0f172a">' + hlEsc(c.description || '(no description)') + '</div>'
+        + (canEdit ? ('<button onclick="event.stopPropagation();ajvEditCoDescription(\'' + idEsc + '\')" title="Edit description" style="border:none;background:transparent;color:var(--mut);cursor:pointer;font-size:12px;padding:2px 4px;flex-shrink:0">&#9998;&#65039;</button>') : '')
+        + '</div>'
+        + '</div>';
+    }).join('');
+    host.innerHTML = label + rows;
+    cos.forEach(function (c) { window._ajvCoDescriptions = window._ajvCoDescriptions || {}; window._ajvCoDescriptions[c.id] = c.description || ''; });
+  }).catch(function () { host.innerHTML = ''; });
+}
+function ajvEditCoDescription(id) {
+  var current = (window._ajvCoDescriptions || {})[id] || '';
+  var body = '<div id="ecd-body">'
+    + '<label style="' + _lbl + '">Description</label>'
+    + '<input id="ecd-desc" type="text" placeholder="e.g. Add recessed lighting in hallway" value="' + hlEsc(current) + '" style="' + _inp + ';margin-bottom:12px">'
+    + '<div id="ecd-err" style="display:none;color:#c65b4e;font-size:11px;font-weight:700;margin-bottom:10px"></div>'
+    + '<div style="display:flex;gap:9px"><button onclick="_hlEcdSubmit()" style="flex:1;padding:11px;border:none;border-radius:8px;background:#1B7A50;color:#fff;font-weight:900;font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;cursor:pointer;font-family:\'Montserrat\',sans-serif">Save</button><button onclick="document.getElementById(\'hlmodal\').remove()" style="flex:1;padding:11px;border:1px solid #dadde8;border-radius:8px;background:#fff;color:#5d657b;font-weight:900;font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;cursor:pointer;font-family:\'Montserrat\',sans-serif">Cancel</button></div>'
+    + '</div>';
+  hlModal('&#9998;&#65039; Edit change order description', body);
+  window._hlEcdSubmit = function () {
+    var description = ((document.getElementById('ecd-desc') || {}).value || '').trim();
+    var err = document.getElementById('ecd-err');
+    if (!description) { err.textContent = 'A description is required.'; err.style.display = 'block'; return; }
+    coApi('update-description', { id: id, description: description }).then(function (d) {
+      if (!d || !d.ok) { err.textContent = (d && d.error) || 'Could not save this description.'; err.style.display = 'block'; return; }
+      document.getElementById('hlmodal').remove();
+      chirpToast('&#10003; Change order description saved');
+      if (AJX.job) ajvLoadLinkedChangeOrders(AJX.job.id);
+    }).catch(function (e) { err.textContent = 'Network error: ' + e.message; err.style.display = 'block'; });
+  };
+}
+function ajvGoToCoWhenReady(id, attempt) {
+  var el = document.getElementById('corow-' + id);
+  if (el) { ajvFlashRow(el); return; }
+  if ((attempt || 0) < 30) setTimeout(function () { ajvGoToCoWhenReady(id, (attempt || 0) + 1); }, 100);
+  else chirpToast('&#9888; Could not find that change order in the list.');
+}
+function ajvGoToChangeOrder(id) {
+  showView('co');
+  if (typeof coLoadList === 'function') coLoadList();
+  ajvGoToCoWhenReady(id, 0);
+}
+
+// 2026-08-25: "in active jobs, when clicking on a job, there should be an
+// option to 'close job' (meaning its done)." Toggle, not a one-way action --
+// see handleSetJobClosed in api/track1.js for why this writes only
+// jobs.hl_closed_at, never job_status/completed_at (both are overwritten by
+// the Jobber sync on every run; hl_closed_at is a HiveLogic-owned column the
+// sync never touches).
+function ajvToggleClosed() {
+  var j = AJX.job; if (!j) return;
+  var closing = !j.closedAt;
+  var btn = document.getElementById('ajv-close-toggle');
+  if (btn) { btn.disabled = true; btn.textContent = closing ? 'Closing…' : 'Reopening…'; }
+  hlApiPost('set_job_closed', { id: j.id, closed: closing }).then(function (r) {
+    if (!r || !r.ok) {
+      chirpToast('⚠ Could not ' + (closing ? 'close' : 'reopen') + ' this job: ' + ((r && r.error) || 'unknown error'));
+      if (btn) { btn.disabled = false; btn.textContent = closing ? 'Close job' : 'Reopen job'; }
+      return;
+    }
+    var closedAt = closing ? ((r.job && r.job.hl_closed_at) || new Date().toISOString()) : null;
+    j.closedAt = closedAt;
+    // AJX.job IS the same object the list renders from (AJX.jobs holds it
+    // by reference), so this one assignment is enough to keep both in sync.
+    if (btn) btn.disabled = false;
+    chirpToast(closing ? '✓ Job closed' : '↩ Job reopened');
+    ajxOpen(j.id);
+    ajxRender();
+  }).catch(function (e) {
+    chirpToast('⚠ Network error: ' + e.message);
+    if (btn) { btn.disabled = false; btn.textContent = closing ? 'Close job' : 'Reopen job'; }
+  });
 }
 
 function ajvLineAdd() { AJX.lines.push({ description: '', quantity: 1, unitPrice: 0 }); ajvLinesRender(); }
@@ -33941,25 +34745,62 @@ function ajvSaveLines(after) {
   });
 }
 
+// 2026-08-26, jomell: "when creating an invoice from this job, the amount
+// should be customizable... since its going to be just a draft first. the
+// name/label should be customizable as well as the amount." Before this,
+// every invoice from a job billed the job's full line-item total under
+// the job's own title -- there was no way to invoice a deposit or any
+// other partial amount. Pre-fills with the job's real numbers (the line
+// items already entered here, or the job's estimated value if none) so
+// accepting the defaults still works exactly as before, but both are
+// editable before the draft is actually created.
+function ajvOpenCreateInvoiceModal() {
+  if (!AJX.job) return;
+  var defaultAmount = (AJX.lines && AJX.lines.length) ? ajvLinesSum() : (Number(AJX.job.total) || 0);
+  var body = '<div id="aci-body">'
+    + '<label style="' + _lbl + '">Title</label>'
+    + '<input id="aci-subject" type="text" placeholder="e.g. Deposit" value="' + hlEsc(AJX.job.title || '') + '" style="' + _inp + ';margin-bottom:12px">'
+    + '<label style="' + _lbl + '">Amount</label>'
+    + '<input id="aci-amount" type="number" min="0.01" step="0.01" value="' + (defaultAmount > 0 ? defaultAmount.toFixed(2) : '') + '" style="' + _inp + ';margin-bottom:6px">'
+    + '<div style="font-size:10.5px;color:var(--mut);font-weight:700;margin-bottom:12px">This job\'s value is ' + ajxMoney(AJX.job.total) + ' &mdash; invoice for all of it, a deposit, or any other amount.</div>'
+    + '<div id="aci-err" style="display:none;color:#c65b4e;font-size:11px;font-weight:700;margin-bottom:10px"></div>'
+    + '<div style="display:flex;gap:9px"><button onclick="_hlAciSubmit()" style="flex:1;padding:11px;border:none;border-radius:8px;background:#1B7A50;color:#fff;font-weight:900;font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;cursor:pointer;font-family:\'Montserrat\',sans-serif">Create draft invoice</button><button onclick="document.getElementById(\'hlmodal\').remove()" style="flex:1;padding:11px;border:1px solid #dadde8;border-radius:8px;background:#fff;color:#5d657b;font-weight:900;font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;cursor:pointer;font-family:\'Montserrat\',sans-serif">Cancel</button></div>'
+    + '</div>';
+  hlModal('&#129534; Create invoice from this job', body);
+  window._hlAciSubmit = function () {
+    var subject = ((document.getElementById('aci-subject') || {}).value || '').trim();
+    var amount = Number((document.getElementById('aci-amount') || {}).value);
+    var err = document.getElementById('aci-err');
+    if (!subject) { err.textContent = 'A title is required.'; err.style.display = 'block'; return; }
+    if (!isFinite(amount) || amount <= 0) { err.textContent = 'Enter an amount greater than $0.'; err.style.display = 'block'; return; }
+    window._ajvPendingInvoice = { subject: subject, amount: amount };
+    document.getElementById('hlmodal').remove();
+    ajvMakeInvoice(false);
+  };
+}
 /* Raises a DRAFT invoice. The backend refuses a second invoice on a job that
    already has one unless allowDuplicate is set, so the confirm below is the
    only way to get there -- billing a job twice should take a deliberate yes. */
 function ajvMakeInvoice(allowDuplicate) {
   if (!AJX.job) return;
+  var pending = window._ajvPendingInvoice || {};
   var btn = document.getElementById('ajv-inv');
   if (btn) { btn.disabled = true; btn.textContent = 'Creating…'; }
   var reset = function () { if (btn) { btn.disabled = false; btn.textContent = 'Create Invoice from this Job'; } };
 
-  hlApiPost('create_invoice_from_job', { jobRef: AJX.job.id, allowDuplicate: allowDuplicate === true }).then(function (r) {
+  hlApiPost('create_invoice_from_job', { jobRef: AJX.job.id, allowDuplicate: allowDuplicate === true, subject: pending.subject, amount: pending.amount }).then(function (r) {
     reset();
     if (r && r.ok) {
+      window._ajvPendingInvoice = null;
       chirpToast('&#10003; Draft invoice for ' + ajxMoney(r.amount) + ' created from ' + r.lineCount + ' line item' + (r.lineCount === 1 ? '' : 's') + ' — not sent');
       if (typeof ivxLoad === 'function') ivxLoad();
       return;
     }
     if (r && r.needsConfirm) {
-      var existing = (r.existing || []).map(function (i) { return '#' + i.invoice_number + ' (' + i.invoice_status + ')'; }).join(', ');
-      if (window.confirm('This job already has an invoice: ' + existing + '.\n\nCreate a SECOND invoice for it anyway?')) ajvMakeInvoice(true);
+      // 2026-08-25: "there should be our own popup rather than google's
+      // popup" -- window.confirm() replaced with hlModal(), same as every
+      // other confirmation this session (estimates, schedule, clients).
+      ajvConfirmSecondInvoice(r.existing || []);
       return;
     }
     chirpToast('&#9888; ' + ((r && r.error) || 'Could not create the invoice'));
@@ -33967,6 +34808,16 @@ function ajvMakeInvoice(allowDuplicate) {
     reset();
     chirpToast('&#9888; Could not create the invoice: ' + e.message);
   });
+}
+// 2026-08-25: own modal instead of window.confirm() for the
+// already-has-an-invoice warning -- billing a job twice is a real money
+// mistake, so this stays an explicit second confirmation, just not a
+// native browser dialog.
+function ajvConfirmSecondInvoice(existing) {
+  var list = existing.map(function (i) { return '#' + hlEsc(i.invoice_number) + ' (' + hlEsc(String(i.invoice_status || '').replace(/_/g, ' ')) + ')'; }).join(', ');
+  var body = '<div style="font-size:12px;font-weight:700;color:#484f64;margin-bottom:14px">This job already has ' + existing.length + ' invoice' + (existing.length === 1 ? '' : 's') + ': ' + list + '.</div>'
+    + '<div style="display:flex;gap:9px"><button onclick="ajvMakeInvoice(true);document.getElementById(\'hlmodal\').remove()" style="flex:1;padding:11px;border:none;border-radius:8px;background:#c65b4e;color:#fff;font-weight:900;font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;cursor:pointer;font-family:\'Montserrat\',sans-serif">Create second invoice</button><button onclick="document.getElementById(\'hlmodal\').remove()" style="flex:1;padding:11px;border:1px solid #dadde8;border-radius:8px;background:#fff;color:#5d657b;font-weight:900;font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;cursor:pointer;font-family:\'Montserrat\',sans-serif">Cancel</button></div>';
+  hlModal('⚠ Invoice already exists', body);
 }
 </script>
 </body>

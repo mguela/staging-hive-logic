@@ -4842,6 +4842,70 @@ async function handleCreateClient(req, res) {
 
   return res.status(200).json({ ok: true, resource: 'create_client', client: created, locationSaved, note: 'Saved in HiveLogic. Not pushed to Jobber yet -- Jobber write-back is a later phase.' });
 }
+// 2026-08-25, jomell, looking at jovie folloso's client card: "his number is
+// not present anywhere add this and it should reflect to all clients and
+// future clients." Every existing client-mutation path only ever CREATES a
+// brand-new HiveLogic client (handleCreateClient above) -- there was no way
+// to edit contact info on an already-synced client at all.
+//
+// Deliberately writes ONLY clients.phone, never phone_e164. The Jobber sync
+// (api/jobber/sync.js mapClient()) does a full-row upsert on jobber_id every
+// hour and always includes phone_e164 in that payload (even as null) --
+// writing there directly would get silently wiped on the very next sync for
+// any client with a real Jobber id. `phone` is never in that payload, and
+// api/clients.js already reads it as the fallback
+// (`phone: c.phone_e164 || c.phone || null`), so this is the column that's
+// actually safe to own from HiveLogic's side -- same column
+// handleCreateClient already uses for a brand-new client, just now also
+// settable on an existing one.
+async function handleUpdateClientContact(req, res) {
+  if (req.method !== 'POST') return res.status(405).json({ ok: false, error: 'POST only' });
+  const requester = await getRequestingProfile(req);
+  if (!requester) return res.status(401).json({ ok: false, error: 'Not signed in -- log into HiveLogic first.' });
+  const b = req.body || {};
+  const id = String(b.id || '').trim();
+  if (!id) return res.status(400).json({ ok: false, error: 'A client id is required.' });
+  const phoneRaw = String(b.phone || '').trim();
+  const r = await supabaseRequest(`clients?jobber_id=eq.${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    headers: { Prefer: 'return=representation' },
+    body: JSON.stringify({ phone: phoneRaw || null }),
+  });
+  if (!r.ok) return res.status(500).json({ ok: false, error: 'Update failed: ' + (await r.text()).slice(0, 300) });
+  const rows = await r.json();
+  if (!rows.length) return res.status(404).json({ ok: false, error: 'Client not found.' });
+  return res.status(200).json({ ok: true, resource: 'update_client_contact', client: rows[0] });
+}
+// 2026-08-25, jomell: "in active jobs, when clicking on a job, there should
+// be an option to 'close job' (meaning its done)."
+//
+// Deliberately writes ONLY jobs.hl_closed_at, never job_status or
+// completed_at -- both of those are in the Jobber sync's mapJob() full-row
+// upsert payload every run, so writing "closed" there directly for a real
+// Jobber-synced job would get silently wiped on the next sync. hl_closed_at
+// is a new HiveLogic-owned column (20260825160000_jobs_hl_closed.sql) the
+// sync never touches, same discipline as clients.phone above and
+// project_seq/division_code already on this table. A toggle (closed: true
+// sets it to now, false clears it) rather than a one-way action, so a job
+// closed by mistake can be reopened without a database console.
+async function handleSetJobClosed(req, res) {
+  if (req.method !== 'POST') return res.status(405).json({ ok: false, error: 'POST only' });
+  const requester = await getRequestingProfile(req);
+  if (!requester) return res.status(401).json({ ok: false, error: 'Not signed in -- log into HiveLogic first.' });
+  const b = req.body || {};
+  const id = String(b.id || '').trim();
+  if (!id) return res.status(400).json({ ok: false, error: 'A job id is required.' });
+  const closed = !!b.closed;
+  const r = await supabaseRequest(`jobs?jobber_id=eq.${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    headers: { Prefer: 'return=representation' },
+    body: JSON.stringify({ hl_closed_at: closed ? new Date().toISOString() : null }),
+  });
+  if (!r.ok) return res.status(500).json({ ok: false, error: 'Update failed: ' + (await r.text()).slice(0, 300) });
+  const rows = await r.json();
+  if (!rows.length) return res.status(404).json({ ok: false, error: 'Job not found.' });
+  return res.status(200).json({ ok: true, resource: 'set_job_closed', job: rows[0] });
+}
 async function handleCreateJob(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ ok: false, error: 'POST only' });
   const requester = await getRequestingProfile(req);
@@ -5122,32 +5186,52 @@ async function handleCreateInvoiceFromJob(req, res) {
     });
   }
 
-  const jobLines = await readJobLineItems(jobRefId);
-  let lineItems = jobLines.map((l) => ({
-    description: l.description,
-    quantity: Number(l.quantity),
-    unitPrice: Number(l.unit_price),
-    lineTotal: Number(l.line_total),
-  }));
+  // 2026-08-26, jomell: "the amount should be customizable... since its
+  // going to be just a draft first. the name/label should be customizable
+  // as well as the amount." A draft invoice no longer has to bill the
+  // job's full line-item total under the job's own title -- a deposit or
+  // any other partial amount is now a real option. When a custom amount
+  // is given it replaces the line-item computation entirely with a single
+  // line under the custom title; omitting it keeps the original
+  // job-line-items behavior untouched, so any other caller of this action
+  // is unaffected.
+  const customSubject = String(b.subject || '').trim();
+  const customAmount = Number(b.amount);
+  const hasCustomAmount = isFinite(customAmount) && customAmount > 0;
 
-  // A job with no itemised lines but a priced total still has something to
-  // bill -- turn that into one line rather than refusing.
-  if (!lineItems.length) {
-    const lump = Number(job.total);
-    if (!isFinite(lump) || lump <= 0) {
-      return res.status(400).json({ ok: false, error: 'This job has no line items and no value, so there is nothing to invoice yet. Add a line item first.' });
+  let lineItems;
+  let amount;
+  if (hasCustomAmount) {
+    amount = Math.round(customAmount * 100) / 100;
+    lineItems = [{ description: customSubject || job.title || 'Work performed', quantity: 1, unitPrice: amount, lineTotal: amount }];
+  } else {
+    const jobLines = await readJobLineItems(jobRefId);
+    lineItems = jobLines.map((l) => ({
+      description: l.description,
+      quantity: Number(l.quantity),
+      unitPrice: Number(l.unit_price),
+      lineTotal: Number(l.line_total),
+    }));
+
+    // A job with no itemised lines but a priced total still has something to
+    // bill -- turn that into one line rather than refusing.
+    if (!lineItems.length) {
+      const lump = Number(job.total);
+      if (!isFinite(lump) || lump <= 0) {
+        return res.status(400).json({ ok: false, error: 'This job has no line items and no value, so there is nothing to invoice yet. Add a line item first.' });
+      }
+      lineItems = [{ description: job.title || 'Work performed', quantity: 1, unitPrice: lump, lineTotal: lump }];
     }
-    lineItems = [{ description: job.title || 'Work performed', quantity: 1, unitPrice: lump, lineTotal: lump }];
-  }
 
-  const amount = Math.round(lineItems.reduce((t, l) => t + (Number(l.lineTotal) || 0), 0) * 100) / 100;
-  if (amount <= 0) return res.status(400).json({ ok: false, error: 'Those line items add up to $0 -- nothing to invoice.' });
+    amount = Math.round(lineItems.reduce((t, l) => t + (Number(l.lineTotal) || 0), 0) * 100) / 100;
+    if (amount <= 0) return res.status(400).json({ ok: false, error: 'Those line items add up to $0 -- nothing to invoice.' });
+  }
 
   const row = {
     jobber_id: 'HL-INV-' + crypto.randomUUID(),
     invoice_number: String(Math.floor(Date.now() / 1000)),
     invoice_status: 'draft',
-    subject: job.title || null,
+    subject: customSubject || job.title || null,
     subtotal: amount,
     total: amount,
     balance: amount,
@@ -5173,6 +5257,82 @@ async function handleCreateInvoiceFromJob(req, res) {
   });
 }
 
+// 2026-08-25, jomell: "the client should be informed or mailed about the
+// invoice since they will be making a deposit for this." A draft invoice
+// created from a job (handleCreateInvoiceFromJob above) is explicitly "not
+// sent to the client" -- there was no way to actually tell them it exists
+// at all. Mirrors send.js's estimate email (sendEmail/isEmailConfigured,
+// same escapeHtml/money helpers) but simpler: an invoice needs no
+// approve/reject decision, just a notification. No "Pay now" link --
+// Phase 1 of the Client Portal explicitly has no live payment processor
+// wired in (sql/013_client_portal.sql's own header), so a payment button
+// here would be exactly the kind of capability Law 1 forbids inventing.
+// Same guard as handleMarkInvoicePaid: only ever a HiveLogic-created
+// invoice (HL-INV-) -- a Jobber-synced one is not this app's to notify
+// about.
+function ivEscapeHtml(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+function ivMoney(n) { return '$' + (Number(n) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+
+async function handleSendInvoiceEmail(req, res) {
+  if (req.method !== 'POST') return res.status(405).json({ ok: false, error: 'POST only' });
+  const requester = await getRequestingProfile(req);
+  if (!requester) return res.status(401).json({ ok: false, error: 'Not signed in -- log into HiveLogic first.' });
+  const id = String((req.body || {}).id || '').trim();
+  if (!id) return res.status(400).json({ ok: false, error: 'Which invoice? No id given.' });
+  if (!id.startsWith('HL-INV-')) {
+    return res.status(400).json({ ok: false, error: 'This invoice is synced from Jobber -- send it from there.' });
+  }
+
+  const invR = await supabaseRequest(`invoices?jobber_id=eq.${encodeURIComponent(id)}&select=*&limit=1`);
+  if (!invR.ok) return res.status(502).json({ ok: false, error: 'Could not look up that invoice.' });
+  const invoice = (await invR.json())[0];
+  if (!invoice) return res.status(404).json({ ok: false, error: 'That invoice no longer exists.' });
+
+  if (!invoice.client_id) return res.status(422).json({ ok: false, error: 'This invoice has no client on it.' });
+  const clientR = await supabaseRequest(`clients?jobber_id=eq.${encodeURIComponent(invoice.client_id)}&select=email,name,first_name&limit=1`);
+  const client = clientR.ok ? (await clientR.json())[0] : null;
+  if (!client || !client.email) return res.status(422).json({ ok: false, error: 'No email on file for this client.' });
+  if (!isEmailConfigured()) return res.status(422).json({ ok: false, error: 'Email is not configured for this deployment (RESEND_API_KEY unset).' });
+
+  const clientName = client.first_name || client.name || 'there';
+  const lineItems = Array.isArray(invoice.line_items) ? invoice.line_items : [];
+  const rowsHtml = lineItems.map((l) => `<tr><td style="padding:6px 0;color:#484f64">${ivEscapeHtml(l.description || 'Item')}</td><td style="padding:6px 0;text-align:right;font-weight:700;color:#161e2e">${ivMoney(l.lineTotal)}</td></tr>`).join('');
+  const dueLine = invoice.due_date ? `<tr><td style="padding:6px 0;color:#484f64">Due</td><td style="padding:6px 0;text-align:right;font-weight:700">${ivEscapeHtml(invoice.due_date)}</td></tr>` : '';
+
+  const html = `
+    <div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto">
+      <p>Hi ${ivEscapeHtml(clientName)},</p>
+      <p>You have a new invoice${invoice.subject ? ` for <b>${ivEscapeHtml(invoice.subject)}</b>` : ''}.</p>
+      <table style="width:100%;border-collapse:collapse;margin:16px 0" role="presentation">
+        <tr><td style="padding:6px 0;color:#484f64">Invoice</td><td style="padding:6px 0;text-align:right;font-weight:700">#${ivEscapeHtml(invoice.invoice_number || '')}</td></tr>
+        <tr><td style="padding:6px 0;color:#484f64">Amount due</td><td style="padding:6px 0;text-align:right;font-weight:700;font-size:16px">${ivMoney(invoice.total)}</td></tr>
+        ${dueLine}
+      </table>
+      ${rowsHtml ? `<table style="width:100%;border-collapse:collapse;margin:0 0 16px" role="presentation">${rowsHtml}</table>` : ''}
+      <p style="color:#484f64">Please contact us to arrange payment.</p>
+    </div>`;
+  const text = `You have a new invoice #${invoice.invoice_number || ''} for ${ivMoney(invoice.total)}. Please contact us to arrange payment.`;
+
+  const sent = await sendEmail({ to: client.email, subject: `Invoice #${invoice.invoice_number || ''}`, html, text });
+  if (!sent.ok) return res.status(422).json({ ok: false, error: sent.error || 'Could not send the email.' });
+
+  let updated = invoice;
+  if (invoice.invoice_status === 'draft') {
+    const patchR = await supabaseRequest(`invoices?jobber_id=eq.${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      headers: { Prefer: 'return=representation' },
+      body: JSON.stringify({ invoice_status: 'awaiting_payment', jobber_updated_at: new Date().toISOString() }),
+    });
+    if (patchR.ok) { const rows = await patchR.json(); if (rows.length) updated = rows[0]; }
+  }
+
+  return res.status(200).json({ ok: true, resource: 'send_invoice_email', invoice: updated, email: client.email });
+}
+
 async function handleMarkInvoicePaid(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ ok: false, error: 'POST only' });
   const requester = await getRequestingProfile(req);
@@ -5191,6 +5351,244 @@ async function handleMarkInvoicePaid(req, res) {
   const rows = await r.json();
   if (!rows.length) return res.status(404).json({ ok: false, error: 'That invoice no longer exists.' });
   return res.status(200).json({ ok: true, resource: 'mark_invoice_paid', invoice: rows[0], note: 'Status only. No payment was processed and nothing was sent to the client.' });
+}
+
+// 2026-08-26, jomell: "the invoices... should have a title or label rather
+// than just the number... their names should be edittable" -- then, after
+// the title-only version shipped: "it should also apply to when im
+// editting an invoice" (the amount too). Same HL-INV- guard as
+// handleMarkInvoicePaid/handleSendInvoiceEmail above: a Jobber-synced
+// invoice's subject/total is overwritten by the Jobber sync's own upsert
+// on every run, so editing either here would just get silently reverted.
+// Restricted to still-draft invoices for the same reason
+// updateChangeOrderDescription locks a change order after it's been acted
+// on -- once sent, the client has already seen a specific amount, and
+// rewriting it after the fact would silently misrepresent what was
+// actually communicated.
+async function handleUpdateInvoice(req, res) {
+  if (req.method !== 'POST') return res.status(405).json({ ok: false, error: 'POST only' });
+  const requester = await getRequestingProfile(req);
+  if (!requester) return res.status(401).json({ ok: false, error: 'Not signed in -- log into HiveLogic first.' });
+  const b = req.body || {};
+  const id = String(b.id || '').trim();
+  if (!id) return res.status(400).json({ ok: false, error: 'Which invoice? No id given.' });
+  if (!id.startsWith('HL-INV-')) {
+    return res.status(400).json({ ok: false, error: "This invoice is synced from Jobber -- edit it there." });
+  }
+  const subject = String(b.subject || '').trim();
+  if (!subject) return res.status(400).json({ ok: false, error: 'A title is required.' });
+
+  const curR = await supabaseRequest(`invoices?jobber_id=eq.${encodeURIComponent(id)}&select=invoice_status,line_items&limit=1`);
+  if (!curR.ok) return res.status(502).json({ ok: false, error: 'Could not look up that invoice.' });
+  const current = (await curR.json())[0];
+  if (!current) return res.status(404).json({ ok: false, error: 'That invoice no longer exists.' });
+  if (current.invoice_status !== 'draft') {
+    return res.status(400).json({ ok: false, error: 'This invoice has already been sent -- only a draft can still be edited.' });
+  }
+
+  const patch = { subject, jobber_updated_at: new Date().toISOString() };
+  const amount = Number(b.amount);
+  if (isFinite(amount) && amount > 0) {
+    const rounded = Math.round(amount * 100) / 100;
+    patch.total = rounded;
+    patch.subtotal = rounded;
+    patch.balance = rounded;
+    // Only re-price the invoice's line items when there is exactly one --
+    // the single custom line the "customizable amount" create flow writes.
+    // A multi-line invoice keeps its real itemization; only the lump total
+    // moves, same as every other total shown elsewhere in this app.
+    const lines = Array.isArray(current.line_items) ? current.line_items : [];
+    if (lines.length === 1) {
+      patch.line_items = [{ ...lines[0], description: subject, unitPrice: rounded, lineTotal: rounded }];
+    }
+  }
+
+  const r = await supabaseRequest(`invoices?jobber_id=eq.${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    headers: { Prefer: 'return=representation' },
+    body: JSON.stringify(patch),
+  });
+  if (!r.ok) return res.status(500).json({ ok: false, error: 'Update failed: ' + (await r.text()).slice(0, 300) });
+  const rows = await r.json();
+  if (!rows.length) return res.status(404).json({ ok: false, error: 'That invoice no longer exists.' });
+  return res.status(200).json({ ok: true, resource: 'update_invoice', invoice: rows[0] });
+}
+
+// 2026-08-26, jomell: "lets start with the timesheet... copy it into our
+// own [Time & Timesheets tab]." A week's worth of time_sheet_entries
+// (Jobber-synced table, api/jobber/sync-extended.js), shaped for the
+// weekly grid: each entry's job resolved to a real title where one
+// exists, or "General" for the entries no job is attached to (matches
+// Jobber's own screenshot layout). Job titles are looked up only for the
+// distinct job ids actually present this week -- not the whole jobs
+// table -- since a week's entries touch at most a handful of jobs.
+async function handleTimesheetWeek(req, res) {
+  const requester = await getRequestingProfile(req);
+  if (!requester) return res.status(401).json({ ok: false, error: 'Not signed in -- log into HiveLogic first.' });
+  const startAt = String(req.query.startAt || '').trim();
+  const endAt = String(req.query.endAt || '').trim();
+  if (!startAt || !endAt || isNaN(Date.parse(startAt)) || isNaN(Date.parse(endAt))) {
+    return res.status(400).json({ ok: false, error: 'A valid startAt and endAt are required.' });
+  }
+
+  const entriesRes = await supabaseRequest(
+    `time_sheet_entries?start_at=gte.${encodeURIComponent(startAt)}&start_at=lt.${encodeURIComponent(endAt)}` +
+    `&select=jobber_id,start_at,end_at,final_duration,user_id,job_id,note&order=start_at.asc&limit=2000`
+  );
+  if (!entriesRes.ok) return res.status(500).json({ ok: false, error: 'Could not load timesheet entries: ' + (await entriesRes.text()).slice(0, 300) });
+  const entries = await entriesRes.json();
+
+  const jobIds = [...new Set(entries.map(e => e.job_id).filter(Boolean))];
+  let jobTitleById = {};
+  if (jobIds.length) {
+    const jobsRes = await supabaseRequest(`jobs?jobber_id=in.(${jobIds.map(id => encodeURIComponent(id)).join(',')})&select=jobber_id,title`);
+    if (jobsRes.ok) { (await jobsRes.json()).forEach(j => { jobTitleById[j.jobber_id] = j.title; }); }
+  }
+
+  const shaped = entries.map(e => {
+    const durationSeconds = isFinite(Number(e.final_duration)) && Number(e.final_duration) > 0
+      ? Number(e.final_duration)
+      : Math.round((new Date(e.end_at) - new Date(e.start_at)) / 1000);
+    return {
+      id: e.jobber_id,
+      userId: e.user_id,
+      jobId: e.job_id || null,
+      jobLabel: e.job_id ? (jobTitleById[e.job_id] || 'Job') : 'General',
+      startAt: e.start_at,
+      endAt: e.end_at,
+      durationSeconds,
+      note: e.note || null,
+    };
+  });
+
+  return res.status(200).json({ ok: true, resource: 'timesheet_week', entries: shaped });
+}
+
+// The Create Timesheet Entry popup. HiveLogic-native rows use their own
+// 'HL-TSE-<uuid>' id namespace (same convention as HL-INV-/HL-JOB-/HL-CO-)
+// so the Jobber sync's own timeSheetEntries upsert never touches or
+// collides with one. Duration is always DERIVED from startAt/endAt here,
+// never trusted from a client-submitted hours/minutes figure that could
+// drift from the actual time range (Law 1).
+async function handleCreateTimesheetEntry(req, res) {
+  if (req.method !== 'POST') return res.status(405).json({ ok: false, error: 'POST only' });
+  const requester = await getRequestingProfile(req);
+  if (!requester) return res.status(401).json({ ok: false, error: 'Not signed in -- log into HiveLogic first.' });
+  const b = req.body || {};
+  const userId = String(b.userId || '').trim();
+  if (!userId) return res.status(400).json({ ok: false, error: 'An employee is required.' });
+  const jobId = String(b.jobId || '').trim() || null;
+  const startAt = String(b.startAt || '').trim();
+  const endAt = String(b.endAt || '').trim();
+  if (!startAt || !endAt || isNaN(Date.parse(startAt)) || isNaN(Date.parse(endAt))) {
+    return res.status(400).json({ ok: false, error: 'A valid start and end time are required.' });
+  }
+  const startMs = new Date(startAt).getTime();
+  const endMs = new Date(endAt).getTime();
+  if (endMs <= startMs) return res.status(400).json({ ok: false, error: 'End time must be after start time.' });
+
+  let jobUuid = null;
+  let jobTitle = null;
+  if (jobId) {
+    const jobRes = await supabaseRequest(`jobs?jobber_id=eq.${encodeURIComponent(jobId)}&select=uuid_id,title&limit=1`);
+    if (jobRes.ok) { const rows = await jobRes.json(); jobUuid = rows[0]?.uuid_id || null; jobTitle = rows[0]?.title || null; }
+  }
+
+  const row = {
+    jobber_id: 'HL-TSE-' + crypto.randomUUID(),
+    start_at: new Date(startAt).toISOString(),
+    end_at: new Date(endAt).toISOString(),
+    final_duration: Math.round((endMs - startMs) / 1000),
+    user_id: userId,
+    job_id: jobId,
+    job_uuid: jobUuid,
+    note: String(b.note || '').trim() || null,
+    jobber_updated_at: new Date().toISOString(),
+  };
+  const r = await supabaseRequest('time_sheet_entries', { method: 'POST', headers: { Prefer: 'return=representation' }, body: JSON.stringify(row) });
+  if (!r.ok) return res.status(500).json({ ok: false, error: 'Could not save this timesheet entry: ' + (await r.text()).slice(0, 300) });
+  const created = (await r.json())[0];
+  return res.status(200).json({
+    ok: true,
+    resource: 'create_timesheet_entry',
+    entry: {
+      id: created.jobber_id, userId: created.user_id, jobId: created.job_id || null,
+      jobLabel: jobId ? (jobTitle || 'Job') : 'General', startAt: created.start_at, endAt: created.end_at,
+      durationSeconds: row.final_duration, note: created.note || null,
+    },
+  });
+}
+
+// Editing the Employee is deliberately not offered here (matches the
+// Jobber modal jomell is copying, which greys that field out) -- reassigning
+// whose hours these are is a bigger action than fixing a time/job/note, and
+// nothing in the UI asks for it.
+async function handleUpdateTimesheetEntry(req, res) {
+  if (req.method !== 'PATCH') return res.status(405).json({ ok: false, error: 'PATCH only' });
+  const requester = await getRequestingProfile(req);
+  if (!requester) return res.status(401).json({ ok: false, error: 'Not signed in -- log into HiveLogic first.' });
+  const b = req.body || {};
+  const id = String(b.id || '').trim();
+  if (!id) return res.status(400).json({ ok: false, error: 'Which entry? No id given.' });
+  if (!id.startsWith('HL-TSE-')) {
+    return res.status(400).json({ ok: false, error: 'This entry is synced from Jobber -- edit it there.' });
+  }
+  const jobId = String(b.jobId || '').trim() || null;
+  const startAt = String(b.startAt || '').trim();
+  const endAt = String(b.endAt || '').trim();
+  if (!startAt || !endAt || isNaN(Date.parse(startAt)) || isNaN(Date.parse(endAt))) {
+    return res.status(400).json({ ok: false, error: 'A valid start and end time are required.' });
+  }
+  const startMs = new Date(startAt).getTime();
+  const endMs = new Date(endAt).getTime();
+  if (endMs <= startMs) return res.status(400).json({ ok: false, error: 'End time must be after start time.' });
+
+  let jobUuid = null;
+  let jobTitle = null;
+  if (jobId) {
+    const jobRes = await supabaseRequest(`jobs?jobber_id=eq.${encodeURIComponent(jobId)}&select=uuid_id,title&limit=1`);
+    if (jobRes.ok) { const rows = await jobRes.json(); jobUuid = rows[0]?.uuid_id || null; jobTitle = rows[0]?.title || null; }
+  }
+
+  const patch = {
+    start_at: new Date(startAt).toISOString(),
+    end_at: new Date(endAt).toISOString(),
+    final_duration: Math.round((endMs - startMs) / 1000),
+    job_id: jobId,
+    job_uuid: jobUuid,
+    note: String(b.note || '').trim() || null,
+    jobber_updated_at: new Date().toISOString(),
+  };
+  const r = await supabaseRequest(`time_sheet_entries?jobber_id=eq.${encodeURIComponent(id)}`, {
+    method: 'PATCH', headers: { Prefer: 'return=representation' }, body: JSON.stringify(patch),
+  });
+  if (!r.ok) return res.status(500).json({ ok: false, error: 'Could not save this timesheet entry: ' + (await r.text()).slice(0, 300) });
+  const rows = await r.json();
+  if (!rows.length) return res.status(404).json({ ok: false, error: 'That entry no longer exists.' });
+  const updated = rows[0];
+  return res.status(200).json({
+    ok: true,
+    resource: 'update_timesheet_entry',
+    entry: {
+      id: updated.jobber_id, userId: updated.user_id, jobId: updated.job_id || null,
+      jobLabel: jobId ? (jobTitle || 'Job') : 'General', startAt: updated.start_at, endAt: updated.end_at,
+      durationSeconds: patch.final_duration, note: updated.note || null,
+    },
+  });
+}
+
+async function handleDeleteTimesheetEntry(req, res) {
+  if (req.method !== 'DELETE') return res.status(405).json({ ok: false, error: 'DELETE only' });
+  const requester = await getRequestingProfile(req);
+  if (!requester) return res.status(401).json({ ok: false, error: 'Not signed in -- log into HiveLogic first.' });
+  const id = String((req.query && req.query.id) || '').trim();
+  if (!id) return res.status(400).json({ ok: false, error: 'Which entry? No id given.' });
+  if (!id.startsWith('HL-TSE-')) {
+    return res.status(400).json({ ok: false, error: 'This entry is synced from Jobber -- delete it there.' });
+  }
+  const r = await supabaseRequest(`time_sheet_entries?jobber_id=eq.${encodeURIComponent(id)}`, { method: 'DELETE' });
+  if (!r.ok) return res.status(500).json({ ok: false, error: 'Could not delete this entry: ' + (await r.text()).slice(0, 300) });
+  return res.status(200).json({ ok: true, resource: 'delete_timesheet_entry' });
 }
 
 async function handleMyJobsToday(req, res) {
@@ -9003,6 +9401,12 @@ if (resource === 'mailconnect') {
   if (resource === 'create_client') {
     try { return await handleCreateClient(req, res); } catch (e) { return res.status(500).json({ ok: false, error: e.message }); }
   }
+  if (resource === 'update_client_contact') {
+    try { return await handleUpdateClientContact(req, res); } catch (e) { return res.status(500).json({ ok: false, error: e.message }); }
+  }
+  if (resource === 'set_job_closed') {
+    try { return await handleSetJobClosed(req, res); } catch (e) { return res.status(500).json({ ok: false, error: e.message }); }
+  }
   if (resource === 'client_location') {
     try { return await handleClientLocation(req, res); } catch (e) { return res.status(500).json({ ok: false, error: e.message }); }
   }
@@ -9027,8 +9431,26 @@ if (resource === 'mailconnect') {
   if (resource === 'create_invoice_from_job') {
     try { return await handleCreateInvoiceFromJob(req, res); } catch (e) { return res.status(500).json({ ok: false, error: e.message }); }
   }
+  if (resource === 'send_invoice_email') {
+    try { return await handleSendInvoiceEmail(req, res); } catch (e) { return res.status(500).json({ ok: false, error: e.message }); }
+  }
   if (resource === 'mark_invoice_paid') {
     try { return await handleMarkInvoicePaid(req, res); } catch (e) { return res.status(500).json({ ok: false, error: e.message }); }
+  }
+  if (resource === 'update_invoice') {
+    try { return await handleUpdateInvoice(req, res); } catch (e) { return res.status(500).json({ ok: false, error: e.message }); }
+  }
+  if (resource === 'timesheet_week') {
+    try { return await handleTimesheetWeek(req, res); } catch (e) { return res.status(500).json({ ok: false, error: e.message }); }
+  }
+  if (resource === 'create_timesheet_entry') {
+    try { return await handleCreateTimesheetEntry(req, res); } catch (e) { return res.status(500).json({ ok: false, error: e.message }); }
+  }
+  if (resource === 'update_timesheet_entry') {
+    try { return await handleUpdateTimesheetEntry(req, res); } catch (e) { return res.status(500).json({ ok: false, error: e.message }); }
+  }
+  if (resource === 'delete_timesheet_entry') {
+    try { return await handleDeleteTimesheetEntry(req, res); } catch (e) { return res.status(500).json({ ok: false, error: e.message }); }
   }
   if (resource === 'my_jobs_today') {
     try { return await handleMyJobsToday(req, res); } catch (e) { return res.status(500).json({ ok: false, error: e.message }); }

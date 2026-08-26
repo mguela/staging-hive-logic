@@ -331,6 +331,30 @@ export function rejectEstimate(estimate, actor, { reason, now = new Date().toISO
   return withComputedStatus(next);
 }
 
+// Records that the CLIENT said yes, clicking Approve on the emailed
+// estimate (api/bookkeeping/estimates/respond.js) -- 2026-08-25, jomell.
+// Deliberately NOT the same thing as approveEstimate() above: that one is
+// gated on a controller-role actor AND the deposit already being paid
+// (Chris's spec), and a client's email click satisfies neither -- it has no
+// server-verified HiveLogic identity, and "the client said yes" is not the
+// same real-world event as "the deposit landed." Collapsing them would let
+// an email click silently skip the deposit-gate. This only stamps the
+// client's response for staff to see and act on (e.g. by sending the
+// deposit request); lifecycleStatus is untouched. A client clicking Reject
+// IS the same real event either way, so that goes through the real
+// rejectEstimate() above instead of a parallel path here.
+export function recordClientApproval(estimate, { note, now = new Date().toISOString() } = {}) {
+  requireStatus(estimate, ['sent'], 'record a client approval for');
+  let next = { ...estimate, clientApprovedAt: now, clientApprovalNote: String(note || '').trim() || null };
+  next = appendHistory(next, {
+    type: 'client_approved',
+    actor: { id: 'client-email-link', role: 'client' },
+    now,
+    detail: { note: note || null }
+  });
+  return withComputedStatus(next);
+}
+
 // approved -> converted. The estimate becomes a real job; the job carries
 // the REMAINING payment schedule -- every row except the deposit, which is
 // already collected and settled. Each remaining row's dollar amount is

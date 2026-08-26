@@ -16,7 +16,7 @@ import { jobRef } from './_lib/project-numbers.js';
 
 const PAGE_SIZE = 50;
 
-const LIST_SELECT = 'jobber_id,client_id,job_number,project_seq,division_code,title,job_status,job_type,total,start_at,end_at,completed_at,jobber_created_at,jobber_web_uri,client_name,gps_lat,gps_lng,loc_city,loc_province';
+const LIST_SELECT = 'jobber_id,client_id,job_number,project_seq,division_code,title,job_status,job_type,total,start_at,end_at,completed_at,jobber_created_at,jobber_web_uri,client_name,gps_lat,gps_lng,loc_city,loc_province,effective_start_at,effective_end_at,hl_closed_at';
 
 // Single-job fetch, used by the real job-detail view (Visual Intelligence's
 // Photos/Timeline/Tags tabs live here). Returns null if not found (route
@@ -35,9 +35,20 @@ export async function getJobByIdData(id) {
     projectSeq: j.project_seq ?? null,
     projectRef: j.project_seq ? jobRef(j.project_seq) : null,
     divisionCode: j.division_code || null,
-    status: j.job_status, type: j.job_type, total: j.total, startAt: j.start_at,
-    endAt: j.end_at, completedAt: j.completed_at, jobberUrl: j.jobber_web_uri,
-    gpsLat: j.gps_lat, gpsLng: j.gps_lng
+    status: j.job_status, type: j.job_type, total: j.total,
+    // 2026-08-25: startAt now falls back to the earliest non-canceled
+    // HiveLogic-native appointment for this job (jobs_enriched's
+    // effective_start_at) when Jobber itself has no start_at -- a job
+    // booked on the crew board is scheduled, whether or not Jobber has
+    // learned about it. jobs.start_at itself is untouched; this only
+    // blends the two for display.
+    startAt: j.effective_start_at ?? j.start_at,
+    endAt: j.effective_end_at ?? j.end_at, completedAt: j.completed_at, jobberUrl: j.jobber_web_uri,
+    gpsLat: j.gps_lat, gpsLng: j.gps_lng,
+    // 2026-08-25: HiveLogic's own "Close job" action (Active Jobs) --
+    // separate from Jobber's job_status/completed_at, which the sync
+    // overwrites every run. Null means not closed from HiveLogic's side.
+    closedAt: j.hl_closed_at || null
   };
 }
 
@@ -83,8 +94,10 @@ export async function getJobsListData({ limit, offset, status } = {}) {
     status: j.job_status,
     type: j.job_type,
     total: j.total,
-    startAt: j.start_at,
-    endAt: j.end_at,
+    // See getJobByIdData's comment: falls back to a native crew-board
+    // appointment when Jobber has no start_at of its own.
+    startAt: j.effective_start_at ?? j.start_at,
+    endAt: j.effective_end_at ?? j.end_at,
     completedAt: j.completed_at,
     // Surfaced for the Active Jobs list, which sorts and shows when a job was raised.
     createdAt: j.jobber_created_at,
@@ -92,7 +105,8 @@ export async function getJobsListData({ limit, offset, status } = {}) {
     gpsLat: j.gps_lat,
     gpsLng: j.gps_lng,
     city: j.loc_city,
-    province: j.loc_province
+    province: j.loc_province,
+    closedAt: j.hl_closed_at || null
   }));
 
   return { totalCount, returned: jobs.length, jobs };

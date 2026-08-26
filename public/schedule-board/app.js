@@ -148,7 +148,8 @@
     rows.push(v.source==='jobber'?'🔒 <b>From Jobber</b> — read-only here (edit in Jobber, or make an override)':'⬡ <b>HiveLogic</b> — editable here');
     if(kd&&kd.clientFacing) rows.push(v.confirm==='confirmed'?'✓ <b>Confirmed</b> by the client':'⌛ <b>Awaiting</b> client confirmation');
     if(v.pinned) rows.push('📌 <b>Pinned</b> — do not move');
-    if(v.override) rows.push('▪ <b>Proposed change</b> — a HiveLogic override of the Jobber time');
+    if(v.override && isRemoved(v)) rows.push('🗑 <b>Proposed removal</b> — a HiveLogic plan to take this off the board, Jobber untouched until Live');
+    else if(v.override) rows.push('▪ <b>Proposed change</b> — a HiveLogic override of the Jobber time');
     rows.push(`Status: <b>${STATUS[v.status]?STATUS[v.status].l:v.status}</b> · type: <b>${kd.l}</b>`);
     return `<div class="iconkey"><div class="ikh">What the marks on this job mean</div>${rows.map((x)=>'<div>'+x+'</div>').join('')}</div>`;
   }
@@ -156,6 +157,15 @@
   function effectiveStart(v){ return (v.override && state.controlMode==='live') ? v.override.s : v.s; }
   function effectiveEnd(v){ return (v.override && state.controlMode==='live') ? v.override.e : v.e; }
   function effectiveTech(v){ return (v.override && state.controlMode==='live') ? v.override.t : v.t; }
+  // 2026-08-25: "remove the schedule" for a Jobber-mirrored job -- same
+  // proposed/effective duality as a time override (this file never writes to
+  // Jobber, see the header comment), except there is no new time/tech to
+  // show, the visit just stops existing once the crew is HiveLogic Live.
+  // isRemoved(v) alone means "proposed" (still shown, flagged); combined
+  // with controlMode==='live' it means "actually gone" (excluded from every
+  // board computation via dayVisits below, the single choke point).
+  function isRemoved(v){ return !!(v.override && v.override.removed); }
+  function isEffectivelyRemoved(v){ return isRemoved(v) && state.controlMode==='live'; }
   // Rule 4: stage a change into the scenario plan instead of firing notifications per drag
   function stageChange(label, apply, undo){
     apply(); state.scenario.changes.push({label, undo}); render();
@@ -206,7 +216,7 @@
   }
   const projectFor = (v) => v&&v.jobNo ? projects.find((p)=>p.id===String(v.jobNo)) : null;
   function visibleProjects(){ return state.division==='all' ? projects : projects.filter((p)=>p.division===state.division); }
-  const dayVisits = (id, date) => visits.filter((v)=>v.date===(date||state.date) && effectiveTech(v)===id);
+  const dayVisits = (id, date) => visits.filter((v)=>v.date===(date||state.date) && effectiveTech(v)===id && !isEffectivelyRemoved(v));
   function conflictInfo(id, date){
     const vs=dayVisits(id,date).slice().sort((a,b)=>a.s-b.s); const bad=new Set(),zones=[];
     for(let i=0;i<vs.length;i++)for(let j=i+1;j<vs.length;j++)
@@ -732,7 +742,7 @@
         const unconf=clientFacing && v.confirm==='unconfirmed' && v.source!=='jobber';
         const cf = v.source==='jobber'?'':(v.confirm==='confirmed'?'<span class="cf" title="Confirmed" style="color:var(--ok)">✓</span>':(unconf?'<span class="cf" title="Awaiting confirmation" style="color:var(--amb)">⌛</span>':''));
         const r=readinessOf(v), es=effectiveStart(v), ee=effectiveEnd(v);
-        const propText = (v.override && state.controlMode!=='live') ? 'PROPOSED CHANGE' : (v.lifecycle==='proposed' ? 'PROPOSED' : '');
+        const propText = isRemoved(v) ? 'PROPOSED REMOVAL' : ((v.override && state.controlMode!=='live') ? 'PROPOSED CHANGE' : (v.lifecycle==='proposed' ? 'PROPOSED' : ''));
         const L=Math.max(0,Math.min(SPAN-0.25,es-DAY_START)), R=Math.max(L+0.25,Math.min(SPAN,ee-DAY_START)); // clamp so early/late jobs stay on-canvas
         const offWin = es<DAY_START || ee>DAY_END;
         // Chained secondary: the job itself lives on the lead's row. All this row
@@ -742,10 +752,10 @@
                style="left:${L*HW}px;width:${(R-L)*HW}px"><small>⛓ with ${v.chainedToName}</small></div>`;
           return;
         }
-        h+=`<div class="job ${v.status==='done'?'done':''} ${ci.bad.has(v.id)?'conflict':''} ${unconf?'unconfirmed':''} ${v.source==='jobber'?'jobber':''} ${r.level!=='ready'?r.level:''}" draggable="${v.locked?'false':'true'}" data-vid="${v.id}" title="${offWin?fmt(es)+'–'+fmt(ee)+' (outside board hours)':''}"
-             style="left:${L*HW}px;width:${(R-L)*HW}px;background:linear-gradient(0deg,${pc}2e,${pc}2e),var(--panel);border-left-color:${pc}">
+        h+=`<div class="job ${v.status==='done'?'done':''} ${ci.bad.has(v.id)?'conflict':''} ${unconf?'unconfirmed':''} ${v.source==='jobber'?'jobber':''} ${r.level!=='ready'?r.level:''}" draggable="${v.locked?'false':'true'}" data-vid="${v.id}" title="${isRemoved(v)?'Proposed removal — Jobber untouched until this crew is Live':(offWin?fmt(es)+'–'+fmt(ee)+' (outside board hours)':'')}"
+             style="left:${L*HW}px;width:${(R-L)*HW}px;background:linear-gradient(0deg,${pc}2e,${pc}2e),var(--panel);border-left-color:${pc}${isRemoved(v)?';opacity:.5':''}">
              ${v.pinned?'<span class="pin">📌</span>':''}${cf}
-             <b><span class="divi" title="${v.div}">${cardIcon(v)}</span>${v.jobNo?'#'+v.jobNo+' ':''}${v.type}</b>
+             <b><span class="divi" title="${v.div}">${cardIcon(v)}</span>${v.jobNo?'#'+v.jobNo+' ':''}${isRemoved(v)?'<s>'+v.type+'</s>':v.type}</b>
              <small><span class="io" title="${exposureOf(v)==='outside'?'Outside work — weather-exposed':'Inside work'}">${outIcon(v)}</span> ${v.client} · ${fmt(es)}–${fmt(ee)}</small>
              <span class="rdy ${r.level}">${r.level==='ready'?'● Ready':(RDY[r.level].l+' — '+r.why)}</span>
              ${(v.crew&&v.crew.length>1)?`<span class="crewrow" title="${v.crew.map((c)=>c.n+(c.lead?' (lead)':'')).join(', ')}">${v.crew.map((c)=>`<span class="cwav${c.lead?' lead':''}" title="${c.n}${c.lead?' · lead':' · crew'}" style="background:${c.pc}">${c.ini}</span>`).join('')}<span class="cwn">+${v.crew.length-1}</span></span>`:''}
@@ -785,7 +795,7 @@
     const dt0=parseYMD(state.date), y=dt0.getFullYear(), m=dt0.getMonth();
     const MONTHS=['January','February','March','April','May','June','July','August','September','October','November','December'];
     const first=new Date(y,m,1), lead=first.getDay(), days=new Date(y,m+1,0).getDate();
-    const byDate={}; visits.forEach((v)=>{ if(state.hidden.has(v.t))return; (byDate[v.date]=byDate[v.date]||[]).push(v); });
+    const byDate={}; visits.forEach((v)=>{ if(state.hidden.has(v.t))return; if(isEffectivelyRemoved(v))return; (byDate[v.date]=byDate[v.date]||[]).push(v); });
     let h='<div class="mo"><div style="font-weight:800;margin:2px 0 8px">'+MONTHS[m]+' '+y+'</div><div class="modow">'+
       ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map((x)=>`<span>${x}</span>`).join('')+'</div><div class="mogrid">';
     const cells=Math.ceil((lead+days)/7)*7;
@@ -1958,6 +1968,16 @@
       if(clientFacing && v.confirm!=='confirmed') body+=`<button class="btn sm primary" onclick="LabUI.confirmAppt('${vid}')">✓ Confirm</button><button class="btn sm" onclick="LabUI.requestApproval('${vid}')">📲 Request approval</button>`;
       if(clientFacing) body+=`<button class="btn sm" onclick="LabUI.sendReminderNow('${vid}')">📧 Reminder</button>`;
       body+=`<button class="btn sm" onclick="LabUI.togglePin('${vid}')">${v.pinned?'📌 Unpin':'📌 Pin'}</button><button class="btn sm" onclick="LabUI.cycleStatus('${vid}')">↻ ${STATUS[v.status].l}</button>`;
+      // 2026-08-25: "in schedule, when clicking on a schedule, there should
+      // be a checkbox named 'completed'." A direct toggle, separate from
+      // the ↻ status-cycle button above (which still only changes the
+      // local status word, not persisted -- same pre-existing gap as the
+      // Apply Move/Cancel bugs, not touched here since it wasn't what was
+      // asked). This one is real: it PATCHes hl_appointments.status for a
+      // native appointment via the new set_appointment_status action, same
+      // reload-on-success pattern every other real write in this file uses
+      // (hlMoveNative, hlChain, hlClockCrew, ...).
+      body+=`<label style="display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:700;color:var(--ink);cursor:pointer;margin:0 2px"><input type="checkbox" ${v.status==='done'?'checked':''} onchange="LabUI.toggleCompleted('${vid}',this.checked)"> Completed</label>`;
       if(clientFacing) body+=`<button class="btn sm danger" onclick="LabUI.cancelAppt('${vid}')">Cancel…</button>`;
       // The whole point of a site visit is the estimate that follows it. The
       // path existed -- the lead card has a "Start estimate" button -- but from
@@ -1977,7 +1997,16 @@
     modal({k:'Appointment',title:`${v.jobNo?'#'+v.jobNo+' ':''}${v.type}`,body,actions:[
       {label:'Close',cls:'',fn:closeModal},
       editable
-        ? {label:'Apply move',cls:'primary',fn:()=>{const nt=document.getElementById('f_tech').value,ns=parseFloat(document.getElementById('f_time').value);closeModal();if(state.date!==v.date)state.date=v.date;openImpact(vid,nt,clampHr(ns,dur));}}
+        // 2026-08-25: "when i click 'apply move' nothing happens" -- this
+        // unconditionally routed through openImpact()->commitMove(), which
+        // is a local-only lab preview (its own body text says so: "No real
+        // write") -- the appointment reverted on the next reload with no
+        // visible error. The drag-and-drop path onto this same appointment
+        // already does this correctly (wireDay()'s drop handler, above):
+        // hlMoveNative() for a real native appointment (v.native, backed by
+        // a real hl_appointments row), openImpact() only for the
+        // non-native/no-apptId-yet case (e.g. a still-proposed visit).
+        ? {label:'Apply move',cls:'primary',fn:()=>{const nt=document.getElementById('f_tech').value,ns=parseFloat(document.getElementById('f_time').value);closeModal();if(state.date!==v.date)state.date=v.date;const clamped=clampHr(ns,dur);if(v.native)hlMoveNative(v,nt,clamped);else openImpact(vid,nt,clamped);}}
         : {label:'📨 Request change',cls:'primary',fn:()=>{const nt=document.getElementById('f_tech').value,ns=parseFloat(document.getElementById('f_time').value);closeModal();if(state.date!==v.date)state.date=v.date;openChangeRequest(vid,nt,clampHr(ns,dur));}}]});
   }
   // Crew + clock controls (HiveLogic-native; never writes to Jobber).
@@ -2035,16 +2064,25 @@
     let body=`<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap"><span class="srcpill jobber">🔒 Jobber source</span><span class="srcpill ${live?'hivelogic':'jobber'}">${live?'HiveLogic managed':'Jobber managed'}</span></div>`;
     body+=infoSections(v);
     body+=crewPanel(v);
-    if(hasOv) body+=`<div class="policybox" style="margin-top:8px"><b>Source history</b>Jobber: ${fmt(v.s)}–${fmt(v.e)}${live?' — now history':' — still effective'} · HiveLogic proposal: ${fmt(v.override.s)}–${fmt(v.override.e)}${live?' — effective':' — proposed'}</div>`;
+    if(hasOv && isRemoved(v)) body+=`<div class="policybox" style="margin-top:8px"><b>Source history</b>Jobber: ${fmt(v.s)}–${fmt(v.e)}${live?' — removed':' — still effective'} · HiveLogic proposal: take this off the board${live?' — effective':' — proposed'}</div>`;
+    else if(hasOv) body+=`<div class="policybox" style="margin-top:8px"><b>Source history</b>Jobber: ${fmt(v.s)}–${fmt(v.e)}${live?' — now history':' — still effective'} · HiveLogic proposal: ${fmt(v.override.s)}–${fmt(v.override.e)}${live?' — effective':' — proposed'}</div>`;
     const actions=[{label:'Close',cls:'',fn:closeModal}];
     if(!canEdit()){
       body+=`<div class="policybox" style="margin-top:8px"><b>${ROLE_LABELS[state.role]||state.role} — view / request only</b>Ask Dispatch to change this Jobber job.</div>`;
       actions.push({label:'📨 Request change',cls:'primary',fn:()=>{closeModal();openChangeRequest(vid);}});
     } else if(state.controlMode==='mirror'){
       body+=`<div class="policybox" style="margin-top:8px;color:var(--amb)"><b>Mirror-only mode</b>Jobber runs this. You can PLAN an override (scenario only) but can't publish it until this crew is HiveLogic Live.</div>`;
-      actions.push({label:hasOv?'Update plan':'Plan override (scenario)',cls:'',fn:()=>{closeModal();openOverrideCreate(vid);}});
+      if(isRemoved(v)){
+        actions.push({label:'↩ Restore to schedule',cls:'',fn:()=>{closeModal();restoreVisitScenario(vid);}});
+      } else {
+        actions.push({label:hasOv?'Update plan':'Plan override (scenario)',cls:'',fn:()=>{closeModal();openOverrideCreate(vid);}});
+        actions.push({label:'🗑 Remove from schedule (scenario)',cls:'',fn:()=>{closeModal();removeVisitScenario(vid);}});
+      }
+    } else if(isRemoved(v)){
+      actions.push({label:'↩ Restore to schedule',cls:'primary',fn:()=>{closeModal();restoreVisitScenario(vid);}});
     } else {
       actions.push({label:hasOv?'Update override':'Create override',cls:'primary',fn:()=>{closeModal();openOverrideCreate(vid);}});
+      actions.push({label:'🗑 Remove from schedule',cls:'',fn:()=>{closeModal();removeVisitScenario(vid);}});
     }
     body+=`<details class="iclps"><summary>❓ What the symbols mean</summary>${iconLegendFor(v)}</details>`;
     modal({k:'Jobber job · '+(live?'HiveLogic live':'read-only source'),title:`${v.jobNo?'#'+v.jobNo+' ':''}${v.type}`,body,actions});
@@ -2064,6 +2102,25 @@
       ()=>{ v.override={t:techId,s:start,e:start+dur,lifecycle:'proposed'}; },
       ()=>{ v.override=prev; });
     toast(state.controlMode==='live'?'📋 Staged override — effective on publish':'✎ Override staged as a proposal — Jobber untouched, one card',false);
+  }
+  // 2026-08-25: "in schedule tab when clicking a job... there should be an
+  // option or button to remove the schedule." Same shape as commitOverride
+  // above (stageChange, undoable, never touches Jobber) -- removing a
+  // Jobber-mirrored job supersedes any time/crew override on it, so this
+  // replaces v.override outright rather than layering onto it.
+  function removeVisitScenario(vid){
+    const v=visits.find((z)=>z.id===vid); if(!v)return; const prev=v.override;
+    stageChange(`Remove ${v.client} · ${v.type} from the board`,
+      ()=>{ v.override={removed:true,lifecycle:'proposed'}; },
+      ()=>{ v.override=prev; });
+    toast(state.controlMode==='live'?'🗑 Staged removal — effective on publish':'🗑 Removal staged as a proposal — Jobber untouched, one card',false);
+  }
+  function restoreVisitScenario(vid){
+    const v=visits.find((z)=>z.id===vid); if(!v)return; const prev=v.override;
+    stageChange(`Restore ${v.client} · ${v.type} to the board`,
+      ()=>{ v.override=null; },
+      ()=>{ v.override=prev; });
+    toast('↩ Restored — back on the board',false);
   }
   function openAssignSheet(uid){ const u=unassigned.find((z)=>z.id===uid); if(!u)return;
     const body=`<div style="font-size:12px;margin-bottom:8px">${u.client} · ${u.city} · ${u.div}</div>
@@ -2338,7 +2395,47 @@
       modal({k:'Cancel appointment',title:`${v.type} · ${v.client}`,
         body:`<div class="policybox"><b>Cancellation policy</b>${config.cancellationPolicy}</div>
           <div style="font-size:11.5px;color:var(--mut);margin-top:8px">Cancelling frees the slot and (in production) emails the client + notifies the crew. Any policy fee is flagged for the office.</div>`,
-        actions:[{label:'Keep it',cls:'',fn:closeModal},{label:'Cancel appointment',cls:'danger',fn:()=>{ v.confirm='cancelled'; v.status='problem'; closeModal(); render(); toast(`🚫 Cancelled — ${v.client}. Policy applied.`,false); }}]}); },
+        actions:[{label:'Keep it',cls:'',fn:closeModal},{label:'Cancel appointment',cls:'danger',fn:()=>{
+          closeModal();
+          // 2026-08-25: "i canceled the appointment... but its not
+          // disappearing from the schedule" -- same shape as the Apply Move
+          // bug: this only ever set v.confirm/v.status locally, never called
+          // the real cancel_appointment action, so the card stayed on the
+          // board (and would have come right back on the next reload too).
+          // api/schedule/hl.js's GET already excludes canceled=eq.false, so
+          // a real cancel + reload is what actually removes the card.
+          // A still-proposed visit (v.native false, no real apptId yet) has
+          // nothing on the server to cancel -- that case keeps the local-
+          // only behavior, same as openImpact() being kept for that case in
+          // openJobSheet's Apply Move handler.
+          if(v.native && v.apptId){
+            window.hlPost('cancel_appointment',{id:v.apptId}).then((r)=>{
+              if(r&&r.ok){ toast(`🚫 Cancelled — ${v.client}. Policy applied.`,false); window.hlReload(); }
+              else toast('⚠ Cancel failed: '+((r&&r.error)||'error'),false);
+            });
+          } else {
+            v.confirm='cancelled'; v.status='problem'; render();
+            toast(`🚫 Cancelled — ${v.client}. Policy applied.`,false);
+          }
+        }}]}); },
+    // 2026-08-25: "there should be a checkbox named 'completed'." Real
+    // write for a native appointment (set_appointment_status), reload on
+    // success -- same pattern as cancelAppt just above. A still-proposed
+    // visit (no real apptId yet) keeps the old local-only status change.
+    toggleCompleted(vid,checked){
+      const v=visits.find((z)=>z.id===vid); if(!v)return;
+      const newStatus=checked?'done':'scheduled';
+      closeModal();
+      if(v.native && v.apptId){
+        window.hlPost('set_appointment_status',{id:v.apptId,status:newStatus}).then((r)=>{
+          if(r&&r.ok){ toast(checked?`✓ Marked completed — ${v.client}`:`Marked not completed — ${v.client}`,false); window.hlReload(); }
+          else toast('⚠ Could not update: '+((r&&r.error)||'error'),false);
+        });
+      } else {
+        v.status=newStatus; render();
+        toast(checked?`✓ Marked completed — ${v.client}`:`Marked not completed — ${v.client}`,false);
+      }
+    },
     sendReminderNow(vid){ const v=visits.find((z)=>z.id===vid); closeModal(); toast(`📧 Reminder email queued to ${v?v.client:'client'} (lab — no real send)`,false); },
     undo(){ const u=state.undo; if(!u)return; if(u.type==='move'){const v=visits.find((z)=>z.id===u.id);Object.assign(v,u.prev);} else if(u.type==='assign'){const i=visits.findIndex((z)=>z.id===u.id);if(i>=0)visits.splice(i,1);unassigned.unshift(u.u);} state.undo=null; render(); toast('↩️ Undone',false); },
   };
