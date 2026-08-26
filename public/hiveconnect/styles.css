@@ -1359,10 +1359,6 @@ html[data-theme="dark"] .huddle-banner {
 }
 .sidebar.sidebar-messages-theme .channel-list li .unread { background: var(--red); color: #fff; }
 .sidebar.sidebar-messages-theme .presence-dot { border-color: var(--card); }
-.msg-head-icons { display: flex; align-items: center; justify-content: flex-end; gap: 4px; margin-bottom: 10px; }
-.msg-head-ic { appearance: none; -webkit-appearance: none; box-shadow: none; background: none; border: none;
-  color: var(--mut); padding: 6px; border-radius: 8px; cursor: pointer; display: flex; }
-.msg-head-ic:hover { background: var(--steel-bg); color: var(--ink); }
 .msg-search { display: flex; align-items: center; gap: 7px; background: var(--canvas); border: 1.5px solid var(--line);
   border-radius: 9px; padding: 7px 11px; color: var(--mut); margin-bottom: 8px; }
 .msg-search svg { flex: none; }

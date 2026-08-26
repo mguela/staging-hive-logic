@@ -691,13 +691,6 @@ function evMsgSection(iconHtml, label, key, opts) {
   body.appendChild(ul); folder.appendChild(body);
   return { folder, ul };
 }
-function evMsgMoreMenu(e) {
-  evMenu(e, [['✓ Mark all as read', () => evMsgMarkAllRead()]]);
-}
-function evMsgMarkAllRead() {
-  evMsgDmChannels().forEach(c => { if ((unreads.get(c.id) || 0) > 0) markRead(c.id); });
-  renderMessagesPanel();
-}
 function buildDmRow(c) {
   const li = document.createElement('li');
   li.dataset.name = dmDisplayName(c).toLowerCase();
@@ -754,21 +747,6 @@ const MSG_ICON_PERSON = '<svg viewBox="0 0 24 24" width="13" height="13" fill="n
 const MSG_ICON_TEAMS = '<svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor"><circle cx="6" cy="6" r="2.6"/><circle cx="18" cy="6" r="2.6"/><circle cx="6" cy="18" r="2.6"/><circle cx="18" cy="18" r="2.6"/></svg>';
 function renderMessagesPanel() {
   const el = $('panel-messages'); if (!el) return; el.innerHTML = '';
-
-  // Header icon row: only real actions -- compose (already existed as the
-  // big "+ New message" CTA) and a "..." menu with a real action (mark all
-  // read). No folder/snooze icons: this app has no message-folders or
-  // snoozed-message concept to back them.
-  const headIcons = document.createElement('div'); headIcons.className = 'msg-head-icons';
-  const composeIc = document.createElement('button'); composeIc.type = 'button'; composeIc.className = 'msg-head-ic'; composeIc.title = 'New message';
-  composeIc.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 114 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>';
-  composeIc.onclick = (e) => { e.stopPropagation(); openCompose(); };
-  headIcons.appendChild(composeIc);
-  const moreIc = document.createElement('button'); moreIc.type = 'button'; moreIc.className = 'msg-head-ic'; moreIc.title = 'More';
-  moreIc.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg>';
-  moreIc.onclick = (e) => evMsgMoreMenu(e);
-  headIcons.appendChild(moreIc);
-  el.appendChild(headIcons);
 
   // Search (own row) + All/Unread quick filter + chevron for the rest.
   const searchWrap = document.createElement('div'); searchWrap.className = 'msg-search';
