@@ -53,6 +53,20 @@ test('public allowlist covers portals, webhooks, oauth callbacks, health, agents
   }
 });
 
+test('the estimate Approve/Reject link (respond.js) is public, same as /api/schedule/confirm -- both are token-authenticated, no HiveLogic session can ever exist', () => {
+  // Found live, 2026-08-27: respond.js was built to mirror /api/schedule/confirm
+  // exactly (its own header comment says so) but was never actually added
+  // here, so the edge gate 401'd every real client who clicked a real emailed
+  // Approve/Reject link -- unreachable since the feature shipped, because
+  // nobody had a working Resend key to click a real one until now.
+  assert.equal(isPublicApiPath('/api/bookkeeping/estimates/respond'), true);
+  // A narrow, exact allowlist entry -- it must not blow open the rest of the
+  // bookkeeping API, which stays session-gated.
+  assert.equal(isPublicApiPath('/api/bookkeeping/reference-data'), false);
+  assert.equal(isPublicApiPath('/api/bookkeeping/estimates'), false);
+  assert.equal(isPublicApiPath('/api/bookkeeping/estimates/respond-lookalike'), false);
+});
+
 test('protected data endpoints are NOT on the public allowlist', () => {
   for (const p of [
     '/api/track1', '/api/bookkeeping/reference-data', '/api/import-companycam',
