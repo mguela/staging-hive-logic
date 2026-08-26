@@ -470,10 +470,10 @@ button { font-family: inherit; cursor: pointer; }
   letter-spacing: .12em; text-transform: uppercase;
 }
 .day-divider::before, .day-divider::after { content: ''; flex: 1; height: 1px; background: var(--line); }
-.msg { display: flex; gap: 12px; padding: 5px 10px; border-radius: 10px; position: relative; }
+.msg { display: flex; align-items: flex-start; gap: 12px; padding: 5px 10px; border: none; border-radius: 10px; box-shadow: none; position: relative; }
 .msg.grouped { margin-top: 0; }
 .msg:not(.grouped) { margin-top: 10px; }
-.msg .avatar { margin-top: 2px; }
+.msg .avatar { margin-top: 0; }
 .msg .avatar-spacer { width: 34px; flex-shrink: 0; }
 .msg-body { flex: 1; min-width: 0; }
 .msg-head { display: flex; align-items: baseline; gap: 8px; }

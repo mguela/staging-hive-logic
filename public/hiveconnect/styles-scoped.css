@@ -689,13 +689,13 @@ html[data-theme="dark"] :is(#hiveconnect-root, .hc-embed).mention { background: 
 :is(#hiveconnect-root, .hc-embed) .day-divider::after,
 :is(#hiveconnect-root, .hc-embed).day-divider::after { content: ''; flex: 1; height: 1px; background: var(--line); }
 :is(#hiveconnect-root, .hc-embed) .msg,
-:is(#hiveconnect-root, .hc-embed).msg { display: flex; gap: 12px; padding: 5px 10px; border-radius: 10px; position: relative; }
+:is(#hiveconnect-root, .hc-embed).msg { display: flex; align-items: flex-start; gap: 12px; padding: 5px 10px; border: none; border-radius: 10px; box-shadow: none; position: relative; }
 :is(#hiveconnect-root, .hc-embed) .msg.grouped,
 :is(#hiveconnect-root, .hc-embed).msg.grouped { margin-top: 0; }
 :is(#hiveconnect-root, .hc-embed) .msg:not(.grouped),
 :is(#hiveconnect-root, .hc-embed).msg:not(.grouped) { margin-top: 10px; }
 :is(#hiveconnect-root, .hc-embed) .msg .avatar,
-:is(#hiveconnect-root, .hc-embed).msg .avatar { margin-top: 2px; }
+:is(#hiveconnect-root, .hc-embed).msg .avatar { margin-top: 0; }
 :is(#hiveconnect-root, .hc-embed) .msg .avatar-spacer,
 :is(#hiveconnect-root, .hc-embed).msg .avatar-spacer { width: 34px; flex-shrink: 0; }
 :is(#hiveconnect-root, .hc-embed) .msg-body,
