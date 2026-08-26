@@ -2688,7 +2688,13 @@ function updateMainHeader() {
   const c = channels.get(currentChannelId);
   if (navTab === 'messages') {
     // Messages is about DMs — only echo the open thing if it's actually a DM.
-    if (c && c.type === 'dm') { t.textContent = channelLabel(c); if (d) d.textContent = ''; }
+    if (c && c.type === 'dm') {
+      t.innerHTML = '';
+      if (isGroupDM(c)) { const grp = partStrip(dmOtherProfiles(c), 2); grp.classList.add('dm-grp-av'); t.appendChild(grp); }
+      else t.appendChild(avatarWithPresence(dmOther(c)));
+      const nm = document.createElement('span'); nm.textContent = channelLabel(c); t.appendChild(nm);
+      if (d) d.textContent = '';
+    }
     else { t.textContent = 'Messages'; if (d) d.textContent = ''; }
     return;
   }
