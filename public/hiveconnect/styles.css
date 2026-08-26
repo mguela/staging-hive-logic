@@ -1512,7 +1512,7 @@ html[data-theme="dark"] .huddle-banner {
 
 /* command bar (bulk + single-message actions) */
 .ev-cmdbar { display: flex; align-items: center; gap: 3px; padding: 7px 16px; border-bottom: 1px solid var(--line); background: var(--card); flex-wrap: wrap; }
-.ev-cmd { display: inline-flex; align-items: center; gap: 6px; border: none; background: transparent; color: var(--slate); font-family: var(--sans); font-weight: 700; font-size: 12px; padding: 7px 11px; border-radius: 8px; cursor: pointer; white-space: nowrap; }
+.ev-cmd { display: inline-flex; align-items: center; gap: 6px; border: none; background: transparent; color: var(--slate); font-family: var(--sans); font-weight: 400; font-size: 12px; padding: 7px 11px; border-radius: 8px; cursor: pointer; white-space: nowrap; }
 .ev-cmd:hover:not(:disabled) { background: var(--steel-bg); color: var(--steel-deep); }
 .ev-cmd:disabled { opacity: .4; cursor: default; }
 .ev-cmd-ic { width: 14px; height: 14px; object-fit: contain; flex: none; }

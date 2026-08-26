@@ -2262,7 +2262,7 @@ html[data-theme="dark"] :is(#hiveconnect-root, .hc-embed).huddle-banner {
 :is(#hiveconnect-root, .hc-embed) .ev-cmdbar,
 :is(#hiveconnect-root, .hc-embed).ev-cmdbar { display: flex; align-items: center; gap: 3px; padding: 7px 16px; border-bottom: 1px solid var(--line); background: var(--card); flex-wrap: wrap; }
 :is(#hiveconnect-root, .hc-embed) .ev-cmd,
-:is(#hiveconnect-root, .hc-embed).ev-cmd { display: inline-flex; align-items: center; gap: 6px; border: none; background: transparent; color: var(--slate); font-family: var(--sans); font-weight: 700; font-size: 12px; padding: 7px 11px; border-radius: 8px; cursor: pointer; white-space: nowrap; }
+:is(#hiveconnect-root, .hc-embed).ev-cmd { display: inline-flex; align-items: center; gap: 6px; border: none; background: transparent; color: var(--slate); font-family: var(--sans); font-weight: 400; font-size: 12px; padding: 7px 11px; border-radius: 8px; cursor: pointer; white-space: nowrap; }
 :is(#hiveconnect-root, .hc-embed) .ev-cmd:hover:not(:disabled),
 :is(#hiveconnect-root, .hc-embed).ev-cmd:hover:not(:disabled) { background: var(--steel-bg); color: var(--steel-deep); }
 :is(#hiveconnect-root, .hc-embed) .ev-cmd:disabled,
