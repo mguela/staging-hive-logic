@@ -83,6 +83,16 @@ test('create_invoice writes a durable, unsent draft and returns the stored row',
   assert.equal(jobberCalls, 0, 'saving a local draft must not call Jobber');
 });
 
+test('create_invoice defaults the due date to 7 days out when none is given', async () => {
+  const res = await createInvoice({ amount: 500, clientId: 'client-9' });
+  assert.equal(res.statusCode, 200);
+  const row = invoiceWrites[0];
+  const due = new Date(row.due_date + 'T00:00:00Z');
+  const today = new Date();
+  today.setUTCHours(0, 0, 0, 0);
+  assert.equal(Math.round((due - today) / 86400000), 7);
+});
+
 test('create_invoice refuses invalid money before writing', async () => {
   const res = await createInvoice({ amount: 0 });
   assert.equal(res.statusCode, 400);
