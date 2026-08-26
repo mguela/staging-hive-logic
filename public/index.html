@@ -19,7 +19,7 @@
  * monitor_my_status poll, so "is this person running current code" is a
  * question the database can answer. Do not hand-edit it -- run
  * `node scripts/stamp-page-build.mjs`. */
-var HL_PAGE_BUILD = 'b70821089605de38';
+var HL_PAGE_BUILD = 'e147385dc9c34ad2';
 </script>
 <script>
 (function () { // HL_FETCH_DEDUPE_V1 — single wrapper: GET /api/ dedupe + 60s cache + write-invalidate
@@ -32617,10 +32617,8 @@ function hlMonitorOpenPairingModal(){
     if(!body) return;
     if(!data || data.ok===false){ body.textContent = (data&&data.error) || 'Could not generate a pairing code.'; return; }
     var installer = await hlMonitorFindInstallerUrl();
-    var uploadedLabel = (installer && installer.uploadedAt) ? new Date(installer.uploadedAt).toLocaleDateString() : null;
     var step1 = installer
       ? '1. <a href="' + installer.url + '" target="_blank" rel="noopener" style="color:#161e2e;font-weight:800;text-decoration:underline">Download HiveLogic Monitor</a> and run it.'
-        + (uploadedLabel ? ' <span style="color:#8b92a8;font-weight:600">(uploaded ' + uploadedLabel + ')</span>' : '')
       : '1. Install the HiveLogic Monitor app (ask your Office Manager for the installer -- not uploaded to Docs yet).';
     body.innerHTML = step1 + '<br>2. Open it and sign in with your HiveLogic email.<br>3. Enter this code within 15 minutes:<br><div style="display:flex;align-items:center;justify-content:center;gap:8px;background:#f4f6f9;border-radius:10px;padding:12px;margin:10px 0"><span style="font-family:\'JetBrains Mono\',monospace;font-size:26px;font-weight:900;letter-spacing:.1em">' + data.pairingCode + '</span><button type="button" onclick="hlMonitorCopyPairingCode(this)" style="font-size:12px;font-weight:700;padding:6px 12px;border-radius:6px;border:1px solid #d7dce3;background:#fff;cursor:pointer;color:#161e2e">Copy</button></div>Every time you log in after that, you\'ll see a notice that monitoring is active.';
   });
