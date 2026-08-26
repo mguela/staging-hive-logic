@@ -58,7 +58,7 @@
     "repo": "hivelogic-monitor"
    }
   ],
-  "artifactName": "HiveLogic-Monitor-Setup.${ext}"
+  "artifactName": "HiveLogic-Monitor-Setup-v${version}.${ext}"
  },
  "allowScripts": {
   "electron@31.7.7": true,
