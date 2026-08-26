@@ -708,7 +708,7 @@ function buildDmRow(c) {
   if (unread > 0) { li.classList.add('has-unread'); const b = document.createElement('span'); b.className = 'unread'; b.textContent = unread; li.appendChild(b); }
   const favOn = evMsgFavorites().includes(c.id);
   const favBtn = document.createElement('button'); favBtn.type = 'button'; favBtn.className = 'dm-fav-btn' + (favOn ? ' on' : '');
-  favBtn.title = favOn ? 'Remove from favourites' : 'Add to favourites'; favBtn.textContent = favOn ? '★' : '☆';
+  favBtn.title = favOn ? 'Remove from favorites' : 'Add to favorites'; favBtn.textContent = favOn ? '★' : '☆';
   favBtn.onclick = (e) => { e.stopPropagation(); evMsgToggleFavorite(c.id); renderMessagesPanel(); };
   li.appendChild(favBtn);
   const hv = document.createElement('span'); hv.className = 'dm-hv'; hv.title = 'Start HiveVideo';
@@ -773,8 +773,8 @@ function renderMessagesPanel() {
   const favIds = evMsgFavorites();
   const favChannels = favIds.map(id => channels.get(id)).filter(c => c && c.type === 'dm' && memberships.has(c.id) && dmOther(c))
     .sort((a, b) => (dmLastActivity(b) || '').localeCompare(dmLastActivity(a) || ''));
-  const fav = evMsgSection(MSG_ICON_STAR, 'FAVOURITES', 'favorites', {});
-  if (!favChannels.length) { const em = document.createElement('div'); em.className = 'ct-empty'; em.textContent = 'No favourites yet'; fav.ul.appendChild(em); }
+  const fav = evMsgSection(MSG_ICON_STAR, 'FAVORITES', 'favorites', {});
+  if (!favChannels.length) { const em = document.createElement('div'); em.className = 'ct-empty'; em.textContent = 'No favorites yet'; fav.ul.appendChild(em); }
   favChannels.forEach(c => fav.ul.appendChild(buildDmRow(c)));
   el.appendChild(fav.folder);
 
