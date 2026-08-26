@@ -5877,7 +5877,7 @@ function evEnsureBriefCss() {
        And it is TINTED. White on white with a hairline is not a card, it is a
        horizontal rule with opinions -- there was nothing to tell his eye that
        this was Reina talking rather than more email. */
-    '.ev-reina-brief{flex:none;margin:14px 22px 18px;padding:18px 20px 16px;border:1px solid var(--line);border-radius:14px;background:linear-gradient(180deg,var(--steel-bg),var(--card));box-shadow:0 1px 2px rgba(16,24,40,.04),0 8px 24px -14px rgba(16,24,40,.18)}',
+    '.ev-reina-brief{flex:none;margin:14px 22px 18px;padding:18px 20px 16px;border:1px solid var(--line);border-radius:0;background:linear-gradient(180deg,var(--steel-bg),var(--card));box-shadow:0 1px 2px rgba(16,24,40,.04),0 8px 24px -14px rgba(16,24,40,.18)}',
     '.ev-reina-brief:empty{display:none}',
 
     '.ev-rb-head{display:flex;align-items:center;gap:10px;margin-bottom:12px}',
