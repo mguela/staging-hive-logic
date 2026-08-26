@@ -644,6 +644,7 @@ html[data-theme="dark"] :is(#hiveconnect-root, .hc-embed).mention { background: 
 /* Attachments */
 :is(#hiveconnect-root, .hc-embed) .attach-btn,
 :is(#hiveconnect-root, .hc-embed).attach-btn {
+  appearance: none; -webkit-appearance: none; box-shadow: none;
   background: none; border: none; color: var(--mut); border-radius: 8px;
   width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;
 }
@@ -701,7 +702,7 @@ html[data-theme="dark"] :is(#hiveconnect-root, .hc-embed).mention { background: 
 :is(#hiveconnect-root, .hc-embed) .msg .avatar-spacer,
 :is(#hiveconnect-root, .hc-embed).msg .avatar-spacer { width: 34px; flex-shrink: 0; }
 :is(#hiveconnect-root, .hc-embed) .msg-time-col,
-:is(#hiveconnect-root, .hc-embed).msg-time-col { flex: none; width: 50px; padding-top: 3px; font-family: var(--mono); color: var(--mut); font-size: 10px; font-weight: 600; text-align: right; }
+:is(#hiveconnect-root, .hc-embed).msg-time-col { flex: none; width: 50px; padding-top: 3px; font-family: var(--sans); color: var(--mut); font-size: 10px; font-weight: 200; text-align: right; }
 :is(#hiveconnect-root, .hc-embed) .time-col-spacer,
 :is(#hiveconnect-root, .hc-embed).time-col-spacer { flex: none; width: 50px; }
 :is(#hiveconnect-root, .hc-embed) .msg-body,
@@ -789,7 +790,7 @@ html[data-theme="dark"] :is(#hiveconnect-root, .hc-embed).mention { background: 
 :is(#hiveconnect-root, .hc-embed).composer-wrap { padding: 8px 22px 16px; position: relative; background: transparent; }
 :is(#hiveconnect-root, .hc-embed) .composer,
 :is(#hiveconnect-root, .hc-embed).composer {
-  display: flex; align-items: flex-end; gap: 8px; background: var(--card);
+  display: flex; align-items: center; gap: 8px; background: var(--card);
   border: 1.5px solid var(--line); border-radius: 12px; padding: 9px 10px 9px 14px;
   box-shadow: 0 2px 10px rgba(72, 79, 100, .06);
 }
@@ -801,7 +802,7 @@ html[data-theme="dark"] :is(#hiveconnect-root, .hc-embed).mention { background: 
   font-family: var(--sans); font-size: 13.5px; font-weight: 500; line-height: 1.5; max-height: 160px; outline: none;
 }
 :is(#hiveconnect-root, .hc-embed) .composer textarea::placeholder,
-:is(#hiveconnect-root, .hc-embed).composer textarea::placeholder { color: var(--mut); font-weight: 500; }
+:is(#hiveconnect-root, .hc-embed).composer textarea::placeholder { color: var(--mut); font-weight: 500; opacity: .55; }
 :is(#hiveconnect-root, .hc-embed) .send-btn,
 :is(#hiveconnect-root, .hc-embed).send-btn {
   background: var(--gold-grad); border: none; color: #3a2408; border-radius: 9px;
@@ -812,7 +813,7 @@ html[data-theme="dark"] :is(#hiveconnect-root, .hc-embed).mention { background: 
 :is(#hiveconnect-root, .hc-embed).send-btn:hover { filter: brightness(1.05); }
 :is(#hiveconnect-root, .hc-embed) .composer-hint,
 :is(#hiveconnect-root, .hc-embed).composer-hint {
-  font-family: var(--mono); color: var(--mut); font-size: 8.5px; font-weight: 600;
+  font-family: var(--sans); color: var(--mut); font-size: 8.5px; font-weight: 200;
   letter-spacing: .06em; margin-top: 7px; padding-left: 4px; text-transform: uppercase;
 }
 :is(#hiveconnect-root, .hc-embed) .composer-hint code,
@@ -820,7 +821,7 @@ html[data-theme="dark"] :is(#hiveconnect-root, .hc-embed).mention { background: 
 :is(#hiveconnect-root, .hc-embed) .composer-hint b,
 :is(#hiveconnect-root, .hc-embed).composer-hint b,
 :is(#hiveconnect-root, .hc-embed) .composer-hint i,
-:is(#hiveconnect-root, .hc-embed).composer-hint i { font-family: var(--mono); font-style: normal; }
+:is(#hiveconnect-root, .hc-embed).composer-hint i { font-family: var(--sans); font-weight: 200; font-style: normal; }
 
 /* Mention autocomplete */
 :is(#hiveconnect-root, .hc-embed) .mention-menu,
