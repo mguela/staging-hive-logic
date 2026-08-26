@@ -473,7 +473,7 @@ button { font-family: inherit; cursor: pointer; }
 .msg { display: flex; align-items: flex-start; gap: 12px; padding: 5px 10px; border: none; border-radius: 10px; box-shadow: none; position: relative; }
 .msg:hover { background: var(--steel-bg); }
 .msg.grouped { margin-top: 0; }
-.msg:not(.grouped) { margin-top: 10px; }
+.msg:not(.grouped) { margin-top: 22px; }
 .msg .avatar { margin-top: 0; }
 .msg .avatar-spacer { width: 34px; flex-shrink: 0; }
 .msg-time-col { flex: none; width: 50px; padding-top: 3px; font-family: var(--mono); color: var(--mut); font-size: 10px; font-weight: 600; text-align: right; }

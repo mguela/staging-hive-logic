@@ -695,7 +695,7 @@ html[data-theme="dark"] :is(#hiveconnect-root, .hc-embed).mention { background: 
 :is(#hiveconnect-root, .hc-embed) .msg.grouped,
 :is(#hiveconnect-root, .hc-embed).msg.grouped { margin-top: 0; }
 :is(#hiveconnect-root, .hc-embed) .msg:not(.grouped),
-:is(#hiveconnect-root, .hc-embed).msg:not(.grouped) { margin-top: 10px; }
+:is(#hiveconnect-root, .hc-embed).msg:not(.grouped) { margin-top: 22px; }
 :is(#hiveconnect-root, .hc-embed) .msg .avatar,
 :is(#hiveconnect-root, .hc-embed).msg .avatar { margin-top: 0; }
 :is(#hiveconnect-root, .hc-embed) .msg .avatar-spacer,
