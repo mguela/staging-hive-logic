@@ -24,8 +24,17 @@ import test from 'node:test';
 import assert from 'node:assert';
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const ROOT = path.resolve(new URL('.', import.meta.url).pathname.replace(/^\/(\w):/, '$1:'), '..');
+// Root cause of the 5 Windows-only failures this file used to produce
+// (2026-08-27): URL.prototype.pathname never decodes percent-escapes --
+// on a checkout under a directory with a space in it (e.g. "Personal
+// Projects"), it returned literally ".../Personal%20Projects/..." and
+// every fs call built from ROOT then 404'd against a path that does not
+// exist. fileURLToPath() is the actual, correct way to turn a file: URL
+// into a filesystem path (it decodes percent-escapes AND handles the
+// Windows drive-letter form), so this needs no hand-rolled regex at all.
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const AMP = String.fromCharCode(38);
 const DQ = String.fromCharCode(34);
 

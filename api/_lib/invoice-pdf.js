@@ -36,6 +36,10 @@ import { GH_LOGO_PNG_BASE64 } from './gh-logo-asset.js';
 
 export const LETTERHEAD = {
   name: 'Greenwich Handyman Co.',
+  // jomell, 2026-08-27: the remittance stub's "Mail to:" line is the legal
+  // mailing entity, not the operating/brand name the logo and letterhead use
+  // everywhere else -- confirmed against the real Jobber-generated reference.
+  mailToName: 'GREAT HOMES CO.',
   addressLine1: '23 Bedford-Banksville Road, 23B',
   addressLine2: 'Bedford, New York 10506',
   phone: '203.618.1234',
@@ -79,6 +83,11 @@ export function buildInvoicePlan({ invoice, client, address, job, accountBalance
     recipientLines.push(address.street);
     const cityLine = [address.city, address.province].filter(Boolean).join(', ') + (address.postal_code ? ' ' + address.postal_code : '');
     if (cityLine.trim()) recipientLines.push(cityLine);
+  } else if (client && client.phone) {
+    // No address on file for this client -- show the one other real contact
+    // detail that is (the reference PDF does the same rather than leaving
+    // the recipient block down to just a bare name).
+    recipientLines.push(client.phone);
   }
 
   const invoiceBox = {
@@ -198,13 +207,32 @@ export async function generateInvoicePdf(inputs) {
 
   const logoImage = await doc.embedPng(Buffer.from(GH_LOGO_PNG_BASE64, 'base64'));
   const logoAspect = logoImage.width / logoImage.height;
+  // jomell, 2026-08-27: one size, pinned to one fixed top -- every page's
+  // logo must match, and it sits higher than the rest of the header (the
+  // contact line stays at CONTENT_TOP; the logo alone sits above it).
+  const LOGO_H = 65;
+  const LOGO_TOP = PAGE_H - 32;
+  const LOGO_BOTTOM = LOGO_TOP - LOGO_H;
   // Real logo graphic, not the company name spelled out in text -- the
   // reference PDF's letterhead is the mark itself plus the contact block,
   // never a literal "GREENWICH HANDYMAN CO." text line.
-  function drawLogo(h) {
-    const w = h * logoAspect;
-    page.drawImage(logoImage, { x: left, y: y - h, width: w, height: h });
+  function drawLogo() {
+    const w = LOGO_H * logoAspect;
+    page.drawImage(logoImage, { x: left, y: LOGO_BOTTOM, width: w, height: LOGO_H });
     return w;
+  }
+
+  // jomell, 2026-08-27: the contact line runs centered across the top of
+  // every page, not just page 1 -- so it no longer needs to also be repeated
+  // in the footer.
+  function drawHeaderContact() {
+    const c1 = plan.letterhead.addressLine1 + ' | ' + plan.letterhead.addressLine2;
+    const c2 = plan.letterhead.phone + ' | ' + plan.letterhead.email + ' | ' + plan.letterhead.website;
+    const c1w = font.widthOfTextAtSize(c1, 8);
+    const c2w = font.widthOfTextAtSize(c2, 8);
+    const cx = (left + right) / 2;
+    page.drawText(c1, { x: cx - c1w / 2, y: y - 2, size: 8, font, color: NAVY });
+    page.drawText(c2, { x: cx - c2w / 2, y: y - 13, size: 8, font, color: NAVY });
   }
 
   const pages = [];
@@ -225,9 +253,12 @@ export async function generateInvoicePdf(inputs) {
     page = doc.addPage([PAGE_W, PAGE_H]);
     pages.push(page);
     y = CONTENT_TOP;
-    const w = drawLogo(24);
-    page.drawText('Invoice #' + plan.invoiceBox.number + ' (continued)', { x: left + w + 10, y: y - 17, size: 10.5, font: bold, color: NAVY });
-    y -= 32;
+    drawLogo();
+    drawHeaderContact();
+    const contLabel = 'Invoice #' + plan.invoiceBox.number + ' (continued)';
+    const clw = bold.widthOfTextAtSize(contLabel, 10.5);
+    page.drawText(contLabel, { x: (left + right) / 2 - clw / 2, y: LOGO_BOTTOM - 20, size: 10.5, font: bold, color: NAVY });
+    y = LOGO_BOTTOM - 40;
     drawTableHeader();
   }
 
@@ -238,55 +269,61 @@ export async function generateInvoicePdf(inputs) {
     if (y - neededHeight < CONTENT_BOTTOM) newPage();
   }
 
-  // ---- Letterhead (page 1 only -- a continuation page gets the lighter
-  // "(continued)" header newPage() draws instead). Font size and logo height
-  // are both picked (and width-checked against the invoice box's left edge
-  // at boxX) so the two real contact lines never run under the navy box --
-  // found live: at the first size tried, "www.greenwichhandyman.net" ran
-  // straight into it. ----
-  const logoW1 = drawLogo(36);
-  const addrX = left + logoW1 + 12;
-  page.drawText(plan.letterhead.addressLine1 + ' | ' + plan.letterhead.addressLine2, { x: addrX, y: y - 14, size: 7.5, font, color: MUT });
-  page.drawText(plan.letterhead.phone + ' | ' + plan.letterhead.email + ' | ' + plan.letterhead.website, { x: addrX, y: y - 25, size: 7.5, font, color: MUT });
-  y -= 36;
+  // ---- Contact line: pinned to the very top of the page, independent of
+  // logo height -- so a bigger logo below it doesn't push it down -- in the
+  // brand's navy blue, centered at the top of the page rather than sharing a
+  // row beside the invoice box. ----
+  drawHeaderContact();
 
-  // ---- Invoice box (top right) ----
+  // ---- Logo (upper left, bigger and higher per jomell 2026-08-27) ----
+  drawLogo();
+
+  // ---- Invoice box (top right, below the contact lines -- lowered another
+  // 30px per jomell 2026-08-27 so it doesn't crowd the logo now sitting
+  // higher above it) ----
   const boxW = 222, boxX = right - boxW;
-  let boxY = PAGE_H - 56;
+  let boxY = y - 54;
   page.drawRectangle({ x: boxX, y: boxY - 26, width: boxW, height: 26, color: NAVY });
   page.drawText('Invoice #' + plan.invoiceBox.number, { x: boxX + 14, y: boxY - 18, size: 12.5, font: bold, color: WHITE });
   boxY -= 26;
+  // Total and Portion of job get a filled navy background, matching the
+  // "Invoice #X" bar above -- the two rows a client actually needs to
+  // register first. Consecutive filled rows are drawn edge-to-edge so the
+  // fill reads as one continuous panel, not two separate chips.
   const boxRow = (label, value, opts = {}) => {
     boxY -= opts.pad || 20;
-    page.drawText(label, { x: boxX + 14, y: boxY, size: 9.5, font, color: MUT });
+    if (opts.fill) page.drawRectangle({ x: boxX, y: boxY - 6, width: boxW, height: opts.pad || 20, color: NAVY });
+    const labelColor = opts.fill ? WHITE : MUT;
+    page.drawText(label, { x: boxX + 14, y: boxY, size: 9.5, font, color: labelColor });
     const vFont = opts.bold ? bold : font;
     const vSize = opts.size || 10.5;
     const vw = vFont.widthOfTextAtSize(value, vSize);
-    page.drawText(value, { x: boxX + boxW - 14 - vw, y: boxY, size: vSize, font: vFont, color: opts.color || INK });
+    const valueColor = opts.fill ? WHITE : (opts.color || INK);
+    page.drawText(value, { x: boxX + boxW - 14 - vw, y: boxY, size: vSize, font: vFont, color: valueColor });
   };
   boxRow('Issued', plan.invoiceBox.issued);
   boxRow('Due', plan.invoiceBox.due);
-  boxRow('Total', plan.invoiceBox.total, { bold: true, size: 14, pad: 24 });
-  if (plan.invoiceBox.portionOfJob) boxRow('Portion of job', plan.invoiceBox.portionOfJob, { size: 8.5 });
+  boxRow('Total', plan.invoiceBox.total, { bold: true, size: 14, pad: 26, fill: true });
+  if (plan.invoiceBox.portionOfJob) boxRow('Portion of job', plan.invoiceBox.portionOfJob, { size: 8.5, pad: 20, fill: true });
   if (plan.invoiceBox.accountBalance) boxRow('Account balance', plan.invoiceBox.accountBalance, { bold: true, color: NAVY });
 
-  // The invoice box can grow taller than the three-line letterhead (Portion
-  // of job / Account balance are both optional rows) -- the divider has to
-  // clear whichever column actually ran longer, not a fixed offset, or a
-  // short box overlaps the row text below it.
-  y = Math.min(y, boxY) - 20;
-  page.drawLine({ start: { x: left, y }, end: { x: right, y }, thickness: 1, color: LINE });
-  y -= 26;
-
-  // ---- Recipient ----
-  page.drawText('BILL TO', { x: left, y, size: 8, font: bold, color: MUT });
-  y -= 15;
-  page.drawText(plan.recipientName, { x: left, y, size: 12.5, font: bold, color: NAVY });
-  y -= 15;
+  // ---- Recipient, moved under the logo (left column) and relabeled to
+  // match the reference PDF, which says "RECIPIENT:", not "BILL TO". ----
+  let leftColY = LOGO_BOTTOM - 18;
+  page.drawText('RECIPIENT:', { x: left, y: leftColY, size: 8, font: bold, color: MUT });
+  leftColY -= 15;
+  page.drawText(plan.recipientName, { x: left, y: leftColY, size: 12.5, font: bold, color: NAVY });
+  leftColY -= 15;
   for (const line of plan.recipientLines) {
-    page.drawText(line, { x: left, y, size: 9.5, font, color: MUT });
-    y -= 12;
+    page.drawText(line, { x: left, y: leftColY, size: 9.5, font, color: MUT });
+    leftColY -= 12;
   }
+
+  // Line items start below whichever column -- the invoice box or the
+  // recipient block -- actually ran longer.
+  y = Math.min(leftColY, boxY) - 20;
+  page.drawLine({ start: { x: left, y }, end: { x: right, y }, thickness: 1, color: LINE });
+  y -= 20;
 
   // ---- Section label (the invoice's own subject/stage, e.g. "Upon Completion") ----
   if (plan.sectionLabel) {
@@ -340,8 +377,9 @@ export async function generateInvoicePdf(inputs) {
     page = doc.addPage([PAGE_W, PAGE_H]);
     pages.push(page);
     y = CONTENT_TOP;
-    drawLogo(28);
-    y -= 40;
+    drawLogo();
+    drawHeaderContact();
+    y = LOGO_BOTTOM - 20;
     page.drawText('Payment Schedule', { x: left, y, size: 15, font: bold, color: NAVY });
     y -= 12;
     page.drawLine({ start: { x: left, y }, end: { x: right, y }, thickness: 1.5, color: NAVY });
@@ -380,10 +418,8 @@ export async function generateInvoicePdf(inputs) {
     page = doc.addPage([PAGE_W, PAGE_H]);
     pages.push(page);
     y = CONTENT_TOP;
-    const rw = drawLogo(28);
-    page.drawText(plan.letterhead.addressLine1 + ' | ' + plan.letterhead.addressLine2, { x: left + rw + 12, y: y - 11, size: 8, font, color: MUT });
-    page.drawText(plan.letterhead.phone + ' | ' + plan.letterhead.email + ' | ' + plan.letterhead.website, { x: left + rw + 12, y: y - 22, size: 8, font, color: MUT });
-    y -= 28;
+    drawLogo();
+    drawHeaderContact();
 
     // The dashed "tear here" line -- everything below it is the part meant
     // to be cut off and mailed back with a check, same layout the reference
@@ -406,30 +442,26 @@ export async function generateInvoicePdf(inputs) {
     stubRow('Invoice #:', plan.remittance.invoiceNumber);
     stubRow('Due date:', plan.remittance.due);
     stubRow('Amount due:', plan.remittance.amountDue);
-    page.drawText('Amount enclosed:', { x: 340, y: ry, size: 9.5, font: bold, color: NAVY });
+    page.drawText('Enclosed:', { x: 340, y: ry, size: 9.5, font: bold, color: NAVY });
     page.drawLine({ start: { x: right - 90, y: ry - 2 }, end: { x: right, y: ry - 2 }, thickness: 1, color: MUT });
 
     const my = Math.min(sy, ry) - 30;
     page.drawText('Mail to:', { x: left, y: my, size: 9, font, color: MUT });
-    page.drawText(plan.letterhead.name, { x: left, y: my - 14, size: 10.5, font: bold, color: NAVY });
+    page.drawText(plan.letterhead.mailToName, { x: left, y: my - 14, size: 10.5, font: bold, color: NAVY });
     page.drawText(plan.letterhead.addressLine1, { x: left, y: my - 28, size: 9.5, font, color: MUT });
     page.drawText(plan.letterhead.addressLine2, { x: left, y: my - 40, size: 9.5, font, color: MUT });
   }
 
   // ---- Footer, fixed at the bottom of every page (page numbers only when
   // there is more than one, matching the reference PDF's "Page 1 of 3").
-  // Only page 1 carries the thank-you note + tax id, matching the reference
-  // exactly -- every later page (continuation, Payment Schedule, remittance
-  // stub) repeats just the plain contact line instead. ----
+  // Only page 1 carries the thank-you note + tax id -- the contact line no
+  // longer repeats here since it now runs across the top of every page. ----
   const footY = 80;
   pages.forEach((p, i) => {
     p.drawLine({ start: { x: left, y: footY + 26 }, end: { x: right, y: footY + 26 }, thickness: 1, color: LINE });
     if (i === 0) {
       p.drawText(plan.footerNote, { x: left, y: footY, size: 9, font, color: MUT });
       p.drawText(plan.taxId, { x: left, y: footY - 14, size: 8, font, color: MUT });
-    } else {
-      p.drawText(plan.letterhead.addressLine1 + ' | ' + plan.letterhead.addressLine2, { x: left, y: footY, size: 8, font, color: MUT });
-      p.drawText(plan.letterhead.phone + ' | ' + plan.letterhead.email + ' | ' + plan.letterhead.website, { x: left, y: footY - 14, size: 8, font, color: MUT });
     }
     if (pages.length > 1) {
       const label = `Page ${i + 1} of ${pages.length}`;

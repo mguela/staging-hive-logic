@@ -188,6 +188,12 @@ test('create_invoice_from_job builds a DRAFT invoice from the job lines', async 
   // The lump job total is NOT what gets billed when real lines exist.
   assert.notEqual(insertedInvoice.total, 12000);
   assert.equal(insertedInvoice.line_items.length, 2);
+  // jomell, 2026-08-27: "for the due date of the invoices, let's put a 7 day
+  // deadline" -- no dueDate was given, so one is set automatically.
+  const due = new Date(insertedInvoice.due_date + 'T00:00:00Z');
+  const today = new Date();
+  today.setUTCHours(0, 0, 0, 0);
+  assert.equal(Math.round((due - today) / 86400000), 7);
 });
 
 test('a job with no lines but a value invoices as a single line', async () => {

@@ -5036,6 +5036,13 @@ async function handleTmRateTypesList(req, res) {
   return res.status(200).json({ ok: true, resource: 'tm_rate_types_list', rateTypes: rows });
 }
 
+// jomell, 2026-08-27: "for the due date of the invoices, let's put a 7 day
+// deadline" -- every HiveLogic-created invoice gets a real due date, not a
+// blank one, when the caller doesn't supply their own.
+function defaultInvoiceDueDate() {
+  return new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+}
+
 async function handleCreateInvoice(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ ok: false, error: 'POST only' });
   const requester = await getRequestingProfile(req);
@@ -5052,7 +5059,7 @@ async function handleCreateInvoice(req, res) {
     invoice_status: 'draft',
     total: amount,
     payments: 0,
-    due_date: b.dueDate || null,
+    due_date: b.dueDate || defaultInvoiceDueDate(),
     client_id: b.clientId || null,
     jobber_updated_at: new Date().toISOString()
   };
@@ -5251,7 +5258,7 @@ async function handleCreateInvoiceFromJob(req, res) {
     total: amount,
     balance: amount,
     payments: 0,
-    due_date: b.dueDate || null,
+    due_date: b.dueDate || defaultInvoiceDueDate(),
     client_id: job.client_id || null,
     client_uuid: job.client_uuid || null,
     job_id: job.jobber_id,
@@ -5308,7 +5315,7 @@ async function handleSendInvoiceEmail(req, res) {
   if (!invoice) return res.status(404).json({ ok: false, error: 'That invoice no longer exists.' });
 
   if (!invoice.client_id) return res.status(422).json({ ok: false, error: 'This invoice has no client on it.' });
-  const clientR = await supabaseRequest(`clients?jobber_id=eq.${encodeURIComponent(invoice.client_id)}&select=email,name,first_name&limit=1`);
+  const clientR = await supabaseRequest(`clients?jobber_id=eq.${encodeURIComponent(invoice.client_id)}&select=email,name,first_name,phone&limit=1`);
   const client = clientR.ok ? (await clientR.json())[0] : null;
   if (!client || !client.email) return res.status(422).json({ ok: false, error: 'No email on file for this client.' });
   if (!isEmailConfigured()) return res.status(422).json({ ok: false, error: 'Email is not configured for this deployment (RESEND_API_KEY unset).' });
