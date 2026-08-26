@@ -748,13 +748,14 @@ const MSG_ICON_TEAMS = '<svg viewBox="0 0 24 24" width="13" height="13" fill="cu
 function renderMessagesPanel() {
   const el = $('panel-messages'); if (!el) return; el.innerHTML = '';
 
-  // Search (own row) + All/Unread quick filter + chevron for the rest.
+  // Search + All/Unread quick filter + chevron, all one row.
+  const headRow = document.createElement('div'); headRow.className = 'msg-search-row';
   const searchWrap = document.createElement('div'); searchWrap.className = 'msg-search';
   searchWrap.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>';
   const search = document.createElement('input'); search.id = 'msg-search'; search.type = 'text'; search.placeholder = 'Search conversations'; search.value = msgSearch;
   search.addEventListener('input', () => { msgSearch = search.value; applyMsgFilter(); });
   searchWrap.appendChild(search);
-  el.appendChild(searchWrap);
+  headRow.appendChild(searchWrap);
   const filterRow = document.createElement('div'); filterRow.className = 'msg-filter-row';
   const counts = evMsgFilterCounts();
   const allBtn = document.createElement('button'); allBtn.type = 'button'; allBtn.className = 'msg-filter-quick' + (msgFilter === 'all' ? ' active' : '');
@@ -767,7 +768,8 @@ function renderMessagesPanel() {
   const filterChev = document.createElement('button'); filterChev.type = 'button'; filterChev.className = 'msg-filter-chev'; filterChev.innerHTML = '▾'; filterChev.title = 'More filters';
   filterChev.onclick = (e) => evMsgFilterMenu(e);
   filterRow.appendChild(filterChev);
-  el.appendChild(filterRow);
+  headRow.appendChild(filterRow);
+  el.appendChild(headRow);
 
   // Favourites
   const favIds = evMsgFavorites();

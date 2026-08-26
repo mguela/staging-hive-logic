@@ -1359,12 +1359,13 @@ html[data-theme="dark"] .huddle-banner {
 }
 .sidebar.sidebar-messages-theme .channel-list li .unread { background: var(--red); color: #fff; }
 .sidebar.sidebar-messages-theme .presence-dot { border-color: var(--card); }
-.msg-search { display: flex; align-items: center; gap: 7px; background: var(--canvas); border: 1.5px solid var(--line);
-  border-radius: 9px; padding: 7px 11px; color: var(--mut); margin-bottom: 8px; }
+.msg-search-row { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+.msg-search { display: flex; align-items: center; gap: 7px; background: none; border: none;
+  padding: 10px 0; color: var(--mut); flex: 1; min-width: 0; }
 .msg-search svg { flex: none; }
 .msg-search input { flex: 1; min-width: 0; border: none; background: none; outline: none; font-family: var(--sans); font-size: 12.5px; color: var(--ink); }
 .msg-search input::placeholder { color: var(--mut); }
-.msg-filter-row { display: flex; align-items: center; justify-content: flex-end; gap: 12px; margin-bottom: 14px; }
+.msg-filter-row { display: flex; align-items: center; justify-content: flex-end; gap: 12px; flex: none; margin-bottom: 0; }
 .msg-filter-quick { appearance: none; -webkit-appearance: none; box-shadow: none; background: none; border: none;
   font-family: var(--sans); font-size: 11px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase;
   color: var(--mut); cursor: pointer; padding: 2px; }
