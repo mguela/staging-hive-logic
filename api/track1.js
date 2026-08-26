@@ -5517,6 +5517,78 @@ async function handleCreateTimesheetEntry(req, res) {
   });
 }
 
+// Editing the Employee is deliberately not offered here (matches the
+// Jobber modal jomell is copying, which greys that field out) -- reassigning
+// whose hours these are is a bigger action than fixing a time/job/note, and
+// nothing in the UI asks for it.
+async function handleUpdateTimesheetEntry(req, res) {
+  if (req.method !== 'PATCH') return res.status(405).json({ ok: false, error: 'PATCH only' });
+  const requester = await getRequestingProfile(req);
+  if (!requester) return res.status(401).json({ ok: false, error: 'Not signed in -- log into HiveLogic first.' });
+  const b = req.body || {};
+  const id = String(b.id || '').trim();
+  if (!id) return res.status(400).json({ ok: false, error: 'Which entry? No id given.' });
+  if (!id.startsWith('HL-TSE-')) {
+    return res.status(400).json({ ok: false, error: 'This entry is synced from Jobber -- edit it there.' });
+  }
+  const jobId = String(b.jobId || '').trim() || null;
+  const startAt = String(b.startAt || '').trim();
+  const endAt = String(b.endAt || '').trim();
+  if (!startAt || !endAt || isNaN(Date.parse(startAt)) || isNaN(Date.parse(endAt))) {
+    return res.status(400).json({ ok: false, error: 'A valid start and end time are required.' });
+  }
+  const startMs = new Date(startAt).getTime();
+  const endMs = new Date(endAt).getTime();
+  if (endMs <= startMs) return res.status(400).json({ ok: false, error: 'End time must be after start time.' });
+
+  let jobUuid = null;
+  let jobTitle = null;
+  if (jobId) {
+    const jobRes = await supabaseRequest(`jobs?jobber_id=eq.${encodeURIComponent(jobId)}&select=uuid_id,title&limit=1`);
+    if (jobRes.ok) { const rows = await jobRes.json(); jobUuid = rows[0]?.uuid_id || null; jobTitle = rows[0]?.title || null; }
+  }
+
+  const patch = {
+    start_at: new Date(startAt).toISOString(),
+    end_at: new Date(endAt).toISOString(),
+    final_duration: Math.round((endMs - startMs) / 1000),
+    job_id: jobId,
+    job_uuid: jobUuid,
+    note: String(b.note || '').trim() || null,
+    jobber_updated_at: new Date().toISOString(),
+  };
+  const r = await supabaseRequest(`time_sheet_entries?jobber_id=eq.${encodeURIComponent(id)}`, {
+    method: 'PATCH', headers: { Prefer: 'return=representation' }, body: JSON.stringify(patch),
+  });
+  if (!r.ok) return res.status(500).json({ ok: false, error: 'Could not save this timesheet entry: ' + (await r.text()).slice(0, 300) });
+  const rows = await r.json();
+  if (!rows.length) return res.status(404).json({ ok: false, error: 'That entry no longer exists.' });
+  const updated = rows[0];
+  return res.status(200).json({
+    ok: true,
+    resource: 'update_timesheet_entry',
+    entry: {
+      id: updated.jobber_id, userId: updated.user_id, jobId: updated.job_id || null,
+      jobLabel: jobId ? (jobTitle || 'Job') : 'General', startAt: updated.start_at, endAt: updated.end_at,
+      durationSeconds: patch.final_duration, note: updated.note || null,
+    },
+  });
+}
+
+async function handleDeleteTimesheetEntry(req, res) {
+  if (req.method !== 'DELETE') return res.status(405).json({ ok: false, error: 'DELETE only' });
+  const requester = await getRequestingProfile(req);
+  if (!requester) return res.status(401).json({ ok: false, error: 'Not signed in -- log into HiveLogic first.' });
+  const id = String((req.query && req.query.id) || '').trim();
+  if (!id) return res.status(400).json({ ok: false, error: 'Which entry? No id given.' });
+  if (!id.startsWith('HL-TSE-')) {
+    return res.status(400).json({ ok: false, error: 'This entry is synced from Jobber -- delete it there.' });
+  }
+  const r = await supabaseRequest(`time_sheet_entries?jobber_id=eq.${encodeURIComponent(id)}`, { method: 'DELETE' });
+  if (!r.ok) return res.status(500).json({ ok: false, error: 'Could not delete this entry: ' + (await r.text()).slice(0, 300) });
+  return res.status(200).json({ ok: true, resource: 'delete_timesheet_entry' });
+}
+
 async function handleMyJobsToday(req, res) {
   const requester = await getRequestingProfile(req);
   if (!requester) return res.status(401).json({ ok: false, error: 'Not signed in -- log into HiveLogic first.' });
@@ -8990,6 +9062,12 @@ if (resource === 'mailconnect') {
   }
   if (resource === 'create_timesheet_entry') {
     try { return await handleCreateTimesheetEntry(req, res); } catch (e) { return res.status(500).json({ ok: false, error: e.message }); }
+  }
+  if (resource === 'update_timesheet_entry') {
+    try { return await handleUpdateTimesheetEntry(req, res); } catch (e) { return res.status(500).json({ ok: false, error: e.message }); }
+  }
+  if (resource === 'delete_timesheet_entry') {
+    try { return await handleDeleteTimesheetEntry(req, res); } catch (e) { return res.status(500).json({ ok: false, error: e.message }); }
   }
   if (resource === 'my_jobs_today') {
     try { return await handleMyJobsToday(req, res); } catch (e) { return res.status(500).json({ ok: false, error: e.message }); }
