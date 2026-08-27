@@ -517,12 +517,12 @@ button { font-family: inherit; cursor: pointer; }
 /* Hover toolbar */
 .msg-tools {
   position: absolute; top: -15px; right: 14px; display: none; gap: 2px;
-  background: none; border: none; border-radius: 9px; padding: 3px;
-  box-shadow: none;
+  background: var(--card); border: none; border-radius: 9px; padding: 3px;
+  box-shadow: 0 6px 18px rgba(22, 30, 46, .14);
 }
 .msg:hover .msg-tools { display: flex; }
-.msg-tools button { background: none; border: none; border-radius: 6px; padding: 4px 7px; font-size: 13px; }
-.msg-tools button:hover { background: var(--steel-bg); }
+.msg-tools button { background: none; border: none; border-radius: 6px; padding: 4px 7px; font-size: 13px; box-shadow: none; }
+.msg-tools button:hover { background: none; box-shadow: none; }
 
 /* Reactions */
 .reactions { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px; }
@@ -1486,8 +1486,8 @@ html[data-theme="dark"] .huddle-banner {
   text-align: right; font-family: var(--sans); font-size: 10.5px; font-weight: 500;
   color: var(--msg-mut); padding: 2px 20px 6px 0;
 }
-.main.messages-workspace .msg-tools { background: none; border: none; box-shadow: none; }
-.main.messages-workspace .msg-tools button:hover { background: var(--msg-bg2); }
+.main.messages-workspace .msg-tools { background: #fff; border: none; box-shadow: 0 6px 18px rgba(22, 30, 46, .14); }
+.main.messages-workspace .msg-tools button:hover { background: none; box-shadow: none; }
 .main.messages-workspace .reaction { background: var(--msg-bg2); border-color: var(--msg-border); color: var(--msg-mut); }
 .main.messages-workspace .reaction:hover { border-color: var(--msg-blue); }
 .main.messages-workspace .reaction.mine { background: var(--msg-selected); border-color: var(--msg-blue); color: var(--msg-blue); }
