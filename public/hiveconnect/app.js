@@ -1540,7 +1540,15 @@ $('nc-create').addEventListener('click', async () => {
   restore();
   $('modal-backdrop').classList.add('hidden');
   renderSidebar();
+  // Opened from the Teams "+" while on the Messages tab -- that section
+  // wouldn't otherwise refresh, and the header stayed on generic "Messages"
+  // for a non-DM channel, so the new channel looked like nothing happened.
+  if (navTab === 'messages') renderMessagesPanel();
   openChannel(data.id);
+  // Straight into "add members" -- nobody else can be in a brand-new
+  // channel yet, private ones especially, so offer that immediately rather
+  // than leaving the creator to find channel settings on their own.
+  openChannelMembers(data.id);
 });
 
 // ---------- Notifications ----------
@@ -2988,6 +2996,9 @@ function updateMainHeader() {
       const isOnline = !!(other && onlineUsers.has(other.id));
       if (d) { d.textContent = isSelfDM(c) ? 'Only visible to you' : (isOnline ? '● Online' : ''); d.classList.toggle('ch-desc-online', isOnline); }
     }
+    // A Team channel opened from the Messages sidebar's own TEAMS section --
+    // same as the Channels tab below, not the generic "Messages" fallback.
+    else if (c) { t.textContent = channelLabel(c); if (d) d.textContent = c.description || ''; }
     else { t.textContent = 'Messages'; if (d) d.textContent = ''; }
     return;
   }
