@@ -7146,7 +7146,13 @@ function evMenu(e, items) {
   document.body.appendChild(menu);
   const btn = (e.currentTarget || e.target).closest('button') || e.target;
   const r = btn.getBoundingClientRect();
-  menu.style.left = Math.min(r.left, window.innerWidth - 250) + 'px'; menu.style.top = (r.bottom + 5) + 'px';
+  // A trigger pinned near the bottom of the viewport (e.g. "Ask Reina" in
+  // the Reina column's footer) has no room below it -- open upward instead
+  // of letting the menu run off-screen and leave its options unreachable.
+  const menuH = menu.offsetHeight;
+  const fitsBelow = r.bottom + 5 + menuH <= window.innerHeight;
+  menu.style.left = Math.min(r.left, window.innerWidth - 250) + 'px';
+  menu.style.top = (fitsBelow ? (r.bottom + 5) : Math.max(8, r.top - menuH - 5)) + 'px';
   setTimeout(() => document.addEventListener('click', function h() { menu.remove(); document.removeEventListener('click', h); }), 0);
 }
 function evReinaMenu(e, m) {

@@ -2628,16 +2628,16 @@ html[data-theme="dark"] :is(#hiveconnect-root, .hc-embed).huddle-banner {
 :is(#hiveconnect-root, .hc-embed).ev-reina-footer { flex: none; display: flex; justify-content: center; padding: 14px 22px; border-top: 1px solid var(--line); }
 :is(#hiveconnect-root, .hc-embed) .ev-reina-ask,
 :is(#hiveconnect-root, .hc-embed).ev-reina-ask {
-  appearance: none; -webkit-appearance: none; box-shadow: 0 1px 2px rgba(16,24,40,.12);
+  appearance: none; -webkit-appearance: none; box-shadow: none;
   display: inline-flex; align-items: center; gap: 7px; height: 36px; padding: 0 18px;
-  border: 1px solid var(--steel-deep); background: var(--steel-deep); color: #fff;
-  border-radius: 999px; cursor: pointer; font: 700 13px var(--sans);
-  transition: filter .12s, opacity .12s;
+  border: 1.5px solid var(--steel-deep); background: none; color: var(--steel-deep);
+  border-radius: 9px; cursor: pointer; font: 700 13px var(--sans);
+  transition: background .12s, opacity .12s;
 }
 :is(#hiveconnect-root, .hc-embed) .ev-reina-ask:hover,
-:is(#hiveconnect-root, .hc-embed).ev-reina-ask:hover { filter: brightness(1.08); }
+:is(#hiveconnect-root, .hc-embed).ev-reina-ask:hover { background: var(--steel-bg); }
 :is(#hiveconnect-root, .hc-embed) .ev-reina-ask:disabled,
-:is(#hiveconnect-root, .hc-embed).ev-reina-ask:disabled { opacity: .45; cursor: default; filter: none; }
+:is(#hiveconnect-root, .hc-embed).ev-reina-ask:disabled { opacity: .45; cursor: default; }
 :is(#hiveconnect-root, .hc-embed) .ev-reina-ask-star,
 :is(#hiveconnect-root, .hc-embed).ev-reina-ask-star { font-size: 13px; }
 
