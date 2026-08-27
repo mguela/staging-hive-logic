@@ -2137,6 +2137,16 @@ html[data-theme="dark"] :is(#hiveconnect-root, .hc-embed).huddle-banner {
 :is(#hiveconnect-root, .hc-embed) .main.messages-workspace .huddle-btn:hover,
 :is(#hiveconnect-root, .hc-embed).main.messages-workspace .huddle-btn:hover { background: var(--msg-selected); color: var(--msg-blue); border-color: var(--msg-blue); }
 
+/* Thread panel -- #thread-panel is a sibling of .main, not a child, so it
+   needs the same sibling-selector scoping used for the sidebar/resizer
+   above (Channels tab's own thread panel is untouched). White conversation
+   background (was --canvas, the page's gray) and the same header padding
+   as the main chat header instead of the tighter default. */
+:is(#hiveconnect-root, .hc-embed) .main.messages-workspace ~ .thread-panel,
+:is(#hiveconnect-root, .hc-embed).main.messages-workspace ~ .thread-panel { background: var(--card); }
+:is(#hiveconnect-root, .hc-embed) .main.messages-workspace ~ .thread-panel .thread-header,
+:is(#hiveconnect-root, .hc-embed).main.messages-workspace ~ .thread-panel .thread-header { padding: 14px 22px; }
+
 /* Message thread -- bubble + pill day-divider, scoped so the Channels tab
    (same msgEl()/.msg markup, different .main class) keeps its own look. */
 :is(#hiveconnect-root, .hc-embed) .main.messages-workspace .day-divider,
