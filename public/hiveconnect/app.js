@@ -7193,7 +7193,7 @@ function evMoreMenu(e, m) {
 function evEnsureToolbarCss() {
   if (document.getElementById('ev-toolbar-css')) return;
   const st = document.createElement('style'); st.id = 'ev-toolbar-css';
-  st.textContent = '#ev-read .ev-read-actions{display:flex;align-items:center;gap:3px;flex-wrap:wrap;padding:4px 0 2px}'
+  st.textContent = '#ev-read .ev-read-actions{display:flex;align-items:center;gap:3px;flex-wrap:wrap}'
     + '#ev-read .ev-act{appearance:none;-webkit-appearance:none;height:34px;min-width:34px;padding:0 9px;border:0;background:transparent;box-shadow:none;color:var(--slate);border-radius:8px;display:inline-flex;align-items:center;justify-content:center;gap:6px;cursor:pointer;font:600 12.5px var(--sans);transition:background .12s,color .12s}'
     + '#ev-read .ev-act:hover{background:var(--steel-bg);color:var(--steel-deep)}'
     + '#ev-read .ev-act-reina{color:var(--steel-deep);font-weight:700}#ev-read .ev-reina-star{font-size:13px}'
