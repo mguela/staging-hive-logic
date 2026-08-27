@@ -19,7 +19,7 @@
  * monitor_my_status poll, so "is this person running current code" is a
  * question the database can answer. Do not hand-edit it -- run
  * `node scripts/stamp-page-build.mjs`. */
-var HL_PAGE_BUILD = '44e4fa10ed914561';
+var HL_PAGE_BUILD = 'e09724a21150a8e7';
 </script>
 <script>
 (function () { // HL_FETCH_DEDUPE_V1 — single wrapper: GET /api/ dedupe + 60s cache + write-invalidate
@@ -314,11 +314,16 @@ var HL_PAGE_BUILD = '44e4fa10ed914561';
   }
 
   .topbar{display:flex;align-items:center;gap:14px;padding:15px 0 13px;border-bottom:1px solid var(--line);margin-bottom:18px}
-  @media(max-width:1150px){
+  /* jomell, 2026-08-27: the rolodex quick-access group (13 icons, ~500px)
+     moved from a fixed right-edge rail into this row -- both wrap
+     breakpoints below are shifted up by that same ~500px so the row still
+     fits (or wraps cleanly) at the widths it always did, rather than
+     overflowing the viewport at a normal desktop width. */
+  @media(max-width:1650px){
     .topbar{flex-wrap:wrap}
     .topbar .ask{min-width:0;flex:1 1 220px}
   }
-  @media(min-width:1151px) and (max-width:1399px){
+  @media(min-width:1651px) and (max-width:1899px){
     body.cc-open .topbar{flex-wrap:wrap}
     body.cc-open .topbar .ask{min-width:0;flex:1 1 220px}
   }
@@ -2786,63 +2791,40 @@ button,.dowork,.startday,.back,.cdb-new,.nc-create,.fm-save,.gbtn,.iconbtn,.dw-a
     <div class="foot" onclick="hlCompanyPop()" style="cursor:pointer" title="Switch company"><div class="gh">GH</div><div><b style="color:#fff" id="hlfootco">Greenwich Handyman</b><br>Chris Kendall</div></div>
   </aside>
 
-  <!-- ═══ ROLODEX QUICK-ACCESS RAIL (feature/rolodex-quick-tabs) ═══
-       A fixed vertical rail of 13 quick-access tabs docked on the RIGHT edge,
-       inserted as a sibling of the left `.rail` nav so it is part of the global
-       app shell and shows on every view. Only the hovered tab pops out (slides
-       ~10px left + widens to reveal its label); every other tab stays locked.
-       The KNOWN BUG (whole stack drifting left when one tab expands) is avoided
-       by giving the container a FIXED 52px width with align-items:flex-end and
-       overflow:visible, so an expanding tab overflows LEFTWARD only and never
-       resizes the container or shifts its siblings. Tabs call the SAME existing
-       functions the left nav / topbar already use — nothing new was routed. -->
+  <!-- ═══ ROLODEX QUICK-ACCESS GROUP (feature/rolodex-quick-tabs) ═══
+       12 quick-access tabs (Reina excluded -- "let's keep the Reina button
+       on the side"; see #rnaFab), originally a fixed vertical rail docked
+       on the right edge. jomell, 2026-08-27: moved into the top nav bar as a
+       horizontal icon group instead -- same tabs, same colors, same onclick
+       handlers (nothing new routed), just inline in .topbar rather than a
+       separate fixed-position rail. Each tab keeps its native `title`
+       tooltip; the old hover-slide-out label (built for a vertical rail)
+       doesn't fit a horizontal row, so it's dropped in favor of that
+       tooltip, same as every other .topbar icon. -->
   <style>
     /* Hidden by default; only shown once signed in (body.hl-authed, toggled by
        the script below based on the #login overlay). Keeps the login screen clean. */
-    .rolodex{position:fixed;top:50%;right:0;transform:translateY(-50%);
-      width:52px;display:none;flex-direction:column;align-items:flex-end;gap:0;
-      overflow:visible;z-index:8000;pointer-events:none}
-    .rolodex .rolo{pointer-events:auto;position:relative;box-sizing:border-box;
-      width:46px;height:38px;margin-bottom:-3px;overflow:hidden;cursor:pointer;
-      background:var(--rl-ac,#6EA8DC);border:none;border-radius:9px 0 0 9px;
-      box-shadow:inset 0 1px 0 rgba(255,255,255,.22),-3px 2px 9px rgba(10,15,25,.26);color:#fff;
-      transition:width .17s ease,transform .17s ease,filter .17s ease,box-shadow .17s ease}
-    .rolodex .rolo:hover{width:178px;transform:translateX(-10px);filter:brightness(1.1);z-index:5;
-      box-shadow:inset 0 1px 0 rgba(255,255,255,.28),-9px 4px 20px rgba(10,15,25,.4)}
-    .rolodex .rolo .ric{position:absolute;right:0;top:0;width:45px;height:100%;
-      display:flex;align-items:center;justify-content:center}
-    .rolodex .rolo .ric svg{width:18px;height:18px;stroke:currentColor;fill:none;
-      stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;transition:stroke .17s ease}
-    .rolodex .rolo .rlabel{position:absolute;right:48px;top:0;height:100%;
-      display:flex;align-items:center;white-space:nowrap;color:#ffffff;opacity:0;
-      font-family:var(--mono,'JetBrains Mono',monospace);font-size:10.5px;
-      font-weight:700;letter-spacing:.02em;transition:opacity .15s ease}
-    .rolodex .rolo:hover .rlabel{opacity:1}
-    /* Shown once signed in, on EVERY page including HiveConnect. */
+    .rolodex{display:none;align-items:center;gap:6px}
     body.hl-authed .rolodex{display:flex}
-    /* Mobile: the left rail collapses to a hamburger drawer at 860px and the
-       topbar keeps the phone/comms icons, so a fixed right rail would collide.
-       Hide below 860px to match the app's existing breakpoint. */
-    @media (max-width:860px){ body.hl-authed .rolodex{display:none} }
+    .rolodex .rolo{cursor:pointer;box-sizing:border-box;width:32px;height:32px;
+      border:none;border-radius:9px;background:var(--rl-ac,#6EA8DC);color:#fff;
+      display:flex;align-items:center;justify-content:center;
+      box-shadow:inset 0 1px 0 rgba(255,255,255,.22),0 1px 3px rgba(10,15,25,.18);
+      transition:filter .15s,transform .15s}
+    .rolodex .rolo:hover{filter:brightness(1.1);transform:translateY(-1px)}
+    .rolodex .rolo svg{width:16px;height:16px;stroke:currentColor;fill:none;
+      stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
     /* The rolodex replaces the old bottom-right floating dock (#hl-fabdock) and
-       its Chirp / Reina / Monitor pills entirely on desktop — they must not show
+       its Chirp / Monitor pills entirely on desktop — they must not show
        anywhere on desktop, including the login screen. Kept on mobile (<=860px),
-       where the rolodex is hidden. */
-    /* The rolodex replaces these old floating pills — remove them entirely at
-       ALL widths (they were reappearing on narrow/phone widths where the rail
-       used to hide). */
-    #hl-fabdock,#pttfab,#rnaFab,#hlMonFab{display:none!important}
-    /* Reserve a right gutter so page content never renders underneath the rail.
-       The collapsed tabs sit in this 60px gutter; the hover fly-out is a
-       transient overlay. Covers normal and wide (hlwide) layouts — this rule sits
-       later in the cascade than the .main rules, so it wins at equal specificity. */
-    @media (min-width:861px){ body.hl-authed .main{padding-right:60px} }
-    /* HiveConnect injects its own full-bleed shell (#hiveconnect-root #app) that
-       ignores .main's gutter, so reserve the rail gutter on that shell directly.
-       box-sizing:border-box keeps it from causing horizontal scroll. */
-    @media (min-width:861px){
-      body.hl-authed #hiveconnect-root #app{box-sizing:border-box;padding-right:60px!important}
-    }
+       where the rolodex (now in .topbar) is hidden along with the rest of the
+       desktop topbar row.
+       jomell, 2026-08-27: "let's keep the Reina button on the side" -- #rnaFab
+       is deliberately NOT in this list. Same exclusion the original rail move
+       (a02740e) made; there's no rolodex Reina tab either (removed below), so
+       its own floating launcher stays the only way to open it. */
+    #hl-fabdock,#pttfab,#hlMonFab{display:none!important}
+    @media (max-width:860px){ body.hl-authed .rolodex{display:none} }
     /* Monitor tab live state. Grey is the DEFAULT (no .mon-on class), so the tab
        reads "not recording" from first paint and only goes green once the
        monitor_my_status poll actually reports recording:true -- see
@@ -2851,36 +2833,15 @@ button,.dowork,.startday,.back,.cdb-new,.nc-create,.fm-save,.gbtn,.iconbtn,.dw-a
     #rolo-mon{--rl-ac:#6b7280}
     #rolo-mon.mon-on{--rl-ac:#25c26e;animation:roloMonGlow 2.6s infinite}
     @keyframes roloMonGlow{
-      0%,100%{box-shadow:-3px 2px 9px rgba(10,15,25,.28),0 0 0 1px rgba(37,194,110,.45),-6px 0 12px rgba(37,194,110,.22)}
-      50%{box-shadow:-3px 2px 9px rgba(10,15,25,.28),0 0 0 1px rgba(37,194,110,.85),-10px 0 20px rgba(37,194,110,.5)}
+      0%,100%{box-shadow:inset 0 1px 0 rgba(255,255,255,.22),0 1px 3px rgba(10,15,25,.18),0 0 0 1px rgba(37,194,110,.45)}
+      50%{box-shadow:inset 0 1px 0 rgba(255,255,255,.22),0 1px 3px rgba(10,15,25,.18),0 0 0 1px rgba(37,194,110,.85),0 0 8px rgba(37,194,110,.5)}
     }
   </style>
-  <div class="rolodex" role="navigation" aria-label="Quick access">
-    <div class="rolo" style="--rl-ac:#5A96CF" title="Phone — VoIP" onclick="hlRoloHC('voip')"><span class="rlabel">Phone</span><span class="ric"><svg viewBox="0 0 24 24"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg></span></div>
-    <!-- Email: open HiveConnect's Email tab (data-tab="email"). -->
-    <div class="rolo" style="--rl-ac:#3E9FB5" title="Email" onclick="hlRoloHC('email')"><span class="rlabel">Email</span><span class="ric"><svg viewBox="0 0 24 24"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22 6 12 13 2 6"/></svg></span></div>
-    <!-- Chirp: open the Chirp popup (openChirp) — talk-group options + push-to-talk. -->
-    <div class="rolo" style="--rl-ac:#E0A63C" title="Chirp" onclick="openChirp()"><span class="rlabel">Chirp</span><span class="ric"><svg viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg></span></div>
-    <!-- SMS: open HiveConnect's Messages tab (data-tab="messages"). -->
-    <div class="rolo" style="--rl-ac:#57A86E" title="SMS" onclick="hlRoloHC('messages')"><span class="rlabel">SMS</span><span class="ric"><svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></span></div>
-    <!-- Video: open HiveConnect's HiveVideo tab (data-tab="huddles"). -->
-    <div class="rolo" style="--rl-ac:#D67F55" title="Video" onclick="hlRoloHC('huddles')"><span class="rlabel">Video</span><span class="ric"><svg viewBox="0 0 24 24"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg></span></div>
-    <div class="rolo" style="--rl-ac:#6488D6" title="Schedule" onclick="showView('schedule')"><span class="rlabel">Schedule</span><span class="ric"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></span></div>
-    <div class="rolo" style="--rl-ac:#4FA95F" title="New Estimate" onclick="estFormNew(null)"><span class="rlabel">New Estimate</span><span class="ric"><svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg></span></div>
-    <div class="rolo" style="--rl-ac:#C77F4A" title="New Job" onclick="openForm('job');if(window.hlFillClientSel)hlFillClientSel('njob-client')"><span class="rlabel">New Job</span><span class="ric"><svg viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg></span></div>
-    <div class="rolo" style="--rl-ac:#3FA98A" title="New Lead" onclick="openNewLead()"><span class="rlabel">New Lead</span><span class="ric"><svg viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="23" y1="11" x2="17" y2="11"/></svg></span></div>
-    <div class="rolo" style="--rl-ac:#2FA06E" title="Invoicing" onclick="showView('invx')"><span class="rlabel">Invoicing</span><span class="ric"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M14.8 9.3c0-1-1.3-1.8-2.8-1.8s-2.8.8-2.8 1.8 1.3 1.6 2.8 1.9 2.8.9 2.8 1.9-1.3 1.8-2.8 1.8-2.8-.8-2.8-1.8"/><line x1="12" y1="6" x2="12" y2="18"/></svg></span></div>
-    <div class="rolo" style="--rl-ac:#BC8F52" title="Photos" onclick="showView('vi')"><span class="rlabel">Photos</span><span class="ric"><svg viewBox="0 0 24 24"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg></span></div>
-    <!-- Reina has no plain open-function; replicate the existing open path used by
-         hlAskReinaFromSearch(): add the `open` class to #rnaPanel. -->
-    <div class="rolo" style="--rl-ac:#9B6FD4" title="Reina" onclick="var p=document.getElementById('rnaPanel');if(p)p.classList.add('open')"><span class="rlabel">Reina</span><span class="ric"><svg viewBox="0 0 24 24"><polygon points="12 2 15.1 8.3 22 9.3 17 14.1 18.2 21 12 17.8 5.8 21 7 14.1 2 9.3 8.9 8.3 12 2"/></svg></span></div>
-    <div class="rolo" id="rolo-mon" title="Monitor" onclick="showView('mon')"><span class="rlabel">Monitor</span><span class="ric"><svg viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg></span></div>
-  </div>
   <script>
-    /* Rolodex visibility gate: show the right-edge quick rail only once the user
-       is signed in. Robust across every auth path (normal sign-in, #win new
-       window, existing session) by watching the #login overlay's visibility
-       rather than hooking each login code path. */
+    /* Rolodex visibility gate: show the topbar quick-access group only once
+       the user is signed in. Robust across every auth path (normal sign-in,
+       #win new window, existing session) by watching the #login overlay's
+       visibility rather than hooking each login code path. */
     (function(){
       function syncRolo(){
         var lg=document.getElementById('login');
@@ -2974,13 +2935,14 @@ button,.dowork,.startday,.back,.cdb-new,.nc-create,.fm-save,.gbtn,.iconbtn,.dw-a
        initial deep-link decision after the page has finished parsing. Clearing
        #/docs (or any other valid view) during parse made bookmarks look valid
        while always landing on Command Center after a hard refresh. */
-    /* The rolodex replaces the old floating pills (Chirp/Reina/Monitor). CSS
-       hides them, but a resize handler elsewhere rebuilds/re-shows the dock — so
-       also force-hide them in JS: on load, on resize (with delayed passes to beat
-       the other resize handlers), and on a slow interval as a backstop. */
+    /* The rolodex replaces the old floating pills (Chirp/Monitor) -- Reina's
+       stays (see the CSS comment above). CSS hides them, but a resize handler
+       elsewhere rebuilds/re-shows the dock — so also force-hide them in JS: on
+       load, on resize (with delayed passes to beat the other resize handlers),
+       and on a slow interval as a backstop. */
     (function(){
       function killFabs(){
-        ['hl-fabdock','pttfab','rnaFab','hlMonFab'].forEach(function(id){
+        ['hl-fabdock','pttfab','hlMonFab'].forEach(function(id){
           var el=document.getElementById(id);
           if(el) el.style.setProperty('display','none','important');
         });
@@ -3014,6 +2976,27 @@ button,.dowork,.startday,.back,.cdb-new,.nc-create,.fm-save,.gbtn,.iconbtn,.dw-a
         <div class="askdrop" id="askdrop"><div id="askres"></div></div>
       </div>
       <script src="/reina-global-search.js"></script>
+      <div class="rolodex" role="navigation" aria-label="Quick access">
+        <div class="rolo" style="--rl-ac:#5A96CF" title="Phone — VoIP" onclick="hlRoloHC('voip')"><svg viewBox="0 0 24 24"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg></div>
+        <!-- Email: open HiveConnect's Email tab (data-tab="email"). -->
+        <div class="rolo" style="--rl-ac:#3E9FB5" title="Email" onclick="hlRoloHC('email')"><svg viewBox="0 0 24 24"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22 6 12 13 2 6"/></svg></div>
+        <!-- Chirp: open the Chirp popup (openChirp) — talk-group options + push-to-talk. -->
+        <div class="rolo" style="--rl-ac:#E0A63C" title="Chirp" onclick="openChirp()"><svg viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg></div>
+        <!-- SMS: open HiveConnect's Messages tab (data-tab="messages"). -->
+        <div class="rolo" style="--rl-ac:#57A86E" title="SMS" onclick="hlRoloHC('messages')"><svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></div>
+        <!-- Video: open HiveConnect's HiveVideo tab (data-tab="huddles"). -->
+        <div class="rolo" style="--rl-ac:#D67F55" title="Video" onclick="hlRoloHC('huddles')"><svg viewBox="0 0 24 24"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg></div>
+        <div class="rolo" style="--rl-ac:#6488D6" title="Schedule" onclick="showView('schedule')"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></div>
+        <div class="rolo" style="--rl-ac:#4FA95F" title="New Estimate" onclick="estFormNew(null)"><svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg></div>
+        <div class="rolo" style="--rl-ac:#C77F4A" title="New Job" onclick="openForm('job');if(window.hlFillClientSel)hlFillClientSel('njob-client')"><svg viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg></div>
+        <div class="rolo" style="--rl-ac:#3FA98A" title="New Lead" onclick="openNewLead()"><svg viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="23" y1="11" x2="17" y2="11"/></svg></div>
+        <div class="rolo" style="--rl-ac:#2FA06E" title="Invoicing" onclick="showView('invx')"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M14.8 9.3c0-1-1.3-1.8-2.8-1.8s-2.8.8-2.8 1.8 1.3 1.6 2.8 1.9 2.8.9 2.8 1.9-1.3 1.8-2.8 1.8-2.8-.8-2.8-1.8"/><line x1="12" y1="6" x2="12" y2="18"/></svg></div>
+        <div class="rolo" style="--rl-ac:#BC8F52" title="Photos" onclick="showView('vi')"><svg viewBox="0 0 24 24"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg></div>
+        <!-- jomell, 2026-08-27: "let's keep the Reina button on the side" --
+             no Reina tab here; #rnaFab (its own floating launcher) stays put
+             instead, same exclusion the original rail move made. -->
+        <div class="rolo" id="rolo-mon" title="Monitor" onclick="showView('mon')"><svg viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg></div>
+      </div>
       <div class="iconbtn" title="Open HiveLogic in another window — run two areas side by side" onclick="hlNewWin()">⧉</div>
       <div class="iconbtn" id="hltheme" title="Dark / light mode" onclick="hlTheme()">🌙</div>
       <div class="iconbtn" id="hlbell" title="Notifications" onclick="hlBellToggle()" style="position:relative">🔔<span class="dot" id="hlbadge" style="display:none">0</span></div>
@@ -28112,7 +28095,20 @@ function efGo(k){
 </script>
 <script>function schTab(i,el){var ps=document.querySelectorAll('.schpane');ps.forEach(function(p,j){p.style.display=j===i?'block':'none'});document.querySelectorAll('.schtab').forEach(function(t){t.style.background='#fff';t.style.color='#5d657b';t.style.border='1px solid #dadde8'});el.style.background='#161e2e';el.style.color='#fff';el.style.border='none';}</script><!-- ═══════════ ⬡ REINA — LIVE INTELLIGENCE LAYER (injected v64_29) ═══════════ -->
 <style>
-#rnaFab{position:fixed;right:26px;bottom:152px;z-index:99990;width:58px;height:58px;border-radius:50%;background:#6a3fb5;color:#fff;border:none;cursor:pointer;font-size:24px;box-shadow:0 10px 30px rgba(106,63,181,.45);display:flex;align-items:center;justify-content:center;transition:transform .15s}
+#rnaFab{position:fixed;right:14px;bottom:152px;z-index:99990;width:44px;height:44px;border-radius:50%;background:#6a3fb5;color:#fff;border:none;cursor:pointer;font-size:18px;box-shadow:0 10px 30px rgba(106,63,181,.45);display:flex;align-items:center;justify-content:center;transition:transform .15s}
+/* jomell, 2026-08-27: "why does it disappear from time to time" -- now that
+   this button is no longer force-hidden by the old rolodex dock CSS, its
+   ACTUAL visibility logic is exposed for the first time: reina-pilot-
+   host.js's hidePage() sets this element's inline style to display:none on
+   every host dispose, including a brief unmount/remount pair the Supabase
+   auth listener can fire spuriously (tab refocus, token refresh) while the
+   person never actually signed out -- body.hl-authed stays on the whole
+   time. Rather than chase that listener, pin the visible answer here: while
+   genuinely signed in, this rule (!important beats the plain inline style
+   hidePage() sets) keeps the launcher on screen regardless of a transient
+   host churn. A real sign-out still hides it -- body loses .hl-authed then
+   too, so this rule stops applying. */
+body.hl-authed #rnaFab{display:flex!important}
 #rnaFab:hover{transform:scale(1.08)}
 #rnaFab .pulse{position:absolute;inset:-4px;border-radius:50%;border:2px solid #6a3fb5;opacity:0;animation:rnaPulse 2.6s infinite}
 @keyframes rnaPulse{0%{transform:scale(.9);opacity:.7}70%{transform:scale(1.25);opacity:0}100%{opacity:0}}
@@ -34034,23 +34030,32 @@ window.__hlUpdateBackBtns=function(){
 })();
 </script>
 <script>
-/* Combine the Reina button and quick-Chirp group into one floating dock.
+/* Combine the quick-Chirp group and Monitor pill into one floating dock.
    Elements are MOVED (not recreated), so every existing click/push-to-talk
-   handler keeps working untouched. */
+   handler keeps working untouched.
+   jomell, 2026-08-27: Reina's #rnaFab is deliberately left OUT of this dock
+   -- "let's keep the Reina button on the side" -- so it stays in its own
+   original spot with its own standalone circular-button CSS instead of
+   becoming a pill inside #hl-fabdock (which is hidden on desktop; see the
+   killFabs comment above). Its own visibility-guard interval is unchanged. */
 (function(){
   try{
-    var rf=document.getElementById('rnaFab');
     var pt=document.getElementById('pttfab')||document.querySelector('.pttfab');
     var mf=document.getElementById('hlMonFab');
-    if(!rf&&!pt&&!mf)return;
+    if(!pt&&!mf)return;
     var dock=document.createElement('div');dock.id='hl-fabdock';
     document.body.appendChild(dock);
     if(mf)dock.appendChild(mf);
-    if(rf)dock.appendChild(rf);
     if(pt)dock.appendChild(pt);
-    /* fix/reina-fab-visibility: ensure Reina launcher is never left hidden after docking (desktop shell or race can set display:none) */
-    if(rf){ rf.style.display='flex'; }
-    try{ var __rnaFabGuard=0; var __rnaFabT=setInterval(function(){ var f=document.getElementById('rnaFab'); if(f && getComputedStyle(f).display==='none'){ f.style.display='flex'; } if(++__rnaFabGuard>20) clearInterval(__rnaFabT); },500); }catch(_e){}
+  }catch(e){}
+})();
+(function(){
+  try{
+    var rf=document.getElementById('rnaFab');
+    if(!rf)return;
+    /* fix/reina-fab-visibility: ensure Reina launcher is never left hidden (desktop shell or race can set display:none) */
+    rf.style.display='flex';
+    var __rnaFabGuard=0; var __rnaFabT=setInterval(function(){ var f=document.getElementById('rnaFab'); if(f && getComputedStyle(f).display==='none'){ f.style.display='flex'; } if(++__rnaFabGuard>20) clearInterval(__rnaFabT); },500);
   }catch(e){}
 })();
 /* Tooltips so every collapsed-rail icon identifies itself on hover. */

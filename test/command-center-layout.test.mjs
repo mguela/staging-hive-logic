@@ -106,10 +106,14 @@ test('Command Center breakpoints keep gauges compact without horizontal overflow
     /@media \(max-width:999px\)\{[\s\S]*?#snapshot > \.grid\{grid-template-columns:minmax\(0,1fr\)\}[\s\S]*?#snapshot \.fin\.pg-grid\{grid-template-columns:repeat\(auto-fit,minmax\(min\(180px,100%\),1fr\)\)\}/,
   );
   assert.match(html, /\.main\{[^}]*width:100%[^}]*min-width:0[^}]*\}/);
-  assert.match(html, /@media\(max-width:1150px\)\{\s*\.topbar\{flex-wrap:wrap\}/);
+  // jomell, 2026-08-27: both breakpoints shifted up ~500px when the rolodex
+  // quick-access group moved from a fixed right-edge rail into the topbar
+  // itself -- see test/browser/rolodex-rail.test.mjs for the real-browser
+  // measurements behind the new numbers.
+  assert.match(html, /@media\(max-width:1650px\)\{\s*\.topbar\{flex-wrap:wrap\}/);
   assert.match(
     html,
-    /@media\(min-width:1151px\) and \(max-width:1399px\)\{\s*body\.cc-open \.topbar\{flex-wrap:wrap\}\s*body\.cc-open \.topbar \.ask\{min-width:0;flex:1 1 220px\}/,
+    /@media\(min-width:1651px\) and \(max-width:1899px\)\{\s*body\.cc-open \.topbar\{flex-wrap:wrap\}\s*body\.cc-open \.topbar \.ask\{min-width:0;flex:1 1 220px\}/,
     'the wider header wrap must be limited to the Command Center',
   );
   assert.match(html, /document\.body\.classList\.toggle\('cc-open', v==='cc'\)/);
