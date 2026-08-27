@@ -7149,8 +7149,13 @@ function evMenu(e, items) {
   // A trigger pinned near the bottom of the viewport (e.g. "Ask Reina" in
   // the Reina column's footer) has no room below it -- open upward instead
   // of letting the menu run off-screen and leave its options unreachable.
+  // The safety margin is deliberately generous: window.innerHeight doesn't
+  // account for an OS taskbar that overlaps the bottom of the browser
+  // window, which otherwise still ate the last couple of items even when
+  // the menu technically "fit" by that measurement alone.
+  const SAFE_BOTTOM = 56;
   const menuH = menu.offsetHeight;
-  const fitsBelow = r.bottom + 5 + menuH <= window.innerHeight;
+  const fitsBelow = r.bottom + 5 + menuH <= window.innerHeight - SAFE_BOTTOM;
   menu.style.left = Math.min(r.left, window.innerWidth - 250) + 'px';
   menu.style.top = (fitsBelow ? (r.bottom + 5) : Math.max(8, r.top - menuH - 5)) + 'px';
   setTimeout(() => document.addEventListener('click', function h() { menu.remove(); document.removeEventListener('click', h); }), 0);
