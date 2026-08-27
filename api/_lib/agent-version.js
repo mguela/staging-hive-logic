@@ -40,7 +40,7 @@
 
 // Mirrors "version" in hivelogic-monitor-agent/package.json. Bump both together
 // -- the test will not let you do otherwise.
-export const EXPECTED_AGENT_VERSION = '1.3.0';
+export const EXPECTED_AGENT_VERSION = '1.3.2';
 
 // A version we would actually have shipped. Anything else is a malformed or
 // forged value and must not be recorded as if it were a real build.

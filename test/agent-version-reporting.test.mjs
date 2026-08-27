@@ -172,8 +172,10 @@ test('the admin roster shows the version alongside the device', () => {
   assert.match(src, /agentVersionState: agentVersionState\(a\.agent_version\),/);
   // paired_at joined 2026-08-26 -- pickBestMonitorAgent needs it to pick the
   // most-recently-paired active row when an employee has more than one
-  // monitor_agents record (see api/track1.js).
-  assert.match(src, /select=id,employee_id,device_name,platform,status,paired_at,last_seen_at,agent_version/);
+  // monitor_agents record. last_disconnected_at joined 2026-08-27 --
+  // isAgentAlive() needs it for the instant-offline-on-clean-quit signal
+  // (see api/track1.js).
+  assert.match(src, /select=id,employee_id,device_name,platform,status,paired_at,last_seen_at,last_disconnected_at,agent_version/);
 });
 
 // --- And it has to be READABLE, not just recorded --------------------------
