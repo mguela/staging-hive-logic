@@ -6728,7 +6728,6 @@ function evAddrsRaw(list) { return (list || []).map(r => r.emailAddress && r.ema
 function renderReadingPane(m) {
   const read = $('ev-read'); if (!read) return;
   const from = (m.from && m.from.emailAddress) || {};
-  const flagged = m.flag && m.flag.flagStatus === 'flagged';
   read.innerHTML = '';
   const head = document.createElement('div'); head.className = 'ev-read-head';
   const subj = document.createElement('div'); subj.className = 'ev-read-subj';
@@ -6743,24 +6742,16 @@ function renderReadingPane(m) {
   topRight.appendChild(meta);
   top.appendChild(topRight);
   head.appendChild(top);
-  // action bar — clean icon actions + Reina + More (iCloud/Outlook style)
+  // action bar — Reply/Reply-all/Forward/Archive/Move/Flag/Delete/Snooze/More
+  // all duplicated the ev-toolbar command bar above the reading pane (same
+  // openEmailCompose/evMove/evMoveMenu/evFlagMenu/evDelete/evMoreMenu calls,
+  // reachable there once a message is open). Only Reina isn't available up
+  // there, so it's the only action left here.
   evEnsureToolbarCss();
   const bar = document.createElement('div'); bar.className = 'ev-read-actions';
-  const sv = (d) => '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">' + d + '</svg>';
   const act = (html, title, fn, extra) => { const b = document.createElement('button'); b.className = 'ev-act' + (extra ? ' ' + extra : ''); b.innerHTML = html; b.title = title; b.setAttribute('aria-label', title); b.onclick = fn; return b; };
-  const sep = () => { const s = document.createElement('span'); s.className = 'ev-act-sep'; return s; };
-  bar.appendChild(act('<img src="/hiveconnect/icons/Reply.png" class="ev-act-ic" alt="">', 'Reply', () => openEmailCompose('reply', m)));
-  bar.appendChild(act(sv('<path d="M8 15l-5-5 5-5"/><path d="M13 15l-5-5 5-5"/><path d="M8 10h8a5 5 0 0 1 5 5v3"/>'), 'Reply all', () => openEmailCompose('replyAll', m)));
-  bar.appendChild(act(sv('<path d="M15 15l5-5-5-5"/><path d="M20 10H9a5 5 0 0 0-5 5v3"/>'), 'Forward', () => openEmailCompose('forward', m)));
-  bar.appendChild(sep());
-  bar.appendChild(act(sv('<rect x="3" y="4" width="18" height="4" rx="1"/><path d="M5 8v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8"/><path d="M10 12h4"/>'), 'Archive', () => evMove(m.id, 'archive', 'Archived')));
-  bar.appendChild(act(sv('<path d="M3 7l1.8-2h4.4L11 7h7a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V7z"/>'), 'Move to folder', (e) => evMoveMenu(e, m.id)));
-  bar.appendChild(act(sv('<path d="M4 21V4h13l-2.5 4L17 12H4"/>'), 'Flag / follow-up', (e) => evFlagMenu(e, m, flagged), flagged ? 'ev-act-on' : ''));
-  bar.appendChild(act(sv('<path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/>'), 'Delete', () => evDelete(m.id)));
-  bar.appendChild(act('<img src="/hiveconnect/icons/Snooze.png" class="ev-act-ic" alt=""><span class="rail-soon">SOON</span>', 'Coming soon', () => evToast('Snooze is coming soon.'), 'ev-act-soon'));
   const spacer = document.createElement('span'); spacer.style.flex = '1'; bar.appendChild(spacer);
   bar.appendChild(act('<span class="ev-reina-star">✦</span> Reina', 'Reina AI — summarize, draft, extract', (e) => evReinaMenu(e, m), 'ev-act-reina'));
-  bar.appendChild(act(sv('<circle cx="5" cy="12" r="1.4"/><circle cx="12" cy="12" r="1.4"/><circle cx="19" cy="12" r="1.4"/>'), 'More', (e) => evMoreMenu(e, m)));
   head.appendChild(bar);
   read.appendChild(head);
   // Reina's read of THIS message, above the message. (Chris, 2026-08-18: "in the
@@ -7205,12 +7196,7 @@ function evEnsureToolbarCss() {
   st.textContent = '#ev-read .ev-read-actions{display:flex;align-items:center;gap:3px;flex-wrap:wrap;padding:4px 0 2px}'
     + '#ev-read .ev-act{appearance:none;-webkit-appearance:none;height:34px;min-width:34px;padding:0 9px;border:0;background:transparent;box-shadow:none;color:var(--slate);border-radius:8px;display:inline-flex;align-items:center;justify-content:center;gap:6px;cursor:pointer;font:600 12.5px var(--sans);transition:background .12s,color .12s}'
     + '#ev-read .ev-act:hover{background:var(--steel-bg);color:var(--steel-deep)}'
-    + '#ev-read .ev-act.ev-act-on{color:var(--red)}'
     + '#ev-read .ev-act-reina{color:var(--steel-deep);font-weight:700}#ev-read .ev-reina-star{font-size:13px}'
-    + '#ev-read .ev-act-sep{width:1px;height:20px;background:var(--line);margin:0 5px}'
-    + '#ev-read .ev-act-ic{width:18px;height:18px;object-fit:contain;flex:none}'
-    + '#ev-read .ev-act.ev-act-soon{opacity:.6;cursor:default}#ev-read .ev-act.ev-act-soon:hover{background:transparent;color:var(--slate)}'
-    + '#ev-read .ev-act-soon .rail-soon{position:static;margin-left:2px}'
     + '.ev-move-menu .ev-move-sep{height:1px;background:var(--line);margin:5px 0}';
   document.head.appendChild(st);
 }
