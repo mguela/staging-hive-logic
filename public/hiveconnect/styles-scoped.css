@@ -2140,12 +2140,22 @@ html[data-theme="dark"] :is(#hiveconnect-root, .hc-embed).huddle-banner {
 /* Thread panel -- #thread-panel is a sibling of .main, not a child, so it
    needs the same sibling-selector scoping used for the sidebar/resizer
    above (Channels tab's own thread panel is untouched). White conversation
-   background (was --canvas, the page's gray) and the same header padding
-   as the main chat header instead of the tighter default. */
+   background (was --canvas, the page's gray), header padding matching the
+   main chat header, and message-area padding matching the Messages
+   sidebar's own content padding (#panel-messages: 30px 16px). */
 :is(#hiveconnect-root, .hc-embed) .main.messages-workspace ~ .thread-panel,
-:is(#hiveconnect-root, .hc-embed).main.messages-workspace ~ .thread-panel { background: var(--card); }
+:is(#hiveconnect-root, .hc-embed).main.messages-workspace ~ .thread-panel { background: var(--card); border-left: none; }
 :is(#hiveconnect-root, .hc-embed) .main.messages-workspace ~ .thread-panel .thread-header,
 :is(#hiveconnect-root, .hc-embed).main.messages-workspace ~ .thread-panel .thread-header { padding: 14px 22px; }
+:is(#hiveconnect-root, .hc-embed) .main.messages-workspace ~ .thread-panel .thread-messages,
+:is(#hiveconnect-root, .hc-embed).main.messages-workspace ~ .thread-panel .thread-messages { padding: 30px 16px; }
+/* Same floating-card spacing as the sidebar/main columns (margin: 12px,
+   rounded corners) -- only above the width where the panel switches to a
+   full-bleed mobile overlay, so that behavior stays untouched. */
+@media (min-width: 901px) {
+  :is(#hiveconnect-root, .hc-embed) .main.messages-workspace ~ .thread-panel,
+:is(#hiveconnect-root, .hc-embed).main.messages-workspace ~ .thread-panel { margin: 12px 12px 12px 0; border-radius: 15px; overflow: hidden; }
+}
 
 /* Message thread -- bubble + pill day-divider, scoped so the Channels tab
    (same msgEl()/.msg markup, different .main class) keeps its own look. */
