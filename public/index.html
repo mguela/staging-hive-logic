@@ -19,7 +19,7 @@
  * monitor_my_status poll, so "is this person running current code" is a
  * question the database can answer. Do not hand-edit it -- run
  * `node scripts/stamp-page-build.mjs`. */
-var HL_PAGE_BUILD = '443826579abc61ee';
+var HL_PAGE_BUILD = '44e4fa10ed914561';
 </script>
 <script>
 (function () { // HL_FETCH_DEDUPE_V1 — single wrapper: GET /api/ dedupe + 60s cache + write-invalidate
@@ -8112,15 +8112,18 @@ function coAfter(d,okMsg){ if(d&&d.ok){ chirpToast('&#10003; '+okMsg); } else { 
     </div>
     <div id="ivx-summary" style="margin-bottom:20px"></div>
     <div id="ivx-create" style="display:none"></div>
-    <div style="display:inline-flex;gap:4px;margin-bottom:20px">
-      <button id="ivx-tab-open" onclick="ivxSetMode('open')" style="border:1.5px solid #d1d5db;border-radius:8px;padding:7px 18px;font-family:var(--sans);font-weight:600;font-size:13px;cursor:pointer;background:#fff;color:#0f172a;box-shadow:0 1px 3px rgba(0,0,0,.08)">Open &amp; drafts</button>
-      <button id="ivx-tab-all" onclick="ivxSetMode('all')" style="border:1.5px solid #d1d5db;border-radius:8px;padding:7px 18px;font-family:var(--sans);font-weight:600;font-size:13px;cursor:pointer;background:transparent;color:var(--mut)">All recent</button>
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:20px;flex-wrap:wrap">
+      <div style="display:inline-flex;gap:4px">
+        <button id="ivx-tab-open" onclick="ivxSetMode('open')" style="border:1.5px solid #d1d5db;border-radius:8px;padding:7px 18px;font-family:var(--sans);font-weight:600;font-size:13px;cursor:pointer;background:#fff;color:#0f172a;box-shadow:0 1px 3px rgba(0,0,0,.08)">Open &amp; drafts</button>
+        <button id="ivx-tab-all" onclick="ivxSetMode('all')" style="border:1.5px solid #d1d5db;border-radius:8px;padding:7px 18px;font-family:var(--sans);font-weight:600;font-size:13px;cursor:pointer;background:transparent;color:var(--mut)">All recent</button>
+      </div>
+      <input id="ivx-search" type="search" placeholder="Search invoice #, client, or title&hellip;" oninput="ivxSearch(this.value)" style="border:1.5px solid var(--line);border-radius:9px;padding:8px 14px;font-family:var(--sans);font-size:13px;font-weight:600;min-width:240px;outline:none;background:#fff">
     </div>
     <div id="ivx-list"><div style="color:var(--mut);padding:44px;text-align:center;font-weight:700">Loading&hellip;</div></div>
   </div>
 </div>
 <script>
-var IVX = { invoices: [], clientsById: {}, mode: 'open' };
+var IVX = { invoices: [], clientsById: {}, mode: 'open', query: '' };
 function ivxEsc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
 function ivxMoney(n){ n=+n||0; return '$'+n.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}); }
 function ivxFmtDate(s){ if(!s) return ''; var d=new Date(s); if(isNaN(d.getTime())) return String(s); return d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric',timeZone:'UTC'}); }
@@ -8128,6 +8131,17 @@ function ivxInp(){ return 'border:1.5px solid var(--line);border-radius:9px;padd
 function ivxBadge(s){ var m={paid:['#047857','#d1fae5'],past_due:['#b91c1c','#fee2e2'],awaiting_payment:['#b45309','#fef3c7'],draft:['#475569','#f1f5f9'],bad_debt:['#6b7280','#f3f4f6']}; var c=m[s]||['#475569','#f1f5f9']; return '<span style="background:'+c[1]+';color:'+c[0]+';font-weight:800;font-size:10px;padding:3px 9px;border-radius:99px;text-transform:uppercase;letter-spacing:.04em">'+ivxEsc((s||'draft').replace(/_/g,' '))+'</span>'; }
 function ivxEmpty(t,s){ return '<div style="border:1.5px dashed var(--line);border-radius:14px;padding:44px;text-align:center;background:#fff"><div style="font-family:var(--sans);font-weight:900;font-size:16px;color:#0f172a">'+ivxEsc(t)+'</div><div style="color:var(--mut);font-size:12px;font-weight:700;margin-top:6px">'+ivxEsc(s)+'</div></div>'; }
 function ivxSetMode(m){ IVX.mode=m; var o=document.getElementById('ivx-tab-open'), a=document.getElementById('ivx-tab-all'); if(o){ o.style.background=(m==='open'?'#fff':'transparent'); o.style.color=(m==='open'?'#0f172a':'var(--mut)'); o.style.boxShadow=(m==='open'?'0 1px 3px rgba(0,0,0,.08)':'none'); } if(a){ a.style.background=(m==='all'?'#fff':'transparent'); a.style.color=(m==='all'?'#0f172a':'var(--mut)'); a.style.boxShadow=(m==='all'?'0 1px 3px rgba(0,0,0,.08)':'none'); } ivxRender(); }
+// jomell, 2026-08-27: a way to find one invoice among hundreds -- by
+// number, client name, or title. Filters before the "All recent" 150-row
+// cap (not after), so a search still finds an older invoice that would
+// otherwise be cut off.
+function ivxSearch(v){ IVX.query=v||''; ivxRender(); }
+function ivxMatchesQuery(i,q){
+  q=String(q||'').trim().toLowerCase();
+  if(!q) return true;
+  var hay=[i.invoiceNumber,i.subject,ivxClientName(i.clientId)].join(' ').toLowerCase();
+  return hay.indexOf(q)>=0;
+}
 function ivxLoad(){
   var el=document.getElementById('ivx-list'); if(!el)return;
   el.innerHTML='<div style="color:var(--mut);padding:44px;text-align:center;font-weight:700">Loading&hellip;</div>';
@@ -8159,6 +8173,8 @@ function ivxRender(){
     +'</div>'; }
   var rows=all.slice();
   if(IVX.mode==='open'){ rows=rows.filter(ivxIsOpen); }
+  var q=(IVX.query||'').trim().toLowerCase();
+  if(q){ rows=rows.filter(function(i){ return ivxMatchesQuery(i,q); }); }
   var order={past_due:0,awaiting_payment:1,draft:2,awaiting:1};
   rows.sort(function(a,b){ 
     if(IVX.mode==='all'){ return String(b.issuedDate||'').localeCompare(String(a.issuedDate||'')); }
@@ -8168,7 +8184,10 @@ function ivxRender(){
   });
   var capped=false;
   if(IVX.mode==='all'&&rows.length>150){ rows=rows.slice(0,150); capped=true; }
-  if(!rows.length){ el.innerHTML=ivxEmpty(IVX.mode==='open'?'No open invoices':'No invoices', IVX.mode==='open'?'Nothing is awaiting payment right now.':'Nothing to show.'); return; }
+  if(!rows.length){
+    if(q){ el.innerHTML=ivxEmpty('No matches', 'Nothing matches "'+q+'" in '+(IVX.mode==='open'?'Open & drafts':'All recent')+'.'); return; }
+    el.innerHTML=ivxEmpty(IVX.mode==='open'?'No open invoices':'No invoices', IVX.mode==='open'?'Nothing is awaiting payment right now.':'Nothing to show.'); return;
+  }
   var html='<div style="display:flex;flex-direction:column;gap:10px">';
   rows.forEach(function(i){ html+=ivxCard(i); });
   html+='</div>';
@@ -8207,7 +8226,16 @@ function ivxCard(i){
   if(ivxIsLocal(i) && i.status!=='paid' && i.status!=='bad_debt'){
     send='<button style="border:none;border-radius:9px;padding:8px 13px;font-family:var(--sans);font-weight:800;font-size:12px;cursor:pointer;background:#1B7A50;color:#fff" onclick="ivxSendEmail(\''+ivxEsc(i.id)+'\')" id="ivx-send-'+ivxEsc(i.id)+'">'+(i.status==='draft'?'Send to client':'Resend to client')+'</button>';
   }
-  var acts=send+pay+jobber;
+  // jomell, 2026-08-27: a way to clean up test invoices -- same HL-INV-
+  // scoping as Mark paid/Send, for the same reason (a Jobber-synced
+  // invoice would just come back on the next sync). Not restricted to
+  // draft: a sent or paid test invoice is still test data someone wants
+  // gone, unlike editing an amount that's already been communicated.
+  var del='';
+  if(ivxIsLocal(i)){
+    del='<button style="border:1.5px solid #f0d3ce;border-radius:7px;padding:6px 16px;font-family:var(--sans);font-weight:600;font-size:12px;cursor:pointer;background:#fff;color:#c65b4e" onclick="ivxOpenDeleteModal(\''+ivxEsc(i.id)+'\',\''+ivxEsc(i.invoiceNumber?('#'+i.invoiceNumber):'this invoice')+'\')">Delete</button>';
+  }
+  var acts=send+pay+jobber+del;
   return '<div id="ivxrow-'+ivxEsc(i.id)+'" style="border:1px solid var(--line);border-radius:12px;padding:18px 22px;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.05)">'
     +'<div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start">'
     +'<div style="min-width:0"><div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><span style="font-family:var(--sans);font-weight:800;font-size:14px;color:#0f172a">'+ivxEsc(i.invoiceNumber?('#'+i.invoiceNumber):'Invoice')+'</span>'+ivxBadge(i.status)+'</div>'
@@ -8237,6 +8265,25 @@ function ivxSendEmail(id){
     if(d&&d.ok){ chirpToast('&#10003; Emailed '+d.email); ivxLoad(); }
     else { chirpToast('&#9888; Could not email the client: '+((d&&d.error)||'unknown error')); if(btn){ btn.disabled=false; btn.textContent='Send to client'; } }
   }).catch(function(e){ chirpToast('&#9888; '+e.message); if(btn){ btn.disabled=false; btn.textContent='Send to client'; } });
+}
+// jomell, 2026-08-27: a way to clean up test invoices from Invoicing & AR.
+// Own modal, not window.confirm, matching this app's other confirm flows --
+// permanent and cannot be undone, so it says so plainly.
+function ivxOpenDeleteModal(id,label){
+  var body='<div style="font-size:12.5px;color:var(--ink);line-height:1.5;margin-bottom:16px">Permanently delete <b>'+ivxEsc(label)+'</b>? This cannot be undone.</div>'
+    +'<div id="ivx-del-err" style="display:none;color:#c65b4e;font-size:11px;font-weight:700;margin-bottom:10px"></div>'
+    +'<div style="display:flex;gap:9px"><button onclick="ivxConfirmDelete(\''+ivxEsc(id)+'\')" style="flex:1;padding:11px;border:none;border-radius:8px;background:#c65b4e;color:#fff;font-weight:900;font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;cursor:pointer;font-family:\'Montserrat\',sans-serif">Delete permanently</button><button onclick="document.getElementById(\'hlmodal\').remove()" style="flex:1;padding:11px;border:1px solid #dadde8;border-radius:8px;background:#fff;color:#5d657b;font-weight:900;font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;cursor:pointer;font-family:\'Montserrat\',sans-serif">Cancel</button></div>';
+  hlModal('Delete invoice',body);
+}
+function ivxConfirmDelete(id){
+  var h={'Content-Type':'application/json'}; var t=hlTokenSync(); if(t)h['Authorization']='Bearer '+t;
+  fetch((window.API||'')+'/api/track1?resource=delete_invoice',{method:'POST',headers:h,body:JSON.stringify({id:id})}).then(function(r){return r.json();}).then(function(d){
+    var err=document.getElementById('ivx-del-err');
+    if(!d||!d.ok){ if(err){ err.textContent=(d&&d.error)||'Could not delete this invoice.'; err.style.display='block'; } return; }
+    var m=document.getElementById('hlmodal'); if(m)m.remove();
+    chirpToast('&#10003; Invoice deleted');
+    ivxLoad();
+  }).catch(function(e){ var err=document.getElementById('ivx-del-err'); if(err){ err.textContent='Network error: '+e.message; err.style.display='block'; } });
 }
 function ivxOpenCreate(){
   var box=document.getElementById('ivx-create'); if(!box)return;
