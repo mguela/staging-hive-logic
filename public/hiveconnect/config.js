@@ -7,5 +7,6 @@ window.HIVE_CONFIG = {
   // Microsoft 365 email (Outlook) integration. Paste your Azure app registration's
   // Application (client) ID here to switch the Email tab on. tenant 'common' lets any
   // work/personal Microsoft account sign in; use your tenant ID to lock it to ghgrp.net.
+  // Must match api/msmail.js's CLIENT_ID.
   msGraph: { clientId: 'ff9bda24-d7e9-4905-a94e-f3ccc0239eb2', tenant: 'organizations' }
 };

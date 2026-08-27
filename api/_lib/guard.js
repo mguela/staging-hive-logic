@@ -420,6 +420,32 @@ const PUBLIC_RESOURCE_PATHS = [
   // is a separate, migration-shaped decision -- not a reason to leave the
   // feature dead.
   { path: '/api/fieldops', param: 'action', resource: 'tm_pay_init', method: 'GET' },
+
+  // HiveConnect bridge (2026-08-27). NINTH instance of the half-shipped-guard
+  // class: this whole path was never added to any allowlist, so every one of
+  // its self-authenticating actions -- the ones the handler itself expects to
+  // run with no Supabase session at all -- has been 401ing at the edge since
+  // this guard shipped.
+  //
+  //   * redeem_invite: a brand-new HiveConnect invitee has no session of any
+  //     kind yet. Authenticated by hcRpc('hc_claim_invite_for_auth', ...) --
+  //     req.body.token must be a real, still-open invite row in the database
+  //     (redeemHiveConnectInvite() in api/hiveconnect-bridge.js), the exact
+  //     capability-token pattern already allowlisted above for
+  //     tm_pay_init/schedule/confirm. public/hiveconnect/app.js deliberately
+  //     sends no Authorization header for this call.
+  //   * bot_provision / bot_post / list_channels: server-to-server calls from
+  //     api/voice-webhook.js's Reina voicemail-alert flow, which has no user
+  //     session to carry. Gated by botSecretOk() requiring req.body.secret to
+  //     equal REINA_BOT_SECRET before the handler does anything.
+  // All four are POST-pinned (the handler 405s anything else outright), so
+  // this opens nothing else on the path -- admin_create_user/
+  // admin_reset_password/tasks_list/etc. still need a real session or the
+  // handler's own getHiveConnectAdmin() check.
+  { path: '/api/hiveconnect-bridge', param: 'action', resource: 'redeem_invite', method: 'POST' },
+  { path: '/api/hiveconnect-bridge', param: 'action', resource: 'bot_provision', method: 'POST' },
+  { path: '/api/hiveconnect-bridge', param: 'action', resource: 'bot_post', method: 'POST' },
+  { path: '/api/hiveconnect-bridge', param: 'action', resource: 'list_channels', method: 'POST' },
 ];
 
 function normalizePath(pathname) {

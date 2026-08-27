@@ -96,7 +96,7 @@
       var fonts = document.createElement('link');
       fonts.id = 'hc-fonts';
       fonts.rel = 'stylesheet';
-      fonts.href = 'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600;700;800&display=swap';
+      fonts.href = 'https://fonts.googleapis.com/css2?family=Inter:wght@200;400;500;600;700;800&family=JetBrains+Mono:wght@500;600;700;800&display=swap';
       document.head.appendChild(fonts);
     }
   }
@@ -234,6 +234,10 @@
       if (!window.msal) {
         await loadScript('https://cdn.jsdelivr.net/npm/@azure/msal-browser@2.38.4/lib/msal-browser.min.js');
       }
+      // mail-engine.js replaces window.msal with a shim that routes Microsoft
+      // sign-in through /api/msmail (server-side), avoiding the 24h SPA token
+      // expiry the plain client-side MSAL flow hits. Its CLIENT_ID must stay
+      // in sync with config.js's msGraph.clientId -- both are ff9bda24-....
       await loadScript('/hiveconnect/mail-engine.js');
       // tasks.js and voip-panel.js were added to hiveconnect/index.html after
       // this mount's manual reload list was written (2026-07-19 Tasks extraction,

@@ -738,3 +738,54 @@ test('every existing resource-pair entry still matches after the param change', 
     assert.equal(d.allow, true, `${r} must still be reachable`);
   }
 });
+
+// --- the HiveConnect bridge's self-authenticating actions -------------------
+//
+// /api/hiveconnect-bridge was never added to any allowlist, so every action
+// the handler itself expects to run with no Supabase session -- a brand-new
+// invitee redeeming a real invite token, or Reina's voicemail-alert bot
+// posting with its own REINA_BOT_SECRET -- 401'd at the edge before the
+// handler's own token/secret check ever ran. NINTH instance of the
+// half-shipped-guard class documented above tm_pay_init.
+
+test('a brand-new HiveConnect invitee with no session can redeem their invite', () => {
+  const d = decideAccess({
+    pathname: '/api/hiveconnect-bridge',
+    searchParams: new URLSearchParams('action=redeem_invite'),
+    hasValidUser: false, hasValidCronSecret: false, cronSecretConfigured: true, method: 'POST',
+  });
+  assert.equal(d.allow, true, 'redeem_invite must survive an edge with no session');
+  assert.equal(d.reason, 'public-resource-allowlist');
+});
+
+test('the Reina voicemail bot can provision/post/list with no session', () => {
+  for (const action of ['bot_provision', 'bot_post', 'list_channels']) {
+    const d = decideAccess({
+      pathname: '/api/hiveconnect-bridge',
+      searchParams: new URLSearchParams('action=' + action),
+      hasValidUser: false, hasValidCronSecret: false, cronSecretConfigured: true, method: 'POST',
+    });
+    assert.equal(d.allow, true, `${action} must survive an edge with no session`);
+  }
+});
+
+test('opening those four actions did not open the rest of the HiveConnect bridge', () => {
+  const denied = (action, method = 'POST') => decideAccess({
+    pathname: '/api/hiveconnect-bridge',
+    searchParams: new URLSearchParams(action ? 'action=' + action : ''),
+    hasValidUser: false, hasValidCronSecret: false, cronSecretConfigured: true, method,
+  });
+  // Sibling actions still require either a real session or the handler's own
+  // getHiveConnectAdmin()/botSecretOk() check -- neither of those is this
+  // guard's job, so an anonymous caller must still be refused at the edge.
+  for (const action of ['admin_create_user', 'admin_reset_password', 'session', 'tasks_list', '']) {
+    assert.equal(denied(action).allow, false, `hiveconnect-bridge ${action || '(no action)'} must still require a session`);
+  }
+  // Pinned to POST -- the handler itself 405s anything else, but the edge
+  // entry shouldn't become a GET door either.
+  for (const action of ['redeem_invite', 'bot_post']) {
+    assert.equal(denied(action, 'GET').allow, false, `${action} is POST-only`);
+  }
+  // And the whole path must still not be prefix-public.
+  assert.equal(isPublicApiPath('/api/hiveconnect-bridge'), false, 'hiveconnect-bridge must never be blanket-public');
+});

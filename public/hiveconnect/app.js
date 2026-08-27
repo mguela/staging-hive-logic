@@ -108,6 +108,11 @@ function initials(p) {
 function fmtTime(ts) {
   return new Date(ts).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
 }
+function evMsgRowTime(ts) {
+  const d = new Date(ts), today = new Date();
+  if (d.toDateString() === today.toDateString()) return fmtTime(ts);
+  return d.toLocaleDateString([], { month: 'short', day: 'numeric' });
+}
 function fmtDay(ts) {
   const d = new Date(ts), today = new Date();
   const yest = new Date(today); yest.setDate(today.getDate() - 1);
@@ -368,7 +373,7 @@ async function loadEverything(myId) {
   // deactivated accounts can't use the app
   if (me && me.active === false) {
     await sb.auth.signOut();
-    document.body.innerHTML = '<div style="height:100vh;display:flex;align-items:center;justify-content:center;font-family:Montserrat,sans-serif;color:#8b92a8;background:#10151f">Your account has been deactivated. Contact an admin.</div>';
+    document.body.innerHTML = '<div style="height:100vh;display:flex;align-items:center;justify-content:center;font-family:Inter,sans-serif;color:#8b92a8;background:#10151f">Your account has been deactivated. Contact an admin.</div>';
     throw new Error('deactivated');
   }
 
@@ -393,6 +398,7 @@ async function loadEverything(myId) {
   subscribePresence();
   subscribeHuddles();
   subscribeChirp();
+  await evEnsureSelfNote();
 
   // Land on Messages, not whatever channel happens to sort first alphabetically
   // (previously fell back to the first non-DM channel when no #general channel
@@ -605,62 +611,261 @@ function renderSidebar() {
   if (typeof navTab !== 'undefined' && navTab === 'huddles') renderHuddlesPanel();
 }
 
-// ---- Messages panel: DMs organized into Team / Vendor / Client / External folders ----
-const MSG_ORDER = [['team', 'Team'], ['vendor', 'Vendor'], ['client', 'Client'], ['external', 'External']];
-const msgOpen = { Team: true, Vendor: true, Client: true, External: true };
-function dmContactType(otherId) {
-  const c = contactsData.find(x => x.profile_id === otherId);
-  if (c) return c.contact_type;
-  const p = profiles.get(otherId);
-  return (p && p.role === 'guest') ? 'external' : 'team';
+// ---- Messages panel: Favourites / Direct Messages / Teams ----
+const msgSecOpen = { favorites: true, dms: true, teams: true };
+let msgSearch = '';
+// Real, cross-device preference (same hcPref mechanism as Email's
+// favourites) -- not device-local, not fake. Toggled from each DM row's
+// hover-reveal star.
+function evMsgFavorites() { return hcPrefJson('hcMsgFavorites', 'hcMsgFavorites', []) || []; }
+function evMsgSetFavorites(ids) { hcPrefSet('hcMsgFavorites', 'hcMsgFavorites', ids); }
+function evMsgToggleFavorite(id) {
+  const cur = evMsgFavorites();
+  evMsgSetFavorites(cur.includes(id) ? cur.filter(x => x !== id) : cur.concat([id]));
 }
+// Real, cross-device preference — same hcPref mechanism as Email's favourites
+// and this panel's own folder order. Muting a conversation writes here from
+// its context menu; nothing writes to it yet.
+function evMsgMuted() { return hcPrefJson('hcMsgMuted', 'hcMsgMuted', []) || []; }
+function evMsgSetMuted(ids) { hcPrefSet('hcMsgMuted', 'hcMsgMuted', ids); }
+// Drafts are the one deliberate device-local exception (an in-flight unsent
+// draft belongs to the device until sent) — same localStorage-only pattern
+// as Email's hcEmailDraft: keys. Nothing writes hcMsgDraft: keys yet; this
+// reads whatever's there so the Drafts filter/count are honest from day one.
+function evMsgDraftChannelIds() {
+  try { return Object.keys(localStorage).filter(k => k.startsWith('hcMsgDraft:') && (localStorage.getItem(k) || '').trim()).map(k => k.slice('hcMsgDraft:'.length)); }
+  catch (e) { return []; }
+}
+function evMsgDmChannels() { return [...channels.values()].filter(c => c.type === 'dm' && memberships.has(c.id) && dmOther(c)); }
+// Session-local: which DMs have a message that failed to send just now.
+// Not a setting -- same "in-flight local draft" territory as hcMsgDraft:
+// (CLAUDE.md), cleared the moment a send to that channel succeeds again.
+const evMsgFailedChannels = new Set();
+// Last-message-per-conversation preview cache. One query per channel the
+// first time it's needed (same acceptable parallel-query pattern
+// loadUnreads() already uses for unread counts), then kept live by the
+// existing message-INSERT realtime hook -- no new subscription.
+const evMsgLastCache = new Map(); // channel_id -> {content, created_at, attachment_name} | null
+async function evMsgLoadPreviews(channelIds) {
+  const missing = channelIds.filter(id => !evMsgLastCache.has(id));
+  if (!missing.length) return;
+  await Promise.all(missing.map(async (cid) => {
+    try {
+      const { data } = await sb.from('messages').select('content,created_at,attachment_name')
+        .eq('channel_id', cid).is('thread_parent_id', null).is('deleted_at', null)
+        .order('created_at', { ascending: false }).limit(1);
+      evMsgLastCache.set(cid, (data && data[0]) || null);
+    } catch (e) { evMsgLastCache.set(cid, null); }
+  }));
+  renderMessagesPanel();
+}
+function evMsgPreviewText(last) {
+  if (!last) return '';
+  if (last.content && last.content.trim()) return last.content.trim();
+  if (last.attachment_name) return '📎 ' + last.attachment_name;
+  return '';
+}
+function evMsgMentionedChannelIds() {
+  const dmIds = new Set(evMsgDmChannels().map(c => c.id));
+  return new Set(notifications.filter(n => !n.read && n.kind === 'mention' && dmIds.has(n.channel_id)).map(n => n.channel_id));
+}
+function evMsgFilterCounts() {
+  const dms = evMsgDmChannels();
+  const muted = new Set(evMsgMuted());
+  const draftIds = new Set(evMsgDraftChannelIds());
+  const mentioned = evMsgMentionedChannelIds();
+  let unread = 0, drafts = 0, mutedCt = 0, failed = 0;
+  dms.forEach(c => {
+    if ((unreads.get(c.id) || 0) > 0) unread++;
+    if (draftIds.has(c.id)) drafts++;
+    if (muted.has(c.id)) mutedCt++;
+    if (evMsgFailedChannels.has(c.id)) failed++;
+  });
+  return { unread, mentions: mentioned.size, drafts, muted: mutedCt, failed };
+}
+let msgFilter = 'all';
+const MSG_FILTERS = [
+  ['all', 'All'],
+  ['unread', 'Unread'],
+  ['mentions', 'Unread @mentions'],
+  ['failed', 'Failed to send'],
+  ['drafts', 'Drafts'],
+  ['muted', 'Muted'],
+];
+function evMsgFilterMenu(e) {
+  const counts = evMsgFilterCounts();
+  const countFor = (key) => key === 'unread' ? counts.unread : key === 'mentions' ? counts.mentions : key === 'drafts' ? counts.drafts : key === 'muted' ? counts.muted : key === 'failed' ? counts.failed : null;
+  // "All", "Unread", "Mentions" and "Failed" already have their own
+  // quick-access pills above the list -- the dropdown covers the rest.
+  evMenu(e, MSG_FILTERS.filter(([key]) => !['all', 'unread', 'mentions', 'failed'].includes(key)).map(([key, label]) => {
+    const n = countFor(key);
+    const html = esc(label) + (n != null && n > 0 ? ' <span class="msg-filter-ct">' + n + '</span>' : '') + (msgFilter === key ? ' ✓' : '');
+    return [html, () => { msgFilter = key; renderMessagesPanel(); }];
+  }));
+}
+// One collapsible section (Favourites / Direct Messages / Teams), reusing
+// the exact same .ct-folder/.ct-head/.ct-chev/.ct-body classes and styling
+// already polished for the folder headers this session -- just with an
+// icon slot and an optional "+" added.
+function evMsgSection(iconHtml, label, key, opts) {
+  opts = opts || {};
+  const folder = document.createElement('div'); folder.className = 'ct-folder' + (msgSecOpen[key] ? '' : ' collapsed');
+  const head = document.createElement('button'); head.type = 'button'; head.className = 'ct-head';
+  const ic = document.createElement('span'); ic.className = 'ct-head-ic'; ic.innerHTML = iconHtml; head.appendChild(ic);
+  const fn = document.createElement('span'); fn.className = 'ct-fname'; fn.textContent = label; head.appendChild(fn);
+  if (opts.count) { const fc = document.createElement('span'); fc.className = 'ct-fcount'; fc.textContent = opts.count; head.appendChild(fc); }
+  if (opts.onAdd) {
+    const add = document.createElement('span'); add.className = 'msg-sec-add'; add.textContent = '+'; add.title = opts.addTitle || 'Add';
+    add.onclick = (e) => { e.stopPropagation(); opts.onAdd(e); };
+    head.appendChild(add);
+  }
+  const chev = document.createElement('span'); chev.className = 'ct-chev'; chev.textContent = '▾'; head.appendChild(chev);
+  head.onclick = () => { const col = folder.classList.toggle('collapsed'); msgSecOpen[key] = !col; };
+  folder.appendChild(head);
+  const body = document.createElement('div'); body.className = 'ct-body';
+  const ul = document.createElement('ul'); ul.className = 'channel-list';
+  body.appendChild(ul); folder.appendChild(body);
+  return { folder, ul };
+}
+function buildDmRow(c) {
+  const li = document.createElement('li');
+  li.className = 'dm-row';
+  li.dataset.name = dmDisplayName(c).toLowerCase();
+  li.dataset.id = c.id;
+  if (isGroupDM(c)) {
+    const grp = partStrip(dmOtherProfiles(c), 2); grp.classList.add('dm-grp-av'); li.appendChild(grp);
+  } else {
+    li.appendChild(avatarWithPresence(dmOther(c)));
+  }
+
+  const body = document.createElement('div'); body.className = 'dm-row-body';
+  const top = document.createElement('div'); top.className = 'dm-row-top';
+  const nm = document.createElement('span'); nm.className = 'cname'; nm.textContent = dmDisplayName(c); top.appendChild(nm);
+  const last = evMsgLastCache.get(c.id);
+  if (last && last.created_at) { const t = document.createElement('span'); t.className = 'dm-row-time'; t.textContent = evMsgRowTime(last.created_at); top.appendChild(t); }
+  body.appendChild(top);
+
+  const bottom = document.createElement('div'); bottom.className = 'dm-row-bottom';
+  const prev = document.createElement('span'); prev.className = 'dm-row-preview'; prev.textContent = evMsgPreviewText(last); bottom.appendChild(prev);
+  const unread = unreads.get(c.id) || 0;
+  if (c.id === currentChannelId) li.classList.add('active');
+  if (unread > 0) { li.classList.add('has-unread'); const b = document.createElement('span'); b.className = 'unread'; b.textContent = unread; bottom.appendChild(b); }
+  body.appendChild(bottom);
+  li.appendChild(body);
+
+  const actions = document.createElement('div'); actions.className = 'dm-row-actions';
+  const selfDM = isSelfDM(c);
+  if (!selfDM) {
+    const favOn = evMsgFavorites().includes(c.id);
+    const favBtn = document.createElement('button'); favBtn.type = 'button'; favBtn.className = 'dm-fav-btn' + (favOn ? ' on' : '');
+    favBtn.title = favOn ? 'Remove from favorites' : 'Add to favorites'; favBtn.textContent = favOn ? '★' : '☆';
+    favBtn.onclick = (e) => { e.stopPropagation(); evMsgToggleFavorite(c.id); renderMessagesPanel(); };
+    actions.appendChild(favBtn);
+  }
+  const hv = document.createElement('span'); hv.className = 'dm-hv'; hv.title = 'Start HiveVideo';
+  hv.innerHTML = '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>';
+  hv.onclick = async (e) => { e.stopPropagation(); if (currentChannelId !== c.id) await openChannel(c.id); joinHuddle(c.id); };
+  actions.appendChild(hv);
+  if (huddleParticipants(c.id).length) { const h = document.createElement('span'); h.className = 'huddle-badge'; h.textContent = '🎧'; actions.appendChild(h); }
+  li.appendChild(actions);
+
+  li.onclick = () => openChannel(c.id);
+  return li;
+}
+function dmDisplayName(c) { return isSelfDM(c) ? (me.display_name || 'Notes to Self') : isGroupDM(c) ? dmGroupLabel(c) : (dmOther(c) ? dmOther(c).display_name : 'DM'); }
+function applyMsgFilter() {
+  const q = (msgSearch || '').trim().toLowerCase();
+  const muted = new Set(evMsgMuted());
+  const draftIds = new Set(evMsgDraftChannelIds());
+  const mentioned = evMsgMentionedChannelIds();
+  document.querySelectorAll('#panel-messages .ct-folder').forEach(folder => {
+    let any = false;
+    folder.querySelectorAll('.channel-list li[data-name]').forEach(row => {
+      const id = row.dataset.id;
+      const nameMatch = !q || (row.dataset.name || '').includes(q);
+      let filterMatch = true;
+      if (msgFilter === 'unread') filterMatch = row.classList.contains('has-unread');
+      else if (msgFilter === 'mentions') filterMatch = mentioned.has(id);
+      else if (msgFilter === 'drafts') filterMatch = draftIds.has(id);
+      else if (msgFilter === 'muted') filterMatch = muted.has(id);
+      else if (msgFilter === 'failed') filterMatch = evMsgFailedChannels.has(id);
+      const match = nameMatch && filterMatch;
+      row.style.display = match ? '' : 'none'; if (match) any = true;
+    });
+    if (q || msgFilter !== 'all') { folder.classList.remove('collapsed'); folder.style.display = any ? '' : 'none'; }
+    else { folder.style.display = ''; }
+  });
+}
+const MSG_ICON_STAR = '★';
+const MSG_ICON_PERSON = '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a8 8 0 0116 0v1"/></svg>';
+const MSG_ICON_TEAMS = '<svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor"><circle cx="6" cy="6" r="2.6"/><circle cx="18" cy="6" r="2.6"/><circle cx="6" cy="18" r="2.6"/><circle cx="18" cy="18" r="2.6"/></svg>';
 function renderMessagesPanel() {
   const el = $('panel-messages'); if (!el) return; el.innerHTML = '';
-  const nb = document.createElement('button'); nb.className = 'new-channel-cta'; nb.id = 'new-dm-btn';
-  nb.innerHTML = '<span>＋</span> New message'; nb.onclick = (e) => { e.stopPropagation(); openCompose(); };
-  el.appendChild(nb);
-  const dms = [...channels.values()].filter(c => c.type === 'dm' && memberships.has(c.id) && dmOther(c));
-  const grouped = { team: [], vendor: [], client: [], external: [] };
-  dms.forEach(c => { const o = dmOther(c); const t = isGroupDM(c) ? 'team' : (o ? dmContactType(o.id) : 'team'); (grouped[t] || grouped.team).push(c); });
-  // Always show all four folders (Team / Vendor / Client / External) — even when empty.
-  applyStoredOrder(MSG_ORDER, x => x[0], 'hcMsgOrder').forEach(([type, label]) => {
-    const list = (grouped[type] || []).sort((a, b) => (dmLastActivity(b) || '').localeCompare(dmLastActivity(a) || ''));
-    const unreadTotal = list.reduce((s, c) => s + (unreads.get(c.id) || 0), 0);
-    const folder = document.createElement('div'); folder.className = 'ct-folder' + (msgOpen[label] ? '' : ' collapsed'); folder.dataset.type = type; folder.dataset.folder = label;
-    const head = document.createElement('button'); head.className = 'ct-head';
-    const grip = document.createElement('span'); grip.className = 'fold-grip'; grip.textContent = '⠿'; grip.setAttribute('aria-hidden', 'true'); head.appendChild(grip);
-    const chev = document.createElement('span'); chev.className = 'ct-chev'; chev.textContent = '▾'; head.appendChild(chev);
-    const fn = document.createElement('span'); fn.className = 'ct-fname'; fn.textContent = label; head.appendChild(fn);
-    const fc = document.createElement('span'); fc.className = 'ct-fcount'; fc.textContent = unreadTotal || ''; head.appendChild(fc);
-    head.onclick = () => { const col = folder.classList.toggle('collapsed'); msgOpen[label] = !col; };
-    folder.appendChild(head);
-    const body = document.createElement('div'); body.className = 'ct-body';
-    const ul = document.createElement('ul'); ul.className = 'channel-list';
-    if (!list.length) { const em = document.createElement('div'); em.className = 'ct-empty'; em.textContent = 'No conversations yet'; ul.appendChild(em); }
-    list.forEach(c => {
-      const li = document.createElement('li');
-      if (isGroupDM(c)) {
-        const grp = partStrip(dmOtherProfiles(c), 2); grp.classList.add('dm-grp-av'); li.appendChild(grp);
-        const nm = document.createElement('span'); nm.className = 'cname'; nm.textContent = dmGroupLabel(c); li.appendChild(nm);
-      } else {
-        const other = dmOther(c);
-        li.appendChild(avatarWithPresence(other));
-        const nm = document.createElement('span'); nm.className = 'cname'; nm.textContent = other ? other.display_name : 'DM'; li.appendChild(nm);
-      }
-      const unread = unreads.get(c.id) || 0;
-      if (c.id === currentChannelId) li.classList.add('active');
-      if (unread > 0) { li.classList.add('has-unread'); const b = document.createElement('span'); b.className = 'unread'; b.textContent = unread; li.appendChild(b); }
-      const hv = document.createElement('span'); hv.className = 'dm-hv'; hv.title = 'Start HiveVideo';
-      hv.innerHTML = '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>';
-      hv.onclick = async (e) => { e.stopPropagation(); if (currentChannelId !== c.id) await openChannel(c.id); joinHuddle(c.id); };
-      li.appendChild(hv);
-      if (huddleParticipants(c.id).length) { const h = document.createElement('span'); h.className = 'huddle-badge'; h.textContent = '🎧'; li.appendChild(h); }
-      li.onclick = () => openChannel(c.id);
-      ul.appendChild(li);
-    });
-    body.appendChild(ul); folder.appendChild(body); el.appendChild(folder);
-  });
-  enableFolderDrag(el, '.ct-head', '.ct-folder', 'type', 'hcMsgOrder');
+
+  // Search (own row, with a ⌘K hint) + All/Unread/Mentions/Favorites quick
+  // filter pills (own row below) + a chevron for the rest (Drafts/Muted).
+  const headRow = document.createElement('div'); headRow.className = 'msg-search-row';
+  const searchWrap = document.createElement('div'); searchWrap.className = 'msg-search';
+  searchWrap.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>';
+  const search = document.createElement('input'); search.id = 'msg-search'; search.type = 'text'; search.placeholder = 'Search conversations'; search.value = msgSearch;
+  search.addEventListener('input', () => { msgSearch = search.value; applyMsgFilter(); });
+  searchWrap.appendChild(search);
+  const kbd = document.createElement('span'); kbd.className = 'msg-search-kbd'; kbd.textContent = /Mac/i.test(navigator.platform || '') ? '⌘K' : 'Ctrl K';
+  searchWrap.appendChild(kbd);
+  headRow.appendChild(searchWrap);
+  el.appendChild(headRow);
+
+  const filterRow = document.createElement('div'); filterRow.className = 'msg-filter-row';
+  const counts = evMsgFilterCounts();
+  const quickPill = (key, label, count) => {
+    const b = document.createElement('button'); b.type = 'button'; b.className = 'msg-filter-quick' + (msgFilter === key ? ' active' : '');
+    b.textContent = label;
+    if (count) { const ct = document.createElement('span'); ct.className = 'msg-filter-ct'; ct.textContent = count; b.appendChild(ct); }
+    b.onclick = () => { msgFilter = key; renderMessagesPanel(); };
+    filterRow.appendChild(b);
+  };
+  quickPill('all', 'All', 0);
+  quickPill('unread', 'Unread', counts.unread);
+  quickPill('mentions', 'Mentions', counts.mentions);
+  quickPill('failed', 'Failed', counts.failed);
+  const filterChev = document.createElement('button'); filterChev.type = 'button'; filterChev.className = 'msg-filter-chev'; filterChev.innerHTML = '▾'; filterChev.title = 'More filters (Drafts, Muted)';
+  filterChev.onclick = (e) => evMsgFilterMenu(e);
+  filterRow.appendChild(filterChev);
+  el.appendChild(filterRow);
+  el.appendChild(headRow);
+
+  // Favourites -- Notes to Self always lives here, not togglable off the
+  // list (it has no star to unfavorite it with), so it can never end up
+  // favorited=false and hidden from both this section and Direct Messages.
+  const favIds = evMsgFavorites();
+  const selfDM = evMsgDmChannels().find(isSelfDM);
+  const favChannels = favIds.map(id => channels.get(id)).filter(c => c && c.type === 'dm' && memberships.has(c.id) && dmOther(c) && !isSelfDM(c))
+    .sort((a, b) => (dmLastActivity(b) || '').localeCompare(dmLastActivity(a) || ''));
+  if (selfDM) favChannels.unshift(selfDM);
+  const fav = evMsgSection(MSG_ICON_STAR, 'FAVORITES', 'favorites', {});
+  if (!favChannels.length) { const em = document.createElement('div'); em.className = 'ct-empty'; em.textContent = 'No favorites yet'; fav.ul.appendChild(em); }
+  favChannels.forEach(c => fav.ul.appendChild(buildDmRow(c)));
+  el.appendChild(fav.folder);
+
+  // Direct Messages (flat -- contact-type folders were dropped in favor of
+  // matching the reference's single-list structure). Notes to Self lives in
+  // Favorites only, not duplicated here.
+  const dms = evMsgDmChannels().filter(c => !isSelfDM(c)).sort((a, b) => (dmLastActivity(b) || '').localeCompare(dmLastActivity(a) || ''));
+  const dmSec = evMsgSection(MSG_ICON_PERSON, 'DIRECT MESSAGES', 'dms', { onAdd: () => openCompose(), addTitle: 'New message' });
+  if (!dms.length) { const em = document.createElement('div'); em.className = 'ct-empty'; em.textContent = 'No conversations yet'; dmSec.ul.appendChild(em); }
+  dms.forEach(c => dmSec.ul.appendChild(buildDmRow(c)));
+  el.appendChild(dmSec.folder);
+
+  // Teams -- the user's real non-DM channels (same data as the Channels
+  // tab), reusing channelRow() as-is rather than duplicating its logic.
+  const teamChannels = [...channels.values()].filter(c => c.type !== 'dm' && memberships.has(c.id) && !c.archived);
+  const teamSec = evMsgSection(MSG_ICON_TEAMS, 'TEAMS', 'teams', { onAdd: () => { const b = $('new-channel-btn'); if (b) b.click(); }, addTitle: 'New channel' });
+  if (!teamChannels.length) { const em = document.createElement('div'); em.className = 'ct-empty'; em.textContent = 'No teams yet'; teamSec.ul.appendChild(em); }
+  teamChannels.forEach(c => { const li = channelRow(c); li.dataset.name = (c.name || '').toLowerCase(); li.dataset.id = c.id; teamSec.ul.appendChild(li); });
+  el.appendChild(teamSec.folder);
+
+  applyMsgFilter();
+  evMsgLoadPreviews([...new Set([...favChannels, ...dms].map(c => c.id))]);
 }
 function hexA(hex, a) {
   const n = parseInt(hex.slice(1), 16);
@@ -678,8 +883,23 @@ function dmOther(channel) {
   return profiles.get(otherId);
 }
 
+// "Seen" read receipt -- no schema change: every DM member already has their
+// own channel_members.last_read_at row; "seen" is just the OTHER member's
+// copy being at/after the timestamp of my own last message in the channel.
+const dmOtherLastRead = new Map(); // dm channel_id -> other member's last_read_at | null
+async function evLoadOtherLastRead(channelId) {
+  const c = channels.get(channelId);
+  if (!c || c.type !== 'dm' || isGroupDM(c) || isSelfDM(c)) return;
+  const other = dmOther(c);
+  if (!other) return;
+  const { data } = await sb.from('channel_members').select('last_read_at')
+    .eq('channel_id', channelId).eq('user_id', other.id).single();
+  dmOtherLastRead.set(channelId, data ? data.last_read_at : null);
+  if (channelId === currentChannelId) renderMessages();
+}
+
 function channelLabel(c) {
-  if (c.type === 'dm') { if (isGroupDM(c)) return dmGroupLabel(c); const o = dmOther(c); return o ? o.display_name : 'DM'; }
+  if (c.type === 'dm') { if (isSelfDM(c)) return me.display_name || 'Notes to Self'; if (isGroupDM(c)) return dmGroupLabel(c); const o = dmOther(c); return o ? o.display_name : 'DM'; }
   return `${c.type === 'private' ? '🔒 ' : '#'}${c.name}`;
 }
 
@@ -691,6 +911,7 @@ async function openChannel(channelId) {
   // Opening a conversation IS the current activity → make sure the rail + header reflect it
   if (navTab === 'people' || navTab === 'huddles') setNavTab(c && c.type === 'dm' ? 'messages' : 'channels');
   else updateMainHeader();
+  if (c && c.type === 'dm') { msgMobileThreadOpen = true; evMsgUpdateMobileView(); }
   { const g = $('channel-settings-btn'); if (g) g.classList.toggle('hidden', !(c && c.type !== 'dm' && (me.role === 'owner' || me.role === 'admin'))); }
   messagesEl.innerHTML = '<div class="notif-empty">Loading…</div>';
 
@@ -717,6 +938,7 @@ async function openChannel(channelId) {
   refreshPinCount();
   $('pinned-panel').classList.add('hidden');
   renderHuddleUI();
+  evLoadOtherLastRead(channelId);
   composerInput.focus();
 }
 
@@ -759,6 +981,15 @@ function renderMessages() {
     messagesEl.appendChild(msgEl(m, grouped, false));
     lastAuthor = m.user_id; lastTs = new Date(m.created_at).getTime();
   }
+  // "Seen" -- only under my own most recent message, and only once the other
+  // DM member's last_read_at has caught up to it (real data, no schema change).
+  const myLast = [...msgs].reverse().find(m => m.user_id === me.id && !m.deleted_at);
+  const otherRead = dmOtherLastRead.get(currentChannelId);
+  if (myLast && otherRead && otherRead >= myLast.created_at) {
+    const seen = document.createElement('div'); seen.className = 'msg-seen';
+    seen.textContent = 'Seen ' + fmtTime(otherRead);
+    messagesEl.appendChild(seen);
+  }
   messagesEl.scrollTop = messagesEl.scrollHeight;
 }
 
@@ -777,7 +1008,7 @@ function msgEl(m, grouped, inThread) {
   const body = document.createElement('div'); body.className = 'msg-body';
   if (!grouped) {
     const head = document.createElement('div'); head.className = 'msg-head';
-    head.innerHTML = `<span class="msg-author"></span>${p && p.username === 'reina' ? '<span class="bot-badge">BOT</span>' : ''}<span class="msg-time">${fmtTime(m.created_at)}</span>`;
+    head.innerHTML = `<span class="msg-author"></span>${p && p.username === 'reina' ? '<span class="bot-badge">BOT</span>' : ''}`;
     head.querySelector('.msg-author').textContent = p ? p.display_name : 'Unknown';
     body.appendChild(head);
   }
@@ -844,7 +1075,16 @@ function msgEl(m, grouped, inThread) {
 
   div.appendChild(body);
 
-  // hover tools
+  if (grouped) {
+    const sp = document.createElement('div'); sp.className = 'time-col-spacer'; div.appendChild(sp);
+  } else {
+    const timeCol = document.createElement('div'); timeCol.className = 'msg-time-col';
+    timeCol.textContent = fmtTime(m.created_at);
+    div.appendChild(timeCol);
+  }
+
+  // hover tools -- React | Reply | Copy | More (Pin/Task/Edit/Delete folded
+  // into the More dropdown, same real actions as before, just consolidated).
   if (!m.deleted_at) {
     const tools = document.createElement('div'); tools.className = 'msg-tools';
     const btn = (label, title, fn) => {
@@ -853,22 +1093,25 @@ function msgEl(m, grouped, inThread) {
     };
     btn('😊', 'React', e => openEmojiPicker(e, m.id));
     if (!inThread) btn('💬', 'Reply in thread', () => openThread(m.id));
-    btn('📌', m.pinned_at ? 'Unpin' : 'Pin', () => togglePin(m));
-    btn('✅', 'Create task from this message', () => {
-      const ch = channels.get(m.channel_id);
-      const isDm = ch && ch.type === 'dm';
-      openTaskQuickCreateFromSource({
-        type: isDm ? 'message' : (inThread ? 'thread_reply' : 'channel_post'),
-        sourceMessageId: m.id, sourceChannelId: m.channel_id,
-        subject: isDm ? ('DM with ' + (profiles.get(m.user_id)?.display_name || 'someone')) : ('#' + (ch ? ch.name : 'channel')),
-        sender: profiles.get(m.user_id)?.display_name || profiles.get(m.user_id)?.username || '?',
-        preview: (m.content || '').slice(0, 200),
-      });
+    btn('📋', 'Copy', () => { navigator.clipboard.writeText(m.content || ''); railToast('Copied'); });
+    btn('⋯', 'More', e => {
+      const items = [
+        [m.pinned_at ? '📌 Unpin' : '📌 Pin', () => togglePin(m)],
+        ['✅ Create task from this message', () => {
+          const ch = channels.get(m.channel_id);
+          const isDm = ch && ch.type === 'dm';
+          openTaskQuickCreateFromSource({
+            type: isDm ? 'message' : (inThread ? 'thread_reply' : 'channel_post'),
+            sourceMessageId: m.id, sourceChannelId: m.channel_id,
+            subject: isDm ? ('DM with ' + (profiles.get(m.user_id)?.display_name || 'someone')) : ('#' + (ch ? ch.name : 'channel')),
+            sender: profiles.get(m.user_id)?.display_name || profiles.get(m.user_id)?.username || '?',
+            preview: (m.content || '').slice(0, 200),
+          });
+        }],
+      ];
+      if (m.user_id === me.id) items.push('---', ['✏️ Edit', () => startEdit(div, m)], ['🗑️ Delete', () => deleteMessage(m)]);
+      evMenu(e, items);
     });
-    if (m.user_id === me.id) {
-      btn('✏️', 'Edit', () => startEdit(div, m));
-      btn('🗑️', 'Delete', () => deleteMessage(m));
-    }
     div.appendChild(tools);
   }
   return div;
@@ -889,8 +1132,9 @@ async function sendMessage(content, threadParentId = null, attachment = null) {
   if (window.hlSfx) hlSfx.play('swoosh');
   content = (content || '').trim();
   if ((!content && !attachment) || !currentChannelId) return;
+  const channelId = currentChannelId;
   const row = {
-    channel_id: currentChannelId, user_id: me.id, content,
+    channel_id: channelId, user_id: me.id, content,
     thread_parent_id: threadParentId,
   };
   if (attachment) {
@@ -899,7 +1143,19 @@ async function sendMessage(content, threadParentId = null, attachment = null) {
     row.attachment_type = attachment.type;
   }
   const { error } = await sb.from('messages').insert(row);
-  if (error) console.error('send failed', error);
+  if (error) {
+    console.error('send failed', error);
+    evMsgFailedChannels.add(channelId);
+    // Same "unsent draft" territory as hcMsgDraft: (device-local, not a
+    // setting) -- the composer already cleared optimistically, so this is
+    // what keeps the text from just vanishing.
+    if (!threadParentId) { try { localStorage.setItem('hcMsgDraft:' + channelId, content); } catch (e) {} }
+    railToast("Message didn't send — check your connection");
+    if (navTab === 'messages') renderMessagesPanel();
+  } else {
+    evMsgFailedChannels.delete(channelId);
+    if (navTab === 'messages' && msgFilter === 'failed') renderMessagesPanel();
+  }
 }
 
 // ---------- Uploads ----------
@@ -1189,6 +1445,38 @@ function closeThread() { currentThreadId = null; threadPanel.classList.add('hidd
 $('thread-close').addEventListener('click', closeThread);
 
 // ---------- DMs ----------
+// "Notes to Self" -- a DM channel with yourself, for personal notes. Created
+// once per user and favorited by default (still just a real DM channel +
+// membership row + the same hcMsgFavorites list every other DM star uses --
+// nothing schema-special). The one-time hcPref flag is what makes it a
+// *default*, not a forced state: un-favoriting it later sticks.
+async function evEnsureSelfNote() {
+  if (hcPref('hcSelfNoteInit', 'hcSelfNoteInit', '')) return;
+  const key = [me.id, me.id].join(':');
+  let dm = [...channels.values()].find(c => c.dm_key === key);
+  if (!dm) {
+    const { data, error } = await sb.from('channels')
+      .insert({ type: 'dm', dm_key: key, created_by: me.id }).select().single();
+    if (error) {
+      const { data: existing } = await sb.from('channels').select('*').eq('dm_key', key).single();
+      dm = existing;
+    } else {
+      dm = data;
+      await sb.from('channel_members').insert([{ channel_id: dm.id, user_id: me.id }]);
+    }
+    if (dm) channels.set(dm.id, dm);
+  }
+  if (dm && !memberships.has(dm.id)) {
+    const { data: mem } = await sb.from('channel_members').select('*')
+      .eq('channel_id', dm.id).eq('user_id', me.id).single();
+    if (mem) memberships.set(dm.id, mem);
+  }
+  if (dm) {
+    const favs = evMsgFavorites();
+    if (!favs.includes(dm.id)) evMsgSetFavorites(favs.concat([dm.id]));
+  }
+  hcPrefSet('hcSelfNoteInit', 'hcSelfNoteInit', '1');
+}
 async function startDM(otherId) {
   const key = [me.id, otherId].sort().join(':');
   let dm = [...channels.values()].find(c => c.dm_key === key);
@@ -1252,7 +1540,15 @@ $('nc-create').addEventListener('click', async () => {
   restore();
   $('modal-backdrop').classList.add('hidden');
   renderSidebar();
+  // Opened from the Teams "+" while on the Messages tab -- that section
+  // wouldn't otherwise refresh, and the header stayed on generic "Messages"
+  // for a non-DM channel, so the new channel looked like nothing happened.
+  if (navTab === 'messages') renderMessagesPanel();
   openChannel(data.id);
+  // Straight into "add members" -- nobody else can be in a brand-new
+  // channel yet, private ones especially, so offer that immediately rather
+  // than leaving the creator to find channel settings on their own.
+  openChannelMembers(data.id);
 });
 
 // ---------- Notifications ----------
@@ -1307,6 +1603,7 @@ function subscribePresence() {
     const state = ch.presenceState();
     onlineUsers = new Set(Object.keys(state));
     renderSidebar();
+    updateMainHeader();
     // refresh the me-dot
     document.querySelector('.me-dot')?.classList.toggle('online', onlineUsers.has(me.id));
   }).subscribe(async status => {
@@ -1578,7 +1875,7 @@ function renderHuddleUI() {
   dot.classList.toggle('hidden', !live);
   if (iAmIn) label.textContent = 'In call';
   else if (live) label.textContent = `Join (${parts.length})`;
-  else label.textContent = isDM ? 'Call' : 'HiveVideo';
+  else label.textContent = 'HiveVideo';
   btn.title = iAmIn ? 'You are in this call' : live ? 'Join the active call' : (isDM ? 'Start a call' : 'Start HiveVideo');
 
   // in-channel banner (only when a huddle is live here and I'm NOT already in it)
@@ -2644,7 +2941,12 @@ function setNavTab(tab) {
   { const cv = $('calendar-view'); if (cv) cv.classList.toggle('hidden', tab !== 'calendar'); }
   { const chv = $('chirp-view'); if (chv) chv.classList.toggle('hidden', tab !== 'chirp'); }
   { const vv = $('voip-view'); if (vv) vv.classList.toggle('hidden', tab !== 'voip'); }
-  { const sb = document.querySelector('.sidebar'); if (sb) { sb.classList.toggle('sidebar-collapsed', tab === 'voip'); sb.classList.toggle('sidebar-email-theme', tab === 'email'); } }
+  { const sb = document.querySelector('.sidebar'); if (sb) {
+      sb.classList.toggle('sidebar-collapsed', tab === 'voip');
+      sb.classList.toggle('sidebar-messages-theme', tab === 'messages');
+      sb.classList.toggle('sidebar-email-theme', tab === 'email');
+    } }
+  { const mn = document.querySelector('.main'); if (mn) mn.classList.toggle('messages-workspace', tab === 'messages'); }
   // .email-view is now inset (top:12px) instead of covering .main edge-to-edge
   // like the other overlay views still do, so .main-header -- always present,
   // never otherwise hidden, same white background as the email toolbar --
@@ -2658,12 +2960,22 @@ function setNavTab(tab) {
   if (tab === 'calendar') openCalendarTab();
   if (tab === 'voip') openVoipTab();
   updateMainHeader();
+  evMsgUpdateMobileView();
 }
+
+// Mobile: show the conversation list OR the open thread, never both. Pure UI
+// flag -- independent of currentChannelId, so desktop is unaffected.
+let msgMobileThreadOpen = false;
+function evMsgUpdateMobileView() {
+  document.body.classList.toggle('msg-mobile-thread', navTab === 'messages' && msgMobileThreadOpen);
+}
+{ const bb = $('msg-back-btn'); if (bb) bb.onclick = () => { msgMobileThreadOpen = false; evMsgUpdateMobileView(); }; }
 
 // Main title bar reflects the CURRENT activity, not just the last channel.
 // Contacts / HiveVideo are section views; Channels / Messages show the open conversation.
 function updateMainHeader() {
   const t = $('channel-title'), d = $('channel-desc'); if (!t) return;
+  if (d) d.classList.remove('ch-desc-online');
   if (navTab === 'people') { t.textContent = 'Contacts'; if (d) d.textContent = 'Your contact directory'; return; }
   if (navTab === 'huddles') { t.textContent = 'HiveVideo'; if (d) d.textContent = 'Start or join a video call'; return; }
   if (navTab === 'chirp') { t.textContent = 'Chirp'; if (d) d.textContent = chirpClockedIn() ? 'Push-to-talk · on' : 'Push-to-talk · off'; return; }
@@ -2671,9 +2983,31 @@ function updateMainHeader() {
   if (navTab === 'tasks') { t.textContent = 'Tasks'; if (d) d.textContent = 'Who owns what, and by when'; return; }
   if (navTab === 'calendar') { t.textContent = 'Calendar'; if (d) d.textContent = 'Your Outlook calendar'; return; }
   const c = channels.get(currentChannelId);
+  const inDm = navTab === 'messages' && c && c.type === 'dm';
+  if (searchInput) searchInput.placeholder = inDm ? 'Search this conversation…' : 'Search messages…';
+  if (composerInput) composerInput.placeholder = inDm ? 'Type a message…' : 'Message';
   if (navTab === 'messages') {
     // Messages is about DMs — only echo the open thing if it's actually a DM.
-    if (c && c.type === 'dm') { t.textContent = channelLabel(c); if (d) d.textContent = ''; }
+    if (c && c.type === 'dm') {
+      t.innerHTML = '';
+      const group = isGroupDM(c);
+      if (group) { const grp = partStrip(dmOtherProfiles(c), 2); grp.classList.add('dm-grp-av'); t.appendChild(grp); }
+      else t.appendChild(avatarWithPresence(dmOther(c)));
+      const nm = document.createElement('span'); nm.textContent = channelLabel(c); t.appendChild(nm);
+      if (!isSelfDM(c)) {
+        const favOn = evMsgFavorites().includes(c.id);
+        const favBtn = document.createElement('button'); favBtn.type = 'button'; favBtn.className = 'ch-title-fav' + (favOn ? ' on' : '');
+        favBtn.title = favOn ? 'Remove from favorites' : 'Add to favorites'; favBtn.textContent = favOn ? '★' : '☆';
+        favBtn.onclick = () => { evMsgToggleFavorite(c.id); updateMainHeader(); renderMessagesPanel(); };
+        t.appendChild(favBtn);
+      }
+      const other = (!group && !isSelfDM(c)) ? dmOther(c) : null;
+      const isOnline = !!(other && onlineUsers.has(other.id));
+      if (d) { d.textContent = isSelfDM(c) ? 'Only visible to you' : (isOnline ? '● Online' : ''); d.classList.toggle('ch-desc-online', isOnline); }
+    }
+    // A Team channel opened from the Messages sidebar's own TEAMS section --
+    // same as the Channels tab below, not the generic "Messages" fallback.
+    else if (c) { t.textContent = channelLabel(c); if (d) d.textContent = c.description || ''; }
     else { t.textContent = 'Messages'; if (d) d.textContent = ''; }
     return;
   }
@@ -2681,7 +3015,51 @@ function updateMainHeader() {
   if (c && c.type !== 'dm') { t.textContent = channelLabel(c); if (d) d.textContent = c.description || ''; }
   else { t.textContent = 'Channels'; if (d) d.textContent = ''; }
 }
-document.querySelectorAll('.rail-btn[data-tab]').forEach(b => b.addEventListener('click', () => setNavTab(b.dataset.tab)));
+document.querySelectorAll('.rail-btn[data-tab]').forEach(b => b.addEventListener('click', () => {
+  if (b.dataset.tab === 'messages') msgMobileThreadOpen = false; // tapping the rail icon always lands on the list, not a stale open thread
+  setNavTab(b.dataset.tab);
+}));
+
+// ---- Sidebar resize (drag the divider between the sidebar and main content) ----
+// Real, cross-device preference (hcPref) -- same mechanism as every other
+// saved setting in this app, not a device-local hack.
+(function () {
+  const sidebar = document.querySelector('.sidebar');
+  const resizer = $('sidebar-resizer');
+  if (!sidebar || !resizer) return;
+  const MIN_W = 200, MAX_W = 460;
+  const saved = parseInt(hcPref('hcSidebarWidth', 'hcSidebarWidth', ''), 10);
+  if (saved && saved >= MIN_W && saved <= MAX_W) {
+    sidebar.style.width = saved + 'px'; sidebar.style.minWidth = saved + 'px';
+  }
+  let dragging = false, startX = 0, startW = 0;
+  resizer.addEventListener('mousedown', (e) => {
+    e.preventDefault();
+    dragging = true; startX = e.clientX; startW = sidebar.getBoundingClientRect().width;
+    sidebar.classList.add('resizing'); resizer.classList.add('dragging');
+    document.body.style.userSelect = 'none';
+  });
+  document.addEventListener('mousemove', (e) => {
+    if (!dragging) return;
+    const w = Math.min(MAX_W, Math.max(MIN_W, startW + (e.clientX - startX)));
+    sidebar.style.width = w + 'px'; sidebar.style.minWidth = w + 'px';
+  });
+  document.addEventListener('mouseup', () => {
+    if (!dragging) return;
+    dragging = false; sidebar.classList.remove('resizing'); resizer.classList.remove('dragging');
+    document.body.style.userSelect = '';
+    hcPrefSet('hcSidebarWidth', 'hcSidebarWidth', Math.round(sidebar.getBoundingClientRect().width));
+  });
+})();
+// Cmd/Ctrl+K -- focus the Messages sidebar search (the ⌘K hint chip next to
+// it advertises this), scoped to the Messages tab so it doesn't fight other
+// tabs' own shortcuts.
+window.addEventListener('keydown', (e) => {
+  if (navTab === 'messages' && (e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+    e.preventDefault();
+    const s = $('msg-search'); if (s) s.focus();
+  }
+});
 // placeholder rail buttons (Chirp, Email) — show a "coming soon" toast
 document.querySelectorAll('.rail-btn[data-soon]').forEach(b => b.addEventListener('click', () => railToast(b.dataset.soon)));
 let railToastT = null;
@@ -3396,6 +3774,7 @@ function createRecipientPicker(opts = {}) {
 function dmMemberIds(c) { return (c.dm_key || '').split(':').filter(Boolean); }
 function dmOtherProfiles(c) { return dmMemberIds(c).filter(id => id !== me.id).map(id => profiles.get(id)).filter(Boolean); }
 function isGroupDM(c) { return c && c.type === 'dm' && dmMemberIds(c).length > 2; }
+function isSelfDM(c) { const ids = c && c.type === 'dm' ? dmMemberIds(c) : []; return ids.length > 0 && ids.every(id => id === me.id); }
 function dmGroupLabel(c) {
   const names = dmOtherProfiles(c).map(p => (p.display_name || 'Someone').split(' ')[0]);
   if (!names.length) return 'Group';
@@ -3787,18 +4166,20 @@ searchInput.addEventListener('keydown', async e => {
   const q = searchInput.value.trim();
   if (q.length < 2) return;
   const panel = $('search-panel'), list = $('search-results');
+  const scopeChannel = channels.get(currentChannelId);
+  const scoped = navTab === 'messages' && scopeChannel && scopeChannel.type === 'dm';
   $('search-title').textContent = `Results for “${q}”`;
   list.innerHTML = '<div class="notif-empty">Searching…</div>';
   panel.classList.remove('hidden');
-  const { data } = await sb.from('messages')
+  let query = sb.from('messages')
     .select('*')
     .ilike('content', `%${q}%`)
-    .is('deleted_at', null)
-    .order('created_at', { ascending: false })
-    .limit(60);
+    .is('deleted_at', null);
+  if (scoped) query = query.eq('channel_id', currentChannelId);
+  const { data } = await query.order('created_at', { ascending: false }).limit(60);
   list.innerHTML = '';
   if (!data || !data.length) {
-    list.innerHTML = '<div class="notif-empty">No matches across your channels & history.</div>';
+    list.innerHTML = `<div class="notif-empty">No matches ${scoped ? 'in this conversation' : 'across your channels & history'}.</div>`;
     return;
   }
   $('search-title').textContent = `${data.length}${data.length === 60 ? '+' : ''} result${data.length === 1 ? '' : 's'} for “${q}”`;
@@ -4359,6 +4740,7 @@ function subscribeRealtime() {
         if (m.thread_parent_id === currentThreadId) renderThread();
         return;
       }
+      evMsgLastCache.set(m.channel_id, { content: m.content, created_at: m.created_at, attachment_name: m.attachment_name });
       if (isCurrent) {
         messagesCache.set(m.id, m);
         renderMessages();
@@ -4408,6 +4790,14 @@ function subscribeRealtime() {
       renderSidebar();
       // …then surface any live call there immediately (don't wait for the next presence sync).
       if (typeof updateIncomingCalls === 'function') updateIncomingCalls();
+    })
+    .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'channel_members' }, ({ new: m }) => {
+      // The other DM member reading my messages moves their last_read_at --
+      // that's what powers the real "Seen" indicator, no new subscription needed elsewhere.
+      if (m.user_id !== me.id && dmOtherLastRead.has(m.channel_id)) {
+        dmOtherLastRead.set(m.channel_id, m.last_read_at);
+        if (m.channel_id === currentChannelId) renderMessages();
+      }
     })
     .subscribe();
 
@@ -4576,9 +4966,6 @@ async function evGraph(path, opts = {}) {
   // returns the same JSON shapes. Microsoft accounts fall through unchanged.
   const acct = opts.account || evActive;
   if (acct && acct.provider === 'imap') return evImapGraph(acct, path, opts);
-  // Demo mailbox: no external provider at all, just an in-memory sample
-  // mailbox so the tab is fully interactive with nothing to sign into.
-  if (acct && acct.provider === 'mock') return evMockGraph(path, opts);
   const token = await evToken(opts.account);
   // Support absolute URLs so @odata.nextLink pagination links work directly.
   const url = /^https:\/\//.test(path) ? path : ('https://graph.microsoft.com/v1.0' + path);
@@ -4643,145 +5030,12 @@ async function evImapGraph(acct, path, opts = {}) {
   return j;
 }
 
-// ---- Demo mailbox (provider:'mock') --------------------------------------
-// A UI-only sample mailbox: no Microsoft, no IMAP, nothing to sign into.
-// Everything (send, reply, delete, flag, drafts…) is real and interactive
-// against this in-memory array, it just never leaves the browser tab — a
-// refresh resets it back to the sample set. It plugs into evGraph() the same
-// way the IMAP shim does, so every existing call site (selectFolder,
-// openEmailMessage, evFlag, evMove, evSendCompose, etc.) needs no changes at
-// all — they already only know "Graph-shaped path in, Graph-shaped JSON out."
-const EV_MOCK_ACCOUNT = { homeAccountId: 'mock-demo', username: 'demo@hivelogic.local', name: 'Demo Mailbox', provider: 'mock' };
+// Random id helper -- also used by evSaveGroups() below, not just Email.
 function evMockId() { return 'mock-' + Math.random().toString(36).slice(2) + Date.now().toString(36); }
-function evMockPerson(name, address) { return { emailAddress: { name, address } }; }
-function evMockMsg(o) {
-  return Object.assign({
-    id: evMockId(), toRecipients: [], ccRecipients: [], categories: [],
-    hasAttachments: false, isRead: true, importance: 'normal',
-    inferenceClassification: 'focused', flag: { flagStatus: 'notFlagged' },
-    conversationId: evMockId(), body: { contentType: 'HTML', content: '<p>' + (o.bodyPreview || '') + '</p>' },
-  }, o);
-}
-function evMockAgo(hours) { return new Date(Date.now() - hours * 3600000).toISOString(); }
-let EV_MOCK_MESSAGES = null;
-let EV_MOCK_FOLDERS = []; // custom (non-well-known) folders created in the demo mailbox: {id, displayName}
-function evMockSeed() {
-  const me = evMockPerson('Demo Mailbox', 'demo@hivelogic.local');
-  const threadId = evMockId();
-  EV_MOCK_MESSAGES = [
-    evMockMsg({ folder: 'inbox', subject: 'Roof leak — urgent', from: evMockPerson('Karen Alvarez', 'karen.alvarez@example.com'), toRecipients: [me], receivedDateTime: evMockAgo(1), isRead: false, importance: 'high', hasAttachments: true, conversationId: threadId, bodyPreview: 'We noticed water coming through the ceiling in the upstairs bedroom after last night\'s storm — can someone come take a look today?', body: { contentType: 'HTML', content: '<p>We noticed water coming through the ceiling in the upstairs bedroom after last night\'s storm.</p><p>Can someone come take a look today? It\'s getting worse.</p><p>— Karen</p>' } }),
-    evMockMsg({ folder: 'inbox', subject: 'Invoice #2044 — payment received', from: evMockPerson('Jobber Billing', 'billing@getjobber.com'), toRecipients: [me], receivedDateTime: evMockAgo(3), isRead: true, categories: ['Green category'], bodyPreview: 'Payment of $1,240.00 has been received for invoice #2044.', body: { contentType: 'HTML', content: '<p>Payment of <b>$1,240.00</b> has been received for invoice #2044.</p>' } }),
-    evMockMsg({ folder: 'inbox', subject: 'Signed contract attached', from: evMockPerson('Marcus Webb', 'mwebb@example.com'), toRecipients: [me], receivedDateTime: evMockAgo(6), isRead: true, hasAttachments: true, flag: { flagStatus: 'flagged' }, bodyPreview: 'Signed and attached — let us know when you can start.', body: { contentType: 'HTML', content: '<p>Signed and attached. Let us know when you can start.</p>' } }),
-    evMockMsg({ folder: 'inbox', subject: 'Photos from job site', from: evMockPerson('Dana Ruiz (Field)', 'dana.ruiz@hivelogic.local'), toRecipients: [me], receivedDateTime: evMockAgo(9), isRead: false, hasAttachments: true, bodyPreview: 'Uploaded today\'s progress photos from the Henderson job.', body: { contentType: 'HTML', content: '<p>Uploaded today\'s progress photos from the Henderson job — framing is done, on schedule.</p>' } }),
-    evMockMsg({ folder: 'inbox', subject: 'Team meeting notes — Thursday', from: evMockPerson('Priya Shah', 'priya.shah@hivelogic.local'), toRecipients: [me], receivedDateTime: evMockAgo(20), isRead: true, categories: ['Blue category'], bodyPreview: 'Notes from this week\'s sync are attached below.', body: { contentType: 'HTML', content: '<p>Notes from this week\'s sync:</p><ul><li>Henderson job on track</li><li>New hire starts Monday</li><li>Truck #3 needs service</li></ul>' } }),
-    evMockMsg({ folder: 'inbox', subject: 'Question about estimate #1122', from: evMockPerson('Tom Bailey', 'tbailey@example.com'), toRecipients: [me], receivedDateTime: evMockAgo(26), isRead: false, bodyPreview: 'Quick question about the materials line on the estimate you sent over.', body: { contentType: 'HTML', content: '<p>Quick question about the materials line on the estimate you sent over — is that per square foot or total?</p>' } }),
-    evMockMsg({ folder: 'inbox', subject: 'Vendor delivery scheduled for Friday', from: evMockPerson('Northgate Supply', 'orders@northgatesupply.example'), toRecipients: [me], receivedDateTime: evMockAgo(30), isRead: true, categories: ['Yellow category'], bodyPreview: 'Your order #88213 is scheduled to arrive Friday between 8am–12pm.', body: { contentType: 'HTML', content: '<p>Your order #88213 is scheduled to arrive Friday between 8am–12pm.</p>' } }),
-    evMockMsg({ folder: 'inbox', subject: 'Fall home maintenance tips', from: evMockPerson('Trade Weekly Newsletter', 'news@tradeweekly.example'), toRecipients: [me], receivedDateTime: evMockAgo(40), isRead: true, inferenceClassification: 'other', bodyPreview: '5 things every homeowner should check before winter…', body: { contentType: 'HTML', content: '<p>5 things every homeowner should check before winter…</p>' } }),
-    evMockMsg({ folder: 'inbox', subject: 'Re: Roof leak — urgent', from: evMockPerson('Karen Alvarez', 'karen.alvarez@example.com'), toRecipients: [me], receivedDateTime: evMockAgo(0.5), isRead: false, importance: 'high', conversationId: threadId, bodyPreview: 'Thanks for the quick response — tomorrow morning works.', body: { contentType: 'HTML', content: '<p>Thanks for the quick response — tomorrow morning works great.</p>' } }),
-    evMockMsg({ folder: 'inbox', subject: 'Limited time offer — act now!!!', from: evMockPerson('DealBlast', 'promo@dealblast.example'), toRecipients: [me], receivedDateTime: evMockAgo(50), isRead: true, inferenceClassification: 'other', bodyPreview: 'Save big on tools this week only.', body: { contentType: 'HTML', content: '<p>Save big on tools this week only.</p>' } }),
-    evMockMsg({ folder: 'sentitems', subject: 'Re: Roof leak — urgent', from: me, toRecipients: [evMockPerson('Karen Alvarez', 'karen.alvarez@example.com')], receivedDateTime: evMockAgo(1.5), conversationId: threadId, bodyPreview: 'We can have someone out first thing tomorrow morning.', body: { contentType: 'HTML', content: '<p>We can have someone out first thing tomorrow morning.</p>' } }),
-    evMockMsg({ folder: 'sentitems', subject: 'Estimate #1122 attached', from: me, toRecipients: [evMockPerson('Tom Bailey', 'tbailey@example.com')], receivedDateTime: evMockAgo(48), hasAttachments: true, bodyPreview: 'Estimate attached as discussed — let me know if you have questions.', body: { contentType: 'HTML', content: '<p>Estimate attached as discussed — let me know if you have questions.</p>' } }),
-    evMockMsg({ folder: 'sentitems', subject: 'Following up on invoice #2039', from: me, toRecipients: [evMockPerson('Linda Osei', 'linda.osei@example.com')], receivedDateTime: evMockAgo(70), bodyPreview: 'Just a friendly follow-up on the invoice sent last week.', body: { contentType: 'HTML', content: '<p>Just a friendly follow-up on the invoice sent last week.</p>' } }),
-    evMockMsg({ folder: 'drafts', subject: 'Proposal for Henderson project', from: me, toRecipients: [], receivedDateTime: evMockAgo(4), bodyPreview: 'Draft — attaching the full scope and timeline once finalized.', body: { contentType: 'HTML', content: '<p>Draft — attaching the full scope and timeline once finalized.</p>' } }),
-    evMockMsg({ folder: 'drafts', subject: 'Thank you note', from: me, toRecipients: [evMockPerson('Marcus Webb', 'mwebb@example.com')], receivedDateTime: evMockAgo(12), bodyPreview: 'Draft — thanks for choosing us for the project.', body: { contentType: 'HTML', content: '<p>Draft — thanks for choosing us for the project.</p>' } }),
-    evMockMsg({ folder: 'archive', subject: 'Completed job — Smith residence', from: evMockPerson('Angela Smith', 'angela.smith@example.com'), toRecipients: [me], receivedDateTime: evMockAgo(200), bodyPreview: 'Everything looks great, thank you for the fast turnaround!', body: { contentType: 'HTML', content: '<p>Everything looks great, thank you for the fast turnaround!</p>' } }),
-    evMockMsg({ folder: 'archive', subject: 'Old vendor quote — 2025', from: evMockPerson('BuildRight Materials', 'sales@buildright.example'), toRecipients: [me], receivedDateTime: evMockAgo(900), bodyPreview: 'Quote attached for lumber and fasteners.', body: { contentType: 'HTML', content: '<p>Quote attached for lumber and fasteners.</p>' } }),
-    evMockMsg({ folder: 'junkemail', subject: "You've won a prize!!!", from: evMockPerson('Totally Real Prizes', 'winner@totally-real-prizes.example'), toRecipients: [me], receivedDateTime: evMockAgo(60), inferenceClassification: 'other', bodyPreview: 'Click here to claim your reward.', body: { contentType: 'HTML', content: '<p>Click here to claim your reward.</p>' } }),
-    evMockMsg({ folder: 'deleteditems', subject: 'Test email', from: me, toRecipients: [me], receivedDateTime: evMockAgo(500), bodyPreview: 'Just testing.', body: { contentType: 'HTML', content: '<p>Just testing.</p>' } }),
-  ];
-}
-function evMockList() { if (!EV_MOCK_MESSAGES) evMockSeed(); return EV_MOCK_MESSAGES; }
-function evMockStrip(m) {
-  // list/search views never need the full HTML body -- keep the shape but drop it,
-  // matching how Graph's own $select would leave it out.
-  const c = Object.assign({}, m); delete c.body; return c;
-}
-async function evMockGraph(path, opts = {}) {
-  const list = evMockList();
-  const method = (opts.method || 'GET').toUpperCase();
-  const clean = path.split('?')[0];
-  const query = (path.split('?')[1] || '');
-
-  if (method === 'GET' && /\/me\/mailFolders$/.test(clean)) {
-    const std = EV_FOLDERS.map(f => ({ id: f.id, displayName: f.name, wellKnownName: f.id, unreadItemCount: list.filter(m => m.folder === f.id && !m.isRead).length }));
-    const custom = EV_MOCK_FOLDERS.map(f => ({ id: f.id, displayName: f.displayName, unreadItemCount: list.filter(m => m.folder === f.id && !m.isRead).length }));
-    return { value: std.concat(custom) };
-  }
-  if (method === 'POST' && /\/me\/mailFolders$/.test(clean)) {
-    const created = { id: evMockId(), displayName: (opts.body || {}).displayName || 'New folder' };
-    EV_MOCK_FOLDERS.push(created);
-    return Object.assign({}, created);
-  }
-  let fm = clean.match(/\/me\/mailFolders\/([^/]+)\/messages$/);
-  if (method === 'GET' && fm) {
-    const rows = list.filter(m => m.folder === fm[1]).sort((a, b) => new Date(b.receivedDateTime) - new Date(a.receivedDateTime));
-    return { value: rows.map(evMockStrip) };
-  }
-  if (method === 'GET' && /\/me\/messages$/.test(clean)) {
-    const params = new URLSearchParams(query);
-    let rows = list.slice();
-    const search = params.get('$search');
-    if (search) {
-      const q = search.replace(/^"|"$/g, '').toLowerCase();
-      rows = rows.filter(m => [m.subject, (m.from.emailAddress || {}).name, (m.from.emailAddress || {}).address, m.bodyPreview].join(' ').toLowerCase().includes(q));
-    }
-    const filter = params.get('$filter') || '';
-    if (/flag\/flagStatus eq 'flagged'/.test(filter)) rows = rows.filter(m => m.flag && m.flag.flagStatus === 'flagged');
-    else if (/importance eq 'high'/.test(filter)) rows = rows.filter(m => m.importance === 'high');
-    const convo = filter.match(/conversationId eq '([^']+)'/);
-    if (convo) rows = rows.filter(m => m.conversationId === convo[1]);
-    rows.sort((a, b) => new Date(b.receivedDateTime) - new Date(a.receivedDateTime));
-    return { value: rows.map(evMockStrip) };
-  }
-  let idm = clean.match(/\/me\/messages\/([^/]+)$/);
-  if (method === 'GET' && idm) {
-    const m = list.find(x => x.id === idm[1]);
-    if (!m) throw new Error('Message not found');
-    return Object.assign({}, m);
-  }
-  if (method === 'GET' && /\/me\/messages\/[^/]+\/attachments$/.test(clean)) {
-    return { value: [] }; // sample mailbox: attachment ICONS show, but there's nothing real to download
-  }
-  if (method === 'PATCH' && idm) {
-    const m = list.find(x => x.id === idm[1]); if (!m) throw new Error('Message not found');
-    Object.assign(m, opts.body || {});
-    return Object.assign({}, m);
-  }
-  let mv = clean.match(/\/me\/messages\/([^/]+)\/move$/);
-  if (method === 'POST' && mv) {
-    const m = list.find(x => x.id === mv[1]); if (!m) throw new Error('Message not found');
-    m.folder = (opts.body || {}).destinationId || m.folder;
-    return Object.assign({}, m); // unlike real Graph, the mock keeps the same id -- nothing to reconcile for Undo
-  }
-  let sd = clean.match(/\/me\/messages\/([^/]+)\/send$/);
-  if (method === 'POST' && sd) {
-    const m = list.find(x => x.id === sd[1]); if (!m) throw new Error('Message not found');
-    m.folder = 'sentitems'; m.isRead = true;
-    return {};
-  }
-  if (method === 'POST' && /\/me\/messages$/.test(clean)) {
-    const body = opts.body || {};
-    const created = evMockMsg(Object.assign({ folder: 'drafts', from: evMockPerson('Demo Mailbox', 'demo@hivelogic.local'), receivedDateTime: new Date().toISOString(), bodyPreview: (body.body && body.body.content || '').replace(/<[^>]+>/g, '').slice(0, 140) }, body));
-    list.unshift(created);
-    return Object.assign({}, created);
-  }
-  if (method === 'POST' && /\/me\/sendMail$/.test(clean)) {
-    const body = ((opts.body || {}).message) || {};
-    const created = evMockMsg(Object.assign({ folder: 'sentitems', from: evMockPerson('Demo Mailbox', 'demo@hivelogic.local'), receivedDateTime: new Date().toISOString(), bodyPreview: (body.body && body.body.content || '').replace(/<[^>]+>/g, '').slice(0, 140) }, body));
-    list.unshift(created);
-    return {};
-  }
-  if (method === 'POST' && /\/me\/mailFolders\/inbox\/messageRules$/.test(clean)) return {}; // block-sender rule: no-op in the sample mailbox
-  return { value: [] };
-}
 // Merge IMAP mailboxes alongside Microsoft ones in the account list.
 function evListAccounts() {
   const ms = (msalApp && msalApp.getAllAccounts) ? msalApp.getAllAccounts() : [];
-  const real = ms.concat(evImapAccounts || []);
-  // No real mailbox connected anywhere -- fall back to the sample mailbox so
-  // the tab is fully usable with nothing to sign into. The moment a real
-  // Microsoft or IMAP account is connected, this stops appearing.
-  return real.length ? real : [EV_MOCK_ACCOUNT];
+  return ms.concat(evImapAccounts || []);
 }
 async function hcRefreshImapAccounts() {
   try { const j = await evMailApi('accounts', {}); evImapAccounts = j.accounts || []; }
@@ -4806,14 +5060,17 @@ function openEmailTab() {
   // Always paint the sidebar so the second column is never blank.
   renderEmailSidebar();
   const note = $('ev-setup-note'), btn = $('ev-signin');
-  const usingSample = !!(evActive && evActive.provider === 'mock');
-  if (!emailConfigured() && !usingSample) {
+  // Microsoft not configured yet only blocks the tab if there's also no
+  // already-connected IMAP mailbox to fall back to -- an admin who hasn't
+  // pasted an Azure client ID shouldn't lose access to a Gmail account
+  // someone already connected.
+  if (!emailConfigured() && !evActive) {
     connect.classList.remove('hidden');
     if (note) { note.classList.remove('hidden'); note.innerHTML = 'Almost there — your admin needs to paste an <b>Azure Application (client) ID</b> into the app config to switch email on. Ask Chris / see the setup checklist.'; }
     if (btn) btn.disabled = true;
     return;
   }
-  if (btn) btn.disabled = false;
+  if (btn) btn.disabled = !emailConfigured();
   if (note) note.classList.add('hidden');
   if (!evActive) { connect.classList.remove('hidden'); return; }
   connect.classList.add('hidden');
@@ -5037,11 +5294,9 @@ function renderEmailSidebar() {
     }
     accWrap.appendChild(pick);
   }
-  // Adding mailboxes lives in Settings (Outlook-style). Only when no REAL
-  // mailbox is connected do we show a first-run "Add a mailbox" here so new
-  // users aren't stranded — the sample mailbox doesn't count as "connected",
-  // or this would vanish the moment the demo data loads and never come back.
-  if (!evAccounts.some(a => a.provider !== 'mock')) {
+  // Adding mailboxes lives in Settings (Outlook-style). Only when no mailbox
+  // is connected yet do we show a first-run "Add a mailbox" here.
+  if (!evAccounts.length) {
     const add = document.createElement('button'); add.className = 'ev-acct-add';
     add.innerHTML = '<span>＋</span> Add a mailbox';
     add.onclick = hcAddImapMailbox; accWrap.appendChild(add);
@@ -5226,6 +5481,7 @@ async function selectFolder(id, name) {
   document.querySelectorAll('#panel-email .ev-folder').forEach(b => b.classList.toggle('active', b.dataset.id === id));
   const fn = $('ev-folder-name'); if (fn) fn.textContent = name + (!evAllInboxes && evActive && evActive.username ? ' — ' + evActive.username : '');
   const read = $('ev-read'); if (read) read.innerHTML = '<div class="ev-read-empty">Select a message to read it here.</div>';
+  evReinaPaneEmpty();
   const list = $('ev-list'); if (list) list.innerHTML = '<div class="ev-loading">Loading…</div>';
   try {
     const sel = '$select=id,subject,from,receivedDateTime,isRead,bodyPreview,hasAttachments,flag,conversationId,categories,inferenceClassification,importance';
@@ -5265,6 +5521,7 @@ async function selectSmartFolder(kind) {
   document.querySelectorAll('#panel-email .ev-folder').forEach(b => b.classList.toggle('active', b.dataset.id === kind));
   const fn = $('ev-folder-name'); if (fn) fn.textContent = name + (!evAllInboxes && evActive && evActive.username ? ' — ' + evActive.username : '');
   const read = $('ev-read'); if (read) read.innerHTML = '<div class="ev-read-empty">Select a message to read it here.</div>';
+  evReinaPaneEmpty();
   const list = $('ev-list'); if (list) list.innerHTML = '<div class="ev-loading">Loading…</div>';
   const filter = kind === 'starred' ? "flag/flagStatus eq 'flagged'" : "importance eq 'high'";
   const sel = '$select=id,subject,from,receivedDateTime,isRead,bodyPreview,hasAttachments,flag,conversationId,categories,inferenceClassification,importance';
@@ -5527,6 +5784,7 @@ function evTriageFiled(r, note) {
       evOpenId = null;
       const read = $('ev-read');
       if (read) read.innerHTML = '<div class="ev-read-empty">' + esc(note || 'Filed.') + '</div>';
+      evReinaPaneEmpty();
     }
     renderMessageList();
   }
@@ -5868,28 +6126,17 @@ const EV_RB_ICON = {
 };
 
 // Styling lives here rather than in styles-scoped.css for the same reason the
-// toolbar's does: this panel only ever exists inside #ev-read, and shipping it
-// with the code that builds it keeps the two from drifting apart.
+// toolbar's does: this panel only ever exists inside #ev-reina-pane, and
+// shipping it with the code that builds it keeps the two from drifting apart.
 function evEnsureBriefCss() {
   if (document.getElementById('ev-brief-css')) return;
   const st = document.createElement('style'); st.id = 'ev-brief-css';
   st.textContent = [
-    /* THE CARD.
-
-       #ev-read is a COLUMN FLEXBOX. Two things follow, and both of them bit:
-
-       * a flex item shrinks by default, so on a narrower window this panel was
-         squeezed shorter than its own content and the buttons overlapped the
-         text. `flex: none` is not decoration -- it is the fix. (Chris,
-         2026-08-18, with a screenshot of exactly that.)
-       * a flex item has no horizontal inset unless you give it one, so it ran
-         edge to edge. The gutter matches .ev-read-head's 22px so the card lines
-         up with the subject above it rather than floating loose.
-
-       And it is TINTED. White on white with a hairline is not a card, it is a
-       horizontal rule with opinions -- there was nothing to tell his eye that
-       this was Reina talking rather than more email. */
-    '.ev-reina-brief{flex:none;margin:14px 22px 18px;padding:18px 20px 16px;border:1px solid var(--line);border-radius:0;background:linear-gradient(180deg,var(--steel-bg),var(--card));box-shadow:0 1px 2px rgba(16,24,40,.04),0 8px 24px -14px rgba(16,24,40,.18)}',
+    // #ev-reina-pane is its own white column now (not a card floating inside
+    // #ev-read's canvas-colored background), so this is just that column's
+    // content padding -- same 22px horizontal gutter every other column's
+    // head uses, no border/shadow/tint of its own to blend seamlessly.
+    '.ev-reina-brief{padding:18px 22px}',
     '.ev-reina-brief:empty{display:none}',
 
     '.ev-rb-head{display:flex;align-items:center;gap:10px;margin-bottom:12px}',
@@ -5911,9 +6158,9 @@ function evEnsureBriefCss() {
     // Prose wants a measure. At 1000px a summary reads like a log line.
     '.ev-rb-summary{font:400 14.5px/1.65 var(--sans);color:var(--ink);max-width:68ch}',
 
-    // The action is the point of the card, so it gets the weight and its own
-    // band -- not one more sentence in the same paragraph.
-    '.ev-rb-action{display:flex;gap:10px;margin:14px -20px -2px;padding:13px 20px 0;border-top:1px solid var(--line)}',
+    // The action gets its own full-width band, breaking out of the column's
+    // 22px inset the same way the summary/draft above it don't.
+    '.ev-rb-action{display:flex;gap:10px;margin:14px -22px -2px;padding:13px 22px 0;border-top:1px solid var(--line)}',
     '.ev-rb-bullet{color:var(--steel-deep);font-weight:800;flex:0 0 auto;line-height:1.5}',
     '.ev-rb-action-txt{font:700 14.5px/1.5 var(--sans);color:var(--ink);max-width:68ch}',
 
@@ -5943,14 +6190,6 @@ function evEnsureBriefCss() {
     '.ev-rb-load,.ev-rb-err{display:flex;align-items:center;gap:9px;font:600 13px var(--sans);color:var(--slate)}',
     '.ev-rb-load .ev-rb-star{animation:ev-rb-pulse 1.1s ease-in-out infinite}',
     '@keyframes ev-rb-pulse{0%,100%{opacity:.3}50%{opacity:1}}',
-
-    // The reading pane around it, so the card is not the only considered thing
-    // on the screen.
-    '#ev-read .ev-read-head{padding:22px 22px 14px}',
-    '#ev-read .ev-read-subj{font-size:20px;line-height:1.3;letter-spacing:-.011em;margin-bottom:10px}',
-    '#ev-read .ev-read-actions{margin-top:14px;gap:2px}',
-
-    '@media (max-width:760px){.ev-reina-brief{margin:12px 14px 14px;padding:14px 15px}.ev-rb-action{margin-left:-15px;margin-right:-15px;padding-left:15px;padding-right:15px}.ev-rb-btn{flex:1 1 auto;justify-content:center}}',
   ].join('');
   document.head.appendChild(st);
 }
@@ -6011,7 +6250,7 @@ async function evPrefetchBriefs() {
       // If he opened this very message while it was in flight, paint it now
       // rather than leaving him on the loading line.
       if (evOpenId === m.id) {
-        const host = document.querySelector('#ev-read .ev-reina-brief');
+        const host = document.querySelector('#ev-reina-pane .ev-reina-brief');
         if (host && host.querySelector('.ev-rb-load')) evRenderBrief(host, full, d, acct);
       }
     } catch (e) { /* one message failing must not stop the rest */ }
@@ -6151,6 +6390,7 @@ function evUpdateCmdbarState() {
   const replyCaret = $('ev-cmd-reply-caret'); if (replyCaret) replyCaret.disabled = !canReply;
   const moreBtn = $('ev-cmd-more'); if (moreBtn) moreBtn.disabled = !canReply;
   const undoBtn = $('ev-cmd-undo'); if (undoBtn) undoBtn.disabled = !evLastUndo;
+  const askReinaBtn = $('ev-reina-ask-btn'); if (askReinaBtn) askReinaBtn.disabled = !canReply;
 }
 function evUpdateListHeadUI(shownRows, counts) {
   counts = counts || { focusedCount: 0, otherCount: 0 };
@@ -6335,10 +6575,16 @@ window.hlOpenEmailMessage = async function (graphId, homeAccountId) {
 function evAddrs(list) { return (list || []).map(r => (r.emailAddress && (r.emailAddress.name || r.emailAddress.address)) || '').filter(Boolean).join(', '); }
 function evAddrsFull(list) { return (list || []).map(r => { const e = (r && r.emailAddress) || {}; if (e.name && e.address && e.name !== e.address) return e.name + ' <' + e.address + '>'; return e.address || e.name || ''; }).filter(Boolean).join(', '); }
 function evAddrsRaw(list) { return (list || []).map(r => r.emailAddress && r.emailAddress.address).filter(Boolean); }
+// Resets the Reina column back to its placeholder -- called everywhere
+// #ev-read itself gets reset to "Select a message…", so the two panes never
+// show mismatched messages (Reina's take on a mail that just got deleted/
+// moved/filed out from under it).
+function evReinaPaneEmpty() {
+  const p = $('ev-reina-scroll'); if (p) p.innerHTML = '<div class="ev-read-empty">Reina\'s take on the open message will appear here.</div>';
+}
 function renderReadingPane(m) {
   const read = $('ev-read'); if (!read) return;
   const from = (m.from && m.from.emailAddress) || {};
-  const flagged = m.flag && m.flag.flagStatus === 'flagged';
   read.innerHTML = '';
   const head = document.createElement('div'); head.className = 'ev-read-head';
   const subj = document.createElement('div'); subj.className = 'ev-read-subj';
@@ -6353,34 +6599,20 @@ function renderReadingPane(m) {
   topRight.appendChild(meta);
   top.appendChild(topRight);
   head.appendChild(top);
-  // action bar — clean icon actions + Reina + More (iCloud/Outlook style)
-  evEnsureToolbarCss();
-  const bar = document.createElement('div'); bar.className = 'ev-read-actions';
-  const sv = (d) => '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">' + d + '</svg>';
-  const act = (html, title, fn, extra) => { const b = document.createElement('button'); b.className = 'ev-act' + (extra ? ' ' + extra : ''); b.innerHTML = html; b.title = title; b.setAttribute('aria-label', title); b.onclick = fn; return b; };
-  const sep = () => { const s = document.createElement('span'); s.className = 'ev-act-sep'; return s; };
-  bar.appendChild(act('<img src="/hiveconnect/icons/Reply.png" class="ev-act-ic" alt="">', 'Reply', () => openEmailCompose('reply', m)));
-  bar.appendChild(act(sv('<path d="M8 15l-5-5 5-5"/><path d="M13 15l-5-5 5-5"/><path d="M8 10h8a5 5 0 0 1 5 5v3"/>'), 'Reply all', () => openEmailCompose('replyAll', m)));
-  bar.appendChild(act(sv('<path d="M15 15l5-5-5-5"/><path d="M20 10H9a5 5 0 0 0-5 5v3"/>'), 'Forward', () => openEmailCompose('forward', m)));
-  bar.appendChild(sep());
-  bar.appendChild(act(sv('<rect x="3" y="4" width="18" height="4" rx="1"/><path d="M5 8v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8"/><path d="M10 12h4"/>'), 'Archive', () => evMove(m.id, 'archive', 'Archived')));
-  bar.appendChild(act(sv('<path d="M3 7l1.8-2h4.4L11 7h7a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V7z"/>'), 'Move to folder', (e) => evMoveMenu(e, m.id)));
-  bar.appendChild(act(sv('<path d="M4 21V4h13l-2.5 4L17 12H4"/>'), 'Flag / follow-up', (e) => evFlagMenu(e, m, flagged), flagged ? 'ev-act-on' : ''));
-  bar.appendChild(act(sv('<path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/>'), 'Delete', () => evDelete(m.id)));
-  bar.appendChild(act('<img src="/hiveconnect/icons/Snooze.png" class="ev-act-ic" alt=""><span class="rail-soon">SOON</span>', 'Coming soon', () => evToast('Snooze is coming soon.'), 'ev-act-soon'));
-  const spacer = document.createElement('span'); spacer.style.flex = '1'; bar.appendChild(spacer);
-  bar.appendChild(act('<span class="ev-reina-star">✦</span> Reina', 'Reina AI — summarize, draft, extract', (e) => evReinaMenu(e, m), 'ev-act-reina'));
-  bar.appendChild(act(sv('<circle cx="5" cy="12" r="1.4"/><circle cx="12" cy="12" r="1.4"/><circle cx="19" cy="12" r="1.4"/>'), 'More', (e) => evMoreMenu(e, m)));
-  head.appendChild(bar);
   read.appendChild(head);
-  // Reina's read of THIS message, above the message. (Chris, 2026-08-18: "in the
-  // preview it shows a reina summary of the email and a suggested action or
-  // response. below would be the actual email.") Rendered empty and filled in
-  // asynchronously, so the email itself never waits on a model call.
+  // Reina's read of THIS message, in its own column to the right -- the
+  // "✦ Reina" trigger that used to live in a header action bar here now
+  // lives as the "Ask Reina" button pinned to that column's own footer
+  // (wired once, statically, near ev-cmd-reply-caret). Rendered empty and
+  // filled in asynchronously, so the email itself never waits on a model
+  // call. (Chris, 2026-08-18: "in the preview it shows a reina summary of
+  // the email and a suggested action or response.")
   evEnsureBriefCss();
-  const brief = document.createElement('div'); brief.className = 'ev-reina-brief'; read.appendChild(brief);
+  const reinaScroll = $('ev-reina-scroll'); if (reinaScroll) reinaScroll.innerHTML = '';
+  const briefHost = reinaScroll || read;
+  const brief = document.createElement('div'); brief.className = 'ev-reina-brief'; briefHost.appendChild(brief);
   evReinaBrief(m, brief);
-  const aiOut = document.createElement('div'); aiOut.id = 'ev-ai-out'; aiOut.className = 'ev-ai-out hidden'; read.appendChild(aiOut);
+  const aiOut = document.createElement('div'); aiOut.id = 'ev-ai-out'; aiOut.className = 'ev-ai-out hidden'; briefHost.appendChild(aiOut);
   // body in a sandboxed iframe (safe render of remote HTML)
   const frame = document.createElement('iframe'); frame.className = 'ev-read-frame'; frame.setAttribute('sandbox', '');
   const content = (m.body && (m.body.contentType || '').toLowerCase() === 'html') ? m.body.content : '<pre style="white-space:pre-wrap;font-family:inherit">' + esc((m.body && m.body.content) || '') + '</pre>';
@@ -6489,7 +6721,7 @@ async function evDelete(id, opts = {}) {
     evMessages = evMessages.filter(x => x.id !== id); if (evOpenId === id) evOpenId = null;
     if (opts.silent) return { id: (moved && moved.id) || id };
     renderMessageList();
-    const read = $('ev-read'); if (read && evOpenId === null) read.innerHTML = '<div class="ev-read-empty">Message moved to Deleted.</div>';
+    const read = $('ev-read'); if (read && evOpenId === null) { read.innerHTML = '<div class="ev-read-empty">Message moved to Deleted.</div>'; evReinaPaneEmpty(); }
     refreshFolderCounts();
   } catch (e) { if (opts.silent) throw e; evToast('Delete failed.'); }
 }
@@ -6499,7 +6731,7 @@ async function evMove(id, dest, note, opts = {}) {
     evMessages = evMessages.filter(x => x.id !== id); if (evOpenId === id) evOpenId = null;
     if (opts.silent) return { id: (moved && moved.id) || id };
     renderMessageList();
-    const read = $('ev-read'); if (read && evOpenId === null) read.innerHTML = '<div class="ev-read-empty">' + esc(note || 'Moved.') + '</div>';
+    const read = $('ev-read'); if (read && evOpenId === null) { read.innerHTML = '<div class="ev-read-empty">' + esc(note || 'Moved.') + '</div>'; evReinaPaneEmpty(); }
     refreshFolderCounts(); evToast(note || 'Moved');
   } catch (e) { if (opts.silent) throw e; evToast('Move failed.'); }
 }
@@ -6721,6 +6953,7 @@ async function evBlockSender(m) {
     await evGraph('/me/messages/' + m.id + '/move', { method: 'POST', body: { destinationId: 'junkemail' } });
     evMessages = evMessages.filter(x => x.id !== m.id); evOpenId = null; renderMessageList();
     const read = $('ev-read'); if (read) read.innerHTML = '<div class="ev-read-empty">Blocked ' + esc(addr) + ' — future mail goes to Junk.</div>';
+    evReinaPaneEmpty();
     evToast('Blocked ' + addr);
   } catch (e) { evToast('Block failed — ' + (e.message || '')); }
 }
@@ -6778,7 +7011,18 @@ function evMenu(e, items) {
   document.body.appendChild(menu);
   const btn = (e.currentTarget || e.target).closest('button') || e.target;
   const r = btn.getBoundingClientRect();
-  menu.style.left = Math.min(r.left, window.innerWidth - 250) + 'px'; menu.style.top = (r.bottom + 5) + 'px';
+  // A trigger pinned near the bottom of the viewport (e.g. "Ask Reina" in
+  // the Reina column's footer) has no room below it -- open upward instead
+  // of letting the menu run off-screen and leave its options unreachable.
+  // The safety margin is deliberately generous: window.innerHeight doesn't
+  // account for an OS taskbar that overlaps the bottom of the browser
+  // window, which otherwise still ate the last couple of items even when
+  // the menu technically "fit" by that measurement alone.
+  const SAFE_BOTTOM = 56;
+  const menuH = menu.offsetHeight;
+  const fitsBelow = r.bottom + 5 + menuH <= window.innerHeight - SAFE_BOTTOM;
+  menu.style.left = Math.min(r.left, window.innerWidth - 250) + 'px';
+  menu.style.top = (fitsBelow ? (r.bottom + 5) : Math.max(8, r.top - menuH - 5)) + 'px';
   setTimeout(() => document.addEventListener('click', function h() { menu.remove(); document.removeEventListener('click', h); }), 0);
 }
 function evReinaMenu(e, m) {
@@ -6808,21 +7052,6 @@ function evMoreMenu(e, m) {
     ['🖨 Print', () => evPrint(m)],
     ['🚫 Block sender', () => evBlockSender(m)],
   ]);
-}
-function evEnsureToolbarCss() {
-  if (document.getElementById('ev-toolbar-css')) return;
-  const st = document.createElement('style'); st.id = 'ev-toolbar-css';
-  st.textContent = '#ev-read .ev-read-actions{display:flex;align-items:center;gap:3px;flex-wrap:wrap;padding:4px 0 2px}'
-    + '#ev-read .ev-act{appearance:none;-webkit-appearance:none;height:34px;min-width:34px;padding:0 9px;border:0;background:transparent;box-shadow:none;color:var(--slate);border-radius:8px;display:inline-flex;align-items:center;justify-content:center;gap:6px;cursor:pointer;font:600 12.5px var(--sans);transition:background .12s,color .12s}'
-    + '#ev-read .ev-act:hover{background:var(--steel-bg);color:var(--steel-deep)}'
-    + '#ev-read .ev-act.ev-act-on{color:var(--red)}'
-    + '#ev-read .ev-act-reina{color:var(--steel-deep);font-weight:700}#ev-read .ev-reina-star{font-size:13px}'
-    + '#ev-read .ev-act-sep{width:1px;height:20px;background:var(--line);margin:0 5px}'
-    + '#ev-read .ev-act-ic{width:18px;height:18px;object-fit:contain;flex:none}'
-    + '#ev-read .ev-act.ev-act-soon{opacity:.6;cursor:default}#ev-read .ev-act.ev-act-soon:hover{background:transparent;color:var(--slate)}'
-    + '#ev-read .ev-act-soon .rail-soon{position:static;margin-left:2px}'
-    + '.ev-move-menu .ev-move-sep{height:1px;background:var(--line);margin:5px 0}';
-  document.head.appendChild(st);
 }
 function evAiMoreMenu(e, m) {
   e.stopPropagation();
@@ -6925,6 +7154,10 @@ function openEmailCompose(mode, src) {
   evCheckDraftRecovery();
 }
 function evSplitAddrs(s) { return (s || '').split(/[,;]+/).map(x => x.trim()).filter(Boolean); }
+// Not a full RFC 5322 parser -- just enough to catch "forgot the @" or a
+// stray word before it reaches Graph/SMTP and comes back as an opaque
+// server error at send time.
+const EV_EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 // ---- draft autosave (in-flight, unsent draft only — raw localStorage, never
 // hcPref/hlUserSettings: this is the one narrow exception to "settings follow
@@ -7024,6 +7257,8 @@ function renderComposeAttachments() {
   });
 }
 async function evSendCompose() {
+  const send = $('ev-c-send');
+  if (send && send.disabled) return; // already sending -- guards double-fire from a source other than a disabled button click (e.g. a keyboard shortcut)
   const to = evChipFieldAddresses('ev-c-to').map(a => ({ emailAddress: { address: a } }));
   const cc = evChipFieldAddresses('ev-c-cc').map(a => ({ emailAddress: { address: a } }));
   const bcc = evChipFieldAddresses('ev-c-bcc').map(a => ({ emailAddress: { address: a } }));
@@ -7031,6 +7266,8 @@ async function evSendCompose() {
   const bodyHtml = $('ev-c-body').innerHTML;
   const msg = $('ev-c-msg');
   if (!to.length) { msg.textContent = 'Add at least one recipient.'; msg.classList.remove('hidden'); return; }
+  const badAddr = [...to, ...cc, ...bcc].map(r => r.emailAddress.address).find(a => !EV_EMAIL_RE.test(a));
+  if (badAddr) { msg.textContent = 'That doesn\'t look like a valid email address: ' + badAddr; msg.classList.remove('hidden'); return; }
   // switch active account to the chosen "From"
   const fromId = $('ev-c-from').value; const acc = evAccounts.find(a => a.homeAccountId === fromId); if (acc) evActive = acc;
   const message = {
@@ -7040,7 +7277,7 @@ async function evSendCompose() {
     isReadReceiptRequested: !!($('ev-c-receipt') && $('ev-c-receipt').checked),
   };
   if (evAttachments.length) message.attachments = evAttachments.map(a => ({ '@odata.type': '#microsoft.graph.fileAttachment', name: a.name, contentType: a.type || 'application/octet-stream', contentBytes: a.bytes }));
-  const send = $('ev-c-send'); send.disabled = true; send.textContent = 'Sending…';
+  send.disabled = true; send.textContent = 'Sending…';
   try {
     if (evComposeDraftId) {
       // A real server draft exists for this session -- update it with the
@@ -7164,6 +7401,7 @@ function evToast(text) {
       ['↪ Forward', () => openEmailCompose('forward', m)],
     ]);
   }); }
+{ const b = $('ev-reina-ask-btn'); if (b) b.addEventListener('click', (e) => { const m = evGetOpenMessage(); if (m) evReinaMenu(e, m); }); }
 { const b = $('ev-cmd-readall'); if (b) b.addEventListener('click', evMarkAllRead); }
 { const b = $('ev-cmd-flag'); if (b) b.addEventListener('click', () => evBulkAction('flag')); }
 { const b = $('ev-cmd-snooze'); if (b) b.addEventListener('click', () => evToast('Snooze is coming soon.')); }
@@ -7239,6 +7477,7 @@ async function evSearchAccount(acct, q) {
       evOpenId = null;
       evNextLink = null; // results are one page -- never page the old folder in underneath them
       const read = $('ev-read'); if (read) read.innerHTML = '<div class="ev-read-empty">Select a message to read it here.</div>';
+      evReinaPaneEmpty();
       renderMessageList();
       if (!evMessages.length && list) list.innerHTML = '<div class="ev-loading">Nothing matches “' + esc(q) + '”.</div>';
       const note = ok.some(r => r.degraded) ? ' (recent mail only)'
