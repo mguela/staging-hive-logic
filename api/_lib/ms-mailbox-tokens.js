@@ -33,11 +33,15 @@
 // idiom (msmail.js speaks to either realm; track1.js uses supabaseRequest).
 // What is centralized is the part that breaks quietly.
 
-// The HiveConnect Email app registration. Pinned, not read from MS_CLIENT_ID:
-// that env var holds a DIFFERENT app's id (see api/msmail.js) and the tokens in
-// hc_ms_tokens were issued to this one. Refreshing them against the wrong
-// client id fails with AADSTS7000215.
-export const MS_MAILBOX_CLIENT_ID = 'ff9bda24-d7e9-4905-a94e-f3ccc0239eb2';
+// The HiveConnect Email app registration. Not read from MS_CLIENT_ID: that env
+// var holds a DIFFERENT app's id (see api/msmail.js). Deliberately its own
+// var, MS_MAILBOX_CLIENT_ID, so a staging deployment can point at a separate
+// Azure app registration (2026-08-28) without touching production's -- the
+// tokens already in hc_ms_tokens were issued to whichever app was pinned when
+// they were minted, and refreshing them against a DIFFERENT client id fails
+// with AADSTS7000215, so this must never change under an environment that
+// already has live rows.
+export function msMailboxClientId() { return (process.env.MS_MAILBOX_CLIENT_ID || '').trim() || 'ff9bda24-d7e9-4905-a94e-f3ccc0239eb2'; }
 export const MS_MAILBOX_SCOPES = 'openid profile email offline_access User.Read Mail.ReadWrite Mail.Send Calendars.ReadWrite Tasks.ReadWrite';
 
 // Refresh this far before actual expiry. A token that expires mid-request is
@@ -63,7 +67,7 @@ export class MsMailboxReauthRequired extends Error {
 
 export async function exchangeMsMailboxToken(params) {
   const body = new URLSearchParams(Object.assign({
-    client_id: MS_MAILBOX_CLIENT_ID,
+    client_id: msMailboxClientId(),
     client_secret: msMailboxClientSecret(),
     redirect_uri: msMailboxRedirectUri(),
   }, params));

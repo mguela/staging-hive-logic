@@ -28,11 +28,14 @@
 
 const crypto = require('crypto');
 
-// HiveConnect Email app registration — pinned on purpose. The MS_CLIENT_ID
-// env var predates this route (added Jul 20 for an earlier attempt) and holds
-// a different app's ID, which made Azure reject our secret (AADSTS7000215).
-// This must match public/hiveconnect/config.js msGraph.clientId.
-const CLIENT_ID = 'ff9bda24-d7e9-4905-a94e-f3ccc0239eb2';
+// HiveConnect Email app registration. Not MS_CLIENT_ID -- that env var
+// predates this route (added Jul 20 for an earlier attempt) and holds a
+// different app's ID, which made Azure reject our secret (AADSTS7000215).
+// MS_MAILBOX_CLIENT_ID lets a staging deployment point at its own Azure app
+// registration (2026-08-28) without touching production's default. Must
+// match public/hiveconnect/config.js msGraph.clientId for whichever
+// deployment this is, and api/_lib/ms-mailbox-tokens.js's msMailboxClientId().
+const CLIENT_ID = (process.env.MS_MAILBOX_CLIENT_ID || '').trim() || 'ff9bda24-d7e9-4905-a94e-f3ccc0239eb2';
 const CLIENT_SECRET = (process.env.MS_CLIENT_SECRET || '').trim() || undefined;
 const TENANT = (process.env.MS_TENANT || 'organizations').trim();
 const REDIRECT_URI = process.env.MS_REDIRECT_URI || 'https://hivelogic-live.vercel.app/api/msmail';
