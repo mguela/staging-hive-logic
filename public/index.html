@@ -19,7 +19,7 @@
  * monitor_my_status poll, so "is this person running current code" is a
  * question the database can answer. Do not hand-edit it -- run
  * `node scripts/stamp-page-build.mjs`. */
-var HL_PAGE_BUILD = 'c15fc5707e87b8ff';
+var HL_PAGE_BUILD = 'e09724a21150a8e7';
 </script>
 <script>
 (function () { // HL_FETCH_DEDUPE_V1 — single wrapper: GET /api/ dedupe + 60s cache + write-invalidate
@@ -28096,6 +28096,19 @@ function efGo(k){
 <script>function schTab(i,el){var ps=document.querySelectorAll('.schpane');ps.forEach(function(p,j){p.style.display=j===i?'block':'none'});document.querySelectorAll('.schtab').forEach(function(t){t.style.background='#fff';t.style.color='#5d657b';t.style.border='1px solid #dadde8'});el.style.background='#161e2e';el.style.color='#fff';el.style.border='none';}</script><!-- ═══════════ ⬡ REINA — LIVE INTELLIGENCE LAYER (injected v64_29) ═══════════ -->
 <style>
 #rnaFab{position:fixed;right:14px;bottom:152px;z-index:99990;width:44px;height:44px;border-radius:50%;background:#6a3fb5;color:#fff;border:none;cursor:pointer;font-size:18px;box-shadow:0 10px 30px rgba(106,63,181,.45);display:flex;align-items:center;justify-content:center;transition:transform .15s}
+/* jomell, 2026-08-27: "why does it disappear from time to time" -- now that
+   this button is no longer force-hidden by the old rolodex dock CSS, its
+   ACTUAL visibility logic is exposed for the first time: reina-pilot-
+   host.js's hidePage() sets this element's inline style to display:none on
+   every host dispose, including a brief unmount/remount pair the Supabase
+   auth listener can fire spuriously (tab refocus, token refresh) while the
+   person never actually signed out -- body.hl-authed stays on the whole
+   time. Rather than chase that listener, pin the visible answer here: while
+   genuinely signed in, this rule (!important beats the plain inline style
+   hidePage() sets) keeps the launcher on screen regardless of a transient
+   host churn. A real sign-out still hides it -- body loses .hl-authed then
+   too, so this rule stops applying. */
+body.hl-authed #rnaFab{display:flex!important}
 #rnaFab:hover{transform:scale(1.08)}
 #rnaFab .pulse{position:absolute;inset:-4px;border-radius:50%;border:2px solid #6a3fb5;opacity:0;animation:rnaPulse 2.6s infinite}
 @keyframes rnaPulse{0%{transform:scale(.9);opacity:.7}70%{transform:scale(1.25);opacity:0}100%{opacity:0}}

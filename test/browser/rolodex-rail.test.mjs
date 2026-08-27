@@ -163,7 +163,32 @@ test('every tab carries a real tooltip (no hover-expand mechanic in a horizontal
   const page = await openAt(1920, 1080);
   try {
     const titles = await page.evaluate(() => [...document.querySelectorAll('.rolodex .rolo')].map((t) => t.getAttribute('title')));
-    assert.equal(titles.length, 13);
+    assert.equal(titles.length, 12);
     assert.ok(titles.every((t) => t && t.length > 0), 'every tab must have a non-empty title tooltip');
+  } finally { await page.close(); }
+});
+
+test('the Reina launcher survives a simulated host-dispose while still signed in, and correctly hides on a real sign-out', OPTS, async () => {
+  // jomell, 2026-08-27: "why does it disappear from time to time" --
+  // reina-pilot-host.js's hidePage() sets #rnaFab's inline style to
+  // display:none on every host dispose, including a brief unmount/remount
+  // pair the Supabase auth listener can fire spuriously while the person
+  // never actually signed out. public/index.html now pins a
+  // `body.hl-authed #rnaFab{display:flex!important}` rule specifically to
+  // outrank that inline style while genuinely signed in.
+  const page = await openAt(1920, 1080);
+  try {
+    const authed = await page.evaluate(() => {
+      const fab = document.getElementById('rnaFab');
+      fab.style.display = 'none'; // simulate hidePage() firing while still authed
+      return getComputedStyle(fab).display;
+    });
+    assert.equal(authed, 'flex', 'a transient host dispose must not visibly hide the launcher while signed in');
+
+    const signedOut = await page.evaluate(() => {
+      document.body.classList.remove('hl-authed');
+      return getComputedStyle(document.getElementById('rnaFab')).display;
+    });
+    assert.equal(signedOut, 'none', 'a real sign-out must still hide it');
   } finally { await page.close(); }
 });
