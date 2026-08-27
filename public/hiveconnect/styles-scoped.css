@@ -765,8 +765,8 @@ html[data-theme="dark"] :is(#hiveconnect-root, .hc-embed).mention { background: 
 :is(#hiveconnect-root, .hc-embed) .msg-tools,
 :is(#hiveconnect-root, .hc-embed).msg-tools {
   position: absolute; top: -15px; right: 14px; display: none; gap: 2px;
-  background: var(--card); border: 1px solid var(--line); border-radius: 9px; padding: 3px;
-  box-shadow: 0 6px 18px rgba(22, 30, 46, .14);
+  background: none; border: none; border-radius: 9px; padding: 3px;
+  box-shadow: none;
 }
 :is(#hiveconnect-root, .hc-embed) .msg:hover .msg-tools,
 :is(#hiveconnect-root, .hc-embed).msg:hover .msg-tools { display: flex; }
@@ -2198,7 +2198,7 @@ html[data-theme="dark"] :is(#hiveconnect-root, .hc-embed).huddle-banner {
   color: var(--msg-mut); padding: 2px 20px 6px 0;
 }
 :is(#hiveconnect-root, .hc-embed) .main.messages-workspace .msg-tools,
-:is(#hiveconnect-root, .hc-embed).main.messages-workspace .msg-tools { background: var(--card); border-color: var(--msg-border); }
+:is(#hiveconnect-root, .hc-embed).main.messages-workspace .msg-tools { background: none; border: none; box-shadow: none; }
 :is(#hiveconnect-root, .hc-embed) .main.messages-workspace .msg-tools button:hover,
 :is(#hiveconnect-root, .hc-embed).main.messages-workspace .msg-tools button:hover { background: var(--msg-bg2); }
 :is(#hiveconnect-root, .hc-embed) .main.messages-workspace .reaction,
