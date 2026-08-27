@@ -59,7 +59,10 @@ test('every identity field re-checks for a duplicate, not just the name', () => 
     // the phone field unwired. Same trap as reading a grep window instead of
     // the statement.
     const tag = HTML.slice(i, HTML.indexOf('>', i));
-    assert.match(tag, /oninput="nlDupeCheck\(\)"/, id + ' should re-run the check, got: ' + tag);
+    // 2026-08-26: oninput also clears this field's required-validation
+    // red-border now (nlClearReq) -- nlDupeCheck() just has to still be
+    // one of the calls, not the whole attribute value.
+    assert.match(tag, /oninput="[^"]*nlDupeCheck\(\)[^"]*"/, id + ' should re-run the check, got: ' + tag);
   }
 });
 

@@ -12,3 +12,4 @@ vercel-secrets.txt
 # Rendered film output -- regenerate with scripts/capture-commercial-frames.mjs
 commercial-frames/
 commercial-out/
+.claude/

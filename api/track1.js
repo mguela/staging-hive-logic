@@ -40,6 +40,7 @@ import { provisionHiveConnectAccount, getMapping, postBotMessage } from './hivec
 import { encryptSecret as _encSecret, decryptSecret as _decSecret } from './_lib/secrets.js';
 import { mailboxAccessToken } from './_lib/ms-mailbox-tokens.js';
 import { sendEmail, isEmailConfigured } from './_lib/email.js';
+import { generateInvoicePdf } from './_lib/invoice-pdf.js';
 import { getFinancials, getFinancialsDurable, qboConnected } from './qbo/index.js';
 // Material Catalog & Procurement -- Vendor Catalog module (view-vcx). Folded
 // in here for the same 12-function-cap reason as everything else in this
@@ -53,6 +54,8 @@ import { PAGE_BUILD, pageBuildState, shouldRecordPageBuild } from './_lib/page-b
 import { monitoringDecision, monitoringPolicy, CLOSE_REASON_DECLINED, CLOSE_REASONS_WORTH_EXPLAINING, CLOSE_NOTICE_WINDOW_MINUTES, closeReasonNotice } from './_lib/monitor-consent.js';
 import { EXPECTED_AGENT_VERSION, isWellFormedAgentVersion, agentVersionState } from './_lib/agent-version.js';
 import { VEHICLE_GPS_COLUMNS, VEHICLE_GPS_STALE_MS, vehicleGps } from './_lib/vehicle-gps.js';
+import { todayRangeInTz, isValidTimeZone, DEFAULT_TIMEZONE } from './_lib/workday.js';
+import { mergeSettings } from './user-settings.js';
 export { VEHICLE_GPS_COLUMNS, VEHICLE_GPS_STALE_MS, vehicleGps } from './_lib/vehicle-gps.js';
 
 const RESOURCE_CONFIG = {
@@ -1224,6 +1227,20 @@ async function handleLeads(req, res) {
     return res.status(200).json({ ok: true, resource: 'leads', pipeline: updated });
   }
 
+  if (req.method === 'DELETE') {
+    // lead_pipeline is entirely HiveLogic-owned (either created here or
+    // one-time-backfilled from Jobber's requests table -- see the POST/GET
+    // comments above), so unlike invoices/timesheets there is no live Jobber
+    // sync to collide with and no HL- id-prefix guard needed. The client and
+    // Jobber's own request record are untouched either way -- this only
+    // removes the opportunity row itself.
+    const leadId = String((req.query && req.query.id) || '').trim();
+    if (!leadId) return res.status(400).json({ ok: false, error: 'Which lead? No id given.' });
+    const r = await supabaseRequest(`lead_pipeline?id=eq.${encodeURIComponent(leadId)}`, { method: 'DELETE' });
+    if (!r.ok) return res.status(500).json({ ok: false, error: 'Could not delete this lead: ' + (await r.text()).slice(0, 300) });
+    return res.status(200).json({ ok: true, resource: 'leads' });
+  }
+
   return res.status(405).json({ ok: false, error: 'Method not allowed.' });
 }
 
@@ -1244,7 +1261,7 @@ async function getRequestingProfile(req) {
   if (!userRes.ok) return null;
   const user = await userRes.json();
   if (!user || !user.id) return null;
-  const profRes = await supabaseRequest(`profiles?id=eq.${user.id}&select=id,email,full_name,role,monitoring_enabled,page_build,page_build_seen_at`);
+  const profRes = await supabaseRequest(`profiles?id=eq.${user.id}&select=id,email,full_name,role,monitoring_enabled,page_build,page_build_seen_at,settings`);
   if (!profRes.ok) return { id: user.id, email: user.email, full_name: null, role: null, monitoring_enabled: true };
   const rows = await profRes.json();
   return (rows && rows[0]) || { id: user.id, email: user.email, full_name: null, role: null, monitoring_enabled: true };
@@ -4856,6 +4873,36 @@ async function handleCreateClient(req, res) {
 // actually safe to own from HiveLogic's side -- same column
 // handleCreateClient already uses for a brand-new client, just now also
 // settable on an existing one.
+// jomell, 2026-08-27: there was no way to enter or fix an address on an
+// EXISTING client -- handleCreateClient above only ever writes one at
+// creation time. Same reasoning as the phone half of this endpoint: a real
+// street a real person typed in beats none on file. lat/lng are left null
+// here too, same as at creation -- for the existing geocoder to fill, never
+// guessed inline.
+async function upsertClientAddress(clientId, b) {
+  const street = String(b.street || '').trim();
+  if (!street) return;
+  const locRow = {
+    street,
+    city: String(b.city || '').trim() || null,
+    province: String(b.province || '').trim() || null,
+    postal_code: String(b.postalCode || '').trim() || null,
+  };
+  const existing = await supabaseRequest(`client_locations?jobber_id=eq.${encodeURIComponent(clientId)}&select=jobber_id&limit=1`);
+  const rows = existing.ok ? await existing.json() : [];
+  if (rows.length) {
+    await supabaseRequest(`client_locations?jobber_id=eq.${encodeURIComponent(clientId)}`, {
+      method: 'PATCH',
+      body: JSON.stringify(locRow),
+    });
+  } else {
+    await supabaseRequest('client_locations', {
+      method: 'POST',
+      body: JSON.stringify({ jobber_id: clientId, ...locRow }),
+    });
+  }
+}
+
 async function handleUpdateClientContact(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ ok: false, error: 'POST only' });
   const requester = await getRequestingProfile(req);
@@ -4872,7 +4919,12 @@ async function handleUpdateClientContact(req, res) {
   if (!r.ok) return res.status(500).json({ ok: false, error: 'Update failed: ' + (await r.text()).slice(0, 300) });
   const rows = await r.json();
   if (!rows.length) return res.status(404).json({ ok: false, error: 'Client not found.' });
-  return res.status(200).json({ ok: true, resource: 'update_client_contact', client: rows[0] });
+
+  let addressSaved = true;
+  if (String(b.street || '').trim()) {
+    try { await upsertClientAddress(id, b); } catch (e) { addressSaved = false; }
+  }
+  return res.status(200).json({ ok: true, resource: 'update_client_contact', client: rows[0], addressSaved });
 }
 // 2026-08-25, jomell: "in active jobs, when clicking on a job, there should
 // be an option to 'close job' (meaning its done)."
@@ -5019,6 +5071,13 @@ async function handleTmRateTypesList(req, res) {
   return res.status(200).json({ ok: true, resource: 'tm_rate_types_list', rateTypes: rows });
 }
 
+// jomell, 2026-08-27: invoices should carry a 7-day payment deadline --
+// every HiveLogic-created invoice gets a real due date, not a blank one,
+// when the caller doesn't supply their own.
+function defaultInvoiceDueDate() {
+  return new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+}
+
 async function handleCreateInvoice(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ ok: false, error: 'POST only' });
   const requester = await getRequestingProfile(req);
@@ -5035,7 +5094,7 @@ async function handleCreateInvoice(req, res) {
     invoice_status: 'draft',
     total: amount,
     payments: 0,
-    due_date: b.dueDate || null,
+    due_date: b.dueDate || defaultInvoiceDueDate(),
     client_id: b.clientId || null,
     jobber_updated_at: new Date().toISOString()
   };
@@ -5184,37 +5243,57 @@ async function handleCreateInvoiceFromJob(req, res) {
     });
   }
 
-  const jobLines = await readJobLineItems(jobRefId);
-  let lineItems = jobLines.map((l) => ({
-    description: l.description,
-    quantity: Number(l.quantity),
-    unitPrice: Number(l.unit_price),
-    lineTotal: Number(l.line_total),
-  }));
+  // 2026-08-26, jomell: "the amount should be customizable... since its
+  // going to be just a draft first. the name/label should be customizable
+  // as well as the amount." A draft invoice no longer has to bill the
+  // job's full line-item total under the job's own title -- a deposit or
+  // any other partial amount is now a real option. When a custom amount
+  // is given it replaces the line-item computation entirely with a single
+  // line under the custom title; omitting it keeps the original
+  // job-line-items behavior untouched, so any other caller of this action
+  // is unaffected.
+  const customSubject = String(b.subject || '').trim();
+  const customAmount = Number(b.amount);
+  const hasCustomAmount = isFinite(customAmount) && customAmount > 0;
 
-  // A job with no itemised lines but a priced total still has something to
-  // bill -- turn that into one line rather than refusing.
-  if (!lineItems.length) {
-    const lump = Number(job.total);
-    if (!isFinite(lump) || lump <= 0) {
-      return res.status(400).json({ ok: false, error: 'This job has no line items and no value, so there is nothing to invoice yet. Add a line item first.' });
+  let lineItems;
+  let amount;
+  if (hasCustomAmount) {
+    amount = Math.round(customAmount * 100) / 100;
+    lineItems = [{ description: customSubject || job.title || 'Work performed', quantity: 1, unitPrice: amount, lineTotal: amount }];
+  } else {
+    const jobLines = await readJobLineItems(jobRefId);
+    lineItems = jobLines.map((l) => ({
+      description: l.description,
+      quantity: Number(l.quantity),
+      unitPrice: Number(l.unit_price),
+      lineTotal: Number(l.line_total),
+    }));
+
+    // A job with no itemised lines but a priced total still has something to
+    // bill -- turn that into one line rather than refusing.
+    if (!lineItems.length) {
+      const lump = Number(job.total);
+      if (!isFinite(lump) || lump <= 0) {
+        return res.status(400).json({ ok: false, error: 'This job has no line items and no value, so there is nothing to invoice yet. Add a line item first.' });
+      }
+      lineItems = [{ description: job.title || 'Work performed', quantity: 1, unitPrice: lump, lineTotal: lump }];
     }
-    lineItems = [{ description: job.title || 'Work performed', quantity: 1, unitPrice: lump, lineTotal: lump }];
-  }
 
-  const amount = Math.round(lineItems.reduce((t, l) => t + (Number(l.lineTotal) || 0), 0) * 100) / 100;
-  if (amount <= 0) return res.status(400).json({ ok: false, error: 'Those line items add up to $0 -- nothing to invoice.' });
+    amount = Math.round(lineItems.reduce((t, l) => t + (Number(l.lineTotal) || 0), 0) * 100) / 100;
+    if (amount <= 0) return res.status(400).json({ ok: false, error: 'Those line items add up to $0 -- nothing to invoice.' });
+  }
 
   const row = {
     jobber_id: 'HL-INV-' + crypto.randomUUID(),
     invoice_number: String(Math.floor(Date.now() / 1000)),
     invoice_status: 'draft',
-    subject: job.title || null,
+    subject: customSubject || job.title || null,
     subtotal: amount,
     total: amount,
     balance: amount,
     payments: 0,
-    due_date: b.dueDate || null,
+    due_date: b.dueDate || defaultInvoiceDueDate(),
     client_id: job.client_id || null,
     client_uuid: job.client_uuid || null,
     job_id: job.jobber_id,
@@ -5271,31 +5350,63 @@ async function handleSendInvoiceEmail(req, res) {
   if (!invoice) return res.status(404).json({ ok: false, error: 'That invoice no longer exists.' });
 
   if (!invoice.client_id) return res.status(422).json({ ok: false, error: 'This invoice has no client on it.' });
-  const clientR = await supabaseRequest(`clients?jobber_id=eq.${encodeURIComponent(invoice.client_id)}&select=email,name,first_name&limit=1`);
+  const clientR = await supabaseRequest(`clients?jobber_id=eq.${encodeURIComponent(invoice.client_id)}&select=email,name,first_name,phone&limit=1`);
   const client = clientR.ok ? (await clientR.json())[0] : null;
   if (!client || !client.email) return res.status(422).json({ ok: false, error: 'No email on file for this client.' });
   if (!isEmailConfigured()) return res.status(422).json({ ok: false, error: 'Email is not configured for this deployment (RESEND_API_KEY unset).' });
 
+  // 2026-08-27, jomell: invoices emailed to a client should carry a real
+  // PDF of the invoice. Everything below is read fresh, real data for the
+  // attached PDF -- an address on file, the
+  // job it's billing against, and the job's other real invoices for a true
+  // running balance. Any of the three can legitimately be missing (no
+  // address on file, no linked job, no other invoices yet); the PDF just
+  // omits that section rather than guessing.
+  let address = null;
+  if (client) {
+    const addrR = await supabaseRequest(`client_locations?jobber_id=eq.${encodeURIComponent(invoice.client_id)}&select=street,city,province,postal_code&limit=1`);
+    if (addrR.ok) { const rows = await addrR.json(); address = rows[0] || null; }
+  }
+  let job = null;
+  if (invoice.job_id) {
+    const jobR = await supabaseRequest(`jobs?jobber_id=eq.${encodeURIComponent(invoice.job_id)}&select=title,total&limit=1`);
+    if (jobR.ok) { const rows = await jobR.json(); job = rows[0] || null; }
+  }
+  let accountBalance = null;
+  let jobInvoices = null;
+  if (invoice.job_id) {
+    const jiR = await supabaseRequest(`invoices?job_id=eq.${encodeURIComponent(invoice.job_id)}&select=jobber_id,invoice_number,subject,total,balance,invoice_status&order=issued_date.asc.nullslast`);
+    if (jiR.ok) {
+      const rows = await jiR.json();
+      accountBalance = rows.reduce((sum, r) => sum + (Number(r.balance) || 0), 0);
+      jobInvoices = rows;
+    }
+  }
+  const pdfBytes = await generateInvoicePdf({ invoice, client, address, job, accountBalance, jobInvoices });
+  const pdfBase64 = Buffer.from(pdfBytes).toString('base64');
+
   const clientName = client.first_name || client.name || 'there';
-  const lineItems = Array.isArray(invoice.line_items) ? invoice.line_items : [];
-  const rowsHtml = lineItems.map((l) => `<tr><td style="padding:6px 0;color:#484f64">${ivEscapeHtml(l.description || 'Item')}</td><td style="padding:6px 0;text-align:right;font-weight:700;color:#161e2e">${ivMoney(l.lineTotal)}</td></tr>`).join('');
   const dueLine = invoice.due_date ? `<tr><td style="padding:6px 0;color:#484f64">Due</td><td style="padding:6px 0;text-align:right;font-weight:700">${ivEscapeHtml(invoice.due_date)}</td></tr>` : '';
 
   const html = `
     <div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto">
       <p>Hi ${ivEscapeHtml(clientName)},</p>
-      <p>You have a new invoice${invoice.subject ? ` for <b>${ivEscapeHtml(invoice.subject)}</b>` : ''}.</p>
+      <p>You have a new invoice${invoice.subject ? ` for <b>${ivEscapeHtml(invoice.subject)}</b>` : ''} -- the full details are in the attached PDF.</p>
       <table style="width:100%;border-collapse:collapse;margin:16px 0" role="presentation">
         <tr><td style="padding:6px 0;color:#484f64">Invoice</td><td style="padding:6px 0;text-align:right;font-weight:700">#${ivEscapeHtml(invoice.invoice_number || '')}</td></tr>
         <tr><td style="padding:6px 0;color:#484f64">Amount due</td><td style="padding:6px 0;text-align:right;font-weight:700;font-size:16px">${ivMoney(invoice.total)}</td></tr>
         ${dueLine}
       </table>
-      ${rowsHtml ? `<table style="width:100%;border-collapse:collapse;margin:0 0 16px" role="presentation">${rowsHtml}</table>` : ''}
       <p style="color:#484f64">Please contact us to arrange payment.</p>
     </div>`;
-  const text = `You have a new invoice #${invoice.invoice_number || ''} for ${ivMoney(invoice.total)}. Please contact us to arrange payment.`;
+  const text = `You have a new invoice #${invoice.invoice_number || ''} for ${ivMoney(invoice.total)}. The full details are in the attached PDF. Please contact us to arrange payment.`;
 
-  const sent = await sendEmail({ to: client.email, subject: `Invoice #${invoice.invoice_number || ''}`, html, text });
+  const sent = await sendEmail({
+    to: client.email,
+    subject: `Invoice #${invoice.invoice_number || ''}`,
+    html, text,
+    attachments: [{ filename: `Invoice-${invoice.invoice_number || id}.pdf`, content: pdfBase64 }],
+  });
   if (!sent.ok) return res.status(422).json({ ok: false, error: sent.error || 'Could not send the email.' });
 
   let updated = invoice;
@@ -5332,12 +5443,18 @@ async function handleMarkInvoicePaid(req, res) {
 }
 
 // 2026-08-26, jomell: "the invoices... should have a title or label rather
-// than just the number... their names should be edittable." Same HL-INV-
-// guard as handleMarkInvoicePaid/handleSendInvoiceEmail above: a
-// Jobber-synced invoice's subject is overwritten by the Jobber sync's own
-// upsert on every run, so editing it here would just get silently reverted
-// -- only a HiveLogic-created invoice's subject is safe to edit.
-async function handleUpdateInvoiceSubject(req, res) {
+// than just the number... their names should be edittable" -- then, after
+// the title-only version shipped: "it should also apply to when im
+// editting an invoice" (the amount too). Same HL-INV- guard as
+// handleMarkInvoicePaid/handleSendInvoiceEmail above: a Jobber-synced
+// invoice's subject/total is overwritten by the Jobber sync's own upsert
+// on every run, so editing either here would just get silently reverted.
+// Restricted to still-draft invoices for the same reason
+// updateChangeOrderDescription locks a change order after it's been acted
+// on -- once sent, the client has already seen a specific amount, and
+// rewriting it after the fact would silently misrepresent what was
+// actually communicated.
+async function handleUpdateInvoice(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ ok: false, error: 'POST only' });
   const requester = await getRequestingProfile(req);
   if (!requester) return res.status(401).json({ ok: false, error: 'Not signed in -- log into HiveLogic first.' });
@@ -5345,19 +5462,222 @@ async function handleUpdateInvoiceSubject(req, res) {
   const id = String(b.id || '').trim();
   if (!id) return res.status(400).json({ ok: false, error: 'Which invoice? No id given.' });
   if (!id.startsWith('HL-INV-')) {
-    return res.status(400).json({ ok: false, error: "This invoice's title is synced from Jobber -- edit it there." });
+    return res.status(400).json({ ok: false, error: "This invoice is synced from Jobber -- edit it there." });
   }
   const subject = String(b.subject || '').trim();
   if (!subject) return res.status(400).json({ ok: false, error: 'A title is required.' });
+
+  const curR = await supabaseRequest(`invoices?jobber_id=eq.${encodeURIComponent(id)}&select=invoice_status,line_items&limit=1`);
+  if (!curR.ok) return res.status(502).json({ ok: false, error: 'Could not look up that invoice.' });
+  const current = (await curR.json())[0];
+  if (!current) return res.status(404).json({ ok: false, error: 'That invoice no longer exists.' });
+  if (current.invoice_status !== 'draft') {
+    return res.status(400).json({ ok: false, error: 'This invoice has already been sent -- only a draft can still be edited.' });
+  }
+
+  const patch = { subject, jobber_updated_at: new Date().toISOString() };
+  const amount = Number(b.amount);
+  if (isFinite(amount) && amount > 0) {
+    const rounded = Math.round(amount * 100) / 100;
+    patch.total = rounded;
+    patch.subtotal = rounded;
+    patch.balance = rounded;
+    // Only re-price the invoice's line items when there is exactly one --
+    // the single custom line the "customizable amount" create flow writes.
+    // A multi-line invoice keeps its real itemization; only the lump total
+    // moves, same as every other total shown elsewhere in this app.
+    const lines = Array.isArray(current.line_items) ? current.line_items : [];
+    if (lines.length === 1) {
+      patch.line_items = [{ ...lines[0], description: subject, unitPrice: rounded, lineTotal: rounded }];
+    }
+  }
+
   const r = await supabaseRequest(`invoices?jobber_id=eq.${encodeURIComponent(id)}`, {
     method: 'PATCH',
     headers: { Prefer: 'return=representation' },
-    body: JSON.stringify({ subject, jobber_updated_at: new Date().toISOString() }),
+    body: JSON.stringify(patch),
   });
   if (!r.ok) return res.status(500).json({ ok: false, error: 'Update failed: ' + (await r.text()).slice(0, 300) });
   const rows = await r.json();
   if (!rows.length) return res.status(404).json({ ok: false, error: 'That invoice no longer exists.' });
-  return res.status(200).json({ ok: true, resource: 'update_invoice_subject', invoice: rows[0] });
+  return res.status(200).json({ ok: true, resource: 'update_invoice', invoice: rows[0] });
+}
+
+// 2026-08-26, jomell: "lets start with the timesheet... copy it into our
+// own [Time & Timesheets tab]." A week's worth of time_sheet_entries
+// (Jobber-synced table, api/jobber/sync-extended.js), shaped for the
+// weekly grid: each entry's job resolved to a real title where one
+// exists, or "General" for the entries no job is attached to (matches
+// Jobber's own screenshot layout). Job titles are looked up only for the
+// distinct job ids actually present this week -- not the whole jobs
+// table -- since a week's entries touch at most a handful of jobs.
+async function handleTimesheetWeek(req, res) {
+  const requester = await getRequestingProfile(req);
+  if (!requester) return res.status(401).json({ ok: false, error: 'Not signed in -- log into HiveLogic first.' });
+  const startAt = String(req.query.startAt || '').trim();
+  const endAt = String(req.query.endAt || '').trim();
+  if (!startAt || !endAt || isNaN(Date.parse(startAt)) || isNaN(Date.parse(endAt))) {
+    return res.status(400).json({ ok: false, error: 'A valid startAt and endAt are required.' });
+  }
+
+  const entriesRes = await supabaseRequest(
+    `time_sheet_entries?start_at=gte.${encodeURIComponent(startAt)}&start_at=lt.${encodeURIComponent(endAt)}` +
+    `&select=jobber_id,start_at,end_at,final_duration,user_id,job_id,note&order=start_at.asc&limit=2000`
+  );
+  if (!entriesRes.ok) return res.status(500).json({ ok: false, error: 'Could not load timesheet entries: ' + (await entriesRes.text()).slice(0, 300) });
+  const entries = await entriesRes.json();
+
+  const jobIds = [...new Set(entries.map(e => e.job_id).filter(Boolean))];
+  let jobTitleById = {};
+  if (jobIds.length) {
+    const jobsRes = await supabaseRequest(`jobs?jobber_id=in.(${jobIds.map(id => encodeURIComponent(id)).join(',')})&select=jobber_id,title`);
+    if (jobsRes.ok) { (await jobsRes.json()).forEach(j => { jobTitleById[j.jobber_id] = j.title; }); }
+  }
+
+  const shaped = entries.map(e => {
+    const durationSeconds = isFinite(Number(e.final_duration)) && Number(e.final_duration) > 0
+      ? Number(e.final_duration)
+      : Math.round((new Date(e.end_at) - new Date(e.start_at)) / 1000);
+    return {
+      id: e.jobber_id,
+      userId: e.user_id,
+      jobId: e.job_id || null,
+      jobLabel: e.job_id ? (jobTitleById[e.job_id] || 'Job') : 'General',
+      startAt: e.start_at,
+      endAt: e.end_at,
+      durationSeconds,
+      note: e.note || null,
+    };
+  });
+
+  return res.status(200).json({ ok: true, resource: 'timesheet_week', entries: shaped });
+}
+
+// The Create Timesheet Entry popup. HiveLogic-native rows use their own
+// 'HL-TSE-<uuid>' id namespace (same convention as HL-INV-/HL-JOB-/HL-CO-)
+// so the Jobber sync's own timeSheetEntries upsert never touches or
+// collides with one. Duration is always DERIVED from startAt/endAt here,
+// never trusted from a client-submitted hours/minutes figure that could
+// drift from the actual time range (Law 1).
+async function handleCreateTimesheetEntry(req, res) {
+  if (req.method !== 'POST') return res.status(405).json({ ok: false, error: 'POST only' });
+  const requester = await getRequestingProfile(req);
+  if (!requester) return res.status(401).json({ ok: false, error: 'Not signed in -- log into HiveLogic first.' });
+  const b = req.body || {};
+  const userId = String(b.userId || '').trim();
+  if (!userId) return res.status(400).json({ ok: false, error: 'An employee is required.' });
+  const jobId = String(b.jobId || '').trim() || null;
+  const startAt = String(b.startAt || '').trim();
+  const endAt = String(b.endAt || '').trim();
+  if (!startAt || !endAt || isNaN(Date.parse(startAt)) || isNaN(Date.parse(endAt))) {
+    return res.status(400).json({ ok: false, error: 'A valid start and end time are required.' });
+  }
+  const startMs = new Date(startAt).getTime();
+  const endMs = new Date(endAt).getTime();
+  if (endMs <= startMs) return res.status(400).json({ ok: false, error: 'End time must be after start time.' });
+
+  let jobUuid = null;
+  let jobTitle = null;
+  if (jobId) {
+    const jobRes = await supabaseRequest(`jobs?jobber_id=eq.${encodeURIComponent(jobId)}&select=uuid_id,title&limit=1`);
+    if (jobRes.ok) { const rows = await jobRes.json(); jobUuid = rows[0]?.uuid_id || null; jobTitle = rows[0]?.title || null; }
+  }
+
+  const row = {
+    jobber_id: 'HL-TSE-' + crypto.randomUUID(),
+    start_at: new Date(startAt).toISOString(),
+    end_at: new Date(endAt).toISOString(),
+    final_duration: Math.round((endMs - startMs) / 1000),
+    user_id: userId,
+    job_id: jobId,
+    job_uuid: jobUuid,
+    note: String(b.note || '').trim() || null,
+    jobber_updated_at: new Date().toISOString(),
+  };
+  const r = await supabaseRequest('time_sheet_entries', { method: 'POST', headers: { Prefer: 'return=representation' }, body: JSON.stringify(row) });
+  if (!r.ok) return res.status(500).json({ ok: false, error: 'Could not save this timesheet entry: ' + (await r.text()).slice(0, 300) });
+  const created = (await r.json())[0];
+  return res.status(200).json({
+    ok: true,
+    resource: 'create_timesheet_entry',
+    entry: {
+      id: created.jobber_id, userId: created.user_id, jobId: created.job_id || null,
+      jobLabel: jobId ? (jobTitle || 'Job') : 'General', startAt: created.start_at, endAt: created.end_at,
+      durationSeconds: row.final_duration, note: created.note || null,
+    },
+  });
+}
+
+// Editing the Employee is deliberately not offered here (matches the
+// Jobber modal jomell is copying, which greys that field out) -- reassigning
+// whose hours these are is a bigger action than fixing a time/job/note, and
+// nothing in the UI asks for it.
+async function handleUpdateTimesheetEntry(req, res) {
+  if (req.method !== 'PATCH') return res.status(405).json({ ok: false, error: 'PATCH only' });
+  const requester = await getRequestingProfile(req);
+  if (!requester) return res.status(401).json({ ok: false, error: 'Not signed in -- log into HiveLogic first.' });
+  const b = req.body || {};
+  const id = String(b.id || '').trim();
+  if (!id) return res.status(400).json({ ok: false, error: 'Which entry? No id given.' });
+  if (!id.startsWith('HL-TSE-')) {
+    return res.status(400).json({ ok: false, error: 'This entry is synced from Jobber -- edit it there.' });
+  }
+  const jobId = String(b.jobId || '').trim() || null;
+  const startAt = String(b.startAt || '').trim();
+  const endAt = String(b.endAt || '').trim();
+  if (!startAt || !endAt || isNaN(Date.parse(startAt)) || isNaN(Date.parse(endAt))) {
+    return res.status(400).json({ ok: false, error: 'A valid start and end time are required.' });
+  }
+  const startMs = new Date(startAt).getTime();
+  const endMs = new Date(endAt).getTime();
+  if (endMs <= startMs) return res.status(400).json({ ok: false, error: 'End time must be after start time.' });
+
+  let jobUuid = null;
+  let jobTitle = null;
+  if (jobId) {
+    const jobRes = await supabaseRequest(`jobs?jobber_id=eq.${encodeURIComponent(jobId)}&select=uuid_id,title&limit=1`);
+    if (jobRes.ok) { const rows = await jobRes.json(); jobUuid = rows[0]?.uuid_id || null; jobTitle = rows[0]?.title || null; }
+  }
+
+  const patch = {
+    start_at: new Date(startAt).toISOString(),
+    end_at: new Date(endAt).toISOString(),
+    final_duration: Math.round((endMs - startMs) / 1000),
+    job_id: jobId,
+    job_uuid: jobUuid,
+    note: String(b.note || '').trim() || null,
+    jobber_updated_at: new Date().toISOString(),
+  };
+  const r = await supabaseRequest(`time_sheet_entries?jobber_id=eq.${encodeURIComponent(id)}`, {
+    method: 'PATCH', headers: { Prefer: 'return=representation' }, body: JSON.stringify(patch),
+  });
+  if (!r.ok) return res.status(500).json({ ok: false, error: 'Could not save this timesheet entry: ' + (await r.text()).slice(0, 300) });
+  const rows = await r.json();
+  if (!rows.length) return res.status(404).json({ ok: false, error: 'That entry no longer exists.' });
+  const updated = rows[0];
+  return res.status(200).json({
+    ok: true,
+    resource: 'update_timesheet_entry',
+    entry: {
+      id: updated.jobber_id, userId: updated.user_id, jobId: updated.job_id || null,
+      jobLabel: jobId ? (jobTitle || 'Job') : 'General', startAt: updated.start_at, endAt: updated.end_at,
+      durationSeconds: patch.final_duration, note: updated.note || null,
+    },
+  });
+}
+
+async function handleDeleteTimesheetEntry(req, res) {
+  if (req.method !== 'DELETE') return res.status(405).json({ ok: false, error: 'DELETE only' });
+  const requester = await getRequestingProfile(req);
+  if (!requester) return res.status(401).json({ ok: false, error: 'Not signed in -- log into HiveLogic first.' });
+  const id = String((req.query && req.query.id) || '').trim();
+  if (!id) return res.status(400).json({ ok: false, error: 'Which entry? No id given.' });
+  if (!id.startsWith('HL-TSE-')) {
+    return res.status(400).json({ ok: false, error: 'This entry is synced from Jobber -- delete it there.' });
+  }
+  const r = await supabaseRequest(`time_sheet_entries?jobber_id=eq.${encodeURIComponent(id)}`, { method: 'DELETE' });
+  if (!r.ok) return res.status(500).json({ ok: false, error: 'Could not delete this entry: ' + (await r.text()).slice(0, 300) });
+  return res.status(200).json({ ok: true, resource: 'delete_timesheet_entry' });
 }
 
 async function handleMyJobsToday(req, res) {
@@ -5577,6 +5897,7 @@ async function handleWorkforceStatus(req, res) {
     }
   }
 
+  const requesterIsOwner = await isOwner(requester);
   return res.status(200).json({
     ok: true,
     tablesReady: sessRes.ok && sumRes.ok,
@@ -5589,7 +5910,14 @@ async function handleWorkforceStatus(req, res) {
     // false the moment ownership changed. The clock-in refusal reads the same
     // source, so the button that is hidden and the request that is refused can
     // never disagree.
-    isOwner: await isOwner(requester),
+    isOwner: requesterIsOwner,
+    // Same reasoning, same shape (2026-08-26): the Monitor dashboard's "View
+    // All" button needs to know, before it's clicked, whether this person is
+    // allowed into the screenshot gallery -- handleMonitorReview enforces
+    // the real rule (Superadmin or Owner) server-side; this just lets the
+    // button be disabled with an honest reason instead of clickable and
+    // then refused.
+    canViewScreenshots: requester.role === 'superadmin' || requesterIsOwner,
   });
 }
 
@@ -5717,10 +6045,30 @@ async function handleWorkforceClock(req, res) {
       const sumRows = sumRes.ok ? await sumRes.json() : [];
       if (!sumRows || !sumRows[0]) return res.status(200).json({ ok: false, error: 'Please submit your End-of-Day report before clocking out.', needsEodReport: true });
     }
+    // Manual clock-out (2026-08-25): "if the employee was not able to clock
+    // out, the system must prompt the employee to input manual clock out."
+    // manualClockOutAt is an ISO timestamp the browser already resolved from
+    // a date+time the person typed (see hlWorkforceManualClockOutOpen).
+    // Validated server-side, not just in the form: cannot predate this
+    // session's own clock_in, cannot be in the future -- the server stays
+    // the source of truth for recorded work time, a typed time is not
+    // trusted blind.
+    const patch = { status: 'completed' };
+    if (req.body && req.body.manualClockOutAt) {
+      const manualMs = new Date(req.body.manualClockOutAt).getTime();
+      if (!Number.isFinite(manualMs)) return res.status(400).json({ ok: false, error: 'That clock-out time is not valid.' });
+      const clockInMs = new Date(open[0].clock_in).getTime();
+      if (manualMs < clockInMs) return res.status(400).json({ ok: false, error: 'Clock-out time cannot be before you clocked in.' });
+      if (manualMs > Date.now() + 60000) return res.status(400).json({ ok: false, error: 'Clock-out time cannot be in the future.' });
+      patch.clock_out = new Date(manualMs).toISOString();
+      patch.close_reason = 'manual_entry';
+    } else {
+      patch.clock_out = new Date().toISOString();
+    }
     const updRes = await supabaseRequest(`workforce_time_sessions?id=eq.${open[0].id}`, {
       method: 'PATCH',
       headers: { Prefer: 'return=representation' },
-      body: JSON.stringify({ clock_out: new Date().toISOString(), status: 'completed' }),
+      body: JSON.stringify(patch),
     });
     if (!updRes.ok) return res.status(500).json({ ok: false, error: 'Could not clock out: ' + (await updRes.text()) });
     const rows = await updRes.json();
@@ -5886,7 +6234,33 @@ export const MONITOR_AGENT_RESOURCES = [
   'monitor_heartbeat',
   'monitor_consent',
   'monitor_screenshot_upload',
+  // Phase 5 (2026-08-25): the agent reads the app whitelist here to
+  // classify the active app locally. handleMonitorAppRules still gates
+  // writes to an admin session itself (see requester check inside it) --
+  // this exemption only lets a GET carry an agent token instead of a
+  // Supabase session, same as the four resources above.
+  'monitor_app_rules',
 ];
+
+// One roster row per PERSON, never per device (2026-08-26). Re-pairing used
+// to insert a brand-new monitor_agents row and simply leave the previous
+// 'active' one in place -- "Unpair this device" in the tray menu only ever
+// cleared the desktop app's local config, it never told the server. Marvin
+// re-pairing after unpairing left two 'Paired' rows for the same name in
+// both the Monitor Settings roster and the dashboard's Activity & Screenshot
+// Review table, with nothing distinguishing them. handleMonitorPair now
+// revokes the old row the moment a new pairing completes (see below), so
+// this only has historical duplicates left to collapse -- most-recently-
+// paired active row wins, then most recent pending, then whatever's left.
+function pickBestMonitorAgent(rows) {
+  if (!rows || !rows.length) return null;
+  const byPairedDesc = (a, b) => (b.paired_at || '').localeCompare(a.paired_at || '');
+  const active = rows.filter((a) => a.status === 'active');
+  if (active.length) return active.sort(byPairedDesc)[0];
+  const pending = rows.filter((a) => a.status === 'pending');
+  if (pending.length) return pending.sort(byPairedDesc)[0];
+  return rows.slice().sort(byPairedDesc)[0];
+}
 
 async function handleMonitorStatus(req, res) {
   const requester = await getRequestingProfile(req);
@@ -5993,6 +6367,18 @@ async function handleMonitorPair(req, res) {
     return res.status(400).json({ ok: false, error: 'That pairing code is incorrect.' });
   }
 
+  // Revoke any OTHER already-active agent this employee has before this one
+  // takes over -- one device is meant to be "the" paired device per person.
+  // Without this, unpairing locally (which never tells the server, see the
+  // tray menu's "Unpair this device") followed by re-pairing left the old
+  // row 'active' forever, showing up as a second, permanently-offline
+  // "Paired" row next to the real one. Fire-and-forget: this pairing must
+  // not fail because the cleanup of an old row did.
+  supabaseRequest(`monitor_agents?employee_id=eq.${employeeId}&status=eq.active&id=neq.${pendingRow.id}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ status: 'revoked' }),
+  }).catch(() => {});
+
   const token = monitorRandomToken();
   const updRes = await supabaseRequest(`monitor_agents?id=eq.${pendingRow.id}`, {
     method: 'PATCH',
@@ -6053,6 +6439,31 @@ async function handleMonitorHeartbeat(req, res) {
   const heartbeatWriteError = patchRes && patchRes.ok
     ? null
     : `monitor_agents PATCH failed (${(patchRes && patchRes.status) || 'no response'}): ${patchRes ? await patchRes.text().catch(() => '') : ''}`.slice(0, 300);
+
+  // Timezone auto-detection (2026-08-26): "make it flexible so anyone who
+  // will be monitored regardless of the location and timezone... the
+  // system must automatically detect my location and timezone." The agent
+  // reports its OS's real IANA zone on every heartbeat; kept on
+  // profiles.settings (the one per-user preferences blob, api/user-settings.js
+  // -- follows the PERSON, not the device, per CLAUDE.md). Always
+  // overwritten with the latest report rather than set once, so it stays
+  // correct if someone travels. isValidTimeZone guards against a garbled or
+  // forged value ever reaching Intl elsewhere. Best-effort: this must never
+  // take down an otherwise-fine heartbeat.
+  const reportedTimezone = req.body && req.body.timezone;
+  if (isValidTimeZone(reportedTimezone)) {
+    try {
+      const profRes = await supabaseRequest(`profiles?id=eq.${agent.employee_id}&select=settings`);
+      const profRows = profRes.ok ? await profRes.json() : [];
+      const currentSettings = (profRows[0] && profRows[0].settings) || {};
+      if (currentSettings.timezone !== reportedTimezone) {
+        await supabaseRequest(`profiles?id=eq.${agent.employee_id}`, {
+          method: 'PATCH',
+          body: JSON.stringify({ settings: mergeSettings(currentSettings, { timezone: reportedTimezone }) }),
+        });
+      }
+    } catch (e) { /* best-effort -- never blocks the heartbeat */ }
+  }
 
   const activeRes = await supabaseRequest(`workforce_time_sessions?employee_id=eq.${agent.employee_id}&status=eq.active&order=clock_in.desc&limit=1`);
   const activeRows = activeRes.ok ? await activeRes.json() : [];
@@ -6223,6 +6634,14 @@ async function handleWorkforceSettings(req, res) {
   const row = (settingsRows && settingsRows[0]) || {};
   return res.status(200).json({
     ok: true,
+    // Monitored workday window: 7:00 AM - 3:30 PM. One shared wall-clock
+    // schedule (2026-08-26: "make it flexible... regardless of the location
+    // and timezone"), applied in EACH EMPLOYEE'S OWN timezone, not a single
+    // hardcoded America/New_York -- see api/_lib/workday.js and
+    // hlWfNowInTz() (public/index.html), which now take a zone parameter
+    // instead of assuming one.
+    workdayStartHour: Number.isFinite(row.workday_start_hour) ? row.workday_start_hour : 7,
+    workdayStartMinute: Number.isFinite(row.workday_start_minute) ? row.workday_start_minute : 0,
     workdayEndHour: Number.isFinite(row.workday_end_hour) ? row.workday_end_hour : 15,
     workdayEndMinute: Number.isFinite(row.workday_end_minute) ? row.workday_end_minute : 30,
     idleWarningMinutes: Number.isFinite(row.idle_warning_minutes) ? row.idle_warning_minutes : 30,
@@ -6263,26 +6682,56 @@ async function handleMonitorSettings(req, res) {
   const settingsRows = settingsRes.ok ? await settingsRes.json() : [];
   const row = (settingsRows && settingsRows[0]) || {};
 
-  const agentsRes = await supabaseRequest('monitor_agents?select=id,employee_id,device_name,platform,status,last_seen_at,agent_version&order=last_seen_at.desc');
+  // Roster source (2026-08-25): every employee, not only ones who have
+  // already paired a device. The toggle itself (handleMonitorUserToggle)
+  // only ever PATCHes profiles.monitoring_enabled -- it never required a
+  // monitor_agents row to exist -- so the old agents-first roster could
+  // show the setting but never let anyone turn it on for a person before
+  // they'd installed the app. Now every profile gets a row; someone with
+  // no paired device shows status 'not_installed' instead of being
+  // omitted, and the toggle still works immediately -- the moment they
+  // install and clock in, monitoring_enabled is already what was set here.
+  const [agentsRes, profilesRes] = await Promise.all([
+    supabaseRequest('monitor_agents?select=id,employee_id,device_name,platform,status,paired_at,last_seen_at,agent_version&order=last_seen_at.desc'),
+    supabaseRequest('profiles?select=id,full_name,email,monitoring_enabled&order=full_name.asc'),
+  ]);
   const agents = agentsRes.ok ? await agentsRes.json() : [];
-  const empIds = [...new Set((agents || []).map((a) => a.employee_id))];
-  let profiles = [];
-  if (empIds.length) {
-    const profRes = await supabaseRequest(`profiles?id=in.(${empIds.join(',')})&select=id,full_name,email,monitoring_enabled`);
-    profiles = profRes.ok ? await profRes.json() : [];
+  const profiles = profilesRes.ok ? await profilesRes.json() : [];
+  const agentsByEmployee = {};
+  for (const a of agents || []) {
+    (agentsByEmployee[a.employee_id] = agentsByEmployee[a.employee_id] || []).push(a);
   }
-  const byId = Object.fromEntries((profiles || []).map((p) => [p.id, p]));
-  const roster = (agents || []).map((a) => ({
-    employeeId: a.employee_id,
-    name: (byId[a.employee_id] && byId[a.employee_id].full_name) || (byId[a.employee_id] && byId[a.employee_id].email) || 'Unknown',
-    deviceName: a.device_name,
-    platform: a.platform,
-    status: a.status,
-    lastSeenAt: a.last_seen_at,
-    agentVersion: a.agent_version || null,
-    agentVersionState: agentVersionState(a.agent_version),
-    monitoringEnabled: !byId[a.employee_id] || byId[a.employee_id].monitoring_enabled !== false,
-  }));
+  const aliveCutoff = new Date(Date.now() - MONITOR_AGENT_ALIVE_MINUTES * 60 * 1000).toISOString();
+  const roster = [];
+  for (const p of profiles || []) {
+    const name = p.full_name || p.email || 'Unknown';
+    const monitoringEnabled = p.monitoring_enabled !== false;
+    // One row per PERSON, not per device (see pickBestMonitorAgent) -- a
+    // roster of "every agent that ever paired" is what showed Marvin twice.
+    const a = pickBestMonitorAgent(agentsByEmployee[p.id]);
+    if (a) {
+      roster.push({
+        employeeId: p.id, name,
+        deviceName: a.device_name, platform: a.platform, status: a.status,
+        lastSeenAt: a.last_seen_at, agentVersion: a.agent_version || null,
+        agentVersionState: agentVersionState(a.agent_version),
+        // Agent Status (2026-08-25): whether the agent has actually
+        // checked in recently, distinct from `status` (pairing/consent
+        // state) -- same "last heartbeat within the alive window" real
+        // signal handleMonitorReview's roster uses.
+        online: a.last_seen_at ? a.last_seen_at >= aliveCutoff : false,
+        monitoringEnabled,
+      });
+    } else {
+      roster.push({
+        employeeId: p.id, name,
+        deviceName: null, platform: null, status: 'not_installed',
+        lastSeenAt: null, agentVersion: null, agentVersionState: null,
+        online: false,
+        monitoringEnabled,
+      });
+    }
+  }
 
   return res.status(200).json({
     ok: true,
@@ -6476,7 +6925,7 @@ async function handleMonitorReview(req, res) {
   const employeeId = req.query.employeeId || null;
 
   if (!employeeId) {
-    const agentsRes = await supabaseRequest('monitor_agents?select=id,employee_id,device_name,platform,status,paired_at,last_seen_at&order=last_seen_at.desc');
+    const agentsRes = await supabaseRequest('monitor_agents?select=id,employee_id,device_name,platform,status,paired_at,last_seen_at,agent_version&order=last_seen_at.desc');
     const agents = agentsRes.ok ? await agentsRes.json() : [];
     const empIds = [...new Set((agents || []).map((a) => a.employee_id))];
     let profiles = [];
@@ -6485,16 +6934,69 @@ async function handleMonitorReview(req, res) {
       profiles = profRes.ok ? await profRes.json() : [];
     }
     const byId = Object.fromEntries((profiles || []).map((p) => [p.id, p]));
-    const roster = (agents || []).map((a) => ({
-      employeeId: a.employee_id,
-      name: (byId[a.employee_id] && byId[a.employee_id].full_name) || (byId[a.employee_id] && byId[a.employee_id].email) || 'Unknown',
-      deviceName: a.device_name,
-      platform: a.platform,
-      status: a.status,
-      pairedAt: a.paired_at,
-      lastSeenAt: a.last_seen_at,
-    }));
+    const aliveCutoff = new Date(Date.now() - MONITOR_AGENT_ALIVE_MINUTES * 60 * 1000).toISOString();
+    // Real, bounded activity-level indicator (2026-08-25): only computed for
+    // agents that are actually online right now (last_seen within the alive
+    // window) -- an offline agent has no "current" activity to report, and
+    // fetching this for every agent that has EVER paired would be an
+    // unbounded query for no one still looking at their screen. Averages the
+    // 5 most recent samples of their currently-open session; honestly null
+    // (not 0) when there is no open session or no samples yet.
+    const onlineAgents = (agents || []).filter((a) => a.last_seen_at && a.last_seen_at >= aliveCutoff);
+    const activityByEmployee = {};
+    if (onlineAgents.length) {
+      const onlineIds = [...new Set(onlineAgents.map((a) => a.employee_id))];
+      const openSessRes = await supabaseRequest(`monitor_sessions?employee_id=in.(${onlineIds.join(',')})&ended_at=is.null&select=id,employee_id&order=started_at.desc`);
+      const openSessions = openSessRes.ok ? await openSessRes.json() : [];
+      const sessionByEmployee = {};
+      for (const s of openSessions || []) if (!sessionByEmployee[s.employee_id]) sessionByEmployee[s.employee_id] = s.id;
+      const sessionIds = Object.values(sessionByEmployee);
+      if (sessionIds.length) {
+        const actRes = await supabaseRequest(`monitor_activity_samples?monitor_session_id=in.(${sessionIds.join(',')})&select=monitor_session_id,activity_level,sampled_at&order=sampled_at.desc&limit=${sessionIds.length * 5}`);
+        const actRows = actRes.ok ? await actRes.json() : [];
+        const bySession = {};
+        for (const s of actRows || []) (bySession[s.monitor_session_id] = bySession[s.monitor_session_id] || []).push(s.activity_level);
+        for (const [empId, sessId] of Object.entries(sessionByEmployee)) {
+          const levels = (bySession[sessId] || []).slice(0, 5).filter((v) => typeof v === 'number');
+          if (levels.length) activityByEmployee[empId] = Math.round(levels.reduce((a, b) => a + b, 0) / levels.length);
+        }
+      }
+    }
+    // One row per PERSON, not per device (see pickBestMonitorAgent) -- a
+    // roster of "every agent that ever paired" is what showed Marvin twice.
+    const agentsByEmployee2 = {};
+    for (const a of agents || []) (agentsByEmployee2[a.employee_id] = agentsByEmployee2[a.employee_id] || []).push(a);
+    const roster = Object.keys(agentsByEmployee2).map((empId) => {
+      const a = pickBestMonitorAgent(agentsByEmployee2[empId]);
+      return {
+        employeeId: empId,
+        name: (byId[empId] && byId[empId].full_name) || (byId[empId] && byId[empId].email) || 'Unknown',
+        deviceName: a.device_name,
+        platform: a.platform,
+        status: a.status,
+        pairedAt: a.paired_at,
+        lastSeenAt: a.last_seen_at,
+        agentVersion: a.agent_version || null,
+        online: a.last_seen_at ? a.last_seen_at >= aliveCutoff : false,
+        activityLevel: Object.prototype.hasOwnProperty.call(activityByEmployee, empId) ? activityByEmployee[empId] : null,
+      };
+    });
     return res.status(200).json({ ok: true, resource: 'monitor_review', roster });
+  }
+
+  // Screenshots are more sensitive than the roster above (real images of
+  // someone's screen, not just an online/offline dot and an activity
+  // number), so this one branch -- and only this one -- gets a tighter bar
+  // than the rest of Monitor's admin/superadmin gate: Superadmin or Owner
+  // only (2026-08-26, "Only System Admin/Owner must be able to view the
+  // screenshots"). A plain 'admin' (an office manager, a project manager)
+  // can still see who's online and how active they are; they just can't
+  // open the gallery. isOwner() reused from ./_lib/owner.js -- the same
+  // source that already answers "is this person exempt from the
+  // timeclock," now also answering "can this person see everyone else's
+  // screen."
+  if (requester.role !== 'superadmin' && !(await isOwner(requester))) {
+    return res.status(403).json({ ok: false, error: 'Screenshots are restricted to Superadmin/Owner.' });
   }
 
   const sessRes = await supabaseRequest(`monitor_sessions?employee_id=eq.${employeeId}&order=started_at.desc&limit=20`);
@@ -6531,6 +7033,129 @@ async function handleMonitorReview(req, res) {
   return res.status(200).json({ ok: true, resource: 'monitor_review', sessions, screenshots, activitySamples });
 }
 
+// ---------------------------------------------------------------------
+// Phase 5 (2026-08-25): App whitelist / productivity classification.
+// monitor_app_rules holds one row per foreground-app name -> category
+// (productive/neutral/unproductive), admin-managed. The desktop agent
+// (hivelogic-monitor-agent) reads this same list with its own bearer
+// token to classify the active app LOCALLY and decide when to show its
+// own "not productive" notification -- classification has to happen on
+// the employee's machine in real time, not only in a server aggregate.
+// ---------------------------------------------------------------------
+const MONITOR_APP_CATEGORIES = ['productive', 'neutral', 'unproductive'];
+
+async function handleMonitorAppRules(req, res) {
+  // Two kinds of caller: an admin browser session (full CRUD), or a
+  // paired desktop agent's own bearer token (read-only -- it only needs
+  // the list to classify locally, never to change it).
+  const agent = await requireMonitorAgent(req);
+  let requester = null;
+  if (!agent) {
+    requester = await getRequestingProfile(req);
+    if (!requester) return res.status(401).json({ ok: false, error: 'Not signed in.' });
+  }
+
+  if (req.method === 'GET') {
+    const r = await supabaseRequest('monitor_app_rules?select=id,app_name,category,updated_at&order=app_name.asc');
+    if (!r.ok) return res.status(200).json({ ok: true, tablesReady: false, rules: [] });
+    const rows = await r.json();
+    return res.status(200).json({
+      ok: true, tablesReady: true,
+      rules: (rows || []).map((row) => ({ id: row.id, appName: row.app_name, category: row.category, updatedAt: row.updated_at })),
+    });
+  }
+
+  // Writes are admin-only -- an agent token alone (or no session) cannot
+  // reach this branch.
+  if (!requester || (requester.role !== 'admin' && requester.role !== 'superadmin')) {
+    return res.status(403).json({ ok: false, error: 'Only an admin/manager can manage the app whitelist.' });
+  }
+
+  if (req.method === 'POST') {
+    const b = req.body || {};
+    const appName = String(b.appName || '').trim();
+    const category = String(b.category || '').trim();
+    if (!appName) return res.status(400).json({ ok: false, error: 'appName is required.' });
+    if (!MONITOR_APP_CATEGORIES.includes(category)) {
+      return res.status(400).json({ ok: false, error: `category must be one of: ${MONITOR_APP_CATEGORIES.join(', ')}.` });
+    }
+    const r = await supabaseRequest('monitor_app_rules?on_conflict=app_name', {
+      method: 'POST',
+      headers: { Prefer: 'resolution=merge-duplicates,return=representation' },
+      body: JSON.stringify({ app_name: appName, category, created_by: requester.id, updated_at: new Date().toISOString() }),
+    });
+    if (!r.ok) return res.status(500).json({ ok: false, error: 'Could not save the rule: ' + (await r.text()) });
+    const rows = await r.json();
+    const row = rows[0];
+    return res.status(200).json({ ok: true, rule: { id: row.id, appName: row.app_name, category: row.category, updatedAt: row.updated_at } });
+  }
+
+  if (req.method === 'DELETE') {
+    const id = (req.query && req.query.id) || (req.body && req.body.id);
+    if (!id) return res.status(400).json({ ok: false, error: 'id is required.' });
+    const r = await supabaseRequest(`monitor_app_rules?id=eq.${encodeURIComponent(id)}`, { method: 'DELETE' });
+    if (!r.ok) return res.status(500).json({ ok: false, error: 'Could not delete the rule.' });
+    return res.status(200).json({ ok: true });
+  }
+
+  return res.status(405).json({ ok: false, error: 'Method not allowed.' });
+}
+
+// GET /api/track1?resource=monitor_app_usage -- the signed-in employee's
+// own today app-usage breakdown + a real productivity %, derived from
+// monitor_activity_samples.active_app joined against monitor_app_rules.
+// Each sample is treated as one heartbeat interval's worth of time (the
+// agent's default is 60s; genuinely approximate, labeled as such -- this
+// is sample-count based, not a wall-clock duration log). An app with no
+// matching rule is honestly reported as 'unclassified', never guessed
+// into a category, and does not count toward the productivity %.
+async function handleMonitorAppUsage(req, res) {
+  const requester = await getRequestingProfile(req);
+  if (!requester) return res.status(401).json({ ok: false, error: 'Not signed in -- log into HiveLogic first.' });
+  // "Today" in the EMPLOYEE'S OWN timezone (2026-08-26), not a hardcoded
+  // America/New_York -- this is a personal dashboard stat about their own
+  // day, unlike Command Center's Jobber-schedule views (which correctly
+  // stay ET, the business's own timezone). Falls back to DEFAULT_TIMEZONE
+  // until a heartbeat/session report has set profiles.settings.timezone.
+  const requesterTz = (requester.settings && isValidTimeZone(requester.settings.timezone))
+    ? requester.settings.timezone : DEFAULT_TIMEZONE;
+  const { startISO } = todayRangeInTz(requesterTz);
+
+  const sessRes = await supabaseRequest(`monitor_sessions?employee_id=eq.${requester.id}&started_at=gte.${encodeURIComponent(startISO)}&select=id`);
+  if (!sessRes.ok) return res.status(200).json({ ok: true, tablesReady: false, apps: [], productivityPercent: null, sampleCount: 0 });
+  const sessions = await sessRes.json();
+  const sessionIds = (sessions || []).map((s) => s.id);
+  if (!sessionIds.length) return res.status(200).json({ ok: true, tablesReady: true, apps: [], productivityPercent: null, sampleCount: 0 });
+
+  const [actRes, rulesRes] = await Promise.all([
+    supabaseRequest(`monitor_activity_samples?monitor_session_id=in.(${sessionIds.join(',')})&select=active_app&active_app=not.is.null`),
+    supabaseRequest('monitor_app_rules?select=app_name,category'),
+  ]);
+  const samples = actRes.ok ? await actRes.json() : [];
+  const rules = rulesRes.ok ? await rulesRes.json() : [];
+  const categoryByApp = Object.fromEntries((rules || []).map((r) => [r.app_name, r.category]));
+
+  const counts = {}; // app_name -> sample count
+  for (const s of samples || []) {
+    if (!s.active_app) continue;
+    counts[s.active_app] = (counts[s.active_app] || 0) + 1;
+  }
+  const apps = Object.entries(counts)
+    .map(([appName, sampleCount]) => ({ appName, sampleCount, category: categoryByApp[appName] || 'unclassified' }))
+    .sort((a, b) => b.sampleCount - a.sampleCount);
+
+  const classified = apps.filter((a) => a.category === 'productive' || a.category === 'unproductive');
+  const classifiedTotal = classified.reduce((sum, a) => sum + a.sampleCount, 0);
+  const productiveTotal = classified.filter((a) => a.category === 'productive').reduce((sum, a) => sum + a.sampleCount, 0);
+  const productivityPercent = classifiedTotal > 0 ? Math.round((productiveTotal / classifiedTotal) * 100) : null;
+
+  return res.status(200).json({
+    ok: true, tablesReady: true, apps,
+    sampleCount: apps.reduce((sum, a) => sum + a.sampleCount, 0),
+    productivityPercent, // null when nothing in today's samples matches a whitelist rule yet
+  });
+}
+
 async function handleWorkforceSummary(req, res) {
   const requester = await getRequestingProfile(req);
   if (!requester) return res.status(401).json({ ok: false, error: 'Not signed in -- log into HiveLogic first.' });
@@ -6563,6 +7188,73 @@ async function handleWorkforceSummary(req, res) {
     return res.status(200).json({ ok: true, summary: rows[0] });
   }
   return res.status(405).json({ ok: false, error: 'Method not allowed.' });
+}
+
+// Monday 00:00 in the same business timezone (America/New_York) todayRangeET
+// uses -- so "this week" always means the same calendar week the office
+// clock uses, not whatever timezone the browser happens to be in.
+function weekStartISOET() {
+  const { dateStr, startISO } = todayRangeET();
+  const [y, mo, d] = dateStr.split('-').map(Number);
+  // getUTCDay() is fine here -- dateStr/startISO already carry the ET offset,
+  // constructing a Date from them and asking its UTC day back out the day
+  // number without a second timezone conversion.
+  const asUtcMidnight = new Date(Date.UTC(y, mo - 1, d));
+  const dow = asUtcMidnight.getUTCDay(); // 0=Sun..6=Sat
+  const daysSinceMonday = (dow + 6) % 7;
+  const offset = startISO.slice(-6); // reuse the same "+HH:MM"/"-HH:MM" suffix
+  const monday = new Date(asUtcMidnight.getTime() - daysSinceMonday * 86400000);
+  const my = monday.getUTCFullYear(), mm = String(monday.getUTCMonth() + 1).padStart(2, '0'), md = String(monday.getUTCDate()).padStart(2, '0');
+  return `${my}-${mm}-${md}T00:00:00${offset}`;
+}
+
+// GET /api/track1?resource=workforce_week_summary -- real Today/This-Week
+// worked-seconds totals for the signed-in employee, computed from
+// workforce_time_sessions (the same source of truth clock in/out already
+// writes to) rather than the free-text hours_worked EOD field. Powers the
+// Monitor dashboard's summary cards -- see handleWorkforceStatus for the
+// companion "what's my session doing right now" call.
+// Calendar date (YYYY-MM-DD) a UTC timestamp falls on in the business
+// timezone. clock_in is stored as new Date().toISOString() (UTC); comparing
+// its raw slice(0,10) against todayStr()'s ET date misclassifies any
+// clock-in from the last ~4-5 hours of the ET business day (it's already
+// "tomorrow" in UTC), dropping a real evening shift off "Today's Hours".
+function etDateStr(isoOrDate) {
+  const d = isoOrDate instanceof Date ? isoOrDate : new Date(isoOrDate);
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit',
+  }).formatToParts(d);
+  const get = (t) => (parts.find((p) => p.type === t) || {}).value;
+  return `${get('year')}-${get('month')}-${get('day')}`;
+}
+
+async function handleWorkforceWeekSummary(req, res) {
+  const requester = await getRequestingProfile(req);
+  if (!requester) return res.status(401).json({ ok: false, error: 'Not signed in -- log into HiveLogic first.' });
+  const today = todayStr();
+  const weekStart = weekStartISOET();
+  const sessRes = await supabaseRequest(
+    `workforce_time_sessions?employee_id=eq.${requester.id}&clock_in=gte.${encodeURIComponent(weekStart)}`
+    + `&order=clock_in.asc&select=clock_in,clock_out,total_break_seconds,on_break,break_started_at,status`
+  );
+  if (!sessRes.ok) return res.status(200).json({ ok: true, tablesReady: false, todaySeconds: 0, weekSeconds: 0 });
+  const sessions = await sessRes.json();
+  const nowMs = Date.now();
+  let todaySeconds = 0, weekSeconds = 0;
+  for (const s of sessions || []) {
+    const startMs = new Date(s.clock_in).getTime();
+    const endMs = s.clock_out ? new Date(s.clock_out).getTime() : nowMs;
+    // total_break_seconds only finalizes when a break ENDS -- an in-progress
+    // break's elapsed time isn't in it yet, so subtract it separately (same
+    // "freeze at break start" accounting the frontend timer uses).
+    const liveBreakSeconds = (s.on_break && s.break_started_at && !s.clock_out)
+      ? Math.max(0, Math.round((nowMs - new Date(s.break_started_at).getTime()) / 1000))
+      : 0;
+    const worked = Math.max(0, Math.round((endMs - startMs) / 1000) - (s.total_break_seconds || 0) - liveBreakSeconds);
+    weekSeconds += worked;
+    if (etDateStr(s.clock_in) === today) todaySeconds += worked;
+  }
+  return res.status(200).json({ ok: true, tablesReady: true, todaySeconds, weekSeconds, weekStart });
 }
 
 async function handleWorkforceTeam(req, res) {
@@ -8681,6 +9373,12 @@ if (resource === 'mailconnect') {
   if (resource === 'monitor_review') {
     try { return await handleMonitorReview(req, res); } catch (e) { return res.status(500).json({ ok: false, error: e.message }); }
   }
+  if (resource === 'monitor_app_rules') {
+    try { return await handleMonitorAppRules(req, res); } catch (e) { return res.status(500).json({ ok: false, error: e.message }); }
+  }
+  if (resource === 'monitor_app_usage') {
+    try { return await handleMonitorAppUsage(req, res); } catch (e) { return res.status(500).json({ ok: false, error: e.message }); }
+  }
   if (resource === 'monitor_settings') {
     try { return await handleMonitorSettings(req, res); } catch (e) { return res.status(500).json({ ok: false, error: e.message }); }
   }
@@ -8701,6 +9399,9 @@ if (resource === 'mailconnect') {
 }
   if (resource === 'workforce_team') {
     try { return await handleWorkforceTeam(req, res); } catch (e) { return res.status(500).json({ ok: false, error: e.message }); }
+}
+  if (resource === 'workforce_week_summary') {
+    try { return await handleWorkforceWeekSummary(req, res); } catch (e) { return res.status(500).json({ ok: false, error: e.message }); }
 }
   if (resource === 'production_tracker') {
     try { return await handleProductionTracker(req, res); } catch (e) { return res.status(500).json({ ok: false, error: e.message }); }
@@ -8825,8 +9526,20 @@ if (resource === 'mailconnect') {
   if (resource === 'mark_invoice_paid') {
     try { return await handleMarkInvoicePaid(req, res); } catch (e) { return res.status(500).json({ ok: false, error: e.message }); }
   }
-  if (resource === 'update_invoice_subject') {
-    try { return await handleUpdateInvoiceSubject(req, res); } catch (e) { return res.status(500).json({ ok: false, error: e.message }); }
+  if (resource === 'update_invoice') {
+    try { return await handleUpdateInvoice(req, res); } catch (e) { return res.status(500).json({ ok: false, error: e.message }); }
+  }
+  if (resource === 'timesheet_week') {
+    try { return await handleTimesheetWeek(req, res); } catch (e) { return res.status(500).json({ ok: false, error: e.message }); }
+  }
+  if (resource === 'create_timesheet_entry') {
+    try { return await handleCreateTimesheetEntry(req, res); } catch (e) { return res.status(500).json({ ok: false, error: e.message }); }
+  }
+  if (resource === 'update_timesheet_entry') {
+    try { return await handleUpdateTimesheetEntry(req, res); } catch (e) { return res.status(500).json({ ok: false, error: e.message }); }
+  }
+  if (resource === 'delete_timesheet_entry') {
+    try { return await handleDeleteTimesheetEntry(req, res); } catch (e) { return res.status(500).json({ ok: false, error: e.message }); }
   }
   if (resource === 'my_jobs_today') {
     try { return await handleMyJobsToday(req, res); } catch (e) { return res.status(500).json({ ok: false, error: e.message }); }

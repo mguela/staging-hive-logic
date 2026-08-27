@@ -14,11 +14,20 @@
 // deliberate exception to "never a silent delete", now available for any
 // status, not just converted.
 //
-// Job first, then the estimate, and ONLY when a job actually exists
-// (lifecycleStatus === 'converted'): if the job delete fails, the estimate
-// is left untouched and the whole thing can simply be retried. Deleting the
-// estimate first would risk leaving an orphaned job with a dangling
-// source_estimate_id if the second delete then failed.
+// Invoices, then the job, then the estimate -- and ONLY when a job actually
+// exists (lifecycleStatus === 'converted'): if any step fails, everything
+// after it is left untouched and the whole thing can simply be retried.
+// Deleting the estimate first would risk leaving an orphaned job with a
+// dangling source_estimate_id if a later delete then failed.
+//
+// 2026-08-26, jomell: hit this live -- deleting a converted estimate's job
+// failed with a foreign-key violation ("Key (uuid_id)=(...) is still
+// referenced from table \"invoices\"") the moment "Create Invoice from this
+// Job" had ever been used on it. jobs.uuid_id carries a real FK
+// (fk_invoices_job_uuid) from invoices.job_uuid, so any invoice raised from
+// the job blocks the job's own deletion until it goes first. Those invoices
+// only exist because this job exists -- deleting the job while leaving them
+// behind would be meaningless anyway.
 
 import { getEstimate, deleteEstimate } from './_store.js';
 import { getTrustedActor } from '../purchase-orders/_actor.js';
@@ -41,24 +50,49 @@ export default async function handler(req, res) {
     if (!current) { res.status(404).json({ ok: false, error: 'Estimate not found.' }); return; }
 
     let jobDeleted = false;
+    let invoicesDeleted = 0;
     if (current.lifecycleStatus === 'converted') {
       const companyUuid = await resolveCompanyUuid(actor.companyId);
-      const jobRes = await supabaseRequest(
-        `jobs?company_id=eq.${encodeURIComponent(companyUuid)}&source_estimate_id=eq.${encodeURIComponent(id)}`,
-        { method: 'DELETE' }
+      const jobLookupRes = await supabaseRequest(
+        `jobs?company_id=eq.${encodeURIComponent(companyUuid)}&source_estimate_id=eq.${encodeURIComponent(id)}&select=uuid_id`
       );
-      if (!jobRes.ok) {
-        res.status(422).json({ ok: false, error: `Could not delete the associated job: ${(await jobRes.text()).slice(0, 300)}` });
+      if (!jobLookupRes.ok) {
+        res.status(422).json({ ok: false, error: `Could not look up the associated job: ${(await jobLookupRes.text()).slice(0, 300)}` });
         return;
       }
-      jobDeleted = true;
+      const job = (await jobLookupRes.json())[0] || null;
+
+      if (job) {
+        if (job.uuid_id) {
+          const invDelRes = await supabaseRequest(
+            `invoices?job_uuid=eq.${encodeURIComponent(job.uuid_id)}`,
+            { method: 'DELETE', headers: { Prefer: 'return=representation' } }
+          );
+          if (!invDelRes.ok) {
+            res.status(422).json({ ok: false, error: `Could not delete this job's invoices: ${(await invDelRes.text()).slice(0, 300)}` });
+            return;
+          }
+          invoicesDeleted = (await invDelRes.json()).length;
+        }
+
+        const jobRes = await supabaseRequest(
+          `jobs?company_id=eq.${encodeURIComponent(companyUuid)}&source_estimate_id=eq.${encodeURIComponent(id)}`,
+          { method: 'DELETE' }
+        );
+        if (!jobRes.ok) {
+          res.status(422).json({ ok: false, error: `Could not delete the associated job: ${(await jobRes.text()).slice(0, 300)}` });
+          return;
+        }
+        jobDeleted = true;
+      }
     }
 
     await deleteEstimate(actor.companyId, id);
+    const invoiceNote = invoicesDeleted ? ` (and ${invoicesDeleted} invoice${invoicesDeleted === 1 ? '' : 's'} raised from it)` : '';
     res.status(200).json({
       ok: true,
       note: jobDeleted
-        ? `${current.estimateNumber} and its job were permanently deleted.`
+        ? `${current.estimateNumber} and its job were permanently deleted${invoiceNote}.`
         : `${current.estimateNumber} was permanently deleted.`
     });
   } catch (error) {

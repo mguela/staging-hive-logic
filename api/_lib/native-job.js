@@ -103,6 +103,14 @@ export async function createNativeJob(input, deps = {}) {
   // that shared sequence is the entire point of E-10001 becoming J-10001.
   const seq = projectSeq || await allocateProjectSequence(companyId, deps);
 
+  // 2026-08-26, jomell: the Active Jobs modal's "Created" field reads
+  // jobs.jobber_created_at -- which, despite the name, is just "when this
+  // job's row came into being," and every other consumer (growth-facts,
+  // ops-detectors, the sync/webhook paths) already treats it that way. A
+  // native job's jobber_id ('HL-JOB-*') never matches anything the Jobber
+  // sync pulls, so there is no real Jobber row for it to clash with --
+  // stamping it here is safe, not a sync-ownership violation.
+  const now = new Date().toISOString();
   const row = {
     jobber_id: 'HL-JOB-' + seq,
     company_id: resolvedCompanyUuid,
@@ -114,7 +122,8 @@ export async function createNativeJob(input, deps = {}) {
     division_code: divisionCode,
     source_estimate_id: sourceEstimateId,
     total: (isFinite(Number(total)) && Number(total) > 0) ? Number(total) : null,
-    jobber_updated_at: new Date().toISOString(),
+    jobber_created_at: now,
+    jobber_updated_at: now,
   };
 
   const res = await sb('jobs', {

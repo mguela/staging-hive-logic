@@ -89,6 +89,17 @@ test('the native job stores the actor company explicitly, never a database defau
   assert.equal(state.inserted.company_id, COMPANY_UUID);
 });
 
+// 2026-08-26, jomell: "where is 'created' supposed to be set?" -- the
+// Active Jobs modal's Created field reads jobber_created_at, which was
+// only ever stamped by the Jobber sync. A native job never got one, so it
+// always showed blank.
+test('a native job is stamped with a created date, matching its updated date', async () => {
+  const { deps, state } = stub();
+  await createNativeJob(BASE, deps);
+  assert.ok(state.inserted.jobber_created_at, 'Created must not be left blank for a native job');
+  assert.equal(state.inserted.jobber_created_at, state.inserted.jobber_updated_at);
+});
+
 // ------------------------------------------------- defect 2: the client link
 
 test('the client is linked internally, not just by text reference', async () => {
