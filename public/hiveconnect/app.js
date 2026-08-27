@@ -5197,6 +5197,7 @@ function openEmailTab() {
   renderEmailSidebar();
   const note = $('ev-setup-note'), btn = $('ev-signin');
   const usingSample = !!(evActive && evActive.provider === 'mock');
+  const sampleBanner = $('ev-sample-banner'); if (sampleBanner) sampleBanner.classList.toggle('hidden', !usingSample);
   if (!emailConfigured() && !usingSample) {
     connect.classList.remove('hidden');
     if (note) { note.classList.remove('hidden'); note.innerHTML = 'Almost there — your admin needs to paste an <b>Azure Application (client) ID</b> into the app config to switch email on. Ask Chris / see the setup checklist.'; }
@@ -7465,6 +7466,7 @@ function evToast(text) {
 { const b = $('ev-compose'); if (b) b.addEventListener('click', () => openEmailCompose('new', null)); }
 { const b = $('ev-refresh'); if (b) b.addEventListener('click', () => selectFolder(evFolderId, evFolderName)); }
 { const b = $('ev-signin'); if (b) b.addEventListener('click', emailSignIn); }
+{ const b = $('ev-sample-signin'); if (b) b.addEventListener('click', emailSignIn); }
 { const b = $('ev-c-close'); if (b) b.addEventListener('click', () => $('ev-compose-backdrop').classList.add('hidden')); }
 { const b = $('ev-c-cancel'); if (b) b.addEventListener('click', () => { evClearDraft(); $('ev-compose-backdrop').classList.add('hidden'); }); }
 { const s = $('ev-c-subj'); if (s) s.addEventListener('input', evScheduleDraftSave); }
