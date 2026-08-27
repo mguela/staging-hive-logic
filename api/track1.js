@@ -1142,6 +1142,30 @@ async function handleLeads(req, res) {
       });
     }
     const pipeline = (await pRes.json())[0];
+
+    // jomell, 2026-08-27: the New Lead form's own address field
+    // (service_address, above) only ever lived on this one lead_pipeline
+    // row -- every other place that shows a client's address (invoice PDF,
+    // estimate builder, Estimates list, Active Jobs) reads client_locations,
+    // a completely different table, so an address entered here never
+    // actually showed up anywhere else. Insert-only, never overwrite: a
+    // client that already has a real client_locations row (a structured
+    // street/city/province/postal_code, or one entered through the client
+    // card) keeps it exactly as-is; this only fills the gap for a client
+    // who had nothing. lat/lng left null for the existing geocoder to fill.
+    if (pipeRow.service_address) {
+      try {
+        const existingLoc = await supabaseRequest(`client_locations?jobber_id=eq.${encodeURIComponent(clientId)}&select=jobber_id&limit=1`);
+        const existingLocRows = existingLoc.ok ? await existingLoc.json() : [];
+        if (!existingLocRows.length) {
+          await supabaseRequest('client_locations', {
+            method: 'POST',
+            body: JSON.stringify({ jobber_id: clientId, street: pipeRow.service_address }),
+          });
+        }
+      } catch (e) { /* the lead itself is saved either way -- this is best-effort */ }
+    }
+
     return res.status(200).json({
       ok: true, resource: 'leads', clientId, pipeline,
       note: 'Saved in HiveLogic. Not pushed to Jobber yet -- Jobber write-back is a later phase.'
