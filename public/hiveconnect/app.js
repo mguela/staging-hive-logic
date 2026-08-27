@@ -769,7 +769,7 @@ function buildDmRow(c) {
   li.onclick = () => openChannel(c.id);
   return li;
 }
-function dmDisplayName(c) { return isSelfDM(c) ? 'Notes to Self' : isGroupDM(c) ? dmGroupLabel(c) : (dmOther(c) ? dmOther(c).display_name : 'DM'); }
+function dmDisplayName(c) { return isSelfDM(c) ? (me.display_name || 'Notes to Self') : isGroupDM(c) ? dmGroupLabel(c) : (dmOther(c) ? dmOther(c).display_name : 'DM'); }
 function applyMsgFilter() {
   const q = (msgSearch || '').trim().toLowerCase();
   const muted = new Set(evMsgMuted());
@@ -841,8 +841,9 @@ function renderMessagesPanel() {
   el.appendChild(fav.folder);
 
   // Direct Messages (flat -- contact-type folders were dropped in favor of
-  // matching the reference's single-list structure)
-  const dms = evMsgDmChannels().sort((a, b) => (dmLastActivity(b) || '').localeCompare(dmLastActivity(a) || ''));
+  // matching the reference's single-list structure). Notes to Self lives in
+  // Favorites only, not duplicated here.
+  const dms = evMsgDmChannels().filter(c => !isSelfDM(c)).sort((a, b) => (dmLastActivity(b) || '').localeCompare(dmLastActivity(a) || ''));
   const dmSec = evMsgSection(MSG_ICON_PERSON, 'DIRECT MESSAGES', 'dms', { onAdd: () => openCompose(), addTitle: 'New message' });
   if (!dms.length) { const em = document.createElement('div'); em.className = 'ct-empty'; em.textContent = 'No conversations yet'; dmSec.ul.appendChild(em); }
   dms.forEach(c => dmSec.ul.appendChild(buildDmRow(c)));
@@ -891,7 +892,7 @@ async function evLoadOtherLastRead(channelId) {
 }
 
 function channelLabel(c) {
-  if (c.type === 'dm') { if (isSelfDM(c)) return 'Notes to Self'; if (isGroupDM(c)) return dmGroupLabel(c); const o = dmOther(c); return o ? o.display_name : 'DM'; }
+  if (c.type === 'dm') { if (isSelfDM(c)) return me.display_name || 'Notes to Self'; if (isGroupDM(c)) return dmGroupLabel(c); const o = dmOther(c); return o ? o.display_name : 'DM'; }
   return `${c.type === 'private' ? '🔒 ' : '#'}${c.name}`;
 }
 
