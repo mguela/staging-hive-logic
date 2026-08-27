@@ -112,6 +112,20 @@ async function durableInsertEstimate(estimate) {
   return rowToEstimate(rows[0]);
 }
 
+// 2026-08-25: jomell asked for a real, permanent delete of converted test
+// estimates (and their jobs) after being told there is no undo and it hits
+// the live production database — everything before this point in the file
+// only ever creates/updates rows, on purpose (estimates keep their history).
+// This is the one deliberate exception, scoped by the caller to 'converted'
+// estimates only.
+async function durableDeleteEstimate(companyId, estimateId) {
+  const res = await supabaseRequest(
+    `estimates?company_id=eq.${encodeURIComponent(companyId)}&data->>id=eq.${encodeURIComponent(estimateId)}`,
+    { method: 'DELETE' }
+  );
+  if (!res.ok) throw new Error(`Could not delete estimate: ${await res.text()}`);
+}
+
 async function durableUpdateEstimate(companyId, estimateId, mutate) {
   for (let attempt = 0; attempt < MAX_CAS_RETRIES; attempt++) {
     const current = await durableGetEstimate(companyId, estimateId);
@@ -184,6 +198,14 @@ export async function updateEstimate(companyId, estimateId, mutate) {
   const next = mutate(store.estimates[index]);
   store.estimates[index] = next;
   return next;
+}
+
+export async function deleteEstimate(companyId, estimateId) {
+  if (BACKEND === 'durable') return durableDeleteEstimate(companyId, estimateId);
+  const store = memGetStore();
+  const index = store.estimates.findIndex(e => e.companyId === companyId && e.id === estimateId);
+  if (index === -1) throw new Error('Estimate not found.');
+  store.estimates.splice(index, 1);
 }
 
 export async function allocateEstNumber({ companyId, companyCode, memoryCounterState }) {

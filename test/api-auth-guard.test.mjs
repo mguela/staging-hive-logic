@@ -53,6 +53,20 @@ test('public allowlist covers portals, webhooks, oauth callbacks, health, agents
   }
 });
 
+test('the estimate Approve/Reject link (respond.js) is public, same as /api/schedule/confirm -- both are token-authenticated, no HiveLogic session can ever exist', () => {
+  // Found live, 2026-08-27: respond.js was built to mirror /api/schedule/confirm
+  // exactly (its own header comment says so) but was never actually added
+  // here, so the edge gate 401'd every real client who clicked a real emailed
+  // Approve/Reject link -- unreachable since the feature shipped, because
+  // nobody had a working Resend key to click a real one until now.
+  assert.equal(isPublicApiPath('/api/bookkeeping/estimates/respond'), true);
+  // A narrow, exact allowlist entry -- it must not blow open the rest of the
+  // bookkeeping API, which stays session-gated.
+  assert.equal(isPublicApiPath('/api/bookkeeping/reference-data'), false);
+  assert.equal(isPublicApiPath('/api/bookkeeping/estimates'), false);
+  assert.equal(isPublicApiPath('/api/bookkeeping/estimates/respond-lookalike'), false);
+});
+
 test('protected data endpoints are NOT on the public allowlist', () => {
   for (const p of [
     '/api/track1', '/api/bookkeeping/reference-data', '/api/import-companycam',
@@ -595,23 +609,37 @@ test('the /api/agents/ prefix is the automation surface, and does not cover the 
 
 import { MONITOR_AGENT_RESOURCES as HANDLER_EXEMPT } from '../api/track1.js';
 
+// Full picture: every resource track1.js exempts from its own handler-level
+// gate, paired with the ONE HTTP method the edge allows it on. Originally
+// every entry here was POST-only (the agent's four write actions); Phase 5
+// (2026-08-25) added a GET-only agent read (monitor_app_rules, so the agent
+// can fetch the app whitelist to classify locally) -- hence a method map
+// instead of a flat "everything is POST" assumption.
+const HANDLER_EXEMPT_METHODS = {
+  monitor_pair: 'POST',
+  monitor_heartbeat: 'POST',
+  monitor_consent: 'POST',
+  monitor_screenshot_upload: 'POST',
+  monitor_app_rules: 'GET',
+};
+
 test('the Monitor agent resource list matches what the guard allowlists', () => {
   // The handler's exemption list and this file's own list of agent resources
   // must describe the same set -- if they drift, one gate closes silently.
   assert.deepEqual(
-    [...HANDLER_EXEMPT].sort(), [...MONITOR_AGENT_RESOURCES].sort(),
+    [...HANDLER_EXEMPT].sort(), Object.keys(HANDLER_EXEMPT_METHODS).sort(),
     'track1 MONITOR_AGENT_RESOURCES must cover exactly the agent routes this suite guards',
   );
   for (const resource of HANDLER_EXEMPT) {
+    const method = HANDLER_EXEMPT_METHODS[resource];
     assert.equal(
-      isPublicResourcePath('/api/track1', new URLSearchParams({ resource }), 'POST'), true,
-      `${resource} is exempt from track1's handler gate but not from the edge -- the agent still cannot reach it`,
+      isPublicResourcePath('/api/track1', new URLSearchParams({ resource }), method), true,
+      `${resource} is exempt from track1's handler gate but not from the edge on ${method} -- the agent still cannot reach it`,
     );
   }
   // And the reverse: nothing is allowlisted at the edge as a monitor_* agent
   // route without also being in the handler's exemption list.
-  const edgeMonitorResources = ['monitor_pair', 'monitor_heartbeat', 'monitor_consent', 'monitor_screenshot_upload'];
-  for (const resource of edgeMonitorResources) {
+  for (const resource of Object.keys(HANDLER_EXEMPT_METHODS)) {
     assert.ok(
       HANDLER_EXEMPT.includes(resource),
       `${resource} is public at the edge but would be re-blocked by requireApiAuth`,
@@ -619,12 +647,13 @@ test('the Monitor agent resource list matches what the guard allowlists', () => 
   }
 });
 
-test('the agent exemption is POST-only on both layers', () => {
+test('each agent exemption is public on exactly its one method, nowhere else', () => {
   for (const resource of HANDLER_EXEMPT) {
-    for (const m of ['GET', 'PUT', 'PATCH', 'DELETE']) {
+    const allowedMethod = HANDLER_EXEMPT_METHODS[resource];
+    for (const m of ['GET', 'POST', 'PUT', 'PATCH', 'DELETE']) {
       assert.equal(
-        isPublicResourcePath('/api/track1', new URLSearchParams({ resource }), m), false,
-        `${resource} must not be public on ${m}`,
+        isPublicResourcePath('/api/track1', new URLSearchParams({ resource }), m), m === allowedMethod,
+        `${resource} on ${m}: expected public=${m === allowedMethod}`,
       );
     }
   }

@@ -76,7 +76,12 @@ test('the clock-in is refused by the server, not merely hidden in the page', () 
 
 test('the page is told who the owner is instead of working it out', () => {
   const src = fs.readFileSync('api/track1.js', 'utf8');
-  assert.match(src, /isOwner: await isOwner\(requester\),/,
+  // requesterIsOwner (2026-08-26) is computed once via isOwner(requester)
+  // and reused for both isOwner and canViewScreenshots -- the assertion
+  // below follows that, not the literal call site.
+  assert.match(src, /const requesterIsOwner = await isOwner\(requester\);/,
+    'workforce_status must ask the real isOwner(), not decide on its own');
+  assert.match(src, /isOwner: requesterIsOwner,/,
     'workforce_status must carry it, so the hidden button and the refused request agree');
   const html = fs.readFileSync('public/index.html', 'utf8');
   assert.match(html, /isOwner = !!\(data && data\.isOwner\);/);

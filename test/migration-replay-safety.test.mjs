@@ -200,9 +200,11 @@ test('the scanner flags only genuinely executing DML across the real tree', () =
   const flagged = fs.readdirSync(dir)
     .filter((f) => f.endsWith('.sql'))
     .filter((f) => destructiveStatements(fs.readFileSync(path.join(dir, f), 'utf8')).length > 0);
-  // 12 execute DML at apply time; a further 11 only mention it inside function
-  // bodies and must not be counted.
-  assert.ok(flagged.length <= 16,
-    `scanner flagged ${flagged.length} existing migrations, expected ~12 -- `
+  // 13 execute DML at apply time (the 12 from before, plus
+  // 20260826180000_native_jobs_created_at_backfill.sql's top-level UPDATE);
+  // a further 11 only mention it inside function bodies and must not be
+  // counted.
+  assert.ok(flagged.length <= 17,
+    `scanner flagged ${flagged.length} existing migrations, expected ~13 -- `
     + `it is probably counting function bodies again: ${flagged.join(', ')}`);
 });

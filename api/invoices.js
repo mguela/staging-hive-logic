@@ -26,14 +26,21 @@ const PAGE_SIZE = 50;
 // ?limit=10000 caller) silently got only the most recent 1000 back with no
 // indication -- totalCount (from content-range) still reported the true
 // count, so the mismatch was invisible unless someone compared the two.
-export async function getInvoicesData({ limit } = {}) {
+// jobRef (2026-08-26): "it should show the connected invoices and change
+// orders in this window" -- the Active Jobs job-detail modal needs every
+// invoice for ONE job, not the whole table. invoices.job_id is already set
+// to the job's jobber_id at creation (handleCreateInvoiceFromJob) --
+// filtering on it here is the same key the create path already writes,
+// not a new relationship.
+export async function getInvoicesData({ limit, jobRef } = {}) {
   const cappedLimit = Math.min(Number(limit) || PAGE_SIZE, 10000);
+  const jobFilter = jobRef ? `&job_id=eq.${encodeURIComponent(jobRef)}` : '';
   const CHUNK = 1000;
   let rows = [];
   let totalCount = 0;
   for (let offset = 0; offset < cappedLimit; offset += CHUNK) {
     const pageLimit = Math.min(CHUNK, cappedLimit - offset);
-    const r = await supabaseRequest(`invoices?select=*&order=issued_date.desc&limit=${pageLimit}&offset=${offset}`, {
+    const r = await supabaseRequest(`invoices?select=*&order=issued_date.desc&limit=${pageLimit}&offset=${offset}${jobFilter}`, {
       headers: { Prefer: 'count=exact' }
     });
     if (!r.ok) throw new Error(await r.text());
@@ -86,7 +93,7 @@ export default async function handler(req, res) {
     if (!_authedUser) return res.status(401).json({ ok: false, error: 'Not signed in.' });
   }
   try {
-    const data = await getInvoicesData({ limit: req.query.limit });
+    const data = await getInvoicesData({ limit: req.query.limit, jobRef: req.query.jobRef });
     res.status(200).json({ ok: true, source: 'Jobber via Supabase', ...data });
   } catch (e) {
     res.status(500).json({ ok: false, error: e.message });

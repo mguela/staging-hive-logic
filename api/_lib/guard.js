@@ -71,6 +71,24 @@ export const PUBLIC_API_PREFIXES = [
                               //   appointment -- it cannot move, cancel, read or
                               //   list anything -- and the handler pins itself to
                               //   GET/POST with fail-closed rate limiting.
+  '/api/bookkeeping/estimates/respond', // Client Approve/Reject link, emailed
+                              //   by estimates/send.js. Exact same pattern as
+                              //   /api/schedule/confirm above (respond.js's
+                              //   own header comment says so explicitly): a
+                              //   256-bit CSPRNG token, hashed at rest,
+                              //   single-use, rate-limited per token AND IP,
+                              //   authorizing exactly one estimate's
+                              //   approve/reject -- nothing else is readable
+                              //   or writable through it. The recipient is a
+                              //   customer with no HiveLogic account, so no
+                              //   session can ever exist. Found live,
+                              //   2026-08-27: this route was built to mirror
+                              //   /api/schedule/confirm but never actually
+                              //   added here, so the edge gate 401'd every
+                              //   real client who clicked a real emailed
+                              //   link -- unreachable since it shipped
+                              //   because nobody had a working Resend key to
+                              //   click a real one until now.
   '/api/authnet-webhook',     // Authorize.Net webhook — signature-authenticated (Item 4)
   '/api/resend-webhook',      // Resend webhook — signature-authenticated (Item 6)
   '/api/voice-webhook',       // Twilio voice webhook — provider-authenticated
@@ -360,6 +378,12 @@ const PUBLIC_RESOURCE_PATHS = [
   { path: '/api/track1', resource: 'monitor_heartbeat', method: 'POST' },
   { path: '/api/track1', resource: 'monitor_consent', method: 'POST' },
   { path: '/api/track1', resource: 'monitor_screenshot_upload', method: 'POST' },
+  // Phase 5 (2026-08-25): the desktop agent GETs the app whitelist with its
+  // own bearer token to classify locally -- GET only. Writing a rule is an
+  // admin action and stays gated normally (a real Supabase session already
+  // clears this gate on its own; see handleMonitorAppRules for the
+  // requester.role check that still applies inside the handler either way).
+  { path: '/api/track1', resource: 'monitor_app_rules', method: 'GET' },
 
   // Customer card payment link (2026-08-19). EIGHTH instance of the
   // half-shipped-guard class catalogued above, and the only one that costs

@@ -45,15 +45,41 @@ test('recording a deposit payment no longer uses window.prompt or window.confirm
 
 test('the deposit modal shows the real remaining balance before anyone types an amount', () => {
   const fn = extractFunction(source, 'function efOpenRecordDepositModal(nid,num){');
-  assert.match(fn, /row\.depositRequired\s*-\s*row\.depositPaidTotal/,
+  assert.match(fn, /row\.depositRequired\s*-\s*\(row\.depositCreditedTotal\|\|0\)/,
     'must compute the actual remaining balance from this specific estimate\'s real data');
   assert.match(fn, /Remaining to satisfy the deposit/);
 });
 
 test('the amount input is capped to the real remaining balance, not left open-ended', () => {
   const fn = extractFunction(source, 'function efOpenRecordDepositModal(nid,num){');
-  assert.match(fn, /max="'\+remaining\.toFixed\(2\)\+'"/,
+  assert.match(fn, /max="'\+initial\.toFixed\(2\)\+'"/,
     'the HTML max attribute alone is not enough (browsers do not enforce it) -- there must also be a JS check');
+});
+
+test('the payable amount is recomputed per payment method, matching the server\'s cash-discount math', () => {
+  // 2026-08-25: "this kinda doesnt make sense" -- the default amount/method
+  // (Check, a cash-discount method) was computed off the CARD-priced
+  // remaining, so accepting the shown default and submitting overshot the
+  // actual required credit and got rejected by the server. A cash/check/ACH
+  // payment must divide by the same cardPrice/cashPrice ratio the server's
+  // creditedAmount() (server/bookkeeping/src/card-pricing.js) multiplies by.
+  const fn = extractFunction(source, 'function efOpenRecordDepositModal(nid,num){');
+  assert.match(fn, /RDP_DISCOUNT_METHODS\s*=\s*\['cash','check','ach'\]/);
+  assert.match(fn, /credRemaining\s*\/\s*cashRatio/,
+    'a cash/check/ACH payment must divide by the card/cash ratio, not use the card-priced figure as-is');
+  assert.match(fn, /cashRatio\s*=.*row\.depositRequired\s*\/\s*row\.depositRequiredCash/,
+    'the ratio must come from this estimate\'s own posted vs. cash amounts');
+});
+
+test('changing the payment method recomputes the amount live, instead of leaving a stale default', () => {
+  const fn = extractFunction(source, 'function efOpenRecordDepositModal(nid,num){');
+  assert.match(fn, /onchange="_hlRdpMethodChange\(\)"/);
+  assert.match(fn, /window\._hlRdpMethodChange\s*=\s*function/);
+  const methodChangeStart = fn.indexOf('window._hlRdpMethodChange');
+  const methodChangeFn = fn.slice(methodChangeStart, fn.indexOf('};', methodChangeStart));
+  assert.match(methodChangeFn, /rdpAmountFor\(method\)/);
+  assert.match(methodChangeFn, /input\.value\s*=\s*amt\.toFixed\(2\)/,
+    'switching methods must update the shown amount, not just its cap');
 });
 
 test('an overpayment is caught client-side before ever calling the server', () => {

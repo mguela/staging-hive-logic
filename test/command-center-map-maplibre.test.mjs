@@ -285,7 +285,11 @@ test('ccSetMarkersVisible is reachable from mapView(), which calls it from outsi
 // path that predates it.
 test('every "<- COMMAND CENTER" back button goes through showView(\'cc\'), not the legacy pre-resize-fix path', () => {
   const buttons = [...html.matchAll(/<button class="back" onclick="([^"]*)">← COMMAND CENTER<\/button>/g)];
-  assert.ok(buttons.length >= 8, 'expected to find every known "<- COMMAND CENTER" back button');
+  // Was >= 8; the Monitor Module redesign (2026-08-25) deliberately dropped
+  // its own back button (the left-rail "Command Center" nav item already
+  // covers that navigation there) -- floor lowered to match, not to loosen
+  // the check. Every remaining button still must go through showView('cc').
+  assert.ok(buttons.length >= 7, 'expected to find every known "<- COMMAND CENTER" back button');
   for (const [, onclick] of buttons) {
     assert.equal(onclick, "showView('cc')", `found a legacy back button still bypassing the map resize fix: onclick="${onclick}"`);
   }
