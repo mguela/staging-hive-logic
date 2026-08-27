@@ -5,13 +5,12 @@
 // not move the card: a draft can still fail to send, and a lead claiming "sent"
 // on the strength of a draft would be lying.
 //
-// 2026-08-25, jomell: "when clicking 'send to client'... i should receive an
-// email... that email should contain details and there should be a button
-// or lets say links either saying 'approve' or 'reject'." Added here, right
-// after the real transition succeeds -- same "the estimate is sent, that
-// already happened" reasoning as advanceLeadOnSend below: a failure to
-// email the client must never fail (or look like it failed) the send
-// itself, only report honestly that the email didn't go out.
+// 2026-08-25, jomell: sending an estimate to a client should also email
+// them the details, with Approve/Reject links. Added here, right after the
+// real transition succeeds -- same "the estimate is sent, that already
+// happened" reasoning as advanceLeadOnSend below: a failure to email the
+// client must never fail (or look like it failed) the send itself, only
+// report honestly that the email didn't go out.
 
 let _load_estimates_cache;
 async function _load_estimates() {
@@ -47,6 +46,23 @@ async function lookupClient(clientId) {
   if (!r.ok) return null;
   const rows = await r.json();
   return rows[0] || null;
+}
+
+// jomell, 2026-08-27: the estimate email should also show the client's
+// address on file, same as the invoice PDF already does. A real address is
+// its own row in client_locations, not every client has one.
+async function lookupClientAddress(clientId) {
+  if (!clientId) return null;
+  const r = await supabaseRequest(`client_locations?jobber_id=eq.${encodeURIComponent(clientId)}&select=street,city,province,postal_code&limit=1`);
+  if (!r.ok) return null;
+  const rows = await r.json();
+  return rows[0] || null;
+}
+
+function formatAddress(address) {
+  if (!address || !address.street) return null;
+  const cityLine = [address.city, address.province].filter(Boolean).join(', ') + (address.postal_code ? ' ' + address.postal_code : '');
+  return cityLine.trim() ? `${address.street}, ${cityLine}` : address.street;
 }
 
 async function lookupCompanyName(companyId) {
@@ -102,6 +118,8 @@ async function emailClientEstimate(req, estimate, actor) {
   const rejectUrl = link('reject');
   const total = (estimate.totals && estimate.totals.cardPrice) || (estimate.totals && estimate.totals.price) || 0;
   const clientName = client.first_name || client.name || 'there';
+  const address = formatAddress(await lookupClientAddress(estimate.clientId));
+  const addressRow = address ? `<tr><td style="padding:6px 0;color:#484f64">Address</td><td style="padding:6px 0;text-align:right;font-weight:700">${escapeHtml(address)}</td></tr>` : '';
 
   const html = `
     <div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto">
@@ -109,6 +127,7 @@ async function emailClientEstimate(req, estimate, actor) {
       <p>${escapeHtml(companyName)} has sent you an estimate${estimate.title ? ` for <b>${escapeHtml(estimate.title)}</b>` : ''}.</p>
       <table style="width:100%;border-collapse:collapse;margin:16px 0" role="presentation">
         <tr><td style="padding:6px 0;color:#484f64">Estimate</td><td style="padding:6px 0;text-align:right;font-weight:700">${escapeHtml(estimate.estimateNumber || '')}</td></tr>
+        ${addressRow}
         <tr><td style="padding:6px 0;color:#484f64">Total</td><td style="padding:6px 0;text-align:right;font-weight:700;font-size:16px">${money(total)}</td></tr>
       </table>
       ${scheduleRowsHtml(estimate)}
@@ -118,7 +137,7 @@ async function emailClientEstimate(req, estimate, actor) {
       </div>
       <p style="color:#8b92a8;font-size:12px">This link is unique to you and expires in ${RESPONSE_LINK_EXPIRY_DAYS} days. If you weren't expecting this, you can ignore this email.</p>
     </div>`;
-  const text = `${companyName} has sent you estimate ${estimate.estimateNumber || ''} for ${money(total)}.\n\nApprove: ${approveUrl}\nReject: ${rejectUrl}\n\nThis link expires in ${RESPONSE_LINK_EXPIRY_DAYS} days.`;
+  const text = `${companyName} has sent you estimate ${estimate.estimateNumber || ''} for ${money(total)}.${address ? `\nAddress: ${address}` : ''}\n\nApprove: ${approveUrl}\nReject: ${rejectUrl}\n\nThis link expires in ${RESPONSE_LINK_EXPIRY_DAYS} days.`;
 
   const result = await sendEmail({
     to: client.email,

@@ -50,6 +50,16 @@ const NATIVE_ONLY = {
   hl_closed_at: null,
 };
 
+// jomell, 2026-08-27: Active Jobs doesn't show a client address anywhere.
+const WITH_ADDRESS = {
+  jobber_id: 'J5', client_id: 'C5', job_number: 105, title: 'Kitchen remodel',
+  job_status: 'active', job_type: 'ONE_OFF', total: 9568, start_at: '2026-08-27T12:00:00Z',
+  end_at: null, completed_at: null, jobber_web_uri: 'https://x/j5',
+  client_name: 'Jomell Alba', gps_lat: 41.2, gps_lng: -73.6, loc_city: 'Bedford', loc_province: 'NY',
+  effective_start_at: '2026-08-27T12:00:00Z', effective_end_at: null, hl_closed_at: null,
+  loc_street: '123 Beaver Dam Road', loc_postal_code: '10507',
+};
+
 let lastPath = null;
 mock.module('../api/_lib/jobber.js', {
   namedExports: {
@@ -57,6 +67,7 @@ mock.module('../api/_lib/jobber.js', {
       lastPath = path;
       if (/jobber_id=eq\.J3/.test(path)) return { ok: true, json: async () => [NATIVE_ONLY], headers: { get: () => null } };
       if (/jobber_id=eq\.J4/.test(path)) return { ok: true, json: async () => [CLOSED_BY_HL], headers: { get: () => null } };
+      if (/jobber_id=eq\.J5/.test(path)) return { ok: true, json: async () => [WITH_ADDRESS], headers: { get: () => null } };
       const single = /jobber_id=eq\./.test(path);
       const rows = single ? [FIXTURE[0]] : FIXTURE;
       return {
@@ -86,7 +97,7 @@ test('list: exact legacy shape, one request, view path', async () => {
     'id','title','clientId','clientName','jobNumber',
     'projectSeq','projectRef','divisionCode',
     'status','type','total',
-    'startAt','endAt','completedAt','createdAt','jobberUrl','gpsLat','gpsLng','city','province','closedAt',
+    'startAt','endAt','completedAt','createdAt','jobberUrl','gpsLat','gpsLng','city','province','address','closedAt',
   ]);
   // These fixtures are Jobber-synced jobs, so they carry jobNumber and no
   // project number -- a job has one or the other, never both.
@@ -114,7 +125,7 @@ test('single job: exact legacy shape (no clientName/city/province)', async () =>
     'id','title','clientId','jobNumber',
     'projectSeq','projectRef','divisionCode',
     'status','type','total',
-    'startAt','endAt','completedAt','jobberUrl','gpsLat','gpsLng','closedAt',
+    'startAt','endAt','completedAt','jobberUrl','gpsLat','gpsLng','address','closedAt',
   ]);
   assert.equal(j.id, 'J1');
   assert.equal(j.gpsLng, -73.62);
@@ -168,4 +179,21 @@ test('a job HiveLogic has not closed reports closedAt as null, not undefined', a
 test('the list select includes hl_closed_at', async () => {
   await getJobsListData({ limit: 10 });
   assert.match(lastPath, /hl_closed_at/);
+});
+
+// jomell, 2026-08-27: Active Jobs doesn't show a client address anywhere.
+test('the list select includes the new street/postal columns', async () => {
+  await getJobsListData({ limit: 10 });
+  assert.match(lastPath, /loc_street/);
+  assert.match(lastPath, /loc_postal_code/);
+});
+
+test('a real street on file formats into one address line', async () => {
+  const j = await getJobByIdData('J5');
+  assert.equal(j.address, '123 Beaver Dam Road, Bedford, NY 10507');
+});
+
+test('address is null, not an empty string, when there is no street on file', async () => {
+  const j = await getJobByIdData('J1');
+  assert.equal(j.address, null);
 });

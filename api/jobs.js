@@ -16,7 +16,16 @@ import { jobRef } from './_lib/project-numbers.js';
 
 const PAGE_SIZE = 50;
 
-const LIST_SELECT = 'jobber_id,client_id,job_number,project_seq,division_code,title,job_status,job_type,total,start_at,end_at,completed_at,jobber_created_at,jobber_web_uri,client_name,gps_lat,gps_lng,loc_city,loc_province,effective_start_at,effective_end_at,hl_closed_at';
+const LIST_SELECT = 'jobber_id,client_id,job_number,project_seq,division_code,title,job_status,job_type,total,start_at,end_at,completed_at,jobber_created_at,jobber_web_uri,client_name,gps_lat,gps_lng,loc_city,loc_province,effective_start_at,effective_end_at,hl_closed_at,loc_street,loc_postal_code';
+
+// jomell, 2026-08-27: Active Jobs doesn't show a client address anywhere.
+// jobs_enriched now carries the street/postal code alongside the
+// city/province it already had (20260827180000_jobs_enriched_address.sql).
+function formatAddress(j) {
+  if (!j.loc_street) return null;
+  const cityLine = [j.loc_city, j.loc_province].filter(Boolean).join(', ') + (j.loc_postal_code ? ' ' + j.loc_postal_code : '');
+  return cityLine.trim() ? `${j.loc_street}, ${cityLine}` : j.loc_street;
+}
 
 // Single-job fetch, used by the real job-detail view (Visual Intelligence's
 // Photos/Timeline/Tags tabs live here). Returns null if not found (route
@@ -45,6 +54,7 @@ export async function getJobByIdData(id) {
     startAt: j.effective_start_at ?? j.start_at,
     endAt: j.effective_end_at ?? j.end_at, completedAt: j.completed_at, jobberUrl: j.jobber_web_uri,
     gpsLat: j.gps_lat, gpsLng: j.gps_lng,
+    address: formatAddress(j),
     // 2026-08-25: HiveLogic's own "Close job" action (Active Jobs) --
     // separate from Jobber's job_status/completed_at, which the sync
     // overwrites every run. Null means not closed from HiveLogic's side.
@@ -106,6 +116,7 @@ export async function getJobsListData({ limit, offset, status } = {}) {
     gpsLng: j.gps_lng,
     city: j.loc_city,
     province: j.loc_province,
+    address: formatAddress(j),
     closedAt: j.hl_closed_at || null
   }));
 
