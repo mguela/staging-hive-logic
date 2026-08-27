@@ -1228,6 +1228,7 @@ html[data-theme="dark"] :is(#hiveconnect-root, .hc-embed).pin-flag { color: #f0c
 }
 :is(#hiveconnect-root, .hc-embed) .emoji-picker button,
 :is(#hiveconnect-root, .hc-embed).emoji-picker button {
+  appearance: none; -webkit-appearance: none; box-shadow: none;
   background: none; border: none; font-size: 19px; border-radius: 7px;
   width: 34px; height: 34px;
 }
