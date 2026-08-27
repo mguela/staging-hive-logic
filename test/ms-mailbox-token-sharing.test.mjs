@@ -35,10 +35,12 @@ const future = (mins) => new Date(Date.now() + mins * 60000).toISOString();
 
 // ---- constants must agree across the CJS/ESM boundary ------------------------
 
-test('msmail.js and the shared module pin the SAME app registration', () => {
-  const m = /const CLIENT_ID = '([0-9a-f-]+)'/.exec(msmailSrc);
-  assert.ok(m, 'sanity: msmail.js declares a CLIENT_ID');
-  assert.equal(m[1], mod.MS_MAILBOX_CLIENT_ID,
+test('msmail.js and the shared module pin the SAME app registration (and the same env var override)', () => {
+  assert.ok(/process\.env\.MS_MAILBOX_CLIENT_ID/.test(msmailSrc),
+    'msmail.js must read the same override var as the shared module, or a staging deployment can only fix one of the two');
+  const m = /\|\| '([0-9a-f-]+)'/.exec(msmailSrc);
+  assert.ok(m, 'sanity: msmail.js declares a fallback CLIENT_ID');
+  assert.equal(m[1], mod.msMailboxClientId(),
     'the tokens in hc_ms_tokens were issued to one app; refreshing them against another fails with AADSTS7000215');
 });
 
