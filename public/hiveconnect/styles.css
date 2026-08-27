@@ -1729,6 +1729,12 @@ html[data-theme="dark"] .huddle-banner {
 .ev-compose-split .primary-btn:first-child { border-radius: 9px 0 0 9px; }
 .ev-compose-split .primary-btn:last-child { border-radius: 0 9px 9px 0; border-left: 1px solid rgba(58,36,8,.18); }
 
+/* Reina AI column -- third pane, same footprint/background as the list and
+   reading panes either side of it (width, white background, hairline
+   border) so it reads as one more column of this layout, not a bolted-on
+   card. */
+.ev-reina-pane { width: 380px; min-width: 320px; border-left: 1px solid var(--line); overflow-y: auto; background: var(--card); display: flex; flex-direction: column; min-height: 0; }
+
 /* list pane wrapper + head (select-all, Focused/Other tabs, sort) */
 .ev-list-pane { width: 380px; min-width: 320px; border-right: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0; }
 .ev-list-pane .ev-list { width: auto; min-width: 0; border-right: none; flex: 1; }
@@ -1804,6 +1810,7 @@ html[data-theme="dark"] .huddle-banner {
   .ev-body.ev-reading { position: relative; }
   .ev-body.ev-reading .ev-list-pane { display: none; }
   .ev-body:not(.ev-reading) .ev-read { display: none; }
+  .ev-reina-pane { display: none; }
 }
 
 /* ===== EMAIL Phase 4: importance flag, reading-pane avatar, save-draft

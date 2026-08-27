@@ -2615,6 +2615,13 @@ html[data-theme="dark"] :is(#hiveconnect-root, .hc-embed).huddle-banner {
 :is(#hiveconnect-root, .hc-embed) .ev-compose-split .primary-btn:last-child,
 :is(#hiveconnect-root, .hc-embed).ev-compose-split .primary-btn:last-child { border-radius: 0 9px 9px 0; border-left: 1px solid rgba(58,36,8,.18); }
 
+/* Reina AI column -- third pane, same footprint/background as the list and
+   reading panes either side of it (width, white background, hairline
+   border) so it reads as one more column of this layout, not a bolted-on
+   card. */
+:is(#hiveconnect-root, .hc-embed) .ev-reina-pane,
+:is(#hiveconnect-root, .hc-embed).ev-reina-pane { width: 380px; min-width: 320px; border-left: 1px solid var(--line); overflow-y: auto; background: var(--card); display: flex; flex-direction: column; min-height: 0; }
+
 /* list pane wrapper + head (select-all, Focused/Other tabs, sort) */
 :is(#hiveconnect-root, .hc-embed) .ev-list-pane,
 :is(#hiveconnect-root, .hc-embed).ev-list-pane { width: 380px; min-width: 320px; border-right: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0; }
@@ -2760,6 +2767,8 @@ html[data-theme="dark"] :is(#hiveconnect-root, .hc-embed).huddle-banner {
 :is(#hiveconnect-root, .hc-embed).ev-body.ev-reading .ev-list-pane { display: none; }
   :is(#hiveconnect-root, .hc-embed) .ev-body:not(.ev-reading) .ev-read,
 :is(#hiveconnect-root, .hc-embed).ev-body:not(.ev-reading) .ev-read { display: none; }
+  :is(#hiveconnect-root, .hc-embed) .ev-reina-pane,
+:is(#hiveconnect-root, .hc-embed).ev-reina-pane { display: none; }
 }
 
 /* ===== EMAIL Phase 4: importance flag, reading-pane avatar, save-draft

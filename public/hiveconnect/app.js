@@ -5616,6 +5616,7 @@ async function selectFolder(id, name) {
   document.querySelectorAll('#panel-email .ev-folder').forEach(b => b.classList.toggle('active', b.dataset.id === id));
   const fn = $('ev-folder-name'); if (fn) fn.textContent = name + (!evAllInboxes && evActive && evActive.username ? ' — ' + evActive.username : '');
   const read = $('ev-read'); if (read) read.innerHTML = '<div class="ev-read-empty">Select a message to read it here.</div>';
+  evReinaPaneEmpty();
   const list = $('ev-list'); if (list) list.innerHTML = '<div class="ev-loading">Loading…</div>';
   try {
     const sel = '$select=id,subject,from,receivedDateTime,isRead,bodyPreview,hasAttachments,flag,conversationId,categories,inferenceClassification,importance';
@@ -5655,6 +5656,7 @@ async function selectSmartFolder(kind) {
   document.querySelectorAll('#panel-email .ev-folder').forEach(b => b.classList.toggle('active', b.dataset.id === kind));
   const fn = $('ev-folder-name'); if (fn) fn.textContent = name + (!evAllInboxes && evActive && evActive.username ? ' — ' + evActive.username : '');
   const read = $('ev-read'); if (read) read.innerHTML = '<div class="ev-read-empty">Select a message to read it here.</div>';
+  evReinaPaneEmpty();
   const list = $('ev-list'); if (list) list.innerHTML = '<div class="ev-loading">Loading…</div>';
   const filter = kind === 'starred' ? "flag/flagStatus eq 'flagged'" : "importance eq 'high'";
   const sel = '$select=id,subject,from,receivedDateTime,isRead,bodyPreview,hasAttachments,flag,conversationId,categories,inferenceClassification,importance';
@@ -5917,6 +5919,7 @@ function evTriageFiled(r, note) {
       evOpenId = null;
       const read = $('ev-read');
       if (read) read.innerHTML = '<div class="ev-read-empty">' + esc(note || 'Filed.') + '</div>';
+      evReinaPaneEmpty();
     }
     renderMessageList();
   }
@@ -6258,28 +6261,17 @@ const EV_RB_ICON = {
 };
 
 // Styling lives here rather than in styles-scoped.css for the same reason the
-// toolbar's does: this panel only ever exists inside #ev-read, and shipping it
-// with the code that builds it keeps the two from drifting apart.
+// toolbar's does: this panel only ever exists inside #ev-reina-pane, and
+// shipping it with the code that builds it keeps the two from drifting apart.
 function evEnsureBriefCss() {
   if (document.getElementById('ev-brief-css')) return;
   const st = document.createElement('style'); st.id = 'ev-brief-css';
   st.textContent = [
-    /* THE CARD.
-
-       #ev-read is a COLUMN FLEXBOX. Two things follow, and both of them bit:
-
-       * a flex item shrinks by default, so on a narrower window this panel was
-         squeezed shorter than its own content and the buttons overlapped the
-         text. `flex: none` is not decoration -- it is the fix. (Chris,
-         2026-08-18, with a screenshot of exactly that.)
-       * a flex item has no horizontal inset unless you give it one, so it ran
-         edge to edge. The gutter matches .ev-read-head's 22px so the card lines
-         up with the subject above it rather than floating loose.
-
-       And it is TINTED. White on white with a hairline is not a card, it is a
-       horizontal rule with opinions -- there was nothing to tell his eye that
-       this was Reina talking rather than more email. */
-    '.ev-reina-brief{flex:none;margin:14px 22px 18px;padding:18px 20px 16px;border:1px solid var(--line);border-radius:0;background:linear-gradient(180deg,var(--steel-bg),var(--card));box-shadow:0 1px 2px rgba(16,24,40,.04),0 8px 24px -14px rgba(16,24,40,.18)}',
+    // #ev-reina-pane is its own white column now (not a card floating inside
+    // #ev-read's canvas-colored background), so this is just that column's
+    // content padding -- same 22px horizontal gutter every other column's
+    // head uses, no border/shadow/tint of its own to blend seamlessly.
+    '.ev-reina-brief{padding:18px 22px}',
     '.ev-reina-brief:empty{display:none}',
 
     '.ev-rb-head{display:flex;align-items:center;gap:10px;margin-bottom:12px}',
@@ -6301,9 +6293,9 @@ function evEnsureBriefCss() {
     // Prose wants a measure. At 1000px a summary reads like a log line.
     '.ev-rb-summary{font:400 14.5px/1.65 var(--sans);color:var(--ink);max-width:68ch}',
 
-    // The action is the point of the card, so it gets the weight and its own
-    // band -- not one more sentence in the same paragraph.
-    '.ev-rb-action{display:flex;gap:10px;margin:14px -20px -2px;padding:13px 20px 0;border-top:1px solid var(--line)}',
+    // The action gets its own full-width band, breaking out of the column's
+    // 22px inset the same way the summary/draft above it don't.
+    '.ev-rb-action{display:flex;gap:10px;margin:14px -22px -2px;padding:13px 22px 0;border-top:1px solid var(--line)}',
     '.ev-rb-bullet{color:var(--steel-deep);font-weight:800;flex:0 0 auto;line-height:1.5}',
     '.ev-rb-action-txt{font:700 14.5px/1.5 var(--sans);color:var(--ink);max-width:68ch}',
 
@@ -6333,14 +6325,6 @@ function evEnsureBriefCss() {
     '.ev-rb-load,.ev-rb-err{display:flex;align-items:center;gap:9px;font:600 13px var(--sans);color:var(--slate)}',
     '.ev-rb-load .ev-rb-star{animation:ev-rb-pulse 1.1s ease-in-out infinite}',
     '@keyframes ev-rb-pulse{0%,100%{opacity:.3}50%{opacity:1}}',
-
-    // The reading pane around it, so the card is not the only considered thing
-    // on the screen.
-    '#ev-read .ev-read-head{padding:22px 22px 14px}',
-    '#ev-read .ev-read-subj{font-size:20px;line-height:1.3;letter-spacing:-.011em;margin-bottom:10px}',
-    '#ev-read .ev-read-actions{margin-top:14px;gap:2px}',
-
-    '@media (max-width:760px){.ev-reina-brief{margin:12px 14px 14px;padding:14px 15px}.ev-rb-action{margin-left:-15px;margin-right:-15px;padding-left:15px;padding-right:15px}.ev-rb-btn{flex:1 1 auto;justify-content:center}}',
   ].join('');
   document.head.appendChild(st);
 }
@@ -6401,7 +6385,7 @@ async function evPrefetchBriefs() {
       // If he opened this very message while it was in flight, paint it now
       // rather than leaving him on the loading line.
       if (evOpenId === m.id) {
-        const host = document.querySelector('#ev-read .ev-reina-brief');
+        const host = document.querySelector('#ev-reina-pane .ev-reina-brief');
         if (host && host.querySelector('.ev-rb-load')) evRenderBrief(host, full, d, acct);
       }
     } catch (e) { /* one message failing must not stop the rest */ }
@@ -6725,6 +6709,13 @@ window.hlOpenEmailMessage = async function (graphId, homeAccountId) {
 function evAddrs(list) { return (list || []).map(r => (r.emailAddress && (r.emailAddress.name || r.emailAddress.address)) || '').filter(Boolean).join(', '); }
 function evAddrsFull(list) { return (list || []).map(r => { const e = (r && r.emailAddress) || {}; if (e.name && e.address && e.name !== e.address) return e.name + ' <' + e.address + '>'; return e.address || e.name || ''; }).filter(Boolean).join(', '); }
 function evAddrsRaw(list) { return (list || []).map(r => r.emailAddress && r.emailAddress.address).filter(Boolean); }
+// Resets the Reina column back to its placeholder -- called everywhere
+// #ev-read itself gets reset to "Select a message…", so the two panes never
+// show mismatched messages (Reina's take on a mail that just got deleted/
+// moved/filed out from under it).
+function evReinaPaneEmpty() {
+  const p = $('ev-reina-pane'); if (p) p.innerHTML = '<div class="ev-read-empty">Reina\'s take on the open message will appear here.</div>';
+}
 function renderReadingPane(m) {
   const read = $('ev-read'); if (!read) return;
   const from = (m.from && m.from.emailAddress) || {};
@@ -6754,14 +6745,16 @@ function renderReadingPane(m) {
   bar.appendChild(act('<span class="ev-reina-star">✦</span> Reina', 'Reina AI — summarize, draft, extract', (e) => evReinaMenu(e, m), 'ev-act-reina'));
   head.appendChild(bar);
   read.appendChild(head);
-  // Reina's read of THIS message, above the message. (Chris, 2026-08-18: "in the
-  // preview it shows a reina summary of the email and a suggested action or
-  // response. below would be the actual email.") Rendered empty and filled in
+  // Reina's read of THIS message, in its own column to the right. (Chris,
+  // 2026-08-18: "in the preview it shows a reina summary of the email and a
+  // suggested action or response.") Rendered empty and filled in
   // asynchronously, so the email itself never waits on a model call.
   evEnsureBriefCss();
-  const brief = document.createElement('div'); brief.className = 'ev-reina-brief'; read.appendChild(brief);
+  const reinaPane = $('ev-reina-pane'); if (reinaPane) reinaPane.innerHTML = '';
+  const briefHost = reinaPane || read;
+  const brief = document.createElement('div'); brief.className = 'ev-reina-brief'; briefHost.appendChild(brief);
   evReinaBrief(m, brief);
-  const aiOut = document.createElement('div'); aiOut.id = 'ev-ai-out'; aiOut.className = 'ev-ai-out hidden'; read.appendChild(aiOut);
+  const aiOut = document.createElement('div'); aiOut.id = 'ev-ai-out'; aiOut.className = 'ev-ai-out hidden'; briefHost.appendChild(aiOut);
   // body in a sandboxed iframe (safe render of remote HTML)
   const frame = document.createElement('iframe'); frame.className = 'ev-read-frame'; frame.setAttribute('sandbox', '');
   const content = (m.body && (m.body.contentType || '').toLowerCase() === 'html') ? m.body.content : '<pre style="white-space:pre-wrap;font-family:inherit">' + esc((m.body && m.body.content) || '') + '</pre>';
@@ -6870,7 +6863,7 @@ async function evDelete(id, opts = {}) {
     evMessages = evMessages.filter(x => x.id !== id); if (evOpenId === id) evOpenId = null;
     if (opts.silent) return { id: (moved && moved.id) || id };
     renderMessageList();
-    const read = $('ev-read'); if (read && evOpenId === null) read.innerHTML = '<div class="ev-read-empty">Message moved to Deleted.</div>';
+    const read = $('ev-read'); if (read && evOpenId === null) { read.innerHTML = '<div class="ev-read-empty">Message moved to Deleted.</div>'; evReinaPaneEmpty(); }
     refreshFolderCounts();
   } catch (e) { if (opts.silent) throw e; evToast('Delete failed.'); }
 }
@@ -6880,7 +6873,7 @@ async function evMove(id, dest, note, opts = {}) {
     evMessages = evMessages.filter(x => x.id !== id); if (evOpenId === id) evOpenId = null;
     if (opts.silent) return { id: (moved && moved.id) || id };
     renderMessageList();
-    const read = $('ev-read'); if (read && evOpenId === null) read.innerHTML = '<div class="ev-read-empty">' + esc(note || 'Moved.') + '</div>';
+    const read = $('ev-read'); if (read && evOpenId === null) { read.innerHTML = '<div class="ev-read-empty">' + esc(note || 'Moved.') + '</div>'; evReinaPaneEmpty(); }
     refreshFolderCounts(); evToast(note || 'Moved');
   } catch (e) { if (opts.silent) throw e; evToast('Move failed.'); }
 }
@@ -7102,6 +7095,7 @@ async function evBlockSender(m) {
     await evGraph('/me/messages/' + m.id + '/move', { method: 'POST', body: { destinationId: 'junkemail' } });
     evMessages = evMessages.filter(x => x.id !== m.id); evOpenId = null; renderMessageList();
     const read = $('ev-read'); if (read) read.innerHTML = '<div class="ev-read-empty">Blocked ' + esc(addr) + ' — future mail goes to Junk.</div>';
+    evReinaPaneEmpty();
     evToast('Blocked ' + addr);
   } catch (e) { evToast('Block failed — ' + (e.message || '')); }
 }
@@ -7615,6 +7609,7 @@ async function evSearchAccount(acct, q) {
       evOpenId = null;
       evNextLink = null; // results are one page -- never page the old folder in underneath them
       const read = $('ev-read'); if (read) read.innerHTML = '<div class="ev-read-empty">Select a message to read it here.</div>';
+      evReinaPaneEmpty();
       renderMessageList();
       if (!evMessages.length && list) list.innerHTML = '<div class="ev-loading">Nothing matches “' + esc(q) + '”.</div>';
       const note = ok.some(r => r.degraded) ? ' (recent mail only)'
