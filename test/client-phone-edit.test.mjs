@@ -1,8 +1,11 @@
 // test/client-phone-edit.test.mjs
-// jomell, 2026-08-25, looking at jovie folloso's real client card: "in
-// clients (clients tab) where its almost getting data everytime like their
-// name and number, for example jovie. his number is not present anywhere
-// add this and it should reflect to all clients and future clients."
+// jomell, 2026-08-25, looking at jovie folloso's real client card: a
+// client's phone number should show up on their card, and be editable, the
+// same way it works for every client, present or future.
+//
+// 2026-08-27: extended to also edit the address, for the same underlying
+// reason -- there was no way to enter or fix one on an already-existing
+// client at all.
 //
 // openRealClient() (the real, Jobber-synced client card) never rendered a
 // Phone row at all -- a DIFFERENT card (the appointment sheet) already
@@ -52,8 +55,21 @@ test('the real client card renders a Phone row', () => {
 
 test('the Phone row has a real Edit control, wired to the new modal', () => {
   const fn = extractFunction(HTML, 'function openRealClient(id){');
-  assert.match(fn, /onclick="efOpenEditClientPhoneModal\(/);
-  assert.match(fn, /efOpenEditClientPhoneModal\([\s\S]{0,30}hlEsc\(c\.id\)/);
+  assert.match(fn, /onclick="efOpenEditClientContactModal\(/);
+  assert.match(fn, /efOpenEditClientContactModal\([\s\S]{0,30}hlEsc\(c\.id\)/);
+});
+
+test('the Property section shows a real address when one is on file, with an Edit control', () => {
+  const fn = extractFunction(HTML, 'function openRealClient(id){');
+  assert.match(fn, /c\.address\s*\?/);
+  assert.match(fn, /<span>Address<\/span>/);
+  assert.doesNotMatch(fn, /No property intel synced into this view yet/, 'the old hardcoded placeholder must be gone now that c.address is real');
+});
+
+test('no address on file offers an Add-one control rather than a dead end', () => {
+  const fn = extractFunction(HTML, 'function openRealClient(id){');
+  assert.match(fn, /No address on file/);
+  assert.match(fn, /Add one/);
 });
 
 test('a Call action appears once a phone number exists', () => {
@@ -62,24 +78,30 @@ test('a Call action appears once a phone number exists', () => {
 });
 
 test('editing the phone does not use a native browser prompt', () => {
-  const fn = extractFunction(HTML, 'function efOpenEditClientPhoneModal(id){');
+  const fn = extractFunction(HTML, 'function efOpenEditClientContactModal(id){');
   assert.doesNotMatch(fn, /window\.prompt|window\.confirm/);
   assert.match(fn, /hlModal\(/);
 });
 
-test('saving posts to update_client_contact with the client id and the typed number', () => {
-  const fn = extractFunction(HTML, 'function efOpenEditClientPhoneModal(id){');
-  assert.match(fn, /hlApiPost\('update_client_contact',\{id:id,phone:phone\}\)/);
+test('saving posts to update_client_contact with the client id, phone, and address fields', () => {
+  const fn = extractFunction(HTML, 'function efOpenEditClientContactModal(id){');
+  assert.match(fn, /hlApiPost\('update_client_contact',\{id:id,phone:phone,street:street,city:city,province:province,postalCode:postalCode\}\)/);
+});
+
+test('phone is always sent as typed, so an address-only edit can never null out an existing number', () => {
+  const fn = extractFunction(HTML, 'function efOpenEditClientContactModal(id){');
+  var phoneVarLine = fn.match(/var phone=[^\n]*/)[0];
+  assert.match(phoneVarLine, /document\.getElementById\('ecp-phone'\)/, 'phone must come from its own always-rendered input, never omitted');
 });
 
 test('a successful save updates the in-memory client and re-renders the card live', () => {
-  const fn = extractFunction(HTML, 'function efOpenEditClientPhoneModal(id){');
+  const fn = extractFunction(HTML, 'function efOpenEditClientContactModal(id){');
   assert.match(fn, /c\.phone\s*=\s*phone\|\|null/);
   assert.match(fn, /openRealClient\(id\)/);
 });
 
 test('a failed save shows the real error, not a silent no-op', () => {
-  const fn = extractFunction(HTML, 'function efOpenEditClientPhoneModal(id){');
+  const fn = extractFunction(HTML, 'function efOpenEditClientContactModal(id){');
   assert.match(fn, /if\(!d\|\|!d\.ok\)/);
   assert.match(fn, /err\.style\.display='block'/);
 });
@@ -120,6 +142,33 @@ test('the handler PATCHes the existing row by jobber_id, rather than inserting a
 test('a client id that matches nothing is reported as not found, not a silent success', () => {
   const fn = extractFunction(TRACK1, 'async function handleUpdateClientContact(req, res) {');
   assert.match(fn, /if \(!rows\.length\) return res\.status\(404\)/);
+});
+
+// jomell, 2026-08-27: an address typed in for an existing client had
+// nowhere real to save to -- handleCreateClient only ever writes
+// client_locations at brand-new-client creation time.
+test('address fields are only written when a real street is given', () => {
+  const fn = extractFunction(TRACK1, 'async function handleUpdateClientContact(req, res) {');
+  assert.match(fn, /if \(String\(b\.street \|\| ''\)\.trim\(\)\)/);
+});
+
+test('the address upsert PATCHes an existing client_locations row rather than duplicating it', () => {
+  const fn = extractFunction(TRACK1, 'async function upsertClientAddress(clientId, b) {');
+  assert.match(fn, /client_locations\?jobber_id=eq\.\$\{encodeURIComponent\(clientId\)\}.*select=jobber_id/);
+  assert.match(fn, /if \(rows\.length\)/);
+  assert.match(fn, /method: 'PATCH'/);
+});
+
+test('the address upsert creates a new client_locations row when there was none', () => {
+  const fn = extractFunction(TRACK1, "async function upsertClientAddress(clientId, b) {");
+  assert.match(fn, /method: 'POST'/);
+  assert.match(fn, /jobber_id: clientId/);
+});
+
+test('lat\\/lng are left for the geocoder, never guessed inline', () => {
+  const fn = extractFunction(TRACK1, 'async function upsertClientAddress(clientId, b) {');
+  assert.doesNotMatch(fn, /\blat\b\s*:/);
+  assert.doesNotMatch(fn, /\blng\b\s*:/);
 });
 
 test('the route stays POST-only', () => {
