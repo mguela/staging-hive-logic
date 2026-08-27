@@ -25,8 +25,16 @@ const DEFAULT_CONFIG = {
   apiBase: 'https://hivelogic-live.vercel.app',
   agentToken: null,
   employeeEmail: null,
-  heartbeatIntervalSec: 60,
-  screenshotEveryNHeartbeats: 5, // ~5 min at the default 60s heartbeat
+  // 2026-08-28: was 60 -- Chris wanted clock-in-to-consent and
+  // clock-out-to-stop-capturing to feel near-instant, not "up to a minute
+  // later." Screenshot cadence is unaffected: it's gated by its own
+  // elapsed-time check (lastScreenshotAt vs. the admin-configured
+  // screenshotIntervalMinutes, below), not by heartbeat count, so a faster
+  // heartbeat only means faster consent/status detection, not more
+  // frequent screenshots. It does mean ~12x more monitor_activity_samples
+  // rows per active hour -- trivial at this team's size, but worth knowing
+  // if the roster ever grows a lot.
+  heartbeatIntervalSec: 5,
 };
 
 const CONFIG_PATH = () => path.join(app.getPath('userData'), 'config.json');
