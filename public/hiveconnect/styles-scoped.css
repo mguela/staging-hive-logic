@@ -173,16 +173,19 @@ html[data-theme="dark"] :is(#hiveconnect-root, .hc-embed).mention { background: 
 :is(#hiveconnect-root, .hc-embed).rail-spacer { flex: 1; }
 :is(#hiveconnect-root, .hc-embed) .rail-btn,
 :is(#hiveconnect-root, .hc-embed).rail-btn {
+  appearance: none; -webkit-appearance: none; box-shadow: none; outline: none;
   width: 62px; border: none; background: none; cursor: pointer; color: #8ba4c4;
   display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 9px 0; border-radius: 13px;
   font-size: 10px; font-weight: 700; letter-spacing: .01em; transition: background .12s, color .12s;
 }
 :is(#hiveconnect-root, .hc-embed) .rail-btn .rail-ic,
 :is(#hiveconnect-root, .hc-embed).rail-btn .rail-ic { display: flex; align-items: center; justify-content: center; height: 24px; }
+:is(#hiveconnect-root, .hc-embed) .rail-btn .rail-ic img,
+:is(#hiveconnect-root, .hc-embed).rail-btn .rail-ic img { display: block; width: 22px; height: 22px; object-fit: contain; }
 :is(#hiveconnect-root, .hc-embed) .rail-btn:hover,
 :is(#hiveconnect-root, .hc-embed).rail-btn:hover { background: rgba(116,138,158,.16); color: #e6eefb; }
 :is(#hiveconnect-root, .hc-embed) .rail-btn.active,
-:is(#hiveconnect-root, .hc-embed).rail-btn.active { background: rgba(255,201,75,.13); color: #ffc94b; }
+:is(#hiveconnect-root, .hc-embed).rail-btn.active { background: none; color: #ffc94b; }
 :is(#hiveconnect-root, .hc-embed) .rail-btn.soon,
 :is(#hiveconnect-root, .hc-embed).rail-btn.soon { position: relative; opacity: .55; }
 :is(#hiveconnect-root, .hc-embed) .rail-btn.soon:hover,

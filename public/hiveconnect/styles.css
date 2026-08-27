@@ -129,13 +129,15 @@ button { font-family: inherit; cursor: pointer; }
 .rail-nav, .rail-bottom { display: flex; flex-direction: column; gap: 5px; width: 100%; align-items: center; }
 .rail-spacer { flex: 1; }
 .rail-btn {
+  appearance: none; -webkit-appearance: none; box-shadow: none; outline: none;
   width: 62px; border: none; background: none; cursor: pointer; color: #8ba4c4;
   display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 9px 0; border-radius: 13px;
   font-size: 10px; font-weight: 700; letter-spacing: .01em; transition: background .12s, color .12s;
 }
 .rail-btn .rail-ic { display: flex; align-items: center; justify-content: center; height: 24px; }
+.rail-btn .rail-ic img { display: block; width: 22px; height: 22px; object-fit: contain; }
 .rail-btn:hover { background: rgba(116,138,158,.16); color: #e6eefb; }
-.rail-btn.active { background: rgba(255,201,75,.13); color: #ffc94b; }
+.rail-btn.active { background: none; color: #ffc94b; }
 .rail-btn.soon { position: relative; opacity: .55; }
 .rail-btn.soon:hover { opacity: .8; }
 .rail-soon {
