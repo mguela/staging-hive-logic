@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Set up HiveLogic Monitor</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, Segoe UI, Montserrat, Arial, sans-serif;
+    background: #ffffff;
+    color: #161e2e;
+    padding: 28px 26px;
+  }
+  h1 { font-size: 17px; font-weight: 800; margin: 0 0 6px; }
+  p.sub { font-size: 12.5px; color: #5a6472; margin: 0 0 22px; line-height: 1.5; }
+  label { display: block; font-size: 11px; font-weight: 700; margin-bottom: 4px; color: #384152; }
+  input {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid #d7dce3;
+    border-radius: 8px;
+    font-size: 13px;
+    font-family: inherit;
+    margin-bottom: 16px;
+  }
+  input:focus { outline: none; border-color: #161e2e; }
+  button {
+    width: 100%;
+    padding: 11px 12px;
+    border: none;
+    border-radius: 8px;
+    background: #161e2e;
+    color: #fff;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+  }
+  button:disabled { opacity: .6; cursor: default; }
+  #error {
+    display: none;
+    background: #fdecec;
+    color: #a83232;
+    border-radius: 8px;
+    padding: 10px 12px;
+    font-size: 12px;
+    margin-bottom: 16px;
+    line-height: 1.4;
+  }
+  #unsupported {
+    display: none;
+    background: #fdecec;
+    color: #a83232;
+    border-radius: 8px;
+    padding: 10px 12px;
+    font-size: 12px;
+    margin-bottom: 16px;
+    line-height: 1.4;
+  }
+</style>
+</head>
+<body>
+  <h1>Set up HiveLogic Monitor</h1>
+  <p class="sub">Sign in to HiveLogic on the web, open this device's pairing code from there, and enter it below to link this computer to your account.</p>
+
+  <div id="unsupported">This operating system isn't supported yet (Windows and Mac only).</div>
+  <div id="error"></div>
+
+  <form id="pairing-form">
+    <label for="email">HiveLogic email</label>
+    <input id="email" type="email" autocomplete="username" required>
+
+    <label for="code">Pairing code</label>
+    <input id="code" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="000000" required>
+
+    <button id="submit-btn" type="submit">Pair this device</button>
+  </form>
+
+<script>
+(async function () {
+  var errorEl = document.getElementById('error');
+  var unsupportedEl = document.getElementById('unsupported');
+  var form = document.getElementById('pairing-form');
+  var submitBtn = document.getElementById('submit-btn');
+
+  function showError(msg) {
+    errorEl.textContent = msg;
+    errorEl.style.display = 'block';
+  }
+
+  var platform = null;
+  try { platform = await window.hlm.getPlatform(); } catch (e) { platform = null; }
+  if (!platform) {
+    unsupportedEl.style.display = 'block';
+    submitBtn.disabled = true;
+  }
+
+  form.addEventListener('submit', async function (ev) {
+    ev.preventDefault();
+    errorEl.style.display = 'none';
+    var email = document.getElementById('email').value.trim();
+    var code = document.getElementById('code').value.trim();
+    if (!email || !code) return;
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Pairing…';
+    try {
+      var result = await window.hlm.submitPairing(email, code);
+      if (!result || result.ok === false) {
+        showError((result && result.error) || 'Pairing failed -- check the code and try again.');
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Pair this device';
+        return;
+      }
+      submitBtn.textContent = 'Paired!';
+      window.hlm.pairingComplete();
+    } catch (e) {
+      showError('Something went wrong. Try again.');
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Pair this device';
+    }
+  });
+})();
+</script>
+</body>
+</html>

@@ -384,6 +384,9 @@ const PUBLIC_RESOURCE_PATHS = [
   // clears this gate on its own; see handleMonitorAppRules for the
   // requester.role check that still applies inside the handler either way).
   { path: '/api/track1', resource: 'monitor_app_rules', method: 'GET' },
+  // 2026-08-27: the tray's Quit handler POSTs this right before app.quit(),
+  // agent bearer token same as the four above -- see handleMonitorGoingOffline.
+  { path: '/api/track1', resource: 'monitor_going_offline', method: 'POST' },
 
   // Customer card payment link (2026-08-19). EIGHTH instance of the
   // half-shipped-guard class catalogued above, and the only one that costs
