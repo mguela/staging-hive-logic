@@ -19,7 +19,7 @@
  * monitor_my_status poll, so "is this person running current code" is a
  * question the database can answer. Do not hand-edit it -- run
  * `node scripts/stamp-page-build.mjs`. */
-var HL_PAGE_BUILD = '016913c37e1d8510';
+var HL_PAGE_BUILD = '8dc5ad6a6f0f0278';
 </script>
 <script>
 (function () { // HL_FETCH_DEDUPE_V1 — single wrapper: GET /api/ dedupe + 60s cache + write-invalidate
@@ -32147,24 +32147,36 @@ function hlWorkforceManualClockOutOpen(opts){
   };
 }
 
+// The business's clock-in/clock-out window is 7:00 AM-3:30 PM ET -- a
+// FIXED point in absolute time, not "each employee's own morning". Staff
+// who work outside America don't clock in at their own 7am; several work
+// nights local time specifically to cover this US window (Marvin, PH,
+// 2026-08-27: his 7:00 PM local IS the business's 7:00 AM ET). Both the
+// EOD prompt below and this stale-session detector anchor to ET for that
+// reason -- HL_WORKDAY_ANCHOR_TZ is the one place that fact lives.
+var HL_WORKDAY_ANCHOR_TZ = 'America/New_York';
+
 // Missed-clock-out detector (2026-08-25): the idle timeout and the
 // browser-close beacon already auto-correct MOST of these cases, but
 // neither fires if the machine loses power, sleeps without waking, or the
 // tab is killed outright -- an open session can then just sit there,
 // silently accumulating wrong hours, with no path to fix it except
 // someone noticing. If the active session's clock_in is from a PRIOR
-// calendar day, in the EMPLOYEE'S OWN timezone, by the time a page loads,
+// calendar day IN THE BUSINESS'S OWN ET DAY, by the time a page loads,
 // "clock out now" would badly overcount their hours -- so this is the one
 // prompt with no normal clock-out button at all, only the manual-time
 // form, required.
 //
-// This used to compare calendar dates in a hardcoded America/New_York
-// regardless of where the employee actually was (2026-08-26: an employee
-// in Manila is far enough ahead of ET that a completely normal
-// Manila-morning clock-in could already read as "yesterday" in ET, wrongly
-// forcing this mandatory flow mid-shift). Both sides of the comparison now
-// use the SAME zone -- the employee's own -- so "previous day" means their
-// previous day, not the business's.
+// 2026-08-26 first tried comparing dates in the employee's own local
+// timezone instead of a hardcoded ET, reasoning an employee far from ET
+// could read a normal local morning as "yesterday" in ET. That broke the
+// opposite way for anyone who works local-evening/night specifically to
+// cover the ET business day (see HL_WORKDAY_ANCHOR_TZ above): a totally
+// normal in-progress night shift crosses THEIR local midnight mid-shift,
+// which wrongly fired this mandatory flow while they were still on the
+// clock. The shift itself never crosses an ET calendar day, so ET is the
+// zone that actually tracks "the business's previous day" correctly for
+// everyone, including night-shift staff.
 function hlWorkforceArmStaleSessionPrompt(){
   var shown = false;
   setInterval(function(){
@@ -32173,15 +32185,14 @@ function hlWorkforceArmStaleSessionPrompt(){
     if (window.hlWorkforceIsOwner && window.hlWorkforceIsOwner()) return;
     var session = window.hlWorkforceActiveSession && window.hlWorkforceActiveSession();
     if (!session || !session.clock_in) return;
-    var myTz = hlWfMyTimezone();
     var parts;
     try {
-      parts = new Intl.DateTimeFormat('en-US', { timeZone: myTz, year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date(session.clock_in));
+      parts = new Intl.DateTimeFormat('en-US', { timeZone: HL_WORKDAY_ANCHOR_TZ, year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date(session.clock_in));
     } catch (e) { return; }
     var map = {}; parts.forEach(function(p){ map[p.type] = p.value; });
     var clockInDateStr = map.year + '-' + map.month + '-' + map.day;
-    var nowLocal = hlWfNowInTz(myTz);
-    if (!nowLocal.dateStr || clockInDateStr >= nowLocal.dateStr) return; // same day (or unknown) -- the normal EOD prompt covers that
+    var nowEt = hlWfNowInTz(HL_WORKDAY_ANCHOR_TZ);
+    if (!nowEt.dateStr || clockInDateStr >= nowEt.dateStr) return; // same ET day (or unknown) -- the normal EOD prompt covers that
     shown = true;
     hlWorkforceManualClockOutOpen({
       required: true,
@@ -32372,15 +32383,9 @@ function hlWorkforceArmIdleTimer(){
   }, 30000);
 }
 
-// The monitored workday (2026-08-25: "monitor the 7:00 am to 3:00 pm est
-// clock in and out") used to be hardcoded to America/New_York regardless of
-// where the employee actually was. Chris/the user, 2026-08-26: "make it
-// flexible so anyone who will be monitored regardless of the location and
-// timezone... the system must automatically detect my location and
-// timezone." One shared 7:00 AM-3:30 PM wall-clock schedule now applies in
-// EACH PERSON'S OWN local time -- hlWfNowInTz(tz) takes that zone as a
-// parameter instead of assuming it, mirroring the server's
-// workdayWindowInTz() (api/_lib/workday.js).
+// hlWfNowInTz(tz) takes a zone as a parameter, mirroring the server's
+// workdayWindowInTz() (api/_lib/workday.js) -- kept generic so it can tell
+// the time in ANY zone, not just the caller's own.
 function hlWfNowInTz(tz){
   try {
     var parts = new Intl.DateTimeFormat('en-US', {
@@ -32424,23 +32429,37 @@ function hlWfReportTimezone(sess){
   } catch (e) {}
 }
 
+// Converts an ET wall-clock time (e.g. the 3:30 PM end of the business's
+// workday) into the equivalent moment in some OTHER zone, purely for
+// display in the EOD prompt's own text. Works by comparing "now" told in
+// both zones at once and applying the difference -- avoids needing a real
+// tz-wall-clock-to-UTC conversion in the browser (Intl only goes the other
+// direction), and it's correct through DST on both sides since both
+// readings are taken live, right now.
+function hlWfEtTimeInTz(hour, minute, tz){
+  var nowEt = hlWfNowInTz(HL_WORKDAY_ANCHOR_TZ);
+  var nowLocal = hlWfNowInTz(tz);
+  var offsetMin = (nowLocal.hour * 60 + nowLocal.minute) - (nowEt.hour * 60 + nowEt.minute);
+  var total = (((hour * 60 + minute) + offsetMin) % 1440 + 1440) % 1440;
+  return new Date(0, 0, 0, Math.floor(total / 60), total % 60).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+}
+
 function hlWorkforceArmEodPrompt(){
   setInterval(function(){
     if (!window.hlWorkforceIsClockedIn || !window.hlWorkforceIsClockedIn()) return;
     if (!hlWfSettings || hlWfEodPromptShown) return;
     try { if (hlDismissedToday('wfEodDismissed', 'hlWfEodDismissed')) return; } catch (e) {}
-    // The 7:00 AM-3:30 PM workday is one shared wall-clock schedule,
-    // applied in the EMPLOYEE'S OWN timezone (2026-08-26) -- this used to
-    // compare against hlWfNowInET() unconditionally, which meant someone
-    // outside America/New_York got this prompt at the wrong wall-clock
-    // moment for them (hours early or late, depending which side of ET
-    // they're on), or not at the moment their own workday actually ends.
-    var nowLocal = hlWfNowInTz(hlWfMyTimezone());
+    // 7:00 AM-3:30 PM is the business's ET workday, fixed -- see
+    // HL_WORKDAY_ANCHOR_TZ. Gating compares ET wall-clock time so night-shift
+    // staff covering these hours from another timezone get the prompt at the
+    // right real moment; only the message TEXT is converted to the viewer's
+    // own local time (hlWfEtTimeInTz), so it reads naturally for them.
+    var nowEt = hlWfNowInTz(HL_WORKDAY_ANCHOR_TZ);
     var endHour = Number.isFinite(hlWfSettings.workdayEndHour) ? hlWfSettings.workdayEndHour : 15;
     var endMin = Number.isFinite(hlWfSettings.workdayEndMinute) ? hlWfSettings.workdayEndMinute : 30;
-    if (nowLocal.hour > endHour || (nowLocal.hour === endHour && nowLocal.minute >= endMin)) {
+    if (nowEt.hour > endHour || (nowEt.hour === endHour && nowEt.minute >= endMin)) {
       hlWfEodPromptShown = true;
-      var timeLabel = new Date(0,0,0,endHour,endMin).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+      var timeLabel = hlWfEtTimeInTz(endHour, endMin, hlWfMyTimezone());
       hlWorkforceModal(
         'End of the business day',
         "It's past " + timeLabel + ", our typical end of day. Want to clock out, or keep working?",
