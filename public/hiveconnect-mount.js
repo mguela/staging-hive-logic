@@ -234,7 +234,15 @@
       if (!window.msal) {
         await loadScript('https://cdn.jsdelivr.net/npm/@azure/msal-browser@2.38.4/lib/msal-browser.min.js');
       }
-      await loadScript('/hiveconnect/mail-engine.js');
+      // DEMO-ONLY on this branch: mail-engine.js replaces window.msal with a
+      // shim that routes Microsoft sign-in through /api/msmail, which has its
+      // own hardcoded CLIENT_ID (ff9bda24-...) independent of config.js -- so
+      // the config.js clientId swap above had no effect while this loaded.
+      // Skipping it here falls back to the plain client-side MSAL flow, which
+      // does read config.js. Do not merge this skip to main -- the real fix
+      // there is keeping api/msmail.js's CLIENT_ID in sync with config.js, not
+      // disabling the server engine (it exists to avoid 24h token expiry).
+      // await loadScript('/hiveconnect/mail-engine.js');
       // tasks.js and voip-panel.js were added to hiveconnect/index.html after
       // this mount's manual reload list was written (2026-07-19 Tasks extraction,
       // 2026-07-23/24 VoIP tab) -- both got stripped by the script-removal loop
