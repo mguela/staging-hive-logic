@@ -19,7 +19,7 @@
  * monitor_my_status poll, so "is this person running current code" is a
  * question the database can answer. Do not hand-edit it -- run
  * `node scripts/stamp-page-build.mjs`. */
-var HL_PAGE_BUILD = '1e812a90fc2c14ad';
+var HL_PAGE_BUILD = '7f7d6df73a2237e6';
 </script>
 <script>
 (function () { // HL_FETCH_DEDUPE_V1 — single wrapper: GET /api/ dedupe + 60s cache + write-invalidate
@@ -25084,7 +25084,7 @@ function efPayBlock(t){
     +'<div class="ef-tgl"><span>Accept bank payments</span><span class="nc-sw'+(EST.pb!==false?' on':'')+'" onclick="EST.pb=EST.pb===false?true:false;efRender()" style="margin-left:0"><span class="tr2"></span></span></div>'
     +'<div class="ef-tgl"><span>Require payment method on file</span><span class="nc-sw'+(EST.pf?' on':'')+'" onclick="EST.pf=!EST.pf;efRender()" style="margin-left:0"><span class="tr2"></span></span></div></div>';
   if(EST.payMode==='deposit'){
-    return '<div class="ef-trow"><span style="color:#59718a;font-weight:800">Deposit <input type="number" style="width:46px" value="'+EST.depPct+'" onchange="efVersionGuard();EST.depPct=+this.value||0;efRender()">%</span><span style="display:flex;gap:8px;align-items:center"><b>'+fm2(t.dep)+'</b><span style="cursor:pointer;color:var(--mut)" title="Remove" onclick="EST.payMode=\'none\';efRender()">&#128465;</span></span></div>'
+    return '<div class="ef-trow"><span style="color:#59718a;font-weight:800">Deposit <input type="number" data-hl-voice-input="off" style="width:46px" value="'+EST.depPct+'" onchange="efVersionGuard();EST.depPct=+this.value||0;efRender()">%</span><span style="display:flex;gap:8px;align-items:center"><b>'+fm2(t.dep)+'</b><span style="cursor:pointer;color:var(--mut)" title="Remove" onclick="EST.payMode=\'none\';efRender()">&#128465;</span></span></div>'
       +'<div class="ef-trow"><span class="lnk2" onclick="efPaySched()">&#8644; Switch to a payment schedule</span><span></span></div>'+setBox;
   }
   if(EST.payMode==='schedule'){
@@ -25099,7 +25099,7 @@ function efPayBlock(t){
       ws+='<option value="final"'+(r.when==='final'?' selected':'')+'>On final completion</option>';
       h+='<div class="ef-payrow"><input class="pl" value="'+r.label+'" onchange="efPayU('+i+',\'label\',this.value)">'
         +'<select onchange="efPayU('+i+',\'when\',this.value)">'+ws+'</select>'
-        +'<input class="pp" type="number" value="'+r.pct+'" onchange="efPayU('+i+',\'pct\',this.value)">'
+        +'<input class="pp" type="number" data-hl-voice-input="off" value="'+r.pct+'" onchange="efPayU('+i+',\'pct\',this.value)">'
         +'<span class="pa">'+fm2(t.total*(+r.pct||0)/100)+'</span>'
         +'<span class="est-rm" onclick="efPayRm('+i+')">&#10005;</span></div>';
       var p=po[i]||{mat:0,sub:0,lab:0,oh:0};
