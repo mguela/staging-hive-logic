@@ -19,7 +19,7 @@
  * monitor_my_status poll, so "is this person running current code" is a
  * question the database can answer. Do not hand-edit it -- run
  * `node scripts/stamp-page-build.mjs`. */
-var HL_PAGE_BUILD = 'bb49e5d06d5e4d32';
+var HL_PAGE_BUILD = 'f91ad458d96ef288';
 </script>
 <script>
 (function () { // HL_FETCH_DEDUPE_V1 — single wrapper: GET /api/ dedupe + 60s cache + write-invalidate
@@ -25375,6 +25375,7 @@ function nativeEstimateToRow(e){
     num:'#'+String(e.estimateNumber||e.id).replace('EST-',''),
     title:e.title||'Untitled estimate',
     client:e.clientName||'&#8212;',
+    address:e.clientAddress||null,
     status:stMap[e.displayStatus||e.lifecycleStatus]||'draft',
     amt:(e.totals&&e.totals.price)||0,
     createdAt:e.createdAt||null,
@@ -25636,7 +25637,8 @@ function efListTable(){
     var meta=EQ_STATUS_META[e.status]||{label:String(e.status||'unknown').toUpperCase(),cls:'dr'};
     h+='<tr class="er" data-key="'+esc(e.key)+'">'
      +'<td onclick="event.stopPropagation()"><input type="checkbox" class="efl-cb-real" '+(EQ_SELECTED[e.key]?'checked':'')+' onclick="event.stopPropagation();efRowToggle(\''+e.key+'\',this.checked)"></td>'
-     +'<td style="font-weight:800">'+esc(e.client)+(e.isLocal?' <span class="ef-vchip edit">local draft</span>':'')+'</td>'
+     +'<td style="font-weight:800">'+esc(e.client)+(e.isLocal?' <span class="ef-vchip edit">local draft</span>':'')
+     +(((e.prop||e.address)&&(e.prop||e.address)!=='&#8212;')?'<div style="font-weight:400;font-size:12px;color:var(--mut)">'+esc(e.prop||e.address)+'</div>':'')+'</td>'
      +'<td><div class="efl-num">'+esc(e.num)+'</div><div class="efl-ttl">'+esc(e.title)+'</div></td>'
      +'<td style="white-space:nowrap">'+(e.createdLabel?esc(e.createdLabel):eqRel(e.createdAt))+'</td>'
      +'<td><span class="ef-st '+meta.cls+'">&#9679; '+meta.label+'</span></td>'
@@ -34418,7 +34420,7 @@ function ajxRender() {
     return '<tr class="' + (j.closedAt ? 'ajx-closed' : '') + '" onclick="ajxOpen(\'' + String(j.id).replace(/'/g, "\\'") + '\')">'
       + '<td class="ajx-num">' + hlEsc(ref) + '</td>'
       + '<td>' + hlEsc(j.title || 'Untitled job') + '</td>'
-      + '<td>' + hlEsc(j.clientName || '—') + '</td>'
+      + '<td>' + hlEsc(j.clientName || '—') + (j.address ? '<div style="font-weight:400;font-size:12px;color:var(--mut)">' + hlEsc(j.address) + '</div>' : '') + '</td>'
       + '<td>' + hlEsc(j.divisionCode || '—') + '</td>'
       + '<td>' + statusPill + '</td>'
       + '<td>' + sched + '</td>'
@@ -34472,6 +34474,7 @@ function ajxOpen(jobId) {
       : '<b>' + hlEsc(String(j.status || 'unknown').replace(/_/g, ' ')) + '</b>';
     meta.innerHTML = ''
       + '<div><span>Client</span><b>' + hlEsc(j.clientName || '—') + '</b></div>'
+      + (j.address ? '<div><span>Address</span><b>' + hlEsc(j.address) + '</b></div>' : '')
       + '<div><span>Division</span><b>' + hlEsc(j.divisionCode || '—') + '</b></div>'
       + '<div><span>Status</span>' + statusHtml + '</div>'
       + '<div><span>Scheduled</span><b>' + (ajxIsScheduled(j) ? ajxDate(j.startAt) : 'Not booked') + '</b></div>'

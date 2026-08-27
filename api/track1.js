@@ -5036,9 +5036,9 @@ async function handleTmRateTypesList(req, res) {
   return res.status(200).json({ ok: true, resource: 'tm_rate_types_list', rateTypes: rows });
 }
 
-// jomell, 2026-08-27: "for the due date of the invoices, let's put a 7 day
-// deadline" -- every HiveLogic-created invoice gets a real due date, not a
-// blank one, when the caller doesn't supply their own.
+// jomell, 2026-08-27: invoices should carry a 7-day payment deadline --
+// every HiveLogic-created invoice gets a real due date, not a blank one,
+// when the caller doesn't supply their own.
 function defaultInvoiceDueDate() {
   return new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
 }
@@ -5320,9 +5320,9 @@ async function handleSendInvoiceEmail(req, res) {
   if (!client || !client.email) return res.status(422).json({ ok: false, error: 'No email on file for this client.' });
   if (!isEmailConfigured()) return res.status(422).json({ ok: false, error: 'Email is not configured for this deployment (RESEND_API_KEY unset).' });
 
-  // 2026-08-27, jomell: "whenever we send an invoice to a client, they
-  // should receive a pdf with the details of the invoice." Everything below
-  // is read fresh, real data for the attached PDF -- an address on file, the
+  // 2026-08-27, jomell: invoices emailed to a client should carry a real
+  // PDF of the invoice. Everything below is read fresh, real data for the
+  // attached PDF -- an address on file, the
   // job it's billing against, and the job's other real invoices for a true
   // running balance. Any of the three can legitimately be missing (no
   // address on file, no linked job, no other invoices yet); the PDF just
