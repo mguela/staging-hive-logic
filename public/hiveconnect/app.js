@@ -754,11 +754,14 @@ function buildDmRow(c) {
   li.appendChild(body);
 
   const actions = document.createElement('div'); actions.className = 'dm-row-actions';
-  const favOn = evMsgFavorites().includes(c.id);
-  const favBtn = document.createElement('button'); favBtn.type = 'button'; favBtn.className = 'dm-fav-btn' + (favOn ? ' on' : '');
-  favBtn.title = favOn ? 'Remove from favorites' : 'Add to favorites'; favBtn.textContent = favOn ? '★' : '☆';
-  favBtn.onclick = (e) => { e.stopPropagation(); evMsgToggleFavorite(c.id); renderMessagesPanel(); };
-  actions.appendChild(favBtn);
+  const selfDM = isSelfDM(c);
+  if (!selfDM) {
+    const favOn = evMsgFavorites().includes(c.id);
+    const favBtn = document.createElement('button'); favBtn.type = 'button'; favBtn.className = 'dm-fav-btn' + (favOn ? ' on' : '');
+    favBtn.title = favOn ? 'Remove from favorites' : 'Add to favorites'; favBtn.textContent = favOn ? '★' : '☆';
+    favBtn.onclick = (e) => { e.stopPropagation(); evMsgToggleFavorite(c.id); renderMessagesPanel(); };
+    actions.appendChild(favBtn);
+  }
   const hv = document.createElement('span'); hv.className = 'dm-hv'; hv.title = 'Start HiveVideo';
   hv.innerHTML = '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>';
   hv.onclick = async (e) => { e.stopPropagation(); if (currentChannelId !== c.id) await openChannel(c.id); joinHuddle(c.id); };
@@ -831,10 +834,14 @@ function renderMessagesPanel() {
   el.appendChild(filterRow);
   el.appendChild(headRow);
 
-  // Favourites
+  // Favourites -- Notes to Self always lives here, not togglable off the
+  // list (it has no star to unfavorite it with), so it can never end up
+  // favorited=false and hidden from both this section and Direct Messages.
   const favIds = evMsgFavorites();
-  const favChannels = favIds.map(id => channels.get(id)).filter(c => c && c.type === 'dm' && memberships.has(c.id) && dmOther(c))
+  const selfDM = evMsgDmChannels().find(isSelfDM);
+  const favChannels = favIds.map(id => channels.get(id)).filter(c => c && c.type === 'dm' && memberships.has(c.id) && dmOther(c) && !isSelfDM(c))
     .sort((a, b) => (dmLastActivity(b) || '').localeCompare(dmLastActivity(a) || ''));
+  if (selfDM) favChannels.unshift(selfDM);
   const fav = evMsgSection(MSG_ICON_STAR, 'FAVORITES', 'favorites', {});
   if (!favChannels.length) { const em = document.createElement('div'); em.className = 'ct-empty'; em.textContent = 'No favorites yet'; fav.ul.appendChild(em); }
   favChannels.forEach(c => fav.ul.appendChild(buildDmRow(c)));
@@ -2970,11 +2977,13 @@ function updateMainHeader() {
       if (group) { const grp = partStrip(dmOtherProfiles(c), 2); grp.classList.add('dm-grp-av'); t.appendChild(grp); }
       else t.appendChild(avatarWithPresence(dmOther(c)));
       const nm = document.createElement('span'); nm.textContent = channelLabel(c); t.appendChild(nm);
-      const favOn = evMsgFavorites().includes(c.id);
-      const favBtn = document.createElement('button'); favBtn.type = 'button'; favBtn.className = 'ch-title-fav' + (favOn ? ' on' : '');
-      favBtn.title = favOn ? 'Remove from favorites' : 'Add to favorites'; favBtn.textContent = favOn ? '★' : '☆';
-      favBtn.onclick = () => { evMsgToggleFavorite(c.id); updateMainHeader(); renderMessagesPanel(); };
-      t.appendChild(favBtn);
+      if (!isSelfDM(c)) {
+        const favOn = evMsgFavorites().includes(c.id);
+        const favBtn = document.createElement('button'); favBtn.type = 'button'; favBtn.className = 'ch-title-fav' + (favOn ? ' on' : '');
+        favBtn.title = favOn ? 'Remove from favorites' : 'Add to favorites'; favBtn.textContent = favOn ? '★' : '☆';
+        favBtn.onclick = () => { evMsgToggleFavorite(c.id); updateMainHeader(); renderMessagesPanel(); };
+        t.appendChild(favBtn);
+      }
       const other = (!group && !isSelfDM(c)) ? dmOther(c) : null;
       const isOnline = !!(other && onlineUsers.has(other.id));
       if (d) { d.textContent = isSelfDM(c) ? 'Only visible to you' : (isOnline ? '● Online' : ''); d.classList.toggle('ch-desc-online', isOnline); }
