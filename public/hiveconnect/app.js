@@ -108,6 +108,11 @@ function initials(p) {
 function fmtTime(ts) {
   return new Date(ts).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
 }
+function evMsgRowTime(ts) {
+  const d = new Date(ts), today = new Date();
+  if (d.toDateString() === today.toDateString()) return fmtTime(ts);
+  return d.toLocaleDateString([], { month: 'short', day: 'numeric' });
+}
 function fmtDay(ts) {
   const d = new Date(ts), today = new Date();
   const yest = new Date(today); yest.setDate(today.getDate() - 1);
@@ -368,7 +373,7 @@ async function loadEverything(myId) {
   // deactivated accounts can't use the app
   if (me && me.active === false) {
     await sb.auth.signOut();
-    document.body.innerHTML = '<div style="height:100vh;display:flex;align-items:center;justify-content:center;font-family:Montserrat,sans-serif;color:#8b92a8;background:#10151f">Your account has been deactivated. Contact an admin.</div>';
+    document.body.innerHTML = '<div style="height:100vh;display:flex;align-items:center;justify-content:center;font-family:Inter,sans-serif;color:#8b92a8;background:#10151f">Your account has been deactivated. Contact an admin.</div>';
     throw new Error('deactivated');
   }
 
@@ -393,6 +398,7 @@ async function loadEverything(myId) {
   subscribePresence();
   subscribeHuddles();
   subscribeChirp();
+  await evEnsureSelfNote();
 
   // Land on Messages, not whatever channel happens to sort first alphabetically
   // (previously fell back to the first non-DM channel when no #general channel
@@ -605,62 +611,261 @@ function renderSidebar() {
   if (typeof navTab !== 'undefined' && navTab === 'huddles') renderHuddlesPanel();
 }
 
-// ---- Messages panel: DMs organized into Team / Vendor / Client / External folders ----
-const MSG_ORDER = [['team', 'Team'], ['vendor', 'Vendor'], ['client', 'Client'], ['external', 'External']];
-const msgOpen = { Team: true, Vendor: true, Client: true, External: true };
-function dmContactType(otherId) {
-  const c = contactsData.find(x => x.profile_id === otherId);
-  if (c) return c.contact_type;
-  const p = profiles.get(otherId);
-  return (p && p.role === 'guest') ? 'external' : 'team';
+// ---- Messages panel: Favourites / Direct Messages / Teams ----
+const msgSecOpen = { favorites: true, dms: true, teams: true };
+let msgSearch = '';
+// Real, cross-device preference (same hcPref mechanism as Email's
+// favourites) -- not device-local, not fake. Toggled from each DM row's
+// hover-reveal star.
+function evMsgFavorites() { return hcPrefJson('hcMsgFavorites', 'hcMsgFavorites', []) || []; }
+function evMsgSetFavorites(ids) { hcPrefSet('hcMsgFavorites', 'hcMsgFavorites', ids); }
+function evMsgToggleFavorite(id) {
+  const cur = evMsgFavorites();
+  evMsgSetFavorites(cur.includes(id) ? cur.filter(x => x !== id) : cur.concat([id]));
 }
+// Real, cross-device preference — same hcPref mechanism as Email's favourites
+// and this panel's own folder order. Muting a conversation writes here from
+// its context menu; nothing writes to it yet.
+function evMsgMuted() { return hcPrefJson('hcMsgMuted', 'hcMsgMuted', []) || []; }
+function evMsgSetMuted(ids) { hcPrefSet('hcMsgMuted', 'hcMsgMuted', ids); }
+// Drafts are the one deliberate device-local exception (an in-flight unsent
+// draft belongs to the device until sent) — same localStorage-only pattern
+// as Email's hcEmailDraft: keys. Nothing writes hcMsgDraft: keys yet; this
+// reads whatever's there so the Drafts filter/count are honest from day one.
+function evMsgDraftChannelIds() {
+  try { return Object.keys(localStorage).filter(k => k.startsWith('hcMsgDraft:') && (localStorage.getItem(k) || '').trim()).map(k => k.slice('hcMsgDraft:'.length)); }
+  catch (e) { return []; }
+}
+function evMsgDmChannels() { return [...channels.values()].filter(c => c.type === 'dm' && memberships.has(c.id) && dmOther(c)); }
+// Session-local: which DMs have a message that failed to send just now.
+// Not a setting -- same "in-flight local draft" territory as hcMsgDraft:
+// (CLAUDE.md), cleared the moment a send to that channel succeeds again.
+const evMsgFailedChannels = new Set();
+// Last-message-per-conversation preview cache. One query per channel the
+// first time it's needed (same acceptable parallel-query pattern
+// loadUnreads() already uses for unread counts), then kept live by the
+// existing message-INSERT realtime hook -- no new subscription.
+const evMsgLastCache = new Map(); // channel_id -> {content, created_at, attachment_name} | null
+async function evMsgLoadPreviews(channelIds) {
+  const missing = channelIds.filter(id => !evMsgLastCache.has(id));
+  if (!missing.length) return;
+  await Promise.all(missing.map(async (cid) => {
+    try {
+      const { data } = await sb.from('messages').select('content,created_at,attachment_name')
+        .eq('channel_id', cid).is('thread_parent_id', null).is('deleted_at', null)
+        .order('created_at', { ascending: false }).limit(1);
+      evMsgLastCache.set(cid, (data && data[0]) || null);
+    } catch (e) { evMsgLastCache.set(cid, null); }
+  }));
+  renderMessagesPanel();
+}
+function evMsgPreviewText(last) {
+  if (!last) return '';
+  if (last.content && last.content.trim()) return last.content.trim();
+  if (last.attachment_name) return '📎 ' + last.attachment_name;
+  return '';
+}
+function evMsgMentionedChannelIds() {
+  const dmIds = new Set(evMsgDmChannels().map(c => c.id));
+  return new Set(notifications.filter(n => !n.read && n.kind === 'mention' && dmIds.has(n.channel_id)).map(n => n.channel_id));
+}
+function evMsgFilterCounts() {
+  const dms = evMsgDmChannels();
+  const muted = new Set(evMsgMuted());
+  const draftIds = new Set(evMsgDraftChannelIds());
+  const mentioned = evMsgMentionedChannelIds();
+  let unread = 0, drafts = 0, mutedCt = 0, failed = 0;
+  dms.forEach(c => {
+    if ((unreads.get(c.id) || 0) > 0) unread++;
+    if (draftIds.has(c.id)) drafts++;
+    if (muted.has(c.id)) mutedCt++;
+    if (evMsgFailedChannels.has(c.id)) failed++;
+  });
+  return { unread, mentions: mentioned.size, drafts, muted: mutedCt, failed };
+}
+let msgFilter = 'all';
+const MSG_FILTERS = [
+  ['all', 'All'],
+  ['unread', 'Unread'],
+  ['mentions', 'Unread @mentions'],
+  ['failed', 'Failed to send'],
+  ['drafts', 'Drafts'],
+  ['muted', 'Muted'],
+];
+function evMsgFilterMenu(e) {
+  const counts = evMsgFilterCounts();
+  const countFor = (key) => key === 'unread' ? counts.unread : key === 'mentions' ? counts.mentions : key === 'drafts' ? counts.drafts : key === 'muted' ? counts.muted : key === 'failed' ? counts.failed : null;
+  // "All", "Unread", "Mentions" and "Failed" already have their own
+  // quick-access pills above the list -- the dropdown covers the rest.
+  evMenu(e, MSG_FILTERS.filter(([key]) => !['all', 'unread', 'mentions', 'failed'].includes(key)).map(([key, label]) => {
+    const n = countFor(key);
+    const html = esc(label) + (n != null && n > 0 ? ' <span class="msg-filter-ct">' + n + '</span>' : '') + (msgFilter === key ? ' ✓' : '');
+    return [html, () => { msgFilter = key; renderMessagesPanel(); }];
+  }));
+}
+// One collapsible section (Favourites / Direct Messages / Teams), reusing
+// the exact same .ct-folder/.ct-head/.ct-chev/.ct-body classes and styling
+// already polished for the folder headers this session -- just with an
+// icon slot and an optional "+" added.
+function evMsgSection(iconHtml, label, key, opts) {
+  opts = opts || {};
+  const folder = document.createElement('div'); folder.className = 'ct-folder' + (msgSecOpen[key] ? '' : ' collapsed');
+  const head = document.createElement('button'); head.type = 'button'; head.className = 'ct-head';
+  const ic = document.createElement('span'); ic.className = 'ct-head-ic'; ic.innerHTML = iconHtml; head.appendChild(ic);
+  const fn = document.createElement('span'); fn.className = 'ct-fname'; fn.textContent = label; head.appendChild(fn);
+  if (opts.count) { const fc = document.createElement('span'); fc.className = 'ct-fcount'; fc.textContent = opts.count; head.appendChild(fc); }
+  if (opts.onAdd) {
+    const add = document.createElement('span'); add.className = 'msg-sec-add'; add.textContent = '+'; add.title = opts.addTitle || 'Add';
+    add.onclick = (e) => { e.stopPropagation(); opts.onAdd(e); };
+    head.appendChild(add);
+  }
+  const chev = document.createElement('span'); chev.className = 'ct-chev'; chev.textContent = '▾'; head.appendChild(chev);
+  head.onclick = () => { const col = folder.classList.toggle('collapsed'); msgSecOpen[key] = !col; };
+  folder.appendChild(head);
+  const body = document.createElement('div'); body.className = 'ct-body';
+  const ul = document.createElement('ul'); ul.className = 'channel-list';
+  body.appendChild(ul); folder.appendChild(body);
+  return { folder, ul };
+}
+function buildDmRow(c) {
+  const li = document.createElement('li');
+  li.className = 'dm-row';
+  li.dataset.name = dmDisplayName(c).toLowerCase();
+  li.dataset.id = c.id;
+  if (isGroupDM(c)) {
+    const grp = partStrip(dmOtherProfiles(c), 2); grp.classList.add('dm-grp-av'); li.appendChild(grp);
+  } else {
+    li.appendChild(avatarWithPresence(dmOther(c)));
+  }
+
+  const body = document.createElement('div'); body.className = 'dm-row-body';
+  const top = document.createElement('div'); top.className = 'dm-row-top';
+  const nm = document.createElement('span'); nm.className = 'cname'; nm.textContent = dmDisplayName(c); top.appendChild(nm);
+  const last = evMsgLastCache.get(c.id);
+  if (last && last.created_at) { const t = document.createElement('span'); t.className = 'dm-row-time'; t.textContent = evMsgRowTime(last.created_at); top.appendChild(t); }
+  body.appendChild(top);
+
+  const bottom = document.createElement('div'); bottom.className = 'dm-row-bottom';
+  const prev = document.createElement('span'); prev.className = 'dm-row-preview'; prev.textContent = evMsgPreviewText(last); bottom.appendChild(prev);
+  const unread = unreads.get(c.id) || 0;
+  if (c.id === currentChannelId) li.classList.add('active');
+  if (unread > 0) { li.classList.add('has-unread'); const b = document.createElement('span'); b.className = 'unread'; b.textContent = unread; bottom.appendChild(b); }
+  body.appendChild(bottom);
+  li.appendChild(body);
+
+  const actions = document.createElement('div'); actions.className = 'dm-row-actions';
+  const selfDM = isSelfDM(c);
+  if (!selfDM) {
+    const favOn = evMsgFavorites().includes(c.id);
+    const favBtn = document.createElement('button'); favBtn.type = 'button'; favBtn.className = 'dm-fav-btn' + (favOn ? ' on' : '');
+    favBtn.title = favOn ? 'Remove from favorites' : 'Add to favorites'; favBtn.textContent = favOn ? '★' : '☆';
+    favBtn.onclick = (e) => { e.stopPropagation(); evMsgToggleFavorite(c.id); renderMessagesPanel(); };
+    actions.appendChild(favBtn);
+  }
+  const hv = document.createElement('span'); hv.className = 'dm-hv'; hv.title = 'Start HiveVideo';
+  hv.innerHTML = '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>';
+  hv.onclick = async (e) => { e.stopPropagation(); if (currentChannelId !== c.id) await openChannel(c.id); joinHuddle(c.id); };
+  actions.appendChild(hv);
+  if (huddleParticipants(c.id).length) { const h = document.createElement('span'); h.className = 'huddle-badge'; h.textContent = '🎧'; actions.appendChild(h); }
+  li.appendChild(actions);
+
+  li.onclick = () => openChannel(c.id);
+  return li;
+}
+function dmDisplayName(c) { return isSelfDM(c) ? (me.display_name || 'Notes to Self') : isGroupDM(c) ? dmGroupLabel(c) : (dmOther(c) ? dmOther(c).display_name : 'DM'); }
+function applyMsgFilter() {
+  const q = (msgSearch || '').trim().toLowerCase();
+  const muted = new Set(evMsgMuted());
+  const draftIds = new Set(evMsgDraftChannelIds());
+  const mentioned = evMsgMentionedChannelIds();
+  document.querySelectorAll('#panel-messages .ct-folder').forEach(folder => {
+    let any = false;
+    folder.querySelectorAll('.channel-list li[data-name]').forEach(row => {
+      const id = row.dataset.id;
+      const nameMatch = !q || (row.dataset.name || '').includes(q);
+      let filterMatch = true;
+      if (msgFilter === 'unread') filterMatch = row.classList.contains('has-unread');
+      else if (msgFilter === 'mentions') filterMatch = mentioned.has(id);
+      else if (msgFilter === 'drafts') filterMatch = draftIds.has(id);
+      else if (msgFilter === 'muted') filterMatch = muted.has(id);
+      else if (msgFilter === 'failed') filterMatch = evMsgFailedChannels.has(id);
+      const match = nameMatch && filterMatch;
+      row.style.display = match ? '' : 'none'; if (match) any = true;
+    });
+    if (q || msgFilter !== 'all') { folder.classList.remove('collapsed'); folder.style.display = any ? '' : 'none'; }
+    else { folder.style.display = ''; }
+  });
+}
+const MSG_ICON_STAR = '★';
+const MSG_ICON_PERSON = '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a8 8 0 0116 0v1"/></svg>';
+const MSG_ICON_TEAMS = '<svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor"><circle cx="6" cy="6" r="2.6"/><circle cx="18" cy="6" r="2.6"/><circle cx="6" cy="18" r="2.6"/><circle cx="18" cy="18" r="2.6"/></svg>';
 function renderMessagesPanel() {
   const el = $('panel-messages'); if (!el) return; el.innerHTML = '';
-  const nb = document.createElement('button'); nb.className = 'new-channel-cta'; nb.id = 'new-dm-btn';
-  nb.innerHTML = '<span>＋</span> New message'; nb.onclick = (e) => { e.stopPropagation(); openCompose(); };
-  el.appendChild(nb);
-  const dms = [...channels.values()].filter(c => c.type === 'dm' && memberships.has(c.id) && dmOther(c));
-  const grouped = { team: [], vendor: [], client: [], external: [] };
-  dms.forEach(c => { const o = dmOther(c); const t = isGroupDM(c) ? 'team' : (o ? dmContactType(o.id) : 'team'); (grouped[t] || grouped.team).push(c); });
-  // Always show all four folders (Team / Vendor / Client / External) — even when empty.
-  applyStoredOrder(MSG_ORDER, x => x[0], 'hcMsgOrder').forEach(([type, label]) => {
-    const list = (grouped[type] || []).sort((a, b) => (dmLastActivity(b) || '').localeCompare(dmLastActivity(a) || ''));
-    const unreadTotal = list.reduce((s, c) => s + (unreads.get(c.id) || 0), 0);
-    const folder = document.createElement('div'); folder.className = 'ct-folder' + (msgOpen[label] ? '' : ' collapsed'); folder.dataset.type = type; folder.dataset.folder = label;
-    const head = document.createElement('button'); head.className = 'ct-head';
-    const grip = document.createElement('span'); grip.className = 'fold-grip'; grip.textContent = '⠿'; grip.setAttribute('aria-hidden', 'true'); head.appendChild(grip);
-    const chev = document.createElement('span'); chev.className = 'ct-chev'; chev.textContent = '▾'; head.appendChild(chev);
-    const fn = document.createElement('span'); fn.className = 'ct-fname'; fn.textContent = label; head.appendChild(fn);
-    const fc = document.createElement('span'); fc.className = 'ct-fcount'; fc.textContent = unreadTotal || ''; head.appendChild(fc);
-    head.onclick = () => { const col = folder.classList.toggle('collapsed'); msgOpen[label] = !col; };
-    folder.appendChild(head);
-    const body = document.createElement('div'); body.className = 'ct-body';
-    const ul = document.createElement('ul'); ul.className = 'channel-list';
-    if (!list.length) { const em = document.createElement('div'); em.className = 'ct-empty'; em.textContent = 'No conversations yet'; ul.appendChild(em); }
-    list.forEach(c => {
-      const li = document.createElement('li');
-      if (isGroupDM(c)) {
-        const grp = partStrip(dmOtherProfiles(c), 2); grp.classList.add('dm-grp-av'); li.appendChild(grp);
-        const nm = document.createElement('span'); nm.className = 'cname'; nm.textContent = dmGroupLabel(c); li.appendChild(nm);
-      } else {
-        const other = dmOther(c);
-        li.appendChild(avatarWithPresence(other));
-        const nm = document.createElement('span'); nm.className = 'cname'; nm.textContent = other ? other.display_name : 'DM'; li.appendChild(nm);
-      }
-      const unread = unreads.get(c.id) || 0;
-      if (c.id === currentChannelId) li.classList.add('active');
-      if (unread > 0) { li.classList.add('has-unread'); const b = document.createElement('span'); b.className = 'unread'; b.textContent = unread; li.appendChild(b); }
-      const hv = document.createElement('span'); hv.className = 'dm-hv'; hv.title = 'Start HiveVideo';
-      hv.innerHTML = '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>';
-      hv.onclick = async (e) => { e.stopPropagation(); if (currentChannelId !== c.id) await openChannel(c.id); joinHuddle(c.id); };
-      li.appendChild(hv);
-      if (huddleParticipants(c.id).length) { const h = document.createElement('span'); h.className = 'huddle-badge'; h.textContent = '🎧'; li.appendChild(h); }
-      li.onclick = () => openChannel(c.id);
-      ul.appendChild(li);
-    });
-    body.appendChild(ul); folder.appendChild(body); el.appendChild(folder);
-  });
-  enableFolderDrag(el, '.ct-head', '.ct-folder', 'type', 'hcMsgOrder');
+
+  // Search (own row, with a ⌘K hint) + All/Unread/Mentions/Favorites quick
+  // filter pills (own row below) + a chevron for the rest (Drafts/Muted).
+  const headRow = document.createElement('div'); headRow.className = 'msg-search-row';
+  const searchWrap = document.createElement('div'); searchWrap.className = 'msg-search';
+  searchWrap.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>';
+  const search = document.createElement('input'); search.id = 'msg-search'; search.type = 'text'; search.placeholder = 'Search conversations'; search.value = msgSearch;
+  search.addEventListener('input', () => { msgSearch = search.value; applyMsgFilter(); });
+  searchWrap.appendChild(search);
+  const kbd = document.createElement('span'); kbd.className = 'msg-search-kbd'; kbd.textContent = /Mac/i.test(navigator.platform || '') ? '⌘K' : 'Ctrl K';
+  searchWrap.appendChild(kbd);
+  headRow.appendChild(searchWrap);
+  el.appendChild(headRow);
+
+  const filterRow = document.createElement('div'); filterRow.className = 'msg-filter-row';
+  const counts = evMsgFilterCounts();
+  const quickPill = (key, label, count) => {
+    const b = document.createElement('button'); b.type = 'button'; b.className = 'msg-filter-quick' + (msgFilter === key ? ' active' : '');
+    b.textContent = label;
+    if (count) { const ct = document.createElement('span'); ct.className = 'msg-filter-ct'; ct.textContent = count; b.appendChild(ct); }
+    b.onclick = () => { msgFilter = key; renderMessagesPanel(); };
+    filterRow.appendChild(b);
+  };
+  quickPill('all', 'All', 0);
+  quickPill('unread', 'Unread', counts.unread);
+  quickPill('mentions', 'Mentions', counts.mentions);
+  quickPill('failed', 'Failed', counts.failed);
+  const filterChev = document.createElement('button'); filterChev.type = 'button'; filterChev.className = 'msg-filter-chev'; filterChev.innerHTML = '▾'; filterChev.title = 'More filters (Drafts, Muted)';
+  filterChev.onclick = (e) => evMsgFilterMenu(e);
+  filterRow.appendChild(filterChev);
+  el.appendChild(filterRow);
+  el.appendChild(headRow);
+
+  // Favourites -- Notes to Self always lives here, not togglable off the
+  // list (it has no star to unfavorite it with), so it can never end up
+  // favorited=false and hidden from both this section and Direct Messages.
+  const favIds = evMsgFavorites();
+  const selfDM = evMsgDmChannels().find(isSelfDM);
+  const favChannels = favIds.map(id => channels.get(id)).filter(c => c && c.type === 'dm' && memberships.has(c.id) && dmOther(c) && !isSelfDM(c))
+    .sort((a, b) => (dmLastActivity(b) || '').localeCompare(dmLastActivity(a) || ''));
+  if (selfDM) favChannels.unshift(selfDM);
+  const fav = evMsgSection(MSG_ICON_STAR, 'FAVORITES', 'favorites', {});
+  if (!favChannels.length) { const em = document.createElement('div'); em.className = 'ct-empty'; em.textContent = 'No favorites yet'; fav.ul.appendChild(em); }
+  favChannels.forEach(c => fav.ul.appendChild(buildDmRow(c)));
+  el.appendChild(fav.folder);
+
+  // Direct Messages (flat -- contact-type folders were dropped in favor of
+  // matching the reference's single-list structure). Notes to Self lives in
+  // Favorites only, not duplicated here.
+  const dms = evMsgDmChannels().filter(c => !isSelfDM(c)).sort((a, b) => (dmLastActivity(b) || '').localeCompare(dmLastActivity(a) || ''));
+  const dmSec = evMsgSection(MSG_ICON_PERSON, 'DIRECT MESSAGES', 'dms', { onAdd: () => openCompose(), addTitle: 'New message' });
+  if (!dms.length) { const em = document.createElement('div'); em.className = 'ct-empty'; em.textContent = 'No conversations yet'; dmSec.ul.appendChild(em); }
+  dms.forEach(c => dmSec.ul.appendChild(buildDmRow(c)));
+  el.appendChild(dmSec.folder);
+
+  // Teams -- the user's real non-DM channels (same data as the Channels
+  // tab), reusing channelRow() as-is rather than duplicating its logic.
+  const teamChannels = [...channels.values()].filter(c => c.type !== 'dm' && memberships.has(c.id) && !c.archived);
+  const teamSec = evMsgSection(MSG_ICON_TEAMS, 'TEAMS', 'teams', { onAdd: () => { const b = $('new-channel-btn'); if (b) b.click(); }, addTitle: 'New channel' });
+  if (!teamChannels.length) { const em = document.createElement('div'); em.className = 'ct-empty'; em.textContent = 'No teams yet'; teamSec.ul.appendChild(em); }
+  teamChannels.forEach(c => { const li = channelRow(c); li.dataset.name = (c.name || '').toLowerCase(); li.dataset.id = c.id; teamSec.ul.appendChild(li); });
+  el.appendChild(teamSec.folder);
+
+  applyMsgFilter();
+  evMsgLoadPreviews([...new Set([...favChannels, ...dms].map(c => c.id))]);
 }
 function hexA(hex, a) {
   const n = parseInt(hex.slice(1), 16);
@@ -678,8 +883,23 @@ function dmOther(channel) {
   return profiles.get(otherId);
 }
 
+// "Seen" read receipt -- no schema change: every DM member already has their
+// own channel_members.last_read_at row; "seen" is just the OTHER member's
+// copy being at/after the timestamp of my own last message in the channel.
+const dmOtherLastRead = new Map(); // dm channel_id -> other member's last_read_at | null
+async function evLoadOtherLastRead(channelId) {
+  const c = channels.get(channelId);
+  if (!c || c.type !== 'dm' || isGroupDM(c) || isSelfDM(c)) return;
+  const other = dmOther(c);
+  if (!other) return;
+  const { data } = await sb.from('channel_members').select('last_read_at')
+    .eq('channel_id', channelId).eq('user_id', other.id).single();
+  dmOtherLastRead.set(channelId, data ? data.last_read_at : null);
+  if (channelId === currentChannelId) renderMessages();
+}
+
 function channelLabel(c) {
-  if (c.type === 'dm') { if (isGroupDM(c)) return dmGroupLabel(c); const o = dmOther(c); return o ? o.display_name : 'DM'; }
+  if (c.type === 'dm') { if (isSelfDM(c)) return me.display_name || 'Notes to Self'; if (isGroupDM(c)) return dmGroupLabel(c); const o = dmOther(c); return o ? o.display_name : 'DM'; }
   return `${c.type === 'private' ? '🔒 ' : '#'}${c.name}`;
 }
 
@@ -691,6 +911,7 @@ async function openChannel(channelId) {
   // Opening a conversation IS the current activity → make sure the rail + header reflect it
   if (navTab === 'people' || navTab === 'huddles') setNavTab(c && c.type === 'dm' ? 'messages' : 'channels');
   else updateMainHeader();
+  if (c && c.type === 'dm') { msgMobileThreadOpen = true; evMsgUpdateMobileView(); }
   { const g = $('channel-settings-btn'); if (g) g.classList.toggle('hidden', !(c && c.type !== 'dm' && (me.role === 'owner' || me.role === 'admin'))); }
   messagesEl.innerHTML = '<div class="notif-empty">Loading…</div>';
 
@@ -717,6 +938,7 @@ async function openChannel(channelId) {
   refreshPinCount();
   $('pinned-panel').classList.add('hidden');
   renderHuddleUI();
+  evLoadOtherLastRead(channelId);
   composerInput.focus();
 }
 
@@ -759,6 +981,15 @@ function renderMessages() {
     messagesEl.appendChild(msgEl(m, grouped, false));
     lastAuthor = m.user_id; lastTs = new Date(m.created_at).getTime();
   }
+  // "Seen" -- only under my own most recent message, and only once the other
+  // DM member's last_read_at has caught up to it (real data, no schema change).
+  const myLast = [...msgs].reverse().find(m => m.user_id === me.id && !m.deleted_at);
+  const otherRead = dmOtherLastRead.get(currentChannelId);
+  if (myLast && otherRead && otherRead >= myLast.created_at) {
+    const seen = document.createElement('div'); seen.className = 'msg-seen';
+    seen.textContent = 'Seen ' + fmtTime(otherRead);
+    messagesEl.appendChild(seen);
+  }
   messagesEl.scrollTop = messagesEl.scrollHeight;
 }
 
@@ -777,7 +1008,7 @@ function msgEl(m, grouped, inThread) {
   const body = document.createElement('div'); body.className = 'msg-body';
   if (!grouped) {
     const head = document.createElement('div'); head.className = 'msg-head';
-    head.innerHTML = `<span class="msg-author"></span>${p && p.username === 'reina' ? '<span class="bot-badge">BOT</span>' : ''}<span class="msg-time">${fmtTime(m.created_at)}</span>`;
+    head.innerHTML = `<span class="msg-author"></span>${p && p.username === 'reina' ? '<span class="bot-badge">BOT</span>' : ''}`;
     head.querySelector('.msg-author').textContent = p ? p.display_name : 'Unknown';
     body.appendChild(head);
   }
@@ -844,7 +1075,16 @@ function msgEl(m, grouped, inThread) {
 
   div.appendChild(body);
 
-  // hover tools
+  if (grouped) {
+    const sp = document.createElement('div'); sp.className = 'time-col-spacer'; div.appendChild(sp);
+  } else {
+    const timeCol = document.createElement('div'); timeCol.className = 'msg-time-col';
+    timeCol.textContent = fmtTime(m.created_at);
+    div.appendChild(timeCol);
+  }
+
+  // hover tools -- React | Reply | Copy | More (Pin/Task/Edit/Delete folded
+  // into the More dropdown, same real actions as before, just consolidated).
   if (!m.deleted_at) {
     const tools = document.createElement('div'); tools.className = 'msg-tools';
     const btn = (label, title, fn) => {
@@ -853,22 +1093,25 @@ function msgEl(m, grouped, inThread) {
     };
     btn('😊', 'React', e => openEmojiPicker(e, m.id));
     if (!inThread) btn('💬', 'Reply in thread', () => openThread(m.id));
-    btn('📌', m.pinned_at ? 'Unpin' : 'Pin', () => togglePin(m));
-    btn('✅', 'Create task from this message', () => {
-      const ch = channels.get(m.channel_id);
-      const isDm = ch && ch.type === 'dm';
-      openTaskQuickCreateFromSource({
-        type: isDm ? 'message' : (inThread ? 'thread_reply' : 'channel_post'),
-        sourceMessageId: m.id, sourceChannelId: m.channel_id,
-        subject: isDm ? ('DM with ' + (profiles.get(m.user_id)?.display_name || 'someone')) : ('#' + (ch ? ch.name : 'channel')),
-        sender: profiles.get(m.user_id)?.display_name || profiles.get(m.user_id)?.username || '?',
-        preview: (m.content || '').slice(0, 200),
-      });
+    btn('📋', 'Copy', () => { navigator.clipboard.writeText(m.content || ''); railToast('Copied'); });
+    btn('⋯', 'More', e => {
+      const items = [
+        [m.pinned_at ? '📌 Unpin' : '📌 Pin', () => togglePin(m)],
+        ['✅ Create task from this message', () => {
+          const ch = channels.get(m.channel_id);
+          const isDm = ch && ch.type === 'dm';
+          openTaskQuickCreateFromSource({
+            type: isDm ? 'message' : (inThread ? 'thread_reply' : 'channel_post'),
+            sourceMessageId: m.id, sourceChannelId: m.channel_id,
+            subject: isDm ? ('DM with ' + (profiles.get(m.user_id)?.display_name || 'someone')) : ('#' + (ch ? ch.name : 'channel')),
+            sender: profiles.get(m.user_id)?.display_name || profiles.get(m.user_id)?.username || '?',
+            preview: (m.content || '').slice(0, 200),
+          });
+        }],
+      ];
+      if (m.user_id === me.id) items.push('---', ['✏️ Edit', () => startEdit(div, m)], ['🗑️ Delete', () => deleteMessage(m)]);
+      evMenu(e, items);
     });
-    if (m.user_id === me.id) {
-      btn('✏️', 'Edit', () => startEdit(div, m));
-      btn('🗑️', 'Delete', () => deleteMessage(m));
-    }
     div.appendChild(tools);
   }
   return div;
@@ -889,8 +1132,9 @@ async function sendMessage(content, threadParentId = null, attachment = null) {
   if (window.hlSfx) hlSfx.play('swoosh');
   content = (content || '').trim();
   if ((!content && !attachment) || !currentChannelId) return;
+  const channelId = currentChannelId;
   const row = {
-    channel_id: currentChannelId, user_id: me.id, content,
+    channel_id: channelId, user_id: me.id, content,
     thread_parent_id: threadParentId,
   };
   if (attachment) {
@@ -899,7 +1143,19 @@ async function sendMessage(content, threadParentId = null, attachment = null) {
     row.attachment_type = attachment.type;
   }
   const { error } = await sb.from('messages').insert(row);
-  if (error) console.error('send failed', error);
+  if (error) {
+    console.error('send failed', error);
+    evMsgFailedChannels.add(channelId);
+    // Same "unsent draft" territory as hcMsgDraft: (device-local, not a
+    // setting) -- the composer already cleared optimistically, so this is
+    // what keeps the text from just vanishing.
+    if (!threadParentId) { try { localStorage.setItem('hcMsgDraft:' + channelId, content); } catch (e) {} }
+    railToast("Message didn't send — check your connection");
+    if (navTab === 'messages') renderMessagesPanel();
+  } else {
+    evMsgFailedChannels.delete(channelId);
+    if (navTab === 'messages' && msgFilter === 'failed') renderMessagesPanel();
+  }
 }
 
 // ---------- Uploads ----------
@@ -1189,6 +1445,38 @@ function closeThread() { currentThreadId = null; threadPanel.classList.add('hidd
 $('thread-close').addEventListener('click', closeThread);
 
 // ---------- DMs ----------
+// "Notes to Self" -- a DM channel with yourself, for personal notes. Created
+// once per user and favorited by default (still just a real DM channel +
+// membership row + the same hcMsgFavorites list every other DM star uses --
+// nothing schema-special). The one-time hcPref flag is what makes it a
+// *default*, not a forced state: un-favoriting it later sticks.
+async function evEnsureSelfNote() {
+  if (hcPref('hcSelfNoteInit', 'hcSelfNoteInit', '')) return;
+  const key = [me.id, me.id].join(':');
+  let dm = [...channels.values()].find(c => c.dm_key === key);
+  if (!dm) {
+    const { data, error } = await sb.from('channels')
+      .insert({ type: 'dm', dm_key: key, created_by: me.id }).select().single();
+    if (error) {
+      const { data: existing } = await sb.from('channels').select('*').eq('dm_key', key).single();
+      dm = existing;
+    } else {
+      dm = data;
+      await sb.from('channel_members').insert([{ channel_id: dm.id, user_id: me.id }]);
+    }
+    if (dm) channels.set(dm.id, dm);
+  }
+  if (dm && !memberships.has(dm.id)) {
+    const { data: mem } = await sb.from('channel_members').select('*')
+      .eq('channel_id', dm.id).eq('user_id', me.id).single();
+    if (mem) memberships.set(dm.id, mem);
+  }
+  if (dm) {
+    const favs = evMsgFavorites();
+    if (!favs.includes(dm.id)) evMsgSetFavorites(favs.concat([dm.id]));
+  }
+  hcPrefSet('hcSelfNoteInit', 'hcSelfNoteInit', '1');
+}
 async function startDM(otherId) {
   const key = [me.id, otherId].sort().join(':');
   let dm = [...channels.values()].find(c => c.dm_key === key);
@@ -1252,7 +1540,15 @@ $('nc-create').addEventListener('click', async () => {
   restore();
   $('modal-backdrop').classList.add('hidden');
   renderSidebar();
+  // Opened from the Teams "+" while on the Messages tab -- that section
+  // wouldn't otherwise refresh, and the header stayed on generic "Messages"
+  // for a non-DM channel, so the new channel looked like nothing happened.
+  if (navTab === 'messages') renderMessagesPanel();
   openChannel(data.id);
+  // Straight into "add members" -- nobody else can be in a brand-new
+  // channel yet, private ones especially, so offer that immediately rather
+  // than leaving the creator to find channel settings on their own.
+  openChannelMembers(data.id);
 });
 
 // ---------- Notifications ----------
@@ -1307,6 +1603,7 @@ function subscribePresence() {
     const state = ch.presenceState();
     onlineUsers = new Set(Object.keys(state));
     renderSidebar();
+    updateMainHeader();
     // refresh the me-dot
     document.querySelector('.me-dot')?.classList.toggle('online', onlineUsers.has(me.id));
   }).subscribe(async status => {
@@ -1578,7 +1875,7 @@ function renderHuddleUI() {
   dot.classList.toggle('hidden', !live);
   if (iAmIn) label.textContent = 'In call';
   else if (live) label.textContent = `Join (${parts.length})`;
-  else label.textContent = isDM ? 'Call' : 'HiveVideo';
+  else label.textContent = 'HiveVideo';
   btn.title = iAmIn ? 'You are in this call' : live ? 'Join the active call' : (isDM ? 'Start a call' : 'Start HiveVideo');
 
   // in-channel banner (only when a huddle is live here and I'm NOT already in it)
@@ -2644,7 +2941,12 @@ function setNavTab(tab) {
   { const cv = $('calendar-view'); if (cv) cv.classList.toggle('hidden', tab !== 'calendar'); }
   { const chv = $('chirp-view'); if (chv) chv.classList.toggle('hidden', tab !== 'chirp'); }
   { const vv = $('voip-view'); if (vv) vv.classList.toggle('hidden', tab !== 'voip'); }
-  { const sb = document.querySelector('.sidebar'); if (sb) { sb.classList.toggle('sidebar-collapsed', tab === 'voip'); sb.classList.toggle('sidebar-email-theme', tab === 'email'); } }
+  { const sb = document.querySelector('.sidebar'); if (sb) {
+      sb.classList.toggle('sidebar-collapsed', tab === 'voip');
+      sb.classList.toggle('sidebar-messages-theme', tab === 'messages');
+      sb.classList.toggle('sidebar-email-theme', tab === 'email');
+    } }
+  { const mn = document.querySelector('.main'); if (mn) mn.classList.toggle('messages-workspace', tab === 'messages'); }
   // .email-view is now inset (top:12px) instead of covering .main edge-to-edge
   // like the other overlay views still do, so .main-header -- always present,
   // never otherwise hidden, same white background as the email toolbar --
@@ -2658,12 +2960,22 @@ function setNavTab(tab) {
   if (tab === 'calendar') openCalendarTab();
   if (tab === 'voip') openVoipTab();
   updateMainHeader();
+  evMsgUpdateMobileView();
 }
+
+// Mobile: show the conversation list OR the open thread, never both. Pure UI
+// flag -- independent of currentChannelId, so desktop is unaffected.
+let msgMobileThreadOpen = false;
+function evMsgUpdateMobileView() {
+  document.body.classList.toggle('msg-mobile-thread', navTab === 'messages' && msgMobileThreadOpen);
+}
+{ const bb = $('msg-back-btn'); if (bb) bb.onclick = () => { msgMobileThreadOpen = false; evMsgUpdateMobileView(); }; }
 
 // Main title bar reflects the CURRENT activity, not just the last channel.
 // Contacts / HiveVideo are section views; Channels / Messages show the open conversation.
 function updateMainHeader() {
   const t = $('channel-title'), d = $('channel-desc'); if (!t) return;
+  if (d) d.classList.remove('ch-desc-online');
   if (navTab === 'people') { t.textContent = 'Contacts'; if (d) d.textContent = 'Your contact directory'; return; }
   if (navTab === 'huddles') { t.textContent = 'HiveVideo'; if (d) d.textContent = 'Start or join a video call'; return; }
   if (navTab === 'chirp') { t.textContent = 'Chirp'; if (d) d.textContent = chirpClockedIn() ? 'Push-to-talk · on' : 'Push-to-talk · off'; return; }
@@ -2671,9 +2983,31 @@ function updateMainHeader() {
   if (navTab === 'tasks') { t.textContent = 'Tasks'; if (d) d.textContent = 'Who owns what, and by when'; return; }
   if (navTab === 'calendar') { t.textContent = 'Calendar'; if (d) d.textContent = 'Your Outlook calendar'; return; }
   const c = channels.get(currentChannelId);
+  const inDm = navTab === 'messages' && c && c.type === 'dm';
+  if (searchInput) searchInput.placeholder = inDm ? 'Search this conversation…' : 'Search messages…';
+  if (composerInput) composerInput.placeholder = inDm ? 'Type a message…' : 'Message';
   if (navTab === 'messages') {
     // Messages is about DMs — only echo the open thing if it's actually a DM.
-    if (c && c.type === 'dm') { t.textContent = channelLabel(c); if (d) d.textContent = ''; }
+    if (c && c.type === 'dm') {
+      t.innerHTML = '';
+      const group = isGroupDM(c);
+      if (group) { const grp = partStrip(dmOtherProfiles(c), 2); grp.classList.add('dm-grp-av'); t.appendChild(grp); }
+      else t.appendChild(avatarWithPresence(dmOther(c)));
+      const nm = document.createElement('span'); nm.textContent = channelLabel(c); t.appendChild(nm);
+      if (!isSelfDM(c)) {
+        const favOn = evMsgFavorites().includes(c.id);
+        const favBtn = document.createElement('button'); favBtn.type = 'button'; favBtn.className = 'ch-title-fav' + (favOn ? ' on' : '');
+        favBtn.title = favOn ? 'Remove from favorites' : 'Add to favorites'; favBtn.textContent = favOn ? '★' : '☆';
+        favBtn.onclick = () => { evMsgToggleFavorite(c.id); updateMainHeader(); renderMessagesPanel(); };
+        t.appendChild(favBtn);
+      }
+      const other = (!group && !isSelfDM(c)) ? dmOther(c) : null;
+      const isOnline = !!(other && onlineUsers.has(other.id));
+      if (d) { d.textContent = isSelfDM(c) ? 'Only visible to you' : (isOnline ? '● Online' : ''); d.classList.toggle('ch-desc-online', isOnline); }
+    }
+    // A Team channel opened from the Messages sidebar's own TEAMS section --
+    // same as the Channels tab below, not the generic "Messages" fallback.
+    else if (c) { t.textContent = channelLabel(c); if (d) d.textContent = c.description || ''; }
     else { t.textContent = 'Messages'; if (d) d.textContent = ''; }
     return;
   }
@@ -2681,7 +3015,51 @@ function updateMainHeader() {
   if (c && c.type !== 'dm') { t.textContent = channelLabel(c); if (d) d.textContent = c.description || ''; }
   else { t.textContent = 'Channels'; if (d) d.textContent = ''; }
 }
-document.querySelectorAll('.rail-btn[data-tab]').forEach(b => b.addEventListener('click', () => setNavTab(b.dataset.tab)));
+document.querySelectorAll('.rail-btn[data-tab]').forEach(b => b.addEventListener('click', () => {
+  if (b.dataset.tab === 'messages') msgMobileThreadOpen = false; // tapping the rail icon always lands on the list, not a stale open thread
+  setNavTab(b.dataset.tab);
+}));
+
+// ---- Sidebar resize (drag the divider between the sidebar and main content) ----
+// Real, cross-device preference (hcPref) -- same mechanism as every other
+// saved setting in this app, not a device-local hack.
+(function () {
+  const sidebar = document.querySelector('.sidebar');
+  const resizer = $('sidebar-resizer');
+  if (!sidebar || !resizer) return;
+  const MIN_W = 200, MAX_W = 460;
+  const saved = parseInt(hcPref('hcSidebarWidth', 'hcSidebarWidth', ''), 10);
+  if (saved && saved >= MIN_W && saved <= MAX_W) {
+    sidebar.style.width = saved + 'px'; sidebar.style.minWidth = saved + 'px';
+  }
+  let dragging = false, startX = 0, startW = 0;
+  resizer.addEventListener('mousedown', (e) => {
+    e.preventDefault();
+    dragging = true; startX = e.clientX; startW = sidebar.getBoundingClientRect().width;
+    sidebar.classList.add('resizing'); resizer.classList.add('dragging');
+    document.body.style.userSelect = 'none';
+  });
+  document.addEventListener('mousemove', (e) => {
+    if (!dragging) return;
+    const w = Math.min(MAX_W, Math.max(MIN_W, startW + (e.clientX - startX)));
+    sidebar.style.width = w + 'px'; sidebar.style.minWidth = w + 'px';
+  });
+  document.addEventListener('mouseup', () => {
+    if (!dragging) return;
+    dragging = false; sidebar.classList.remove('resizing'); resizer.classList.remove('dragging');
+    document.body.style.userSelect = '';
+    hcPrefSet('hcSidebarWidth', 'hcSidebarWidth', Math.round(sidebar.getBoundingClientRect().width));
+  });
+})();
+// Cmd/Ctrl+K -- focus the Messages sidebar search (the ⌘K hint chip next to
+// it advertises this), scoped to the Messages tab so it doesn't fight other
+// tabs' own shortcuts.
+window.addEventListener('keydown', (e) => {
+  if (navTab === 'messages' && (e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+    e.preventDefault();
+    const s = $('msg-search'); if (s) s.focus();
+  }
+});
 // placeholder rail buttons (Chirp, Email) — show a "coming soon" toast
 document.querySelectorAll('.rail-btn[data-soon]').forEach(b => b.addEventListener('click', () => railToast(b.dataset.soon)));
 let railToastT = null;
@@ -3396,6 +3774,7 @@ function createRecipientPicker(opts = {}) {
 function dmMemberIds(c) { return (c.dm_key || '').split(':').filter(Boolean); }
 function dmOtherProfiles(c) { return dmMemberIds(c).filter(id => id !== me.id).map(id => profiles.get(id)).filter(Boolean); }
 function isGroupDM(c) { return c && c.type === 'dm' && dmMemberIds(c).length > 2; }
+function isSelfDM(c) { const ids = c && c.type === 'dm' ? dmMemberIds(c) : []; return ids.length > 0 && ids.every(id => id === me.id); }
 function dmGroupLabel(c) {
   const names = dmOtherProfiles(c).map(p => (p.display_name || 'Someone').split(' ')[0]);
   if (!names.length) return 'Group';
@@ -3787,18 +4166,20 @@ searchInput.addEventListener('keydown', async e => {
   const q = searchInput.value.trim();
   if (q.length < 2) return;
   const panel = $('search-panel'), list = $('search-results');
+  const scopeChannel = channels.get(currentChannelId);
+  const scoped = navTab === 'messages' && scopeChannel && scopeChannel.type === 'dm';
   $('search-title').textContent = `Results for “${q}”`;
   list.innerHTML = '<div class="notif-empty">Searching…</div>';
   panel.classList.remove('hidden');
-  const { data } = await sb.from('messages')
+  let query = sb.from('messages')
     .select('*')
     .ilike('content', `%${q}%`)
-    .is('deleted_at', null)
-    .order('created_at', { ascending: false })
-    .limit(60);
+    .is('deleted_at', null);
+  if (scoped) query = query.eq('channel_id', currentChannelId);
+  const { data } = await query.order('created_at', { ascending: false }).limit(60);
   list.innerHTML = '';
   if (!data || !data.length) {
-    list.innerHTML = '<div class="notif-empty">No matches across your channels & history.</div>';
+    list.innerHTML = `<div class="notif-empty">No matches ${scoped ? 'in this conversation' : 'across your channels & history'}.</div>`;
     return;
   }
   $('search-title').textContent = `${data.length}${data.length === 60 ? '+' : ''} result${data.length === 1 ? '' : 's'} for “${q}”`;
@@ -4359,6 +4740,7 @@ function subscribeRealtime() {
         if (m.thread_parent_id === currentThreadId) renderThread();
         return;
       }
+      evMsgLastCache.set(m.channel_id, { content: m.content, created_at: m.created_at, attachment_name: m.attachment_name });
       if (isCurrent) {
         messagesCache.set(m.id, m);
         renderMessages();
@@ -4408,6 +4790,14 @@ function subscribeRealtime() {
       renderSidebar();
       // …then surface any live call there immediately (don't wait for the next presence sync).
       if (typeof updateIncomingCalls === 'function') updateIncomingCalls();
+    })
+    .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'channel_members' }, ({ new: m }) => {
+      // The other DM member reading my messages moves their last_read_at --
+      // that's what powers the real "Seen" indicator, no new subscription needed elsewhere.
+      if (m.user_id !== me.id && dmOtherLastRead.has(m.channel_id)) {
+        dmOtherLastRead.set(m.channel_id, m.last_read_at);
+        if (m.channel_id === currentChannelId) renderMessages();
+      }
     })
     .subscribe();
 

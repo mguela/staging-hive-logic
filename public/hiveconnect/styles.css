@@ -62,6 +62,7 @@ body {
 
 button { font-family: inherit; cursor: pointer; }
 .icon-btn {
+  appearance: none; -webkit-appearance: none; box-shadow: none;
   background: none; border: none; color: var(--mut);
   border-radius: 7px; padding: 4px 7px; font-size: 14px; line-height: 1;
   display: inline-flex; align-items: center; justify-content: center;
@@ -261,6 +262,12 @@ button { font-family: inherit; cursor: pointer; }
 .sidebar.sidebar-collapsed {
   width: 0; min-width: 0; overflow: hidden; border: none;
 }
+.sidebar.resizing, .sidebar.resizing + .sidebar-resizer + .main { transition: none; }
+.sidebar-resizer {
+  width: 5px; flex: none; cursor: col-resize; background: transparent;
+  position: relative; z-index: 5;
+}
+.sidebar-resizer:hover, .sidebar-resizer.dragging { background: var(--steel); }
 .sidebar-header {
   display: flex; align-items: center; justify-content: space-between;
   padding: 16px 14px 13px; border-bottom: 1px solid rgba(139, 164, 196, .16);
@@ -412,7 +419,9 @@ button { font-family: inherit; cursor: pointer; }
   padding: 14px 22px; border-bottom: 1px solid var(--line); background: var(--card);
   display: flex; align-items: center; justify-content: space-between;
 }
-.channel-title { font-weight: 800; font-size: 16px; letter-spacing: -.02em; color: var(--ink); }
+.channel-title { display: inline-flex; align-items: center; gap: 9px; font-weight: 800; font-size: 16px; letter-spacing: -.02em; color: var(--ink); }
+.main-header .channel-title .mini-avatar { width: 26px; height: 26px; font-size: 11px; }
+.main-header .channel-title .presence-dot { width: 11px; height: 11px; }
 .channel-desc { color: var(--mut); font-size: 11.5px; font-weight: 500; margin-top: 1px; }
 
 /* Search */
@@ -436,6 +445,7 @@ button { font-family: inherit; cursor: pointer; }
 
 /* Attachments */
 .attach-btn {
+  appearance: none; -webkit-appearance: none; box-shadow: none;
   background: none; border: none; color: var(--mut); border-radius: 8px;
   width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;
 }
@@ -467,17 +477,22 @@ button { font-family: inherit; cursor: pointer; }
   letter-spacing: .12em; text-transform: uppercase;
 }
 .day-divider::before, .day-divider::after { content: ''; flex: 1; height: 1px; background: var(--line); }
-.msg { display: flex; gap: 12px; padding: 5px 10px; border-radius: 10px; position: relative; }
-.msg:hover { background: var(--card); box-shadow: 0 1px 4px rgba(72, 79, 100, .07); }
+.msg { display: flex; align-items: flex-start; gap: 12px; padding: 5px 10px; border: none; border-radius: 10px; box-shadow: none; position: relative; }
+.msg:hover { background: var(--steel-bg); }
 .msg.grouped { margin-top: 0; }
-.msg:not(.grouped) { margin-top: 10px; }
-.msg .avatar { margin-top: 2px; }
+.msg:not(.grouped) { margin-top: 22px; }
+.msg .avatar { margin-top: 0; }
 .msg .avatar-spacer { width: 34px; flex-shrink: 0; }
+.msg-time-col { flex: none; width: 50px; padding-top: 3px; font-family: var(--sans); color: var(--mut); font-size: 10px; font-weight: 200; text-align: right; }
+.time-col-spacer { flex: none; width: 50px; }
 .msg-body { flex: 1; min-width: 0; }
 .msg-head { display: flex; align-items: baseline; gap: 8px; }
 .msg-author { font-weight: 800; font-size: 13.5px; color: var(--ink); }
-.msg-time { font-family: var(--mono); color: var(--mut); font-size: 10px; font-weight: 600; }
-.msg-content { font-size: 13.5px; font-weight: 500; line-height: 1.5; word-wrap: break-word; white-space: pre-wrap; color: var(--ink); }
+.msg-content {
+  display: inline-block; max-width: 72%; font-size: 13.5px; font-weight: 400; line-height: 1.5;
+  word-wrap: break-word; white-space: pre-wrap; color: var(--ink);
+  background: none; border: none; padding: 0; border-radius: 14px; margin-top: 3px;
+}
 .msg-content a { color: var(--steel-deep); font-weight: 700; text-decoration: none; }
 .msg-content a:hover { text-decoration: underline; }
 .msg-content code {
@@ -529,7 +544,7 @@ button { font-family: inherit; cursor: pointer; }
 /* Composer */
 .composer-wrap { padding: 8px 22px 16px; position: relative; background: transparent; }
 .composer {
-  display: flex; align-items: flex-end; gap: 8px; background: var(--card);
+  display: flex; align-items: center; gap: 8px; background: var(--card);
   border: 1.5px solid var(--line); border-radius: 12px; padding: 9px 10px 9px 14px;
   box-shadow: 0 2px 10px rgba(72, 79, 100, .06);
 }
@@ -538,7 +553,7 @@ button { font-family: inherit; cursor: pointer; }
   flex: 1; background: none; border: none; resize: none; color: var(--ink);
   font-family: var(--sans); font-size: 13.5px; font-weight: 500; line-height: 1.5; max-height: 160px; outline: none;
 }
-.composer textarea::placeholder { color: var(--mut); font-weight: 500; }
+.composer textarea::placeholder { color: var(--mut); font-weight: 500; opacity: .55; }
 .send-btn {
   background: var(--gold-grad); border: none; color: #3a2408; border-radius: 9px;
   width: 34px; height: 34px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;
@@ -546,10 +561,10 @@ button { font-family: inherit; cursor: pointer; }
 }
 .send-btn:hover { filter: brightness(1.05); }
 .composer-hint {
-  font-family: var(--mono); color: var(--mut); font-size: 8.5px; font-weight: 600;
+  font-family: var(--sans); color: var(--mut); font-size: 8.5px; font-weight: 200;
   letter-spacing: .06em; margin-top: 7px; padding-left: 4px; text-transform: uppercase;
 }
-.composer-hint code, .composer-hint b, .composer-hint i { font-family: var(--mono); font-style: normal; }
+.composer-hint code, .composer-hint b, .composer-hint i { font-family: var(--sans); font-weight: 200; font-style: normal; }
 
 /* Mention autocomplete */
 .mention-menu {
@@ -811,6 +826,7 @@ html[data-theme="dark"] .pin-flag { color: #f0c987; }
   display: grid; grid-template-columns: repeat(8, 34px); gap: 2px;
 }
 .emoji-picker button {
+  appearance: none; -webkit-appearance: none; box-shadow: none;
   background: none; border: none; font-size: 19px; border-radius: 7px;
   width: 34px; height: 34px;
 }
@@ -841,9 +857,10 @@ html[data-theme="dark"] .pin-flag { color: #f0c987; }
 /* ==================== HUDDLES ==================== */
 /* Header "Huddle" button */
 .huddle-btn {
+  appearance: none; -webkit-appearance: none; box-shadow: none;
   display: inline-flex; align-items: center; gap: 6px;
-  padding: 6px 12px; border-radius: 99px; cursor: pointer;
-  background: var(--steel-bg); border: 1.5px solid var(--line);
+  padding: 6px 12px; border-radius: 9px; cursor: pointer;
+  background: none; border: 1.5px solid var(--line);
   color: var(--steel-deep); font-family: var(--sans);
   font-weight: 700; font-size: 12px; letter-spacing: -.01em;
   transition: background .14s, color .14s, border-color .14s, box-shadow .14s;
@@ -1326,6 +1343,182 @@ html[data-theme="dark"] .huddle-banner {
 .hdi-link { background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.12); border-radius: 10px; padding: 9px 10px; margin-bottom: 8px; }
 .hdi-link-top { font-size: 11.5px; font-weight: 700; color: #eaf1fb; margin-bottom: 5px; }
 .hdi-link-url { font-size: 10.5px; color: #9fb4cf; word-break: break-all; background: rgba(0,0,0,.25); border-radius: 6px; padding: 5px 7px; margin-bottom: 7px; font-family: var(--mono); }
+
+/* ==================== MESSAGES SIDEBAR — light floating-card format ====================
+   Same technique as the Email tab: the sidebar is normally a fixed dark
+   navy rail (var(--rail)) regardless of theme; when the Messages tab is
+   active we flip it to a light floating card instead, matching Email's
+   design. Toggled by setNavTab() adding .sidebar-messages-theme. */
+/* Enterprise-blue palette, scoped to the Messages workspace only (the
+   sidebar while .sidebar-messages-theme is on, and .main while
+   .messages-workspace is on) -- deliberately NOT on :root, so it never
+   leaks into Email/Channels/Contacts/etc., which keep the app's existing
+   gold/steel tokens. */
+.sidebar.sidebar-messages-theme, .main.messages-workspace {
+  --msg-blue: #2563EB; --msg-bg2: #F8FAFC; --msg-selected: #EFF6FF;
+  --msg-border: #E2E8F0; --msg-ink: #1E293B; --msg-mut: #64748B; --msg-online: #10B981;
+}
+.sidebar.sidebar-messages-theme { background: var(--card); border-radius: 15px; overflow: hidden; margin: 12px; }
+.sidebar.sidebar-messages-theme .sidebar-header { background: var(--card); border-bottom: 1px solid var(--line); }
+.sidebar.sidebar-messages-theme #panel-messages { padding: 30px 16px; }
+#panel-messages button { appearance: none; -webkit-appearance: none; box-shadow: none; }
+.sidebar.sidebar-messages-theme .sidebar-title { color: var(--ink); }
+.sidebar.sidebar-messages-theme .icon-btn { color: var(--mut); }
+.sidebar.sidebar-messages-theme .icon-btn:hover { background: var(--steel-bg); color: var(--ink); }
+.sidebar.sidebar-messages-theme .new-channel-cta { background: none; border-color: var(--line); color: var(--steel-deep); }
+.sidebar.sidebar-messages-theme .new-channel-cta:hover { background: var(--steel-bg); color: var(--ink); border-color: var(--steel); }
+.sidebar.sidebar-messages-theme .ct-head { color: var(--ink); font-weight: 600; }
+.sidebar.sidebar-messages-theme .ct-head:hover { background: var(--steel-bg); }
+.sidebar.sidebar-messages-theme .ct-chev { color: var(--mut); }
+.sidebar.sidebar-messages-theme .ct-fcount { color: var(--steel-deep); background: var(--steel-bg); }
+.sidebar.sidebar-messages-theme .ct-empty { color: var(--mut); }
+.sidebar.sidebar-messages-theme .ct-folder { margin-bottom: 14px; }
+.sidebar.sidebar-messages-theme .channel-list li { color: var(--ink); font-weight: 400; }
+.sidebar.sidebar-messages-theme .channel-list li:hover { background: var(--steel-bg); color: var(--ink); }
+.sidebar.sidebar-messages-theme .channel-list li.active {
+  background: var(--msg-selected); color: var(--msg-blue); font-weight: 700;
+  border: none; border-radius: 10px; padding: 6px 10px; box-shadow: none;
+}
+.sidebar.sidebar-messages-theme .channel-list li .unread { background: var(--msg-blue); color: #fff; }
+.sidebar.sidebar-messages-theme .presence-dot { border-color: var(--card); }
+.msg-search-row { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+.msg-search { display: flex; align-items: center; gap: 7px; height: 40px; box-sizing: border-box;
+  background: var(--msg-bg2); border: 1px solid var(--msg-border); border-radius: 8px;
+  padding: 0 11px; color: var(--msg-mut); flex: 2 1 0; min-width: 0; }
+.msg-search svg { flex: none; }
+.msg-search input { flex: 1; min-width: 0; border: none; background: none; outline: none; font-family: var(--sans); font-size: 12.5px; color: var(--msg-ink); }
+.msg-search input::placeholder { color: var(--msg-mut); }
+.msg-search-kbd { flex: none; font-family: var(--mono); font-size: 9.5px; font-weight: 700; color: var(--msg-mut);
+  background: var(--card); border: 1px solid var(--msg-border); border-radius: 4px; padding: 1px 5px; }
+.msg-filter-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-bottom: 14px; }
+.msg-filter-quick { appearance: none; -webkit-appearance: none; box-shadow: none; background: none; border: none;
+  font-family: var(--sans); font-size: 11.5px; font-weight: 600; letter-spacing: 0; text-transform: none;
+  color: var(--msg-mut); cursor: pointer; padding: 5px 10px; border-radius: 999px; display: inline-flex; align-items: center; gap: 5px; }
+.msg-filter-quick:hover { background: var(--msg-bg2); color: var(--msg-ink); }
+.msg-filter-quick.active { background: var(--msg-selected); color: var(--msg-blue); }
+.msg-filter-quick .msg-filter-ct { background: var(--msg-blue); color: #fff; font-size: 9.5px; font-weight: 800;
+  border-radius: 999px; padding: 1px 6px; min-width: 15px; text-align: center; }
+.msg-filter-chev { appearance: none; -webkit-appearance: none; box-shadow: none; background: none; border: none;
+  color: var(--mut); cursor: pointer; font-size: 10px; padding: 2px; }
+.msg-filter-chev:hover { color: var(--ink); }
+.msg-filter-ct { color: var(--steel-deep); font-weight: 800; }
+.ct-head-ic { flex: none; width: 15px; display: flex; align-items: center; justify-content: center; color: var(--mut); font-size: 12px; }
+.ct-head-ic svg { display: block; }
+.msg-sec-add { flex: none; font-size: 13px; font-weight: 800; line-height: 1; color: var(--mut); cursor: pointer; padding: 3px 5px; border-radius: 5px; }
+.msg-sec-add:hover { background: var(--steel-bg); color: var(--ink); }
+.dm-fav-btn { appearance: none; -webkit-appearance: none; box-shadow: none; background: none; border: none;
+  flex: none; font-size: 12px; color: var(--mut); cursor: pointer; padding: 2px; opacity: 0; transition: opacity .12s; }
+.channel-list li:hover .dm-fav-btn, .dm-fav-btn.on { opacity: 1; }
+.dm-fav-btn.on { color: var(--gold); }
+/* DM row: two-line layout (name+time on top, preview+unread below), with
+   fav/HiveVideo actions in their own column so they don't disturb it. */
+.channel-list li.dm-row { align-items: flex-start; padding: 7px 8px; gap: 10px; }
+.channel-list li.dm-row.active { padding: 7px 8px; }
+.dm-row-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.dm-row-top { display: flex; align-items: baseline; gap: 8px; }
+.dm-row-top .cname { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dm-row-time { flex: none; font-size: 10.5px; font-weight: 400; color: var(--msg-mut); }
+.dm-row-bottom { display: flex; align-items: center; gap: 8px; min-height: 15px; }
+.dm-row-preview { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11.5px; font-weight: 400; color: var(--msg-mut); }
+.dm-row.has-unread .dm-row-preview { color: var(--msg-ink); font-weight: 600; }
+.dm-row-actions { display: flex; align-items: center; gap: 2px; flex: none; align-self: center; }
+/* Give the main content area the same floating-card margin as the Messages
+   sidebar (12px, 0 on the left since the sidebar's own right margin already
+   makes that gap), so both columns float as matching cards. */
+.sidebar.sidebar-messages-theme ~ .main { margin: 12px 12px 12px 0; border-radius: 15px; overflow: hidden; background: var(--card); }
+
+/* Messages chat header -- same enterprise-blue tokens as the sidebar. */
+.main.messages-workspace .main-header { background: var(--card); border-bottom: 1px solid var(--msg-border); }
+.main.messages-workspace .channel-title { color: var(--msg-ink); }
+.main.messages-workspace .channel-desc { color: var(--msg-mut); }
+.main.messages-workspace .channel-desc.ch-desc-online { color: var(--msg-online); font-weight: 600; }
+.main.messages-workspace .ch-title-fav { appearance: none; -webkit-appearance: none; box-shadow: none; background: none; border: none;
+  font-size: 15px; color: var(--msg-mut); cursor: pointer; padding: 2px; line-height: 1; }
+.main.messages-workspace .ch-title-fav:hover { color: var(--gold); }
+.main.messages-workspace .ch-title-fav.on { color: var(--gold); }
+.main.messages-workspace .search-box { background: var(--msg-bg2); border-color: var(--msg-border); }
+.main.messages-workspace .search-box:focus-within { border-color: var(--msg-blue); }
+.main.messages-workspace .icon-btn, .main.messages-workspace .pin-header-btn { color: var(--msg-mut); }
+.main.messages-workspace .icon-btn:hover, .main.messages-workspace .pin-header-btn:hover { background: var(--msg-bg2); color: var(--msg-ink); }
+.main.messages-workspace .huddle-btn { border-color: var(--msg-border); color: var(--msg-blue); }
+.main.messages-workspace .huddle-btn:hover { background: var(--msg-selected); color: var(--msg-blue); border-color: var(--msg-blue); }
+
+/* Thread panel -- #thread-panel is a sibling of .main, not a child, so it
+   needs the same sibling-selector scoping used for the sidebar/resizer
+   above (Channels tab's own thread panel is untouched). White conversation
+   background (was --canvas, the page's gray), header padding matching the
+   main chat header, and message-area padding matching the Messages
+   sidebar's own content padding (#panel-messages: 30px 16px). */
+.main.messages-workspace ~ .thread-panel { background: var(--card); border-left: none; }
+.main.messages-workspace ~ .thread-panel .thread-header { padding: 14px 22px; }
+.main.messages-workspace ~ .thread-panel .thread-messages { padding: 30px 16px; }
+/* Same floating-card spacing as the sidebar/main columns (margin: 12px,
+   rounded corners) -- only above the width where the panel switches to a
+   full-bleed mobile overlay, so that behavior stays untouched. */
+@media (min-width: 901px) {
+  .main.messages-workspace ~ .thread-panel { margin: 12px 12px 12px 0; border-radius: 15px; overflow: hidden; }
+}
+
+/* Message thread -- bubble + pill day-divider, scoped so the Channels tab
+   (same msgEl()/.msg markup, different .main class) keeps its own look. */
+.main.messages-workspace .day-divider {
+  display: block; width: fit-content; margin: 18px auto 10px;
+  background: var(--msg-bg2); border: 1px solid var(--msg-border); border-radius: 999px;
+  padding: 4px 14px; text-transform: none; letter-spacing: 0; font-family: var(--sans);
+  font-weight: 600; font-size: 11px; color: var(--msg-mut);
+}
+.main.messages-workspace .day-divider::before, .main.messages-workspace .day-divider::after { content: none; }
+.main.messages-workspace .msg {
+  margin-left: -22px; margin-right: -22px; padding-left: 22px; padding-right: 22px; border-radius: 0;
+}
+.main.messages-workspace .msg:hover { background: var(--msg-bg2); }
+.main.messages-workspace .msg-tools { right: 36px; }
+.main.messages-workspace .msg-author { color: var(--msg-ink); }
+.main.messages-workspace .msg-time-col { color: var(--msg-mut); }
+.main.messages-workspace .msg-content {
+  background: var(--msg-bg2); border: 1px solid var(--msg-border); border-radius: 8px;
+  padding: 8px 12px; max-width: 640px; color: var(--msg-ink); margin-top: 3px;
+}
+.main.messages-workspace .msg-content code { background: var(--card); border-color: var(--msg-border); }
+.main.messages-workspace .msg-seen {
+  text-align: right; font-family: var(--sans); font-size: 10.5px; font-weight: 500;
+  color: var(--msg-mut); padding: 2px 20px 6px 0;
+}
+.main.messages-workspace .msg-tools { background: var(--card); border-color: var(--msg-border); }
+.main.messages-workspace .msg-tools button:hover { background: var(--msg-bg2); }
+.main.messages-workspace .reaction { background: var(--msg-bg2); border-color: var(--msg-border); color: var(--msg-mut); }
+.main.messages-workspace .reaction:hover { border-color: var(--msg-blue); }
+.main.messages-workspace .reaction.mine { background: var(--msg-selected); border-color: var(--msg-blue); color: var(--msg-blue); }
+.main.messages-workspace .attach-img { max-width: 420px; max-height: 300px; object-fit: cover; border-radius: 10px; border-color: var(--msg-border); }
+.main.messages-workspace .file-chip { background: var(--msg-bg2); border-color: var(--msg-border); color: var(--msg-ink); }
+.main.messages-workspace .file-chip:hover { border-color: var(--msg-blue); }
+.main.messages-workspace .composer { background: #fff; border-color: var(--msg-border); border-radius: 12px; min-height: 52px; box-shadow: none; }
+.main.messages-workspace .composer:focus-within { border-color: var(--msg-blue); }
+.main.messages-workspace .composer textarea { color: var(--msg-ink); }
+.main.messages-workspace .composer textarea::placeholder { color: var(--msg-mut); }
+.main.messages-workspace .attach-btn:hover { background: var(--msg-bg2); color: var(--msg-blue); }
+.main.messages-workspace .send-btn { background: var(--msg-blue); color: #fff; box-shadow: none; }
+.main.messages-workspace .composer-hint { color: var(--msg-mut); }
+
+/* Mobile: list OR thread, never both -- #msg-back-btn returns to the list.
+   body.msg-mobile-thread is a pure UI flag (openChannel()/setNavTab()),
+   independent of which conversation is actually open. */
+#msg-back-btn {
+  display: none; appearance: none; -webkit-appearance: none; box-shadow: none;
+  background: none; border: none; color: var(--msg-blue, var(--steel-deep));
+  width: 32px; height: 32px; border-radius: 8px; align-items: center; justify-content: center;
+  flex: none; cursor: pointer;
+}
+#msg-back-btn:hover { background: var(--msg-bg2, var(--steel-bg)); }
+@media (max-width: 760px) {
+  .sidebar.sidebar-messages-theme ~ #sidebar-resizer { display: none; }
+  .sidebar.sidebar-messages-theme { width: 100% !important; min-width: 0 !important; margin: 0; border-radius: 0; }
+  .sidebar.sidebar-messages-theme ~ .main.messages-workspace { margin: 0; border-radius: 0; }
+  body:not(.msg-mobile-thread) .sidebar.sidebar-messages-theme ~ .main.messages-workspace { display: none; }
+  body.msg-mobile-thread .sidebar.sidebar-messages-theme { display: none; }
+  body.msg-mobile-thread #msg-back-btn { display: flex; }
+  body.msg-mobile-thread .main.messages-workspace .main-header { justify-content: flex-start; gap: 10px; }
+}
 
 /* ==================== EMAIL APP ==================== */
 /* sidebar: mailbox switcher + folders */
@@ -1925,13 +2118,21 @@ html[data-theme="dark"] .chirp-folderhead { background: #1e2940; }
 .ev-loadmore { display: block; width: calc(100% - 16px); margin: 10px 8px 14px; padding: 10px; border-radius: 9px; border: 1px solid var(--line); background: var(--steel-bg); color: var(--ink); font-weight: 800; font-size: 12px; cursor: pointer; }
 .ev-loadmore:hover { border-color: var(--steel); }
 .ev-loadmore:disabled { opacity: .6; cursor: default; }
-#hc-back-btn { appearance: none; -webkit-appearance: none; width: 34px; height: 34px; min-width: 34px; border-radius: 9px; border: none; background: none; box-shadow: none; color: var(--gold); font-size: 18px; font-weight: 900; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+#hc-back-btn {
+  appearance: none; -webkit-appearance: none; width: 34px; height: 34px; min-width: 34px;
+  border-radius: 9px; border: none; background: none; box-shadow: none; color: var(--gold);
+  font-size: 18px; font-weight: 900; display: flex; align-items: center; justify-content: center; cursor: pointer;
+}
 #hc-back-btn:hover { background: rgba(255,201,75,.16); }
+.sidebar.sidebar-messages-theme #hc-back-btn { color: var(--steel-deep); }
+.sidebar.sidebar-messages-theme #hc-back-btn:hover { background: var(--steel-bg); }
 .sidebar.sidebar-email-theme #hc-back-btn { color: var(--steel-deep); }
 .sidebar.sidebar-email-theme #hc-back-btn:hover { background: var(--steel-bg); }
 #bell-btn { appearance: none; -webkit-appearance: none; width: 34px; height: 34px; min-width: 34px; border-radius: 9px; border: none; background: none; box-shadow: none; color: rgba(255,255,255,.85); display: flex; align-items: center; justify-content: center; cursor: pointer; }
 #bell-btn:hover { background: rgba(255,255,255,.16); color: #fff; }
 #bell-btn svg { width: 17px; height: 17px; }
+.sidebar.sidebar-messages-theme #bell-btn { color: var(--mut); }
+.sidebar.sidebar-messages-theme #bell-btn:hover { background: var(--steel-bg); color: var(--ink); }
 
 /* ===== HiveVideo: screen-share spotlight + full-window mode (2026-07-26) ===== */
 .huddle-dock.hd-full { left: 0 !important; top: 0 !important; right: auto !important; bottom: auto !important; width: 100vw !important; height: 100vh !important; max-width: none !important; max-height: none !important; border-radius: 0 !important; z-index: 100000; }
