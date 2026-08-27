@@ -1,11 +1,10 @@
 // api/_lib/invoice-pdf.js
 //
-// jomell, 2026-08-27: "i just received an invoice format... whenever we send
-// an invoice to a client, they should receive a pdf with the details of the
-// invoice." Reference: the Jobber-generated invoice PDF for Greenwich
-// Handyman (Downloads/invoice format.pdf) -- same letterhead, same
-// recipient/invoice-number/dates/total layout, same line-items table, same
-// subtotal/total block.
+// jomell, 2026-08-27: invoices emailed to a client should carry a real PDF
+// of the invoice, not just the email body. Reference: the Jobber-generated
+// invoice PDF for Greenwich Handyman (Downloads/invoice format.pdf) -- same
+// letterhead, same recipient/invoice-number/dates/total layout, same
+// line-items table, same subtotal/total block.
 //
 // pdf-lib, not Puppeteer/an HTML-to-PDF service: this runs in a Vercel
 // serverless function, and a headless-Chrome dependency is exactly the kind
@@ -78,17 +77,20 @@ export function buildInvoicePlan({ invoice, client, address, job, accountBalance
   const inv = invoice || {};
 
   const recipientName = (client && (client.name || client.first_name)) || 'Client';
-  const recipientLines = [];
+  const recipientAddressLines = [];
   if (address && address.street) {
-    recipientLines.push(address.street);
+    recipientAddressLines.push(address.street);
     const cityLine = [address.city, address.province].filter(Boolean).join(', ') + (address.postal_code ? ' ' + address.postal_code : '');
-    if (cityLine.trim()) recipientLines.push(cityLine);
-  } else if (client && client.phone) {
-    // No address on file for this client -- show the one other real contact
-    // detail that is (the reference PDF does the same rather than leaving
-    // the recipient block down to just a bare name).
-    recipientLines.push(client.phone);
+    if (cityLine.trim()) recipientAddressLines.push(cityLine);
   }
+  const recipientContactLines = [];
+  if (client && client.phone) recipientContactLines.push(client.phone);
+  if (client && client.email) recipientContactLines.push(client.email);
+  // jomell, 2026-08-27: the recipient block also carries the client's phone
+  // and email, when there's a real one on file, alongside the address --
+  // address, then phone, then email on page 1. The remittance stub (page 3)
+  // orders them differently: phone/email, then address underneath.
+  const recipientLines = [...recipientAddressLines, ...recipientContactLines];
 
   const invoiceBox = {
     number: inv.invoice_number || '',
@@ -141,6 +143,8 @@ export function buildInvoicePlan({ invoice, client, address, job, accountBalance
     invoiceBox,
     recipientName,
     recipientLines,
+    recipientAddressLines,
+    recipientContactLines,
     sectionLabel: inv.subject || null,
     lineItems,
     totals,
@@ -430,7 +434,10 @@ export async function generateInvoicePdf(inputs) {
     let sy = tearY - 40;
     page.drawText(plan.recipientName, { x: left, y: sy, size: 12, font: bold, color: NAVY });
     sy -= 15;
-    for (const line of plan.recipientLines) { page.drawText(line, { x: left, y: sy, size: 9.5, font, color: MUT }); sy -= 12; }
+    // Contact info first here, address underneath -- the opposite order from
+    // page 1's recipient block.
+    const stubRecipientLines = [...plan.recipientContactLines, ...plan.recipientAddressLines];
+    for (const line of stubRecipientLines) { page.drawText(line, { x: left, y: sy, size: 9.5, font, color: MUT }); sy -= 12; }
 
     let ry = tearY - 40;
     const stubRow = (label, value) => {

@@ -1,7 +1,6 @@
 // test/estimate-send-client-email.test.mjs
-// jomell, 2026-08-25: "when clicking 'send to client'... i should receive an
-// email... that email should contain details and there should be a button
-// or lets say links either saying 'approve' or 'reject'."
+// jomell, 2026-08-25: sending an estimate to a client should also email
+// them the details, with Approve/Reject links.
 //
 // What these tests pin:
 //   - sending still succeeds even when the email can't be delivered (no
@@ -25,6 +24,7 @@ let estimateFixture;
 let updateEstimateImpl;
 let clientRows;
 let companyRows;
+let clientLocationRows;
 let insertedLinks;
 let sendEmailCalls;
 let sendEmailShouldFail;
@@ -55,6 +55,7 @@ mock.module('../api/_lib/jobber.js', {
     supabaseRequest: async (path, opts) => {
       if (path.startsWith('clients?')) return { ok: true, json: async () => clientRows };
       if (path.startsWith('companies?')) return { ok: true, json: async () => companyRows };
+      if (path.startsWith('client_locations?')) return { ok: true, json: async () => clientLocationRows };
       if (path.startsWith('estimate_response_links')) {
         if (opts && opts.method === 'POST') {
           const row = JSON.parse(opts.body)[0];
@@ -116,6 +117,7 @@ function reset() {
   updateEstimateImpl = async (mutate) => { estimateFixture = mutate(estimateFixture); return estimateFixture; };
   clientRows = [{ email: 'jomell@ghgrp.net', name: 'Jomell Alba', first_name: 'Jomell' }];
   companyRows = [{ name: 'Greenwich Handyman' }];
+  clientLocationRows = [];
   insertedLinks = [];
   sendEmailCalls = [];
   sendEmailShouldFail = false;
@@ -152,6 +154,20 @@ test('the payment schedule shown in the email matches the estimate\'s real rows'
   assert.match(sendEmailCalls[0].html, /Deposit/);
   assert.match(sendEmailCalls[0].html, /Balance due upon completion/);
   assert.match(sendEmailCalls[0].html, /\$500\.00/, 'each row is 50% of the $1,000 total');
+});
+
+test('a real address on file is shown in the email', async () => {
+  reset();
+  clientLocationRows = [{ street: '123 Beaver Dam Road', city: 'Bedford', province: 'NY', postal_code: '10507' }];
+  await handler(req(), res());
+  assert.match(sendEmailCalls[0].html, /123 Beaver Dam Road, Bedford, NY 10507/);
+  assert.match(sendEmailCalls[0].text, /123 Beaver Dam Road, Bedford, NY 10507/);
+});
+
+test('no address on file omits the row entirely, not a blank one', async () => {
+  reset();
+  await handler(req(), res());
+  assert.doesNotMatch(sendEmailCalls[0].html, />Address</);
 });
 
 test('a missing client email does not fail the send', async () => {

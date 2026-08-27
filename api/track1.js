@@ -4873,6 +4873,36 @@ async function handleCreateClient(req, res) {
 // actually safe to own from HiveLogic's side -- same column
 // handleCreateClient already uses for a brand-new client, just now also
 // settable on an existing one.
+// jomell, 2026-08-27: there was no way to enter or fix an address on an
+// EXISTING client -- handleCreateClient above only ever writes one at
+// creation time. Same reasoning as the phone half of this endpoint: a real
+// street a real person typed in beats none on file. lat/lng are left null
+// here too, same as at creation -- for the existing geocoder to fill, never
+// guessed inline.
+async function upsertClientAddress(clientId, b) {
+  const street = String(b.street || '').trim();
+  if (!street) return;
+  const locRow = {
+    street,
+    city: String(b.city || '').trim() || null,
+    province: String(b.province || '').trim() || null,
+    postal_code: String(b.postalCode || '').trim() || null,
+  };
+  const existing = await supabaseRequest(`client_locations?jobber_id=eq.${encodeURIComponent(clientId)}&select=jobber_id&limit=1`);
+  const rows = existing.ok ? await existing.json() : [];
+  if (rows.length) {
+    await supabaseRequest(`client_locations?jobber_id=eq.${encodeURIComponent(clientId)}`, {
+      method: 'PATCH',
+      body: JSON.stringify(locRow),
+    });
+  } else {
+    await supabaseRequest('client_locations', {
+      method: 'POST',
+      body: JSON.stringify({ jobber_id: clientId, ...locRow }),
+    });
+  }
+}
+
 async function handleUpdateClientContact(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ ok: false, error: 'POST only' });
   const requester = await getRequestingProfile(req);
@@ -4889,7 +4919,12 @@ async function handleUpdateClientContact(req, res) {
   if (!r.ok) return res.status(500).json({ ok: false, error: 'Update failed: ' + (await r.text()).slice(0, 300) });
   const rows = await r.json();
   if (!rows.length) return res.status(404).json({ ok: false, error: 'Client not found.' });
-  return res.status(200).json({ ok: true, resource: 'update_client_contact', client: rows[0] });
+
+  let addressSaved = true;
+  if (String(b.street || '').trim()) {
+    try { await upsertClientAddress(id, b); } catch (e) { addressSaved = false; }
+  }
+  return res.status(200).json({ ok: true, resource: 'update_client_contact', client: rows[0], addressSaved });
 }
 // 2026-08-25, jomell: "in active jobs, when clicking on a job, there should
 // be an option to 'close job' (meaning its done)."
@@ -5036,9 +5071,9 @@ async function handleTmRateTypesList(req, res) {
   return res.status(200).json({ ok: true, resource: 'tm_rate_types_list', rateTypes: rows });
 }
 
-// jomell, 2026-08-27: "for the due date of the invoices, let's put a 7 day
-// deadline" -- every HiveLogic-created invoice gets a real due date, not a
-// blank one, when the caller doesn't supply their own.
+// jomell, 2026-08-27: invoices should carry a 7-day payment deadline --
+// every HiveLogic-created invoice gets a real due date, not a blank one,
+// when the caller doesn't supply their own.
 function defaultInvoiceDueDate() {
   return new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
 }
@@ -5320,9 +5355,9 @@ async function handleSendInvoiceEmail(req, res) {
   if (!client || !client.email) return res.status(422).json({ ok: false, error: 'No email on file for this client.' });
   if (!isEmailConfigured()) return res.status(422).json({ ok: false, error: 'Email is not configured for this deployment (RESEND_API_KEY unset).' });
 
-  // 2026-08-27, jomell: "whenever we send an invoice to a client, they
-  // should receive a pdf with the details of the invoice." Everything below
-  // is read fresh, real data for the attached PDF -- an address on file, the
+  // 2026-08-27, jomell: invoices emailed to a client should carry a real
+  // PDF of the invoice. Everything below is read fresh, real data for the
+  // attached PDF -- an address on file, the
   // job it's billing against, and the job's other real invoices for a true
   // running balance. Any of the three can legitimately be missing (no
   // address on file, no linked job, no other invoices yet); the PDF just

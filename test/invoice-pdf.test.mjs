@@ -83,6 +83,18 @@ test('a fully-populated invoice produces every real field the reference PDF has'
   assert.equal(plan.lineItems[0].lineTotal, '$926.00');
 });
 
+test('recipient block also carries the client\'s phone and email when on file, alongside the address', () => {
+  const plan = buildInvoicePlan({ ...FULL, client: { ...FULL.client, phone: '203-555-0110', email: 'john@example.com' } });
+  assert.deepEqual(plan.recipientLines, ['123 Elm Street', 'Hartford, CT 06103', '203-555-0110', 'john@example.com']);
+});
+
+test('recipient phone/email are each independently omitted when not on file', () => {
+  const noContact = buildInvoicePlan({ ...FULL, client: { name: 'John Smith' } });
+  assert.deepEqual(noContact.recipientLines, ['123 Elm Street', 'Hartford, CT 06103']);
+  const phoneOnly = buildInvoicePlan({ ...FULL, address: null, client: { name: 'John Smith', phone: '203-555-0110' } });
+  assert.deepEqual(phoneOnly.recipientLines, ['203-555-0110']);
+});
+
 test('portion of job is computed from the invoice total against the job total, never invented', () => {
   const plan = buildInvoicePlan(FULL);
   // 4068.95 / 7652 = 53.17...% -> rounds to one decimal
@@ -200,6 +212,12 @@ test('the remittance stub carries the real invoice number, due date, and amount 
 test('remittance amount due falls back to the total when there is no separate balance', () => {
   const plan = buildInvoicePlan({ ...FULL, invoice: { ...FULL.invoice, balance: null } });
   assert.equal(plan.remittance.amountDue, '$4,068.95');
+});
+
+test('recipient address and contact info are split out separately, so the remittance stub can order them address-last', () => {
+  const plan = buildInvoicePlan({ ...FULL, client: { ...FULL.client, phone: '203-555-0110', email: 'john@example.com' } });
+  assert.deepEqual(plan.recipientAddressLines, ['123 Elm Street', 'Hartford, CT 06103']);
+  assert.deepEqual(plan.recipientContactLines, ['203-555-0110', 'john@example.com']);
 });
 
 // --------------------------------------------------------------------- logo

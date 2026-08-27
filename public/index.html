@@ -19,7 +19,7 @@
  * monitor_my_status poll, so "is this person running current code" is a
  * question the database can answer. Do not hand-edit it -- run
  * `node scripts/stamp-page-build.mjs`. */
-var HL_PAGE_BUILD = 'a98b01c99beaf7f1';
+var HL_PAGE_BUILD = 'a93efb72b963f26c';
 </script>
 <script>
 (function () { // HL_FETCH_DEDUPE_V1 — single wrapper: GET /api/ dedupe + 60s cache + write-invalidate
@@ -23947,22 +23947,25 @@ function openRealClient(id){
   if(c.jobberUrl)acts+='<button class="gbtn go" onclick="window.open(\''+hlEsc(c.jobberUrl)+'\',\'_blank\')">\u2197 Open in Jobber</button>';
   document.getElementById('ck-act').innerHTML=acts||'<span style="font-size:11px;color:var(--mut)">No contact info on file.</span>';
   document.getElementById('ck-qb').innerHTML='\u26A1 <b>Reina:</b> Real record synced from Jobber. Job history and property notes aren\'t wired into this view yet \u2014 use \u201COpen in Jobber\u201D for the full record.';
-  // 2026-08-25: "his number is not present anywhere add this and it should
-  // reflect to all clients and future clients" -- this card never had a
-  // Phone row at all (a different modal, the appointment sheet, already
-  // showed "No phone on file" correctly -- this one just omitted it
-  // entirely). Editable here via efOpenEditClientPhoneModal(), writing only
-  // clients.phone (never phone_e164, which the hourly Jobber sync
-  // overwrites every run) -- see handleUpdateClientContact in
-  // api/track1.js. Works the same for every client, synced or
-  // HiveLogic-created, present or future.
+  // 2026-08-25: this card never had a Phone row at all (a different modal,
+  // the appointment sheet, already showed "No phone on file" correctly --
+  // this one just omitted it entirely). Editable here via
+  // efOpenEditClientContactModal(), writing only clients.phone (never
+  // phone_e164, which the hourly Jobber sync overwrites every run) -- see
+  // handleUpdateClientContact in api/track1.js. Works the same for every
+  // client, synced or HiveLogic-created, present or future.
   document.getElementById('ck-contact').innerHTML=
-    '<div class="ck-kv"><span>Phone</span><b>'+(c.phone?hlEsc(c.phone):'<span style="color:var(--mut);font-weight:600">No phone on file</span>')+' <a href="javascript:void(0)" onclick="efOpenEditClientPhoneModal(\''+hlEsc(c.id)+'\')" style="font-size:10px;font-weight:800;color:var(--slate);margin-left:6px">Edit</a></b></div>'
+    '<div class="ck-kv"><span>Phone</span><b>'+(c.phone?hlEsc(c.phone):'<span style="color:var(--mut);font-weight:600">No phone on file</span>')+' <a href="javascript:void(0)" onclick="efOpenEditClientContactModal(\''+hlEsc(c.id)+'\')" style="font-size:10px;font-weight:800;color:var(--slate);margin-left:6px">Edit</a></b></div>'
     +'<div class="ck-kv"><span>Email</span><b>'+(c.email?hlEsc(c.email):'\u2014')+'</b></div>'
     +'<div class="ck-kv"><span>Company</span><b>'+(c.companyName?hlEsc(c.companyName):'\u2014')+'</b></div>'
     +'<div class="ck-kv"><span>Status</span><b>'+(c.isArchived?'Archived':(c.isLead?'Lead':'Active'))+'</b></div>'
     +'<div class="ck-kv"><span>Last updated</span><b>'+rcDate(c.updatedAt)+'</b></div>';
-  document.getElementById('ck-prop').innerHTML='<div style="font-size:11px;color:var(--mut);font-weight:600;line-height:1.6;padding:4px 0">No property intel synced into this view yet.</div>';
+  // jomell, 2026-08-27: this always said "No property intel synced into this
+  // view yet", even for a client with a real address on file -- c.address
+  // was sitting right there on the same object the rest of this card reads.
+  document.getElementById('ck-prop').innerHTML=c.address
+    ? '<div class="ck-kv"><span>Address</span><b>'+hlEsc(c.address)+' <a href="javascript:void(0)" onclick="efOpenEditClientContactModal(\''+hlEsc(c.id)+'\')" style="font-size:10px;font-weight:800;color:var(--slate);margin-left:6px">Edit</a></b></div>'
+    : '<div style="font-size:11px;color:var(--mut);font-weight:600;line-height:1.6;padding:4px 0">No address on file. <a href="javascript:void(0)" onclick="efOpenEditClientContactModal(\''+hlEsc(c.id)+'\')" style="font-size:10px;font-weight:800;color:var(--slate)">Add one</a></div>';
   document.getElementById('ck-ppl').innerHTML='<div class="ck-kv"><span>'+hlEsc(nm)+'<div class="cdb-sub">Client</div></span><b></b></div>';
   var bal=Number(c.balance)||0;
   document.getElementById('ck-money').innerHTML=
@@ -23976,29 +23979,50 @@ function openRealClient(id){
 }
 // 2026-08-25: "his number is not present anywhere add this and it should
 // reflect to all clients and future clients" -- own modal (not
-// window.prompt), same pattern as this session's other edit flows. Saves
-// via update_client_contact (api/track1.js), which writes ONLY
-// clients.phone -- never phone_e164, which the hourly Jobber sync
-// overwrites on every run. Updates REAL_CLIENTS in place so the card
-// reflects it immediately without a full refetch.
-function efOpenEditClientPhoneModal(id){
+// window.prompt), same pattern as this session's other edit flows.
+//
+// jomell, 2026-08-27: extended to also edit the address -- there was no way
+// to enter or fix one on an already-existing client (handleCreateClient
+// only ever writes one at brand-new-client creation time), which is why an
+// address typed in elsewhere (an estimate, an invoice send) never actually
+// landed anywhere. Both fields save in one request to update_client_contact
+// (api/track1.js): phone always goes through as typed (never omitted, so an
+// address-only edit can never accidentally null out an existing number);
+// street/city/province/postalCode upsert into client_locations only when a
+// street is given. Writes ONLY clients.phone, never phone_e164, which the
+// hourly Jobber sync overwrites on every run. Updates REAL_CLIENTS in place
+// so the card reflects it immediately without a full refetch.
+function efOpenEditClientContactModal(id){
   var c=null; for(var i=0;i<REAL_CLIENTS.length;i++){ if(String(REAL_CLIENTS[i].id)===String(id)){c=REAL_CLIENTS[i];break;} }
   if(!c)return;
+  var addrParts=(c.address||'').split(',').map(function(s){return s.trim();});
   var body='<div id="ecp-body">'
     +'<label style="'+_lbl+'">Phone</label>'
     +'<input id="ecp-phone" type="tel" placeholder="e.g. (203) 555-0134" value="'+hlEsc(c.phone||'')+'" style="'+_inp+';margin-bottom:12px">'
+    +'<label style="'+_lbl+'">Street address</label>'
+    +'<input id="ecp-street" placeholder="e.g. 123 Beaver Dam Road" value="'+hlEsc(addrParts[0]||'')+'" style="'+_inp+';margin-bottom:12px">'
+    +'<div style="display:flex;gap:9px;margin-bottom:12px">'
+    +'<input id="ecp-city" placeholder="City / town" value="'+hlEsc(addrParts[1]||'')+'" style="'+_inp+'">'
+    +'<input id="ecp-province" placeholder="State" value="'+hlEsc(addrParts[2]||'')+'" style="'+_inp+';max-width:80px">'
+    +'<input id="ecp-postal" placeholder="ZIP" style="'+_inp+';max-width:90px">'
+    +'</div>'
     +'<div id="ecp-err" style="display:none;color:#c65b4e;font-size:11px;font-weight:700;margin-bottom:10px"></div>'
     +'<div style="display:flex;gap:9px"><button onclick="_hlEcpSubmit()" style="flex:1;padding:11px;border:none;border-radius:8px;background:#1B7A50;color:#fff;font-weight:900;font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;cursor:pointer;font-family:\'Montserrat\',sans-serif">Save</button><button onclick="document.getElementById(\'hlmodal\').remove()" style="flex:1;padding:11px;border:1px solid #dadde8;border-radius:8px;background:#fff;color:#5d657b;font-weight:900;font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;cursor:pointer;font-family:\'Montserrat\',sans-serif">Cancel</button></div>'
     +'</div>';
-  hlModal('☎ Edit phone', body);
+  hlModal('✎ Edit contact info', body);
   window._hlEcpSubmit=function(){
     var phone=((document.getElementById('ecp-phone')||{}).value||'').trim();
+    var street=((document.getElementById('ecp-street')||{}).value||'').trim();
+    var city=((document.getElementById('ecp-city')||{}).value||'').trim();
+    var province=((document.getElementById('ecp-province')||{}).value||'').trim();
+    var postalCode=((document.getElementById('ecp-postal')||{}).value||'').trim();
     var err=document.getElementById('ecp-err');
-    hlApiPost('update_client_contact',{id:id,phone:phone}).then(function(d){
-      if(!d||!d.ok){ err.textContent=(d&&d.error)||'Could not save this number.'; err.style.display='block'; return; }
+    hlApiPost('update_client_contact',{id:id,phone:phone,street:street,city:city,province:province,postalCode:postalCode}).then(function(d){
+      if(!d||!d.ok){ err.textContent=(d&&d.error)||'Could not save this contact info.'; err.style.display='block'; return; }
       c.phone=phone||null;
+      if(street) c.address=[street,city,province].filter(Boolean).join(', ');
       document.getElementById('hlmodal').remove();
-      chirpToast('✓ Phone number saved');
+      chirpToast('✓ Contact info saved');
       openRealClient(id);
     }).catch(function(e){ err.textContent='Network error: '+e.message; err.style.display='block'; });
   };
@@ -24742,10 +24766,15 @@ function efTaxFor(cl){
 // ---- Real-client wiring for the Estimate builder (2026-07-30) ----
 // The picker searches REAL_CLIENTS (live /api/clients data, loaded by
 // loadClientsLive on boot). Picking one upserts a normalized entry into
-// CLIENTDB (fields the estimate code already expects: n=name, a=company,
+// CLIENTDB (fields the estimate code already expects: n=name, a=address,
 // t=town[none], plus email/jobberUrl/_real) so every existing CLIENTDB
 // lookup resolves to the real client with no other edits.
-function efClientNorm(rc){ return { id: rc.id, n: rc.name||'(unnamed)', a: rc.companyName||'', t: '', email: rc.email||'', jobberUrl: rc.jobberUrl||'', isLead: !!rc.isLead, isArchived: !!rc.isArchived, _real: true }; }
+//
+// jomell, 2026-08-27: the Property field on a new estimate always read "See
+// Jobber for address", even for a client with a real address on file --
+// this was building `a` from companyName instead of the real `.address`
+// api/clients.js already returns (client_locations, joined server-side).
+function efClientNorm(rc){ return { id: rc.id, n: rc.name||'(unnamed)', a: rc.address||'', t: '', email: rc.email||'', jobberUrl: rc.jobberUrl||'', isLead: !!rc.isLead, isArchived: !!rc.isArchived, _real: true }; }
 function efEnsureRealClient(id){
   if(!id || typeof REAL_CLIENTS==='undefined' || !REAL_CLIENTS) return null;
   var rc=null; for(var i=0;i<REAL_CLIENTS.length;i++){ if(String(REAL_CLIENTS[i].id)===String(id)){ rc=REAL_CLIENTS[i]; break; } }
@@ -25375,6 +25404,7 @@ function nativeEstimateToRow(e){
     num:'#'+String(e.estimateNumber||e.id).replace('EST-',''),
     title:e.title||'Untitled estimate',
     client:e.clientName||'&#8212;',
+    address:e.clientAddress||null,
     status:stMap[e.displayStatus||e.lifecycleStatus]||'draft',
     amt:(e.totals&&e.totals.price)||0,
     createdAt:e.createdAt||null,
@@ -25636,7 +25666,8 @@ function efListTable(){
     var meta=EQ_STATUS_META[e.status]||{label:String(e.status||'unknown').toUpperCase(),cls:'dr'};
     h+='<tr class="er" data-key="'+esc(e.key)+'">'
      +'<td onclick="event.stopPropagation()"><input type="checkbox" class="efl-cb-real" '+(EQ_SELECTED[e.key]?'checked':'')+' onclick="event.stopPropagation();efRowToggle(\''+e.key+'\',this.checked)"></td>'
-     +'<td style="font-weight:800">'+esc(e.client)+(e.isLocal?' <span class="ef-vchip edit">local draft</span>':'')+'</td>'
+     +'<td style="font-weight:800">'+esc(e.client)+(e.isLocal?' <span class="ef-vchip edit">local draft</span>':'')
+     +(((e.prop||e.address)&&(e.prop||e.address)!=='&#8212;')?'<div style="font-weight:400;font-size:12px;color:var(--mut)">'+esc(e.prop||e.address)+'</div>':'')+'</td>'
      +'<td><div class="efl-num">'+esc(e.num)+'</div><div class="efl-ttl">'+esc(e.title)+'</div></td>'
      +'<td style="white-space:nowrap">'+(e.createdLabel?esc(e.createdLabel):eqRel(e.createdAt))+'</td>'
      +'<td><span class="ef-st '+meta.cls+'">&#9679; '+meta.label+'</span></td>'
@@ -34418,7 +34449,7 @@ function ajxRender() {
     return '<tr class="' + (j.closedAt ? 'ajx-closed' : '') + '" onclick="ajxOpen(\'' + String(j.id).replace(/'/g, "\\'") + '\')">'
       + '<td class="ajx-num">' + hlEsc(ref) + '</td>'
       + '<td>' + hlEsc(j.title || 'Untitled job') + '</td>'
-      + '<td>' + hlEsc(j.clientName || '—') + '</td>'
+      + '<td>' + hlEsc(j.clientName || '—') + (j.address ? '<div style="font-weight:400;font-size:12px;color:var(--mut)">' + hlEsc(j.address) + '</div>' : '') + '</td>'
       + '<td>' + hlEsc(j.divisionCode || '—') + '</td>'
       + '<td>' + statusPill + '</td>'
       + '<td>' + sched + '</td>'
@@ -34472,6 +34503,7 @@ function ajxOpen(jobId) {
       : '<b>' + hlEsc(String(j.status || 'unknown').replace(/_/g, ' ')) + '</b>';
     meta.innerHTML = ''
       + '<div><span>Client</span><b>' + hlEsc(j.clientName || '—') + '</b></div>'
+      + (j.address ? '<div><span>Address</span><b>' + hlEsc(j.address) + '</b></div>' : '')
       + '<div><span>Division</span><b>' + hlEsc(j.divisionCode || '—') + '</b></div>'
       + '<div><span>Status</span>' + statusHtml + '</div>'
       + '<div><span>Scheduled</span><b>' + (ajxIsScheduled(j) ? ajxDate(j.startAt) : 'Not booked') + '</b></div>'
