@@ -666,9 +666,9 @@ html[data-theme="dark"] :is(#hiveconnect-root, .hc-embed).mention { background: 
 :is(#hiveconnect-root, .hc-embed) .emoji-btn,
 :is(#hiveconnect-root, .hc-embed).emoji-btn { font-size: 17px; line-height: 1; }
 :is(#hiveconnect-root, .hc-embed) .emoji-picker.wide,
-:is(#hiveconnect-root, .hc-embed).emoji-picker.wide { grid-template-columns: repeat(9, 32px); max-height: 240px; overflow-y: auto; }
+:is(#hiveconnect-root, .hc-embed).emoji-picker.wide { grid-template-columns: repeat(9, 38px); max-height: 240px; overflow-y: auto; }
 :is(#hiveconnect-root, .hc-embed) .emoji-picker.wide button,
-:is(#hiveconnect-root, .hc-embed).emoji-picker.wide button { font-size: 18px; width: 32px; height: 32px; }
+:is(#hiveconnect-root, .hc-embed).emoji-picker.wide button { width: 38px; height: 38px; }
 :is(#hiveconnect-root, .hc-embed) .upload-bar,
 :is(#hiveconnect-root, .hc-embed).upload-bar {
   font-family: var(--mono); font-size: 10px; font-weight: 700; color: var(--steel-deep);
@@ -1219,20 +1219,25 @@ html[data-theme="dark"] :is(#hiveconnect-root, .hc-embed).search-hit { color: #f
 html[data-theme="dark"] :is(#hiveconnect-root, .hc-embed) .pin-flag,
 html[data-theme="dark"] :is(#hiveconnect-root, .hc-embed).pin-flag { color: #f0c987; }
 
-/* Emoji picker */
+/* Emoji picker -- native emoji glyphs directly on the picker surface, no
+   per-emoji card/border/shadow at rest; only a hover affordance. */
 :is(#hiveconnect-root, .hc-embed) .emoji-picker,
 :is(#hiveconnect-root, .hc-embed).emoji-picker {
   position: fixed; z-index: 70; background: var(--card); border: 1px solid var(--line);
-  border-radius: 12px; padding: 10px; box-shadow: 0 14px 34px rgba(22, 30, 46, .2);
-  display: grid; grid-template-columns: repeat(8, 34px); gap: 2px;
+  border-radius: 12px; padding: 10px; box-shadow: 0 4px 16px rgba(22, 30, 46, .12);
+  display: grid; grid-template-columns: repeat(8, 38px); gap: 4px;
 }
 :is(#hiveconnect-root, .hc-embed) .emoji-picker button,
 :is(#hiveconnect-root, .hc-embed).emoji-picker button {
-  background: none; border: none; font-size: 19px; border-radius: 7px;
-  width: 34px; height: 34px;
+  appearance: none; -webkit-appearance: none; box-shadow: none;
+  background: none; border: none; outline: none;
+  font-family: 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', sans-serif;
+  font-size: 24px; line-height: 1; border-radius: 8px;
+  width: 38px; height: 38px; display: flex; align-items: center; justify-content: center;
+  transition: background-color .15s ease, transform .15s ease;
 }
 :is(#hiveconnect-root, .hc-embed) .emoji-picker button:hover,
-:is(#hiveconnect-root, .hc-embed).emoji-picker button:hover { background: var(--steel-bg); }
+:is(#hiveconnect-root, .hc-embed).emoji-picker button:hover { background: var(--steel-bg); transform: scale(1.12); }
 
 /* Scrollbars */
 :is(#hiveconnect-root, .hc-embed) ::-webkit-scrollbar { width: 9px; }

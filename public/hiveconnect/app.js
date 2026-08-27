@@ -1239,7 +1239,7 @@ function openComposerEmoji(e, textarea) {
   });
   picker.classList.remove('hidden');
   const r = e.currentTarget.getBoundingClientRect();
-  const w = 9 * 32 + 20;
+  const w = 9 * 38 + 8 * 4 + 20; // 9 cols x 38px cells + 8 gaps x 4px + 10px container padding each side
   picker.style.left = Math.max(8, Math.min(r.left, window.innerWidth - w - 8)) + 'px';
   picker.style.top = Math.max(8, r.top - 250) + 'px';
   e.stopPropagation();
