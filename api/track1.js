@@ -5527,6 +5527,27 @@ async function handleUpdateInvoice(req, res) {
   return res.status(200).json({ ok: true, resource: 'update_invoice', invoice: rows[0] });
 }
 
+// jomell, 2026-08-27: a way to clean up test invoices from Invoicing & AR.
+// Same HL-INV- guard as every other invoice mutation here -- a Jobber-synced
+// invoice is owned by api/jobber/sync.js and would just come back on the
+// next hourly sync anyway, so deleting one here would accomplish nothing.
+// Unlike handleUpdateInvoice, not restricted to draft-only: a sent or paid
+// test invoice is still real test data someone wants gone, not a
+// communicated amount that would be misrepresented by staying half-edited.
+async function handleDeleteInvoice(req, res) {
+  if (req.method !== 'POST') return res.status(405).json({ ok: false, error: 'POST only' });
+  const requester = await getRequestingProfile(req);
+  if (!requester) return res.status(401).json({ ok: false, error: 'Not signed in -- log into HiveLogic first.' });
+  const id = String((req.body || {}).id || '').trim();
+  if (!id) return res.status(400).json({ ok: false, error: 'Which invoice? No id given.' });
+  if (!id.startsWith('HL-INV-')) {
+    return res.status(400).json({ ok: false, error: 'This invoice is synced from Jobber and cannot be deleted here.' });
+  }
+  const r = await supabaseRequest(`invoices?jobber_id=eq.${encodeURIComponent(id)}`, { method: 'DELETE' });
+  if (!r.ok) return res.status(500).json({ ok: false, error: 'Delete failed: ' + (await r.text()).slice(0, 300) });
+  return res.status(200).json({ ok: true, resource: 'delete_invoice' });
+}
+
 // 2026-08-26, jomell: "lets start with the timesheet... copy it into our
 // own [Time & Timesheets tab]." A week's worth of time_sheet_entries
 // (Jobber-synced table, api/jobber/sync-extended.js), shaped for the
@@ -9552,6 +9573,9 @@ if (resource === 'mailconnect') {
   }
   if (resource === 'update_invoice') {
     try { return await handleUpdateInvoice(req, res); } catch (e) { return res.status(500).json({ ok: false, error: e.message }); }
+  }
+  if (resource === 'delete_invoice') {
+    try { return await handleDeleteInvoice(req, res); } catch (e) { return res.status(500).json({ ok: false, error: e.message }); }
   }
   if (resource === 'timesheet_week') {
     try { return await handleTimesheetWeek(req, res); } catch (e) { return res.status(500).json({ ok: false, error: e.message }); }
