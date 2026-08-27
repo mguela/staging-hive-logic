@@ -79,7 +79,10 @@ test('the group lives inside the topbar, not a fixed right-edge rail', OPTS, asy
   } finally { await page.close(); }
 });
 
-test('all thirteen tabs are present, and none are duplicated outside the group', OPTS, async () => {
+test('all twelve tabs are present, and none are duplicated outside the group', OPTS, async () => {
+  // jomell, 2026-08-27: "let's keep the Reina button on the side" -- Reina
+  // is deliberately NOT one of these twelve (Phone through Monitor); its
+  // own #rnaFab launcher is checked separately below.
   const page = await openAt(1920, 1080);
   try {
     const counts = await page.evaluate(() => ({
@@ -87,9 +90,29 @@ test('all thirteen tabs are present, and none are duplicated outside the group',
       inGroup: document.querySelectorAll('.rolodex .rolo').length,
       monitorIds: document.querySelectorAll('#rolo-mon').length,
     }));
-    assert.equal(counts.inGroup, 13, 'Phone through Monitor, Reina included');
+    assert.equal(counts.inGroup, 12, 'Phone through Monitor, Reina excluded');
     assert.equal(counts.total, counts.inGroup, 'no .rolo button may live outside the group');
     assert.equal(counts.monitorIds, 1, 'a duplicated #rolo-mon would break the live recording glow');
+  } finally { await page.close(); }
+});
+
+test('Reina keeps its own floating launcher, outside the topbar group', OPTS, async () => {
+  const page = await openAt(1920, 1080);
+  try {
+    const m = await page.evaluate(() => {
+      const titles = [...document.querySelectorAll('.rolodex .rolo')].map((t) => t.getAttribute('title') || '');
+      const fab = document.getElementById('rnaFab');
+      return {
+        inGroup: titles.some((t) => /reina/i.test(t)),
+        fabExists: !!fab,
+        fabDisplay: fab ? getComputedStyle(fab).display : null,
+        fabPosition: fab ? getComputedStyle(fab).position : null,
+      };
+    });
+    assert.equal(m.inGroup, false, 'Reina must not be one of the topbar tabs');
+    assert.ok(m.fabExists, '#rnaFab must still exist');
+    assert.equal(m.fabDisplay, 'flex', 'the Reina launcher must be visible');
+    assert.equal(m.fabPosition, 'fixed', 'it stays a docked floating button, on the side');
   } finally { await page.close(); }
 });
 

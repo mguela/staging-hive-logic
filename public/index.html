@@ -19,7 +19,7 @@
  * monitor_my_status poll, so "is this person running current code" is a
  * question the database can answer. Do not hand-edit it -- run
  * `node scripts/stamp-page-build.mjs`. */
-var HL_PAGE_BUILD = '39f0f8fb6cada660';
+var HL_PAGE_BUILD = '75dddc0b7a271570';
 </script>
 <script>
 (function () { // HL_FETCH_DEDUPE_V1 — single wrapper: GET /api/ dedupe + 60s cache + write-invalidate
@@ -2792,8 +2792,9 @@ button,.dowork,.startday,.back,.cdb-new,.nc-create,.fm-save,.gbtn,.iconbtn,.dw-a
   </aside>
 
   <!-- ═══ ROLODEX QUICK-ACCESS GROUP (feature/rolodex-quick-tabs) ═══
-       13 quick-access tabs, originally a fixed vertical rail docked on the
-       right edge. jomell, 2026-08-27: moved into the top nav bar as a
+       12 quick-access tabs (Reina excluded -- "let's keep the Reina button
+       on the side"; see #rnaFab), originally a fixed vertical rail docked
+       on the right edge. jomell, 2026-08-27: moved into the top nav bar as a
        horizontal icon group instead -- same tabs, same colors, same onclick
        handlers (nothing new routed), just inline in .topbar rather than a
        separate fixed-position rail. Each tab keeps its native `title`
@@ -2814,11 +2815,15 @@ button,.dowork,.startday,.back,.cdb-new,.nc-create,.fm-save,.gbtn,.iconbtn,.dw-a
     .rolodex .rolo svg{width:16px;height:16px;stroke:currentColor;fill:none;
       stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
     /* The rolodex replaces the old bottom-right floating dock (#hl-fabdock) and
-       its Chirp / Reina / Monitor pills entirely on desktop — they must not show
+       its Chirp / Monitor pills entirely on desktop — they must not show
        anywhere on desktop, including the login screen. Kept on mobile (<=860px),
        where the rolodex (now in .topbar) is hidden along with the rest of the
-       desktop topbar row. */
-    #hl-fabdock,#pttfab,#rnaFab,#hlMonFab{display:none!important}
+       desktop topbar row.
+       jomell, 2026-08-27: "let's keep the Reina button on the side" -- #rnaFab
+       is deliberately NOT in this list. Same exclusion the original rail move
+       (a02740e) made; there's no rolodex Reina tab either (removed below), so
+       its own floating launcher stays the only way to open it. */
+    #hl-fabdock,#pttfab,#hlMonFab{display:none!important}
     @media (max-width:860px){ body.hl-authed .rolodex{display:none} }
     /* Monitor tab live state. Grey is the DEFAULT (no .mon-on class), so the tab
        reads "not recording" from first paint and only goes green once the
@@ -2930,13 +2935,14 @@ button,.dowork,.startday,.back,.cdb-new,.nc-create,.fm-save,.gbtn,.iconbtn,.dw-a
        initial deep-link decision after the page has finished parsing. Clearing
        #/docs (or any other valid view) during parse made bookmarks look valid
        while always landing on Command Center after a hard refresh. */
-    /* The rolodex replaces the old floating pills (Chirp/Reina/Monitor). CSS
-       hides them, but a resize handler elsewhere rebuilds/re-shows the dock — so
-       also force-hide them in JS: on load, on resize (with delayed passes to beat
-       the other resize handlers), and on a slow interval as a backstop. */
+    /* The rolodex replaces the old floating pills (Chirp/Monitor) -- Reina's
+       stays (see the CSS comment above). CSS hides them, but a resize handler
+       elsewhere rebuilds/re-shows the dock — so also force-hide them in JS: on
+       load, on resize (with delayed passes to beat the other resize handlers),
+       and on a slow interval as a backstop. */
     (function(){
       function killFabs(){
-        ['hl-fabdock','pttfab','rnaFab','hlMonFab'].forEach(function(id){
+        ['hl-fabdock','pttfab','hlMonFab'].forEach(function(id){
           var el=document.getElementById(id);
           if(el) el.style.setProperty('display','none','important');
         });
@@ -2986,9 +2992,9 @@ button,.dowork,.startday,.back,.cdb-new,.nc-create,.fm-save,.gbtn,.iconbtn,.dw-a
         <div class="rolo" style="--rl-ac:#3FA98A" title="New Lead" onclick="openNewLead()"><svg viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="23" y1="11" x2="17" y2="11"/></svg></div>
         <div class="rolo" style="--rl-ac:#2FA06E" title="Invoicing" onclick="showView('invx')"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M14.8 9.3c0-1-1.3-1.8-2.8-1.8s-2.8.8-2.8 1.8 1.3 1.6 2.8 1.9 2.8.9 2.8 1.9-1.3 1.8-2.8 1.8-2.8-.8-2.8-1.8"/><line x1="12" y1="6" x2="12" y2="18"/></svg></div>
         <div class="rolo" style="--rl-ac:#BC8F52" title="Photos" onclick="showView('vi')"><svg viewBox="0 0 24 24"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg></div>
-        <!-- Reina has no plain open-function; replicate the existing open path used by
-             hlAskReinaFromSearch(): add the `open` class to #rnaPanel. -->
-        <div class="rolo" style="--rl-ac:#9B6FD4" title="Reina" onclick="var p=document.getElementById('rnaPanel');if(p)p.classList.add('open')"><svg viewBox="0 0 24 24"><polygon points="12 2 15.1 8.3 22 9.3 17 14.1 18.2 21 12 17.8 5.8 21 7 14.1 2 9.3 8.9 8.3 12 2"/></svg></div>
+        <!-- jomell, 2026-08-27: "let's keep the Reina button on the side" --
+             no Reina tab here; #rnaFab (its own floating launcher) stays put
+             instead, same exclusion the original rail move made. -->
         <div class="rolo" id="rolo-mon" title="Monitor" onclick="showView('mon')"><svg viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg></div>
       </div>
       <div class="iconbtn" title="Open HiveLogic in another window — run two areas side by side" onclick="hlNewWin()">⧉</div>
@@ -34011,23 +34017,32 @@ window.__hlUpdateBackBtns=function(){
 })();
 </script>
 <script>
-/* Combine the Reina button and quick-Chirp group into one floating dock.
+/* Combine the quick-Chirp group and Monitor pill into one floating dock.
    Elements are MOVED (not recreated), so every existing click/push-to-talk
-   handler keeps working untouched. */
+   handler keeps working untouched.
+   jomell, 2026-08-27: Reina's #rnaFab is deliberately left OUT of this dock
+   -- "let's keep the Reina button on the side" -- so it stays in its own
+   original spot with its own standalone circular-button CSS instead of
+   becoming a pill inside #hl-fabdock (which is hidden on desktop; see the
+   killFabs comment above). Its own visibility-guard interval is unchanged. */
 (function(){
   try{
-    var rf=document.getElementById('rnaFab');
     var pt=document.getElementById('pttfab')||document.querySelector('.pttfab');
     var mf=document.getElementById('hlMonFab');
-    if(!rf&&!pt&&!mf)return;
+    if(!pt&&!mf)return;
     var dock=document.createElement('div');dock.id='hl-fabdock';
     document.body.appendChild(dock);
     if(mf)dock.appendChild(mf);
-    if(rf)dock.appendChild(rf);
     if(pt)dock.appendChild(pt);
-    /* fix/reina-fab-visibility: ensure Reina launcher is never left hidden after docking (desktop shell or race can set display:none) */
-    if(rf){ rf.style.display='flex'; }
-    try{ var __rnaFabGuard=0; var __rnaFabT=setInterval(function(){ var f=document.getElementById('rnaFab'); if(f && getComputedStyle(f).display==='none'){ f.style.display='flex'; } if(++__rnaFabGuard>20) clearInterval(__rnaFabT); },500); }catch(_e){}
+  }catch(e){}
+})();
+(function(){
+  try{
+    var rf=document.getElementById('rnaFab');
+    if(!rf)return;
+    /* fix/reina-fab-visibility: ensure Reina launcher is never left hidden (desktop shell or race can set display:none) */
+    rf.style.display='flex';
+    var __rnaFabGuard=0; var __rnaFabT=setInterval(function(){ var f=document.getElementById('rnaFab'); if(f && getComputedStyle(f).display==='none'){ f.style.display='flex'; } if(++__rnaFabGuard>20) clearInterval(__rnaFabT); },500);
   }catch(e){}
 })();
 /* Tooltips so every collapsed-rail icon identifies itself on hover. */
