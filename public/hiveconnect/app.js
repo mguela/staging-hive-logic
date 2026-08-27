@@ -398,6 +398,7 @@ async function loadEverything(myId) {
   subscribePresence();
   subscribeHuddles();
   subscribeChirp();
+  await evEnsureSelfNote();
 
   // Land on Messages, not whatever channel happens to sort first alphabetically
   // (previously fell back to the first non-DM channel when no #general channel
@@ -636,6 +637,10 @@ function evMsgDraftChannelIds() {
   catch (e) { return []; }
 }
 function evMsgDmChannels() { return [...channels.values()].filter(c => c.type === 'dm' && memberships.has(c.id) && dmOther(c)); }
+// Session-local: which DMs have a message that failed to send just now.
+// Not a setting -- same "in-flight local draft" territory as hcMsgDraft:
+// (CLAUDE.md), cleared the moment a send to that channel succeeds again.
+const evMsgFailedChannels = new Set();
 // Last-message-per-conversation preview cache. One query per channel the
 // first time it's needed (same acceptable parallel-query pattern
 // loadUnreads() already uses for unread counts), then kept live by the
@@ -669,31 +674,30 @@ function evMsgFilterCounts() {
   const muted = new Set(evMsgMuted());
   const draftIds = new Set(evMsgDraftChannelIds());
   const mentioned = evMsgMentionedChannelIds();
-  const favIds = new Set(evMsgFavorites());
-  let unread = 0, drafts = 0, mutedCt = 0, favorites = 0;
+  let unread = 0, drafts = 0, mutedCt = 0, failed = 0;
   dms.forEach(c => {
     if ((unreads.get(c.id) || 0) > 0) unread++;
     if (draftIds.has(c.id)) drafts++;
     if (muted.has(c.id)) mutedCt++;
-    if (favIds.has(c.id)) favorites++;
+    if (evMsgFailedChannels.has(c.id)) failed++;
   });
-  return { unread, mentions: mentioned.size, drafts, muted: mutedCt, favorites };
+  return { unread, mentions: mentioned.size, drafts, muted: mutedCt, failed };
 }
 let msgFilter = 'all';
 const MSG_FILTERS = [
   ['all', 'All'],
   ['unread', 'Unread'],
   ['mentions', 'Unread @mentions'],
-  ['favorites', 'Favorites'],
+  ['failed', 'Failed to send'],
   ['drafts', 'Drafts'],
   ['muted', 'Muted'],
 ];
 function evMsgFilterMenu(e) {
   const counts = evMsgFilterCounts();
-  const countFor = (key) => key === 'unread' ? counts.unread : key === 'mentions' ? counts.mentions : key === 'drafts' ? counts.drafts : key === 'muted' ? counts.muted : key === 'favorites' ? counts.favorites : null;
-  // "All", "Unread", "Mentions" and "Favorites" already have their own
+  const countFor = (key) => key === 'unread' ? counts.unread : key === 'mentions' ? counts.mentions : key === 'drafts' ? counts.drafts : key === 'muted' ? counts.muted : key === 'failed' ? counts.failed : null;
+  // "All", "Unread", "Mentions" and "Failed" already have their own
   // quick-access pills above the list -- the dropdown covers the rest.
-  evMenu(e, MSG_FILTERS.filter(([key]) => !['all', 'unread', 'mentions', 'favorites'].includes(key)).map(([key, label]) => {
+  evMenu(e, MSG_FILTERS.filter(([key]) => !['all', 'unread', 'mentions', 'failed'].includes(key)).map(([key, label]) => {
     const n = countFor(key);
     const html = esc(label) + (n != null && n > 0 ? ' <span class="msg-filter-ct">' + n + '</span>' : '') + (msgFilter === key ? ' ✓' : '');
     return [html, () => { msgFilter = key; renderMessagesPanel(); }];
@@ -765,13 +769,12 @@ function buildDmRow(c) {
   li.onclick = () => openChannel(c.id);
   return li;
 }
-function dmDisplayName(c) { return isGroupDM(c) ? dmGroupLabel(c) : (dmOther(c) ? dmOther(c).display_name : 'DM'); }
+function dmDisplayName(c) { return isSelfDM(c) ? 'Notes to Self' : isGroupDM(c) ? dmGroupLabel(c) : (dmOther(c) ? dmOther(c).display_name : 'DM'); }
 function applyMsgFilter() {
   const q = (msgSearch || '').trim().toLowerCase();
   const muted = new Set(evMsgMuted());
   const draftIds = new Set(evMsgDraftChannelIds());
   const mentioned = evMsgMentionedChannelIds();
-  const favIds = new Set(evMsgFavorites());
   document.querySelectorAll('#panel-messages .ct-folder').forEach(folder => {
     let any = false;
     folder.querySelectorAll('.channel-list li[data-name]').forEach(row => {
@@ -782,7 +785,7 @@ function applyMsgFilter() {
       else if (msgFilter === 'mentions') filterMatch = mentioned.has(id);
       else if (msgFilter === 'drafts') filterMatch = draftIds.has(id);
       else if (msgFilter === 'muted') filterMatch = muted.has(id);
-      else if (msgFilter === 'favorites') filterMatch = favIds.has(id);
+      else if (msgFilter === 'failed') filterMatch = evMsgFailedChannels.has(id);
       const match = nameMatch && filterMatch;
       row.style.display = match ? '' : 'none'; if (match) any = true;
     });
@@ -821,7 +824,7 @@ function renderMessagesPanel() {
   quickPill('all', 'All', 0);
   quickPill('unread', 'Unread', counts.unread);
   quickPill('mentions', 'Mentions', counts.mentions);
-  quickPill('favorites', 'Favorites', counts.favorites);
+  quickPill('failed', 'Failed', counts.failed);
   const filterChev = document.createElement('button'); filterChev.type = 'button'; filterChev.className = 'msg-filter-chev'; filterChev.innerHTML = '▾'; filterChev.title = 'More filters (Drafts, Muted)';
   filterChev.onclick = (e) => evMsgFilterMenu(e);
   filterRow.appendChild(filterChev);
@@ -878,7 +881,7 @@ function dmOther(channel) {
 const dmOtherLastRead = new Map(); // dm channel_id -> other member's last_read_at | null
 async function evLoadOtherLastRead(channelId) {
   const c = channels.get(channelId);
-  if (!c || c.type !== 'dm' || isGroupDM(c)) return;
+  if (!c || c.type !== 'dm' || isGroupDM(c) || isSelfDM(c)) return;
   const other = dmOther(c);
   if (!other) return;
   const { data } = await sb.from('channel_members').select('last_read_at')
@@ -888,7 +891,7 @@ async function evLoadOtherLastRead(channelId) {
 }
 
 function channelLabel(c) {
-  if (c.type === 'dm') { if (isGroupDM(c)) return dmGroupLabel(c); const o = dmOther(c); return o ? o.display_name : 'DM'; }
+  if (c.type === 'dm') { if (isSelfDM(c)) return 'Notes to Self'; if (isGroupDM(c)) return dmGroupLabel(c); const o = dmOther(c); return o ? o.display_name : 'DM'; }
   return `${c.type === 'private' ? '🔒 ' : '#'}${c.name}`;
 }
 
@@ -1121,8 +1124,9 @@ async function sendMessage(content, threadParentId = null, attachment = null) {
   if (window.hlSfx) hlSfx.play('swoosh');
   content = (content || '').trim();
   if ((!content && !attachment) || !currentChannelId) return;
+  const channelId = currentChannelId;
   const row = {
-    channel_id: currentChannelId, user_id: me.id, content,
+    channel_id: channelId, user_id: me.id, content,
     thread_parent_id: threadParentId,
   };
   if (attachment) {
@@ -1131,7 +1135,19 @@ async function sendMessage(content, threadParentId = null, attachment = null) {
     row.attachment_type = attachment.type;
   }
   const { error } = await sb.from('messages').insert(row);
-  if (error) console.error('send failed', error);
+  if (error) {
+    console.error('send failed', error);
+    evMsgFailedChannels.add(channelId);
+    // Same "unsent draft" territory as hcMsgDraft: (device-local, not a
+    // setting) -- the composer already cleared optimistically, so this is
+    // what keeps the text from just vanishing.
+    if (!threadParentId) { try { localStorage.setItem('hcMsgDraft:' + channelId, content); } catch (e) {} }
+    railToast("Message didn't send — check your connection");
+    if (navTab === 'messages') renderMessagesPanel();
+  } else {
+    evMsgFailedChannels.delete(channelId);
+    if (navTab === 'messages' && msgFilter === 'failed') renderMessagesPanel();
+  }
 }
 
 // ---------- Uploads ----------
@@ -1421,6 +1437,38 @@ function closeThread() { currentThreadId = null; threadPanel.classList.add('hidd
 $('thread-close').addEventListener('click', closeThread);
 
 // ---------- DMs ----------
+// "Notes to Self" -- a DM channel with yourself, for personal notes. Created
+// once per user and favorited by default (still just a real DM channel +
+// membership row + the same hcMsgFavorites list every other DM star uses --
+// nothing schema-special). The one-time hcPref flag is what makes it a
+// *default*, not a forced state: un-favoriting it later sticks.
+async function evEnsureSelfNote() {
+  if (hcPref('hcSelfNoteInit', 'hcSelfNoteInit', '')) return;
+  const key = [me.id, me.id].join(':');
+  let dm = [...channels.values()].find(c => c.dm_key === key);
+  if (!dm) {
+    const { data, error } = await sb.from('channels')
+      .insert({ type: 'dm', dm_key: key, created_by: me.id }).select().single();
+    if (error) {
+      const { data: existing } = await sb.from('channels').select('*').eq('dm_key', key).single();
+      dm = existing;
+    } else {
+      dm = data;
+      await sb.from('channel_members').insert([{ channel_id: dm.id, user_id: me.id }]);
+    }
+    if (dm) channels.set(dm.id, dm);
+  }
+  if (dm && !memberships.has(dm.id)) {
+    const { data: mem } = await sb.from('channel_members').select('*')
+      .eq('channel_id', dm.id).eq('user_id', me.id).single();
+    if (mem) memberships.set(dm.id, mem);
+  }
+  if (dm) {
+    const favs = evMsgFavorites();
+    if (!favs.includes(dm.id)) evMsgSetFavorites(favs.concat([dm.id]));
+  }
+  hcPrefSet('hcSelfNoteInit', 'hcSelfNoteInit', '1');
+}
 async function startDM(otherId) {
   const key = [me.id, otherId].sort().join(':');
   let dm = [...channels.values()].find(c => c.dm_key === key);
@@ -2926,9 +2974,9 @@ function updateMainHeader() {
       favBtn.title = favOn ? 'Remove from favorites' : 'Add to favorites'; favBtn.textContent = favOn ? '★' : '☆';
       favBtn.onclick = () => { evMsgToggleFavorite(c.id); updateMainHeader(); renderMessagesPanel(); };
       t.appendChild(favBtn);
-      const other = !group ? dmOther(c) : null;
+      const other = (!group && !isSelfDM(c)) ? dmOther(c) : null;
       const isOnline = !!(other && onlineUsers.has(other.id));
-      if (d) { d.textContent = isOnline ? '● Online' : ''; d.classList.toggle('ch-desc-online', isOnline); }
+      if (d) { d.textContent = isSelfDM(c) ? 'Only visible to you' : (isOnline ? '● Online' : ''); d.classList.toggle('ch-desc-online', isOnline); }
     }
     else { t.textContent = 'Messages'; if (d) d.textContent = ''; }
     return;
@@ -3696,6 +3744,7 @@ function createRecipientPicker(opts = {}) {
 function dmMemberIds(c) { return (c.dm_key || '').split(':').filter(Boolean); }
 function dmOtherProfiles(c) { return dmMemberIds(c).filter(id => id !== me.id).map(id => profiles.get(id)).filter(Boolean); }
 function isGroupDM(c) { return c && c.type === 'dm' && dmMemberIds(c).length > 2; }
+function isSelfDM(c) { const ids = c && c.type === 'dm' ? dmMemberIds(c) : []; return ids.length > 0 && ids.every(id => id === me.id); }
 function dmGroupLabel(c) {
   const names = dmOtherProfiles(c).map(p => (p.display_name || 'Someone').split(' ')[0]);
   if (!names.length) return 'Group';

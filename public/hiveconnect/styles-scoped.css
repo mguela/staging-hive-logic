@@ -2149,8 +2149,14 @@ html[data-theme="dark"] :is(#hiveconnect-root, .hc-embed).huddle-banner {
 :is(#hiveconnect-root, .hc-embed).main.messages-workspace .day-divider::before,
 :is(#hiveconnect-root, .hc-embed) .main.messages-workspace .day-divider::after,
 :is(#hiveconnect-root, .hc-embed).main.messages-workspace .day-divider::after { content: none; }
+:is(#hiveconnect-root, .hc-embed) .main.messages-workspace .msg,
+:is(#hiveconnect-root, .hc-embed).main.messages-workspace .msg {
+  margin-left: -22px; margin-right: -22px; padding-left: 22px; padding-right: 22px; border-radius: 0;
+}
 :is(#hiveconnect-root, .hc-embed) .main.messages-workspace .msg:hover,
 :is(#hiveconnect-root, .hc-embed).main.messages-workspace .msg:hover { background: var(--msg-bg2); }
+:is(#hiveconnect-root, .hc-embed) .main.messages-workspace .msg-tools,
+:is(#hiveconnect-root, .hc-embed).main.messages-workspace .msg-tools { right: 36px; }
 :is(#hiveconnect-root, .hc-embed) .main.messages-workspace .msg-author,
 :is(#hiveconnect-root, .hc-embed).main.messages-workspace .msg-author { color: var(--msg-ink); }
 :is(#hiveconnect-root, .hc-embed) .main.messages-workspace .msg-time-col,
