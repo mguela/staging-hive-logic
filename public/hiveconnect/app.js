@@ -4966,9 +4966,6 @@ async function evGraph(path, opts = {}) {
   // returns the same JSON shapes. Microsoft accounts fall through unchanged.
   const acct = opts.account || evActive;
   if (acct && acct.provider === 'imap') return evImapGraph(acct, path, opts);
-  // Demo mailbox: no external provider at all, just an in-memory sample
-  // mailbox so the tab is fully interactive with nothing to sign into.
-  if (acct && acct.provider === 'mock') return evMockGraph(path, opts);
   const token = await evToken(opts.account);
   // Support absolute URLs so @odata.nextLink pagination links work directly.
   const url = /^https:\/\//.test(path) ? path : ('https://graph.microsoft.com/v1.0' + path);
@@ -5033,145 +5030,12 @@ async function evImapGraph(acct, path, opts = {}) {
   return j;
 }
 
-// ---- Demo mailbox (provider:'mock') --------------------------------------
-// A UI-only sample mailbox: no Microsoft, no IMAP, nothing to sign into.
-// Everything (send, reply, delete, flag, drafts…) is real and interactive
-// against this in-memory array, it just never leaves the browser tab — a
-// refresh resets it back to the sample set. It plugs into evGraph() the same
-// way the IMAP shim does, so every existing call site (selectFolder,
-// openEmailMessage, evFlag, evMove, evSendCompose, etc.) needs no changes at
-// all — they already only know "Graph-shaped path in, Graph-shaped JSON out."
-const EV_MOCK_ACCOUNT = { homeAccountId: 'mock-demo', username: 'demo@hivelogic.local', name: 'Demo Mailbox', provider: 'mock' };
+// Random id helper -- also used by evSaveGroups() below, not just Email.
 function evMockId() { return 'mock-' + Math.random().toString(36).slice(2) + Date.now().toString(36); }
-function evMockPerson(name, address) { return { emailAddress: { name, address } }; }
-function evMockMsg(o) {
-  return Object.assign({
-    id: evMockId(), toRecipients: [], ccRecipients: [], categories: [],
-    hasAttachments: false, isRead: true, importance: 'normal',
-    inferenceClassification: 'focused', flag: { flagStatus: 'notFlagged' },
-    conversationId: evMockId(), body: { contentType: 'HTML', content: '<p>' + (o.bodyPreview || '') + '</p>' },
-  }, o);
-}
-function evMockAgo(hours) { return new Date(Date.now() - hours * 3600000).toISOString(); }
-let EV_MOCK_MESSAGES = null;
-let EV_MOCK_FOLDERS = []; // custom (non-well-known) folders created in the demo mailbox: {id, displayName}
-function evMockSeed() {
-  const me = evMockPerson('Demo Mailbox', 'demo@hivelogic.local');
-  const threadId = evMockId();
-  EV_MOCK_MESSAGES = [
-    evMockMsg({ folder: 'inbox', subject: 'Roof leak — urgent', from: evMockPerson('Karen Alvarez', 'karen.alvarez@example.com'), toRecipients: [me], receivedDateTime: evMockAgo(1), isRead: false, importance: 'high', hasAttachments: true, conversationId: threadId, bodyPreview: 'We noticed water coming through the ceiling in the upstairs bedroom after last night\'s storm — can someone come take a look today?', body: { contentType: 'HTML', content: '<p>We noticed water coming through the ceiling in the upstairs bedroom after last night\'s storm.</p><p>Can someone come take a look today? It\'s getting worse.</p><p>— Karen</p>' } }),
-    evMockMsg({ folder: 'inbox', subject: 'Invoice #2044 — payment received', from: evMockPerson('Jobber Billing', 'billing@getjobber.com'), toRecipients: [me], receivedDateTime: evMockAgo(3), isRead: true, categories: ['Green category'], bodyPreview: 'Payment of $1,240.00 has been received for invoice #2044.', body: { contentType: 'HTML', content: '<p>Payment of <b>$1,240.00</b> has been received for invoice #2044.</p>' } }),
-    evMockMsg({ folder: 'inbox', subject: 'Signed contract attached', from: evMockPerson('Marcus Webb', 'mwebb@example.com'), toRecipients: [me], receivedDateTime: evMockAgo(6), isRead: true, hasAttachments: true, flag: { flagStatus: 'flagged' }, bodyPreview: 'Signed and attached — let us know when you can start.', body: { contentType: 'HTML', content: '<p>Signed and attached. Let us know when you can start.</p>' } }),
-    evMockMsg({ folder: 'inbox', subject: 'Photos from job site', from: evMockPerson('Dana Ruiz (Field)', 'dana.ruiz@hivelogic.local'), toRecipients: [me], receivedDateTime: evMockAgo(9), isRead: false, hasAttachments: true, bodyPreview: 'Uploaded today\'s progress photos from the Henderson job.', body: { contentType: 'HTML', content: '<p>Uploaded today\'s progress photos from the Henderson job — framing is done, on schedule.</p>' } }),
-    evMockMsg({ folder: 'inbox', subject: 'Team meeting notes — Thursday', from: evMockPerson('Priya Shah', 'priya.shah@hivelogic.local'), toRecipients: [me], receivedDateTime: evMockAgo(20), isRead: true, categories: ['Blue category'], bodyPreview: 'Notes from this week\'s sync are attached below.', body: { contentType: 'HTML', content: '<p>Notes from this week\'s sync:</p><ul><li>Henderson job on track</li><li>New hire starts Monday</li><li>Truck #3 needs service</li></ul>' } }),
-    evMockMsg({ folder: 'inbox', subject: 'Question about estimate #1122', from: evMockPerson('Tom Bailey', 'tbailey@example.com'), toRecipients: [me], receivedDateTime: evMockAgo(26), isRead: false, bodyPreview: 'Quick question about the materials line on the estimate you sent over.', body: { contentType: 'HTML', content: '<p>Quick question about the materials line on the estimate you sent over — is that per square foot or total?</p>' } }),
-    evMockMsg({ folder: 'inbox', subject: 'Vendor delivery scheduled for Friday', from: evMockPerson('Northgate Supply', 'orders@northgatesupply.example'), toRecipients: [me], receivedDateTime: evMockAgo(30), isRead: true, categories: ['Yellow category'], bodyPreview: 'Your order #88213 is scheduled to arrive Friday between 8am–12pm.', body: { contentType: 'HTML', content: '<p>Your order #88213 is scheduled to arrive Friday between 8am–12pm.</p>' } }),
-    evMockMsg({ folder: 'inbox', subject: 'Fall home maintenance tips', from: evMockPerson('Trade Weekly Newsletter', 'news@tradeweekly.example'), toRecipients: [me], receivedDateTime: evMockAgo(40), isRead: true, inferenceClassification: 'other', bodyPreview: '5 things every homeowner should check before winter…', body: { contentType: 'HTML', content: '<p>5 things every homeowner should check before winter…</p>' } }),
-    evMockMsg({ folder: 'inbox', subject: 'Re: Roof leak — urgent', from: evMockPerson('Karen Alvarez', 'karen.alvarez@example.com'), toRecipients: [me], receivedDateTime: evMockAgo(0.5), isRead: false, importance: 'high', conversationId: threadId, bodyPreview: 'Thanks for the quick response — tomorrow morning works.', body: { contentType: 'HTML', content: '<p>Thanks for the quick response — tomorrow morning works great.</p>' } }),
-    evMockMsg({ folder: 'inbox', subject: 'Limited time offer — act now!!!', from: evMockPerson('DealBlast', 'promo@dealblast.example'), toRecipients: [me], receivedDateTime: evMockAgo(50), isRead: true, inferenceClassification: 'other', bodyPreview: 'Save big on tools this week only.', body: { contentType: 'HTML', content: '<p>Save big on tools this week only.</p>' } }),
-    evMockMsg({ folder: 'sentitems', subject: 'Re: Roof leak — urgent', from: me, toRecipients: [evMockPerson('Karen Alvarez', 'karen.alvarez@example.com')], receivedDateTime: evMockAgo(1.5), conversationId: threadId, bodyPreview: 'We can have someone out first thing tomorrow morning.', body: { contentType: 'HTML', content: '<p>We can have someone out first thing tomorrow morning.</p>' } }),
-    evMockMsg({ folder: 'sentitems', subject: 'Estimate #1122 attached', from: me, toRecipients: [evMockPerson('Tom Bailey', 'tbailey@example.com')], receivedDateTime: evMockAgo(48), hasAttachments: true, bodyPreview: 'Estimate attached as discussed — let me know if you have questions.', body: { contentType: 'HTML', content: '<p>Estimate attached as discussed — let me know if you have questions.</p>' } }),
-    evMockMsg({ folder: 'sentitems', subject: 'Following up on invoice #2039', from: me, toRecipients: [evMockPerson('Linda Osei', 'linda.osei@example.com')], receivedDateTime: evMockAgo(70), bodyPreview: 'Just a friendly follow-up on the invoice sent last week.', body: { contentType: 'HTML', content: '<p>Just a friendly follow-up on the invoice sent last week.</p>' } }),
-    evMockMsg({ folder: 'drafts', subject: 'Proposal for Henderson project', from: me, toRecipients: [], receivedDateTime: evMockAgo(4), bodyPreview: 'Draft — attaching the full scope and timeline once finalized.', body: { contentType: 'HTML', content: '<p>Draft — attaching the full scope and timeline once finalized.</p>' } }),
-    evMockMsg({ folder: 'drafts', subject: 'Thank you note', from: me, toRecipients: [evMockPerson('Marcus Webb', 'mwebb@example.com')], receivedDateTime: evMockAgo(12), bodyPreview: 'Draft — thanks for choosing us for the project.', body: { contentType: 'HTML', content: '<p>Draft — thanks for choosing us for the project.</p>' } }),
-    evMockMsg({ folder: 'archive', subject: 'Completed job — Smith residence', from: evMockPerson('Angela Smith', 'angela.smith@example.com'), toRecipients: [me], receivedDateTime: evMockAgo(200), bodyPreview: 'Everything looks great, thank you for the fast turnaround!', body: { contentType: 'HTML', content: '<p>Everything looks great, thank you for the fast turnaround!</p>' } }),
-    evMockMsg({ folder: 'archive', subject: 'Old vendor quote — 2025', from: evMockPerson('BuildRight Materials', 'sales@buildright.example'), toRecipients: [me], receivedDateTime: evMockAgo(900), bodyPreview: 'Quote attached for lumber and fasteners.', body: { contentType: 'HTML', content: '<p>Quote attached for lumber and fasteners.</p>' } }),
-    evMockMsg({ folder: 'junkemail', subject: "You've won a prize!!!", from: evMockPerson('Totally Real Prizes', 'winner@totally-real-prizes.example'), toRecipients: [me], receivedDateTime: evMockAgo(60), inferenceClassification: 'other', bodyPreview: 'Click here to claim your reward.', body: { contentType: 'HTML', content: '<p>Click here to claim your reward.</p>' } }),
-    evMockMsg({ folder: 'deleteditems', subject: 'Test email', from: me, toRecipients: [me], receivedDateTime: evMockAgo(500), bodyPreview: 'Just testing.', body: { contentType: 'HTML', content: '<p>Just testing.</p>' } }),
-  ];
-}
-function evMockList() { if (!EV_MOCK_MESSAGES) evMockSeed(); return EV_MOCK_MESSAGES; }
-function evMockStrip(m) {
-  // list/search views never need the full HTML body -- keep the shape but drop it,
-  // matching how Graph's own $select would leave it out.
-  const c = Object.assign({}, m); delete c.body; return c;
-}
-async function evMockGraph(path, opts = {}) {
-  const list = evMockList();
-  const method = (opts.method || 'GET').toUpperCase();
-  const clean = path.split('?')[0];
-  const query = (path.split('?')[1] || '');
-
-  if (method === 'GET' && /\/me\/mailFolders$/.test(clean)) {
-    const std = EV_FOLDERS.map(f => ({ id: f.id, displayName: f.name, wellKnownName: f.id, unreadItemCount: list.filter(m => m.folder === f.id && !m.isRead).length }));
-    const custom = EV_MOCK_FOLDERS.map(f => ({ id: f.id, displayName: f.displayName, unreadItemCount: list.filter(m => m.folder === f.id && !m.isRead).length }));
-    return { value: std.concat(custom) };
-  }
-  if (method === 'POST' && /\/me\/mailFolders$/.test(clean)) {
-    const created = { id: evMockId(), displayName: (opts.body || {}).displayName || 'New folder' };
-    EV_MOCK_FOLDERS.push(created);
-    return Object.assign({}, created);
-  }
-  let fm = clean.match(/\/me\/mailFolders\/([^/]+)\/messages$/);
-  if (method === 'GET' && fm) {
-    const rows = list.filter(m => m.folder === fm[1]).sort((a, b) => new Date(b.receivedDateTime) - new Date(a.receivedDateTime));
-    return { value: rows.map(evMockStrip) };
-  }
-  if (method === 'GET' && /\/me\/messages$/.test(clean)) {
-    const params = new URLSearchParams(query);
-    let rows = list.slice();
-    const search = params.get('$search');
-    if (search) {
-      const q = search.replace(/^"|"$/g, '').toLowerCase();
-      rows = rows.filter(m => [m.subject, (m.from.emailAddress || {}).name, (m.from.emailAddress || {}).address, m.bodyPreview].join(' ').toLowerCase().includes(q));
-    }
-    const filter = params.get('$filter') || '';
-    if (/flag\/flagStatus eq 'flagged'/.test(filter)) rows = rows.filter(m => m.flag && m.flag.flagStatus === 'flagged');
-    else if (/importance eq 'high'/.test(filter)) rows = rows.filter(m => m.importance === 'high');
-    const convo = filter.match(/conversationId eq '([^']+)'/);
-    if (convo) rows = rows.filter(m => m.conversationId === convo[1]);
-    rows.sort((a, b) => new Date(b.receivedDateTime) - new Date(a.receivedDateTime));
-    return { value: rows.map(evMockStrip) };
-  }
-  let idm = clean.match(/\/me\/messages\/([^/]+)$/);
-  if (method === 'GET' && idm) {
-    const m = list.find(x => x.id === idm[1]);
-    if (!m) throw new Error('Message not found');
-    return Object.assign({}, m);
-  }
-  if (method === 'GET' && /\/me\/messages\/[^/]+\/attachments$/.test(clean)) {
-    return { value: [] }; // sample mailbox: attachment ICONS show, but there's nothing real to download
-  }
-  if (method === 'PATCH' && idm) {
-    const m = list.find(x => x.id === idm[1]); if (!m) throw new Error('Message not found');
-    Object.assign(m, opts.body || {});
-    return Object.assign({}, m);
-  }
-  let mv = clean.match(/\/me\/messages\/([^/]+)\/move$/);
-  if (method === 'POST' && mv) {
-    const m = list.find(x => x.id === mv[1]); if (!m) throw new Error('Message not found');
-    m.folder = (opts.body || {}).destinationId || m.folder;
-    return Object.assign({}, m); // unlike real Graph, the mock keeps the same id -- nothing to reconcile for Undo
-  }
-  let sd = clean.match(/\/me\/messages\/([^/]+)\/send$/);
-  if (method === 'POST' && sd) {
-    const m = list.find(x => x.id === sd[1]); if (!m) throw new Error('Message not found');
-    m.folder = 'sentitems'; m.isRead = true;
-    return {};
-  }
-  if (method === 'POST' && /\/me\/messages$/.test(clean)) {
-    const body = opts.body || {};
-    const created = evMockMsg(Object.assign({ folder: 'drafts', from: evMockPerson('Demo Mailbox', 'demo@hivelogic.local'), receivedDateTime: new Date().toISOString(), bodyPreview: (body.body && body.body.content || '').replace(/<[^>]+>/g, '').slice(0, 140) }, body));
-    list.unshift(created);
-    return Object.assign({}, created);
-  }
-  if (method === 'POST' && /\/me\/sendMail$/.test(clean)) {
-    const body = ((opts.body || {}).message) || {};
-    const created = evMockMsg(Object.assign({ folder: 'sentitems', from: evMockPerson('Demo Mailbox', 'demo@hivelogic.local'), receivedDateTime: new Date().toISOString(), bodyPreview: (body.body && body.body.content || '').replace(/<[^>]+>/g, '').slice(0, 140) }, body));
-    list.unshift(created);
-    return {};
-  }
-  if (method === 'POST' && /\/me\/mailFolders\/inbox\/messageRules$/.test(clean)) return {}; // block-sender rule: no-op in the sample mailbox
-  return { value: [] };
-}
 // Merge IMAP mailboxes alongside Microsoft ones in the account list.
 function evListAccounts() {
   const ms = (msalApp && msalApp.getAllAccounts) ? msalApp.getAllAccounts() : [];
-  const real = ms.concat(evImapAccounts || []);
-  // No real mailbox connected anywhere -- fall back to the sample mailbox so
-  // the tab is fully usable with nothing to sign into. The moment a real
-  // Microsoft or IMAP account is connected, this stops appearing.
-  return real.length ? real : [EV_MOCK_ACCOUNT];
+  return ms.concat(evImapAccounts || []);
 }
 async function hcRefreshImapAccounts() {
   try { const j = await evMailApi('accounts', {}); evImapAccounts = j.accounts || []; }
@@ -5196,15 +5060,17 @@ function openEmailTab() {
   // Always paint the sidebar so the second column is never blank.
   renderEmailSidebar();
   const note = $('ev-setup-note'), btn = $('ev-signin');
-  const usingSample = !!(evActive && evActive.provider === 'mock');
-  const sampleBanner = $('ev-sample-banner'); if (sampleBanner) sampleBanner.classList.toggle('hidden', !usingSample);
-  if (!emailConfigured() && !usingSample) {
+  // Microsoft not configured yet only blocks the tab if there's also no
+  // already-connected IMAP mailbox to fall back to -- an admin who hasn't
+  // pasted an Azure client ID shouldn't lose access to a Gmail account
+  // someone already connected.
+  if (!emailConfigured() && !evActive) {
     connect.classList.remove('hidden');
     if (note) { note.classList.remove('hidden'); note.innerHTML = 'Almost there — your admin needs to paste an <b>Azure Application (client) ID</b> into the app config to switch email on. Ask Chris / see the setup checklist.'; }
     if (btn) btn.disabled = true;
     return;
   }
-  if (btn) btn.disabled = false;
+  if (btn) btn.disabled = !emailConfigured();
   if (note) note.classList.add('hidden');
   if (!evActive) { connect.classList.remove('hidden'); return; }
   connect.classList.add('hidden');
@@ -5428,11 +5294,9 @@ function renderEmailSidebar() {
     }
     accWrap.appendChild(pick);
   }
-  // Adding mailboxes lives in Settings (Outlook-style). Only when no REAL
-  // mailbox is connected do we show a first-run "Add a mailbox" here so new
-  // users aren't stranded — the sample mailbox doesn't count as "connected",
-  // or this would vanish the moment the demo data loads and never come back.
-  if (!evAccounts.some(a => a.provider !== 'mock')) {
+  // Adding mailboxes lives in Settings (Outlook-style). Only when no mailbox
+  // is connected yet do we show a first-run "Add a mailbox" here.
+  if (!evAccounts.length) {
     const add = document.createElement('button'); add.className = 'ev-acct-add';
     add.innerHTML = '<span>＋</span> Add a mailbox';
     add.onclick = hcAddImapMailbox; accWrap.appendChild(add);
@@ -7290,6 +7154,10 @@ function openEmailCompose(mode, src) {
   evCheckDraftRecovery();
 }
 function evSplitAddrs(s) { return (s || '').split(/[,;]+/).map(x => x.trim()).filter(Boolean); }
+// Not a full RFC 5322 parser -- just enough to catch "forgot the @" or a
+// stray word before it reaches Graph/SMTP and comes back as an opaque
+// server error at send time.
+const EV_EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 // ---- draft autosave (in-flight, unsent draft only — raw localStorage, never
 // hcPref/hlUserSettings: this is the one narrow exception to "settings follow
@@ -7389,6 +7257,8 @@ function renderComposeAttachments() {
   });
 }
 async function evSendCompose() {
+  const send = $('ev-c-send');
+  if (send && send.disabled) return; // already sending -- guards double-fire from a source other than a disabled button click (e.g. a keyboard shortcut)
   const to = evChipFieldAddresses('ev-c-to').map(a => ({ emailAddress: { address: a } }));
   const cc = evChipFieldAddresses('ev-c-cc').map(a => ({ emailAddress: { address: a } }));
   const bcc = evChipFieldAddresses('ev-c-bcc').map(a => ({ emailAddress: { address: a } }));
@@ -7396,6 +7266,8 @@ async function evSendCompose() {
   const bodyHtml = $('ev-c-body').innerHTML;
   const msg = $('ev-c-msg');
   if (!to.length) { msg.textContent = 'Add at least one recipient.'; msg.classList.remove('hidden'); return; }
+  const badAddr = [...to, ...cc, ...bcc].map(r => r.emailAddress.address).find(a => !EV_EMAIL_RE.test(a));
+  if (badAddr) { msg.textContent = 'That doesn\'t look like a valid email address: ' + badAddr; msg.classList.remove('hidden'); return; }
   // switch active account to the chosen "From"
   const fromId = $('ev-c-from').value; const acc = evAccounts.find(a => a.homeAccountId === fromId); if (acc) evActive = acc;
   const message = {
@@ -7405,7 +7277,7 @@ async function evSendCompose() {
     isReadReceiptRequested: !!($('ev-c-receipt') && $('ev-c-receipt').checked),
   };
   if (evAttachments.length) message.attachments = evAttachments.map(a => ({ '@odata.type': '#microsoft.graph.fileAttachment', name: a.name, contentType: a.type || 'application/octet-stream', contentBytes: a.bytes }));
-  const send = $('ev-c-send'); send.disabled = true; send.textContent = 'Sending…';
+  send.disabled = true; send.textContent = 'Sending…';
   try {
     if (evComposeDraftId) {
       // A real server draft exists for this session -- update it with the
@@ -7466,7 +7338,6 @@ function evToast(text) {
 { const b = $('ev-compose'); if (b) b.addEventListener('click', () => openEmailCompose('new', null)); }
 { const b = $('ev-refresh'); if (b) b.addEventListener('click', () => selectFolder(evFolderId, evFolderName)); }
 { const b = $('ev-signin'); if (b) b.addEventListener('click', emailSignIn); }
-{ const b = $('ev-sample-signin'); if (b) b.addEventListener('click', emailSignIn); }
 { const b = $('ev-c-close'); if (b) b.addEventListener('click', () => $('ev-compose-backdrop').classList.add('hidden')); }
 { const b = $('ev-c-cancel'); if (b) b.addEventListener('click', () => { evClearDraft(); $('ev-compose-backdrop').classList.add('hidden'); }); }
 { const s = $('ev-c-subj'); if (s) s.addEventListener('input', evScheduleDraftSave); }

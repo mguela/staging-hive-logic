@@ -1806,14 +1806,6 @@ html[data-theme="dark"] .huddle-banner {
 .ev-c-draft-banner { display: flex; align-items: center; gap: 10px; background: var(--gold-soft); border: 1px solid var(--gold); border-radius: 9px; padding: 8px 12px; font-size: 12.5px; color: #8a5a12; margin-bottom: 10px; }
 .ev-c-draft-banner button { border: none; background: rgba(0,0,0,.08); color: #6b4400; font-weight: 800; font-size: 11px; padding: 4px 10px; border-radius: 7px; cursor: pointer; }
 .ev-c-draft-banner button:hover { background: rgba(0,0,0,.15); }
-
-/* "Add a mailbox" already covers this in the sidebar, but nothing in the
-   mail list/reading pane itself said "this isn't your real inbox" -- this
-   is that, so a first-time real user can't mistake the example messages
-   for actual mail. */
-.ev-sample-banner { display: flex; align-items: center; justify-content: space-between; gap: 12px; background: var(--gold-soft); border-bottom: 1px solid var(--gold); padding: 9px 22px; font-size: 12.5px; color: #8a5a12; }
-.ev-sample-banner button { flex: none; border: 1px solid rgba(0,0,0,.15); background: rgba(255,255,255,.6); color: #6b4400; font-weight: 800; font-size: 11.5px; padding: 5px 12px; border-radius: 7px; cursor: pointer; }
-.ev-sample-banner button:hover { background: #fff; }
 .ev-c-draft-spacer { flex: 1; }
 
 /* sidebar: Favourites section (hardcoded light text — #panel-email sits on
