@@ -26,6 +26,8 @@
 // the embedded/main realm), TOKEN_ENC_KEY (required to store passwords).
 
 const crypto = require('crypto');
+const dns = require('dns').promises;
+const net = require('net');
 const { ImapFlow } = require('imapflow');
 const nodemailer = require('nodemailer');
 const { simpleParser } = require('mailparser');
@@ -440,6 +442,8 @@ function parsedAddrList(field) {
   return field.value.map(a => ({ emailAddress: { name: a.name || '', address: (a.address || '').toLowerCase() } })).filter(x => x.emailAddress.address);
 }
 // ---------- SMTP send ----------
+const EV_MAX_ATTACHMENT_BYTES = 3 * 1024 * 1024;        // matches the composer's own per-file limit
+const EV_MAX_ATTACHMENTS_TOTAL_BYTES = 20 * 1024 * 1024; // combined cap for one send
 async function sendMail(acct, creds, message) {
   const transport = nodemailer.createTransport({
     host: acct.smtp_host, port: acct.smtp_port, secure: !!acct.smtp_secure,
@@ -456,9 +460,20 @@ async function sendMail(acct, creds, message) {
     [isHtml ? 'html' : 'text']: (message.body && message.body.content) || '',
   };
   if (Array.isArray(message.attachments)) {
-    mail.attachments = message.attachments.map(a => ({
-      filename: a.name, content: a.contentBytes ? Buffer.from(a.contentBytes, 'base64') : undefined, contentType: a.contentType,
-    })).filter(a => a.content);
+    // The composer enforces 3 MB/file client-side, but that's advisory --
+    // this is the same evGraph()-shaped body a direct API call could send
+    // with anything in it, and decoding an unbounded base64 payload into a
+    // Buffer on serverless is a real memory/timeout risk.
+    let total = 0;
+    mail.attachments = message.attachments.map(a => {
+      const content = a.contentBytes ? Buffer.from(a.contentBytes, 'base64') : undefined;
+      if (content) {
+        if (content.length > EV_MAX_ATTACHMENT_BYTES) throw new Error((a.name || 'Attachment') + ' is too large — the limit is 3 MB per file.');
+        total += content.length;
+      }
+      return { filename: a.name, content: content, contentType: a.contentType };
+    }).filter(a => a.content);
+    if (total > EV_MAX_ATTACHMENTS_TOTAL_BYTES) throw new Error('Attachments are too large together — the limit is 20 MB per email.');
   }
   // Note: we don't APPEND to the Sent folder. Gmail/Yahoo auto-file SMTP sends
   // (appending would duplicate them); iCloud/custom may not show a Sent copy
@@ -474,7 +489,54 @@ function errText(e) {
   const parts = [e.responseText, e.response, e.serverResponseCode, e.code, e.message].filter(Boolean);
   return (parts[0] ? String(parts[0]) : String(e)).slice(0, 200);
 }
+// SECURITY: add_account's imap_host/smtp_host come straight from a signed-in
+// user's request body for a custom (non-preset) mailbox. Without this check,
+// pointing them at an internal address turns this route into an SSRF/port-
+// scan oracle -- the caller can't reach those hosts directly, but this
+// server can, and the connect/auth error text it gets back (timeout vs.
+// refused vs. protocol mismatch) differentiates what's actually there.
+function isPrivateOrReservedIp(ip) {
+  const v = net.isIP(ip);
+  if (v === 4) {
+    const [a, b] = ip.split('.').map(Number);
+    if (a === 127 || a === 10 || a === 0) return true;              // loopback, 10/8, "this network"
+    if (a === 172 && b >= 16 && b <= 31) return true;                // 172.16/12
+    if (a === 192 && b === 168) return true;                        // 192.168/16
+    if (a === 169 && b === 254) return true;                        // link-local, incl. cloud metadata (169.254.169.254)
+    if (a === 100 && b >= 64 && b <= 127) return true;               // 100.64/10 (carrier-grade NAT)
+    return false;
+  }
+  if (v === 6) {
+    const low = ip.toLowerCase();
+    if (low === '::1' || low === '::') return true;
+    if (low.startsWith('fe80:') || low.startsWith('fc') || low.startsWith('fd')) return true; // link-local / unique-local
+    if (low.startsWith('::ffff:')) return isPrivateOrReservedIp(low.slice(7)); // IPv4-mapped
+    return false;
+  }
+  return false;
+}
+async function assertPublicHost(host) {
+  const h = String(host || '').trim().toLowerCase();
+  if (!h) throw new Error('Host is required.');
+  if (h === 'localhost') throw new Error('That host isn\'t reachable from here.');
+  if (net.isIP(h)) {
+    if (isPrivateOrReservedIp(h)) throw new Error('That host isn\'t reachable from here.');
+    return;
+  }
+  let addrs;
+  try { addrs = await dns.lookup(h, { all: true }); }
+  catch (e) { throw new Error('Could not resolve ' + h + '.'); }
+  if (!addrs.length) throw new Error('Could not resolve ' + h + '.');
+  for (const a of addrs) {
+    if (isPrivateOrReservedIp(a.address)) throw new Error('That host isn\'t reachable from here.');
+  }
+}
 async function verifyConnection(acct, creds) {
+  // Reject before ever opening a socket -- resolving is enough to leak
+  // whether an internal name exists via DNS timing/NXDOMAIN alone otherwise,
+  // but the connect attempt itself is the louder oracle this closes.
+  await assertPublicHost(acct.imap_host);
+  await assertPublicHost(acct.smtp_host);
   // Prove IMAP login works, then SMTP login — reporting WHICH failed and why,
   // so the user sees a real reason instead of a generic "command failed".
   let client;
@@ -506,6 +568,16 @@ module.exports = async (req, res) => {
       if (q.error) return fail(String(q.error_description || q.error));
       const gw = readGState(q.state || '');
       if (!gw) return fail('The sign-in link expired — please try again.');
+      // Single-use, same as api/msmail.js's callback (Item 5): claim the
+      // state's hash exactly once so a replayed callback (same code
+      // delivered twice) is rejected instead of silently re-running. Fails
+      // open on a store error -- the state's own HMAC signature + expiry
+      // still protect it either way.
+      try {
+        const { claimOAuthStateOnce, hashState } = await import('./_lib/oauth-state.js');
+        const claim = await claimOAuthStateOnce({ provider: 'gmail', stateHash: hashState(q.state) });
+        if (!claim.ok) return fail('This sign-in link was already used — please reconnect the mailbox.');
+      } catch (e) { /* fail open: signature + expiry still protect the state */ }
       let tok;
       try {
         const p = new URLSearchParams({ client_id: GOOGLE.clientId, client_secret: GOOGLE.clientSecret, grant_type: 'authorization_code', code: q.code, redirect_uri: GOOGLE.redirect });
@@ -575,6 +647,8 @@ module.exports = async (req, res) => {
         smtp_host: (body.smtpHost || preset.smtp_host).trim(), smtp_port: parseInt(body.smtpPort || preset.smtp_port, 10), smtp_secure: body.smtpSecure != null ? !!body.smtpSecure : preset.smtp_secure,
       };
       if (!acct.imap_host || !acct.smtp_host) return res.status(400).json({ error: 'IMAP/SMTP host is required for a custom account' });
+      const validPort = (p) => Number.isInteger(p) && p > 0 && p <= 65535;
+      if (!validPort(acct.imap_port) || !validPort(acct.smtp_port)) return res.status(400).json({ error: 'IMAP/SMTP port must be a number between 1 and 65535' });
 
       // SECURITY: refuse to store a real password unless encryption is armed.
       const { encryptSecret, isEncrypted } = await getSecretsLib();
@@ -668,6 +742,14 @@ module.exports.mailboxesForUser = async function mailboxesForUser({ uid, realm }
   const rows = await dbFetch(realm, `/rest/v1/hc_mail_accounts?owner_id=eq.${uid}&select=email_address,display_name`) || [];
   return rows.map(r => ({ address: r.email_address, name: r.display_name || '' })).filter(r => r.address);
 };
+
+// Exposed for test/mail-ssrf-guard.test.mjs -- the SSRF/attachment-size
+// checks are the security-critical pure logic in this file; everything else
+// needs a live IMAP/SMTP/DB connection to exercise.
+module.exports.isPrivateOrReservedIp = isPrivateOrReservedIp;
+module.exports.assertPublicHost = assertPublicHost;
+module.exports.EV_MAX_ATTACHMENT_BYTES = EV_MAX_ATTACHMENT_BYTES;
+module.exports.EV_MAX_ATTACHMENTS_TOTAL_BYTES = EV_MAX_ATTACHMENTS_TOTAL_BYTES;
 
 // Same bearer-to-user resolution the mail UI uses, so a caller acting for a
 // person resolves them exactly as this route would, against the same realms.
