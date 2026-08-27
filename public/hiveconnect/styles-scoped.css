@@ -2364,8 +2364,6 @@ html[data-theme="dark"] :is(#hiveconnect-root, .hc-embed).huddle-banner {
 :is(#hiveconnect-root, .hc-embed).ev-read-meta { font-size: 12.5px; color: var(--ink); line-height: 1.6; }
 :is(#hiveconnect-root, .hc-embed) .ev-read-when,
 :is(#hiveconnect-root, .hc-embed).ev-read-when { display: block; font-size: 11px; color: var(--mut); margin-top: 2px; }
-:is(#hiveconnect-root, .hc-embed) .ev-read-actions,
-:is(#hiveconnect-root, .hc-embed).ev-read-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 4px; }
 :is(#hiveconnect-root, .hc-embed) .ev-read-frame,
 :is(#hiveconnect-root, .hc-embed).ev-read-frame { flex: 1; width: 100%; border: 0; background: #fff; min-height: 320px; }
 :is(#hiveconnect-root, .hc-embed) .ev-read-attach,
@@ -2500,6 +2498,8 @@ html[data-theme="dark"] :is(#hiveconnect-root, .hc-embed).huddle-banner {
 :is(#hiveconnect-root, .hc-embed).ev-move-item { padding: 8px 12px; border-radius: 7px; cursor: pointer; font-size: 13px; color: var(--ink); }
 :is(#hiveconnect-root, .hc-embed) .ev-move-item:hover,
 :is(#hiveconnect-root, .hc-embed).ev-move-item:hover { background: var(--steel-bg); }
+:is(#hiveconnect-root, .hc-embed) .ev-move-sep,
+:is(#hiveconnect-root, .hc-embed).ev-move-sep { height: 1px; background: var(--line); margin: 5px 0; }
 
 :is(#hiveconnect-root, .hc-embed) .ev-cf-sep,
 :is(#hiveconnect-root, .hc-embed).ev-cf-sep { font-size: 10px; font-weight: 800; letter-spacing: .7px; color: var(--mut); padding: 12px 11px 5px; }
@@ -2618,9 +2618,28 @@ html[data-theme="dark"] :is(#hiveconnect-root, .hc-embed).huddle-banner {
 /* Reina AI column -- third pane, same footprint/background as the list and
    reading panes either side of it (width, white background, hairline
    border) so it reads as one more column of this layout, not a bolted-on
-   card. */
+   card. The "Ask Reina" trigger lives in its own footer, pinned to the
+   bottom instead of scrolling away with the brief/AI output above it. */
 :is(#hiveconnect-root, .hc-embed) .ev-reina-pane,
-:is(#hiveconnect-root, .hc-embed).ev-reina-pane { width: 380px; min-width: 320px; border-left: 1px solid var(--line); overflow-y: auto; background: var(--card); display: flex; flex-direction: column; min-height: 0; }
+:is(#hiveconnect-root, .hc-embed).ev-reina-pane { width: 380px; min-width: 320px; border-left: 1px solid var(--line); background: var(--card); display: flex; flex-direction: column; min-height: 0; }
+:is(#hiveconnect-root, .hc-embed) .ev-reina-scroll,
+:is(#hiveconnect-root, .hc-embed).ev-reina-scroll { flex: 1; overflow-y: auto; min-height: 0; }
+:is(#hiveconnect-root, .hc-embed) .ev-reina-footer,
+:is(#hiveconnect-root, .hc-embed).ev-reina-footer { flex: none; display: flex; justify-content: center; padding: 14px 22px; border-top: 1px solid var(--line); }
+:is(#hiveconnect-root, .hc-embed) .ev-reina-ask,
+:is(#hiveconnect-root, .hc-embed).ev-reina-ask {
+  appearance: none; -webkit-appearance: none; box-shadow: 0 1px 2px rgba(16,24,40,.12);
+  display: inline-flex; align-items: center; gap: 7px; height: 36px; padding: 0 18px;
+  border: 1px solid var(--steel-deep); background: var(--steel-deep); color: #fff;
+  border-radius: 999px; cursor: pointer; font: 700 13px var(--sans);
+  transition: filter .12s, opacity .12s;
+}
+:is(#hiveconnect-root, .hc-embed) .ev-reina-ask:hover,
+:is(#hiveconnect-root, .hc-embed).ev-reina-ask:hover { filter: brightness(1.08); }
+:is(#hiveconnect-root, .hc-embed) .ev-reina-ask:disabled,
+:is(#hiveconnect-root, .hc-embed).ev-reina-ask:disabled { opacity: .45; cursor: default; filter: none; }
+:is(#hiveconnect-root, .hc-embed) .ev-reina-ask-star,
+:is(#hiveconnect-root, .hc-embed).ev-reina-ask-star { font-size: 13px; }
 
 /* list pane wrapper + head (select-all, Focused/Other tabs, sort) */
 :is(#hiveconnect-root, .hc-embed) .ev-list-pane,

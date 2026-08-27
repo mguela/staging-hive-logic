@@ -1581,7 +1581,6 @@ html[data-theme="dark"] .huddle-banner {
 .ev-read-subj { font-size: 18px; font-weight: 800; color: var(--ink); margin-bottom: 8px; }
 .ev-read-meta { font-size: 12.5px; color: var(--ink); line-height: 1.6; }
 .ev-read-when { display: block; font-size: 11px; color: var(--mut); margin-top: 2px; }
-.ev-read-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 4px; }
 .ev-read-frame { flex: 1; width: 100%; border: 0; background: #fff; min-height: 320px; }
 .ev-read-attach { padding: 12px 22px; border-top: 1px solid var(--line); display: flex; flex-wrap: wrap; gap: 8px; background: var(--card); }
 .ev-attach-chip { display: inline-flex; align-items: center; padding: 6px 11px; background: var(--steel-bg); border: 1px solid var(--line);
@@ -1659,6 +1658,7 @@ html[data-theme="dark"] .huddle-banner {
 .ev-move-menu { position: fixed; z-index: 90; background: var(--card); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 14px 40px rgba(8,12,20,.28); padding: 5px; min-width: 190px; max-height: 320px; overflow-y: auto; }
 .ev-move-item { padding: 8px 12px; border-radius: 7px; cursor: pointer; font-size: 13px; color: var(--ink); }
 .ev-move-item:hover { background: var(--steel-bg); }
+.ev-move-sep { height: 1px; background: var(--line); margin: 5px 0; }
 
 .ev-cf-sep { font-size: 10px; font-weight: 800; letter-spacing: .7px; color: var(--mut); padding: 12px 11px 5px; }
 
@@ -1732,8 +1732,21 @@ html[data-theme="dark"] .huddle-banner {
 /* Reina AI column -- third pane, same footprint/background as the list and
    reading panes either side of it (width, white background, hairline
    border) so it reads as one more column of this layout, not a bolted-on
-   card. */
-.ev-reina-pane { width: 380px; min-width: 320px; border-left: 1px solid var(--line); overflow-y: auto; background: var(--card); display: flex; flex-direction: column; min-height: 0; }
+   card. The "Ask Reina" trigger lives in its own footer, pinned to the
+   bottom instead of scrolling away with the brief/AI output above it. */
+.ev-reina-pane { width: 380px; min-width: 320px; border-left: 1px solid var(--line); background: var(--card); display: flex; flex-direction: column; min-height: 0; }
+.ev-reina-scroll { flex: 1; overflow-y: auto; min-height: 0; }
+.ev-reina-footer { flex: none; display: flex; justify-content: center; padding: 14px 22px; border-top: 1px solid var(--line); }
+.ev-reina-ask {
+  appearance: none; -webkit-appearance: none; box-shadow: 0 1px 2px rgba(16,24,40,.12);
+  display: inline-flex; align-items: center; gap: 7px; height: 36px; padding: 0 18px;
+  border: 1px solid var(--steel-deep); background: var(--steel-deep); color: #fff;
+  border-radius: 999px; cursor: pointer; font: 700 13px var(--sans);
+  transition: filter .12s, opacity .12s;
+}
+.ev-reina-ask:hover { filter: brightness(1.08); }
+.ev-reina-ask:disabled { opacity: .45; cursor: default; filter: none; }
+.ev-reina-ask-star { font-size: 13px; }
 
 /* list pane wrapper + head (select-all, Focused/Other tabs, sort) */
 .ev-list-pane { width: 380px; min-width: 320px; border-right: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0; }

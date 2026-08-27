@@ -6525,6 +6525,7 @@ function evUpdateCmdbarState() {
   const replyCaret = $('ev-cmd-reply-caret'); if (replyCaret) replyCaret.disabled = !canReply;
   const moreBtn = $('ev-cmd-more'); if (moreBtn) moreBtn.disabled = !canReply;
   const undoBtn = $('ev-cmd-undo'); if (undoBtn) undoBtn.disabled = !evLastUndo;
+  const askReinaBtn = $('ev-reina-ask-btn'); if (askReinaBtn) askReinaBtn.disabled = !canReply;
 }
 function evUpdateListHeadUI(shownRows, counts) {
   counts = counts || { focusedCount: 0, otherCount: 0 };
@@ -6714,7 +6715,7 @@ function evAddrsRaw(list) { return (list || []).map(r => r.emailAddress && r.ema
 // show mismatched messages (Reina's take on a mail that just got deleted/
 // moved/filed out from under it).
 function evReinaPaneEmpty() {
-  const p = $('ev-reina-pane'); if (p) p.innerHTML = '<div class="ev-read-empty">Reina\'s take on the open message will appear here.</div>';
+  const p = $('ev-reina-scroll'); if (p) p.innerHTML = '<div class="ev-read-empty">Reina\'s take on the open message will appear here.</div>';
 }
 function renderReadingPane(m) {
   const read = $('ev-read'); if (!read) return;
@@ -6733,25 +6734,17 @@ function renderReadingPane(m) {
   topRight.appendChild(meta);
   top.appendChild(topRight);
   head.appendChild(top);
-  // action bar — Reply/Reply-all/Forward/Archive/Move/Flag/Delete/Snooze/More
-  // all duplicated the ev-toolbar command bar above the reading pane (same
-  // openEmailCompose/evMove/evMoveMenu/evFlagMenu/evDelete/evMoreMenu calls,
-  // reachable there once a message is open). Only Reina isn't available up
-  // there, so it's the only action left here.
-  evEnsureToolbarCss();
-  const bar = document.createElement('div'); bar.className = 'ev-read-actions';
-  const act = (html, title, fn, extra) => { const b = document.createElement('button'); b.className = 'ev-act' + (extra ? ' ' + extra : ''); b.innerHTML = html; b.title = title; b.setAttribute('aria-label', title); b.onclick = fn; return b; };
-  const spacer = document.createElement('span'); spacer.style.flex = '1'; bar.appendChild(spacer);
-  bar.appendChild(act('<span class="ev-reina-star">✦</span> Reina', 'Reina AI — summarize, draft, extract', (e) => evReinaMenu(e, m), 'ev-act-reina'));
-  head.appendChild(bar);
   read.appendChild(head);
-  // Reina's read of THIS message, in its own column to the right. (Chris,
-  // 2026-08-18: "in the preview it shows a reina summary of the email and a
-  // suggested action or response.") Rendered empty and filled in
-  // asynchronously, so the email itself never waits on a model call.
+  // Reina's read of THIS message, in its own column to the right -- the
+  // "✦ Reina" trigger that used to live in a header action bar here now
+  // lives as the "Ask Reina" button pinned to that column's own footer
+  // (wired once, statically, near ev-cmd-reply-caret). Rendered empty and
+  // filled in asynchronously, so the email itself never waits on a model
+  // call. (Chris, 2026-08-18: "in the preview it shows a reina summary of
+  // the email and a suggested action or response.")
   evEnsureBriefCss();
-  const reinaPane = $('ev-reina-pane'); if (reinaPane) reinaPane.innerHTML = '';
-  const briefHost = reinaPane || read;
+  const reinaScroll = $('ev-reina-scroll'); if (reinaScroll) reinaScroll.innerHTML = '';
+  const briefHost = reinaScroll || read;
   const brief = document.createElement('div'); brief.className = 'ev-reina-brief'; briefHost.appendChild(brief);
   evReinaBrief(m, brief);
   const aiOut = document.createElement('div'); aiOut.id = 'ev-ai-out'; aiOut.className = 'ev-ai-out hidden'; briefHost.appendChild(aiOut);
@@ -7184,16 +7177,6 @@ function evMoreMenu(e, m) {
     ['🚫 Block sender', () => evBlockSender(m)],
   ]);
 }
-function evEnsureToolbarCss() {
-  if (document.getElementById('ev-toolbar-css')) return;
-  const st = document.createElement('style'); st.id = 'ev-toolbar-css';
-  st.textContent = '#ev-read .ev-read-actions{display:flex;align-items:center;gap:3px;flex-wrap:wrap}'
-    + '#ev-read .ev-act{appearance:none;-webkit-appearance:none;height:34px;min-width:34px;padding:0 9px;border:0;background:transparent;box-shadow:none;color:var(--slate);border-radius:8px;display:inline-flex;align-items:center;justify-content:center;gap:6px;cursor:pointer;font:600 12.5px var(--sans);transition:background .12s,color .12s}'
-    + '#ev-read .ev-act:hover{background:var(--steel-bg);color:var(--steel-deep)}'
-    + '#ev-read .ev-act-reina{color:var(--steel-deep);font-weight:700}#ev-read .ev-reina-star{font-size:13px}'
-    + '.ev-move-menu .ev-move-sep{height:1px;background:var(--line);margin:5px 0}';
-  document.head.appendChild(st);
-}
 function evAiMoreMenu(e, m) {
   e.stopPropagation();
   const old = document.getElementById('ev-ai-menu'); if (old) old.remove();
@@ -7534,6 +7517,7 @@ function evToast(text) {
       ['↪ Forward', () => openEmailCompose('forward', m)],
     ]);
   }); }
+{ const b = $('ev-reina-ask-btn'); if (b) b.addEventListener('click', (e) => { const m = evGetOpenMessage(); if (m) evReinaMenu(e, m); }); }
 { const b = $('ev-cmd-readall'); if (b) b.addEventListener('click', evMarkAllRead); }
 { const b = $('ev-cmd-flag'); if (b) b.addEventListener('click', () => evBulkAction('flag')); }
 { const b = $('ev-cmd-snooze'); if (b) b.addEventListener('click', () => evToast('Snooze is coming soon.')); }
