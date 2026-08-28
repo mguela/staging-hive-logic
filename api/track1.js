@@ -7022,7 +7022,17 @@ async function handleMonitorReview(req, res) {
 
   if (!employeeId) {
     const agentsRes = await supabaseRequest('monitor_agents?select=id,employee_id,device_name,platform,status,paired_at,last_seen_at,last_disconnected_at,agent_version&order=last_seen_at.desc');
-    const agents = agentsRes.ok ? await agentsRes.json() : [];
+    // A failed query here used to silently become an empty roster --
+    // indistinguishable from "genuinely nobody has paired yet" on the
+    // frontend, which shows that exact reassuring message either way
+    // (public/index.html mgrMonRefresh). That is the worst failure mode
+    // for an admin-facing screen: it reads as calm, true information when
+    // it may be reporting a query that never ran. Surface the real error
+    // instead so a broken query looks broken, not empty.
+    if (!agentsRes.ok) {
+      return res.status(500).json({ ok: false, error: 'Could not load the Monitor roster: ' + (await agentsRes.text()) });
+    }
+    const agents = await agentsRes.json();
     const empIds = [...new Set((agents || []).map((a) => a.employee_id))];
     let profiles = [];
     if (empIds.length) {
