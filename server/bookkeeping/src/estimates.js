@@ -186,6 +186,11 @@ export function createEstimate(input, actor, { counterState, now = new Date().to
     index,
     type: line.type,
     description: line.description || '',
+    // jomell, 2026-08-27: the Scope of Work description (bullet points
+    // under a line item's name) was being typed in and then dropped at
+    // save time -- only the name ever reached this record. Carried through
+    // as its own field now, distinct from `description` (the name).
+    notes: line.notes || '',
     qty: Number(line.qty) || 0,
     unit: line.unit || 'ea',
     unitCost: money(line.unitCost),

@@ -21,6 +21,7 @@ export const APPROVAL_TTL_MS = 5 * 60 * 1000;
 
 export const ACTION_KINDS = Object.freeze({
   SEND_EMAIL: 'send_email',
+  SEND_SMS: 'send_sms',
 });
 
 // Which actions a person must personally approve. Chris named the categories:
@@ -28,6 +29,7 @@ export const ACTION_KINDS = Object.freeze({
 // an unrecognised action is NOT 'routine' -- see requiresApproval below.
 export const SENSITIVITY = Object.freeze({
   [ACTION_KINDS.SEND_EMAIL]: 'comms',
+  [ACTION_KINDS.SEND_SMS]: 'comms',
 });
 
 const APPROVED_SENSITIVITIES = Object.freeze(['comms', 'schedule', 'financial']);
@@ -68,6 +70,8 @@ export function payloadDigest(actionKind, payload) {
       payload.body || '',
       payload.from || '',
     );
+  } else if (actionKind === ACTION_KINDS.SEND_SMS) {
+    parts.push(payload.to || '', payload.body || '');
   } else {
     parts.push(JSON.stringify(payload));
   }
@@ -118,6 +122,43 @@ export function normalizeEmailPayload(raw) {
   const from = typeof raw.from === 'string' ? raw.from.trim().toLowerCase() : '';
   if (from && !EMAIL_RE.test(from)) return null;
   return Object.freeze({ to, cc, bcc, subject, body, from });
+}
+
+// E.164: a leading '+', then 1-15 digits, first digit not zero.
+const E164_RE = /^\+[1-9]\d{1,14}$/u;
+
+export const SMS_LIMITS = Object.freeze({
+  body: 1600, // ~10 concatenated Twilio segments -- well past a normal reply
+});
+
+// True if `s` contains a control character other than tab/newline/carriage
+// return -- checked by character code rather than a regex literal so the
+// bytes this guards against never have to appear, even as an escape
+// sequence, in this file's own source.
+function hasControlChars(s) {
+  for (let i = 0; i < s.length; i++) {
+    const code = s.charCodeAt(i);
+    if (code === 9 || code === 10 || code === 13) continue;
+    if (code < 32 || code === 127) return true;
+  }
+  return false;
+}
+
+// Unlike email, an SMS proposal's `to` is never something the model is asked
+// to invent -- the route resolves it from the real thread being replied to,
+// before the draft is even requested. This only validates the shape of
+// whatever the caller (the route itself, or a person editing the draft)
+// hands back.
+export function normalizeSmsPayload(raw) {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  const to = typeof raw.to === 'string' ? raw.to.trim() : '';
+  if (!E164_RE.test(to)) return null;
+  const body = typeof raw.body === 'string' ? raw.body.trim() : '';
+  if (!body || body.length > SMS_LIMITS.body) return null;
+  // Control characters (other than the newlines a real text message can
+  // contain) are not something a person typed or a draft model should emit.
+  if (hasControlChars(body)) return null;
+  return Object.freeze({ to, body });
 }
 
 function endpointFrom(env) {

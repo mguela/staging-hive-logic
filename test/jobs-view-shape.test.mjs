@@ -119,6 +119,18 @@ test('list: status filters build the legacy PostgREST filters', async () => {
   assert.match(lastPath, /job_status=eq\.requires_invoicing/);
 });
 
+// jomell, 2026-08-27: the client profile modal's Job History needs this one
+// client's real jobs, not the whole board.
+test('list: a clientId filters to that one client\'s jobs', async () => {
+  await getJobsListData({ clientId: 'C1', limit: 10 });
+  assert.match(lastPath, /client_id=eq\.C1/);
+});
+
+test('list: no clientId means no client filter at all', async () => {
+  await getJobsListData({ limit: 10 });
+  assert.doesNotMatch(lastPath, /client_id=eq\./);
+});
+
 test('single job: exact legacy shape (no clientName/city/province)', async () => {
   const j = await getJobByIdData('J1');
   assert.deepEqual(Object.keys(j), [

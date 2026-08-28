@@ -23,6 +23,7 @@ import { advanceLeadOnSend } from '../../_lib/lead-estimate-link.js';
 import { supabaseRequest } from '../../_lib/jobber.js';
 import { sendEmail, isEmailConfigured } from '../../_lib/email.js';
 import { genToken, hashToken } from '../../_lib/portal-auth.js';
+import { generateEstimatePdf } from '../../_lib/estimate-pdf.js';
 
 const RESPONSE_LINK_EXPIRY_DAYS = 30;
 
@@ -42,7 +43,7 @@ function money(n) { return '$' + (Number(n) || 0).toLocaleString('en-US', { mini
 
 async function lookupClient(clientId) {
   if (!clientId) return null;
-  const r = await supabaseRequest(`clients?jobber_id=eq.${encodeURIComponent(clientId)}&select=email,name,first_name&limit=1`);
+  const r = await supabaseRequest(`clients?jobber_id=eq.${encodeURIComponent(clientId)}&select=email,name,first_name,phone&limit=1`);
   if (!r.ok) return null;
   const rows = await r.json();
   return rows[0] || null;
@@ -118,8 +119,19 @@ async function emailClientEstimate(req, estimate, actor) {
   const rejectUrl = link('reject');
   const total = (estimate.totals && estimate.totals.cardPrice) || (estimate.totals && estimate.totals.price) || 0;
   const clientName = client.first_name || client.name || 'there';
-  const address = formatAddress(await lookupClientAddress(estimate.clientId));
+  const rawAddress = await lookupClientAddress(estimate.clientId);
+  const address = formatAddress(rawAddress);
   const addressRow = address ? `<tr><td style="padding:6px 0;color:#484f64">Address</td><td style="padding:6px 0;text-align:right;font-weight:700">${escapeHtml(address)}</td></tr>` : '';
+
+  // jomell, 2026-08-27: the client should also receive a PDF of the
+  // estimate's scope of work, same as an invoice email already attaches
+  // one. Best-effort: a PDF-generation failure must not stop the estimate
+  // email itself from going out.
+  let attachments;
+  try {
+    const pdfBytes = await generateEstimatePdf({ estimate, client, address: rawAddress });
+    attachments = [{ filename: `Estimate-${estimate.estimateNumber || estimate.id}.pdf`, content: Buffer.from(pdfBytes).toString('base64') }];
+  } catch { /* the email still goes out without the PDF */ }
 
   const html = `
     <div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto">
@@ -144,6 +156,7 @@ async function emailClientEstimate(req, estimate, actor) {
     subject: `Your estimate ${estimate.estimateNumber || ''} from ${companyName}`,
     html,
     text,
+    attachments,
   });
   return result.ok ? { sent: true, email: client.email } : { sent: false, reason: result.error };
 }

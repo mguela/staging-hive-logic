@@ -72,6 +72,9 @@ const RESOURCE_CONFIG = {
   requests: {
     table: 'requests', order: 'jobber_updated_at.desc', defaultLimit: 50,
     notSyncedMsg: 'Requests are not synced in this deployment yet.',
+    // jomell, 2026-08-27: the client profile modal's Requests tab needs
+    // this one client's real requests, not the whole table.
+    clientFilterColumn: 'client_id',
     shape: r => ({
       id: r.jobber_id, title: r.title, status: r.request_status, clientId: r.client_id,
       jobberUrl: r.jobber_web_uri, createdAt: r.jobber_created_at, updatedAt: r.jobber_updated_at
@@ -80,10 +83,35 @@ const RESOURCE_CONFIG = {
   visits: {
     table: 'visits', order: 'start_at.asc', defaultLimit: 100,
     notSyncedMsg: 'Visits/schedule are not synced in this deployment yet.',
+    // jomell, 2026-08-27: the client profile modal's Client Schedule
+    // section needs this one client's real visits, plus the real
+    // status/assignment fields it was dropping before (visit_status,
+    // assigned_users) -- both already synced by api/jobber/sync-extended.js's
+    // mapVisit(), just never read here.
+    clientFilterColumn: 'client_id',
     shape: v => ({
       id: v.jobber_id, title: v.title, startAt: v.start_at, endAt: v.end_at,
       completedAt: v.completed_at, isAllDay: v.is_all_day, clientId: v.client_id,
-      jobId: v.job_id, jobberUrl: v.jobber_web_uri
+      jobId: v.job_id, jobberUrl: v.jobber_web_uri,
+      status: v.visit_status || null,
+      assignedUsers: Array.isArray(v.assigned_users) ? v.assigned_users.map(u => u && u.name).filter(Boolean) : []
+    })
+  },
+  // jomell, 2026-08-27: HiveLogic-native appointments (crew-board bookings
+  // that have no Jobber visit yet) are the other real half of a client's
+  // schedule -- the Client Schedule section blends this with `visits`
+  // above. canceled ones are excluded, same as the crew board itself.
+  hl_appointments: {
+    table: 'hl_appointments', order: 'start_at.asc', defaultLimit: 100,
+    notSyncedMsg: 'HiveLogic-native scheduling is not synced in this deployment yet.',
+    baseFilter: '&canceled=eq.false',
+    clientFilterColumn: 'client_ref',
+    shape: a => ({
+      id: a.id, title: a.title, startAt: a.start_at, endAt: a.end_at,
+      status: a.status || null, clientRef: a.client_ref, jobRef: a.job_ref,
+      // Real device/user ids, not names -- no roster lookup here to resolve
+      // them to real names, so the count is what's shown, not a guess.
+      crewCount: Array.isArray(a.crew_jids) ? a.crew_jids.length : 0
     })
   },
   expenses: {
@@ -9692,7 +9720,9 @@ const cfg = RESOURCE_CONFIG[resource];
   }
   try {
     const limit = Math.min(Number(req.query.limit) || cfg.defaultLimit, 10000);
-    const r = await supabaseRequest(`${cfg.table}?select=*&order=${cfg.order}&limit=${limit}`, {
+    const clientFilter = (cfg.clientFilterColumn && req.query.clientId)
+      ? `&${cfg.clientFilterColumn}=eq.${encodeURIComponent(req.query.clientId)}` : '';
+    const r = await supabaseRequest(`${cfg.table}?select=*&order=${cfg.order}&limit=${limit}${cfg.baseFilter || ''}${clientFilter}`, {
       headers: { Prefer: 'count=exact' }
     });
     if (!r.ok) {

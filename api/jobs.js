@@ -70,7 +70,7 @@ export async function getJobByIdData(id) {
 // requires_invoicing (the board shows that as its own real column). Any
 // other value is matched exactly against job_status. Omit for the original
 // unfiltered behavior (used by Visual Intelligence's "show me everything").
-export async function getJobsListData({ limit, offset, status } = {}) {
+export async function getJobsListData({ limit, offset, status, clientId } = {}) {
   const cappedLimit = Math.min(Number(limit) || PAGE_SIZE, 10000);
   // offset support so callers can page past PostgREST's 1000-row-per-request
   // cap (same pattern as api/clients.js) -- Visual Intelligence's Jobs list
@@ -80,8 +80,11 @@ export async function getJobsListData({ limit, offset, status } = {}) {
   let statusFilter = '';
   if (status === 'active') statusFilter = '&job_status=neq.archived';
   else if (status) statusFilter = `&job_status=eq.${encodeURIComponent(status)}`;
+  // jomell, 2026-08-27: the client profile modal's Job History needs this
+  // one client's real jobs, not the whole board.
+  const clientFilter = clientId ? `&client_id=eq.${encodeURIComponent(clientId)}` : '';
   const r = await supabaseRequest(
-    `jobs_enriched?select=${LIST_SELECT}&order=jobber_updated_at.desc&limit=${cappedLimit}&offset=${safeOffset}${statusFilter}`,
+    `jobs_enriched?select=${LIST_SELECT}&order=jobber_updated_at.desc&limit=${cappedLimit}&offset=${safeOffset}${statusFilter}${clientFilter}`,
     { headers: { Prefer: 'count=exact' } }
   );
   if (!r.ok) throw new Error(await r.text());
@@ -158,7 +161,7 @@ export default async function handler(req, res) {
       return res.status(200).json({ ok: true, source: 'Jobber via Supabase', job });
     }
 
-    const data = await getJobsListData({ limit: req.query.limit, offset: req.query.offset, status: req.query.status });
+    const data = await getJobsListData({ limit: req.query.limit, offset: req.query.offset, status: req.query.status, clientId: req.query.clientId });
     res.status(200).json({ ok: true, source: 'Jobber via Supabase', ...data });
   } catch (e) {
     res.status(500).json({ ok: false, error: e.message });
