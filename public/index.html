@@ -19,7 +19,7 @@
  * monitor_my_status poll, so "is this person running current code" is a
  * question the database can answer. Do not hand-edit it -- run
  * `node scripts/stamp-page-build.mjs`. */
-var HL_PAGE_BUILD = '4f79c41a27fc6fa5';
+var HL_PAGE_BUILD = '674e1aa2a7fab9fb';
 </script>
 <script>
 (function () { // HL_FETCH_DEDUPE_V1 — single wrapper: GET /api/ dedupe + 60s cache + write-invalidate
@@ -5033,6 +5033,32 @@ function ninvSave(){ var amt = parseFloat(document.getElementById('ninv-amt').va
 
   <script>
   (function(){
+    // Keyed by profile id, populated on every refresh -- read by
+    // teamOpenMemberDetail() rather than embedded in each row's onclick
+    // HTML. Building an onclick string from a person's own data has broken
+    // a roster table exactly this way once already (2026-08-25): a name or
+    // email containing a quote corrupts the handler, and it fails silently
+    // for that one row. Reading from this map instead makes the row's
+    // handler a plain `teamOpenMemberDetail('<id>')` -- the id is a UUID,
+    // never untrusted free text.
+    var _teamMemberById = {};
+    var ROLE_LABEL = { superadmin: 'Superadmin', admin: 'Admin', crew: 'Crew' };
+    var ROLE_BADGE_BG = { superadmin: '#efe7fb', admin: '#e3ecfb', crew: '#eef2f7' };
+    var ROLE_BADGE_FG = { superadmin: '#6b3fc4', admin: '#2255aa', crew: '#59718a' };
+
+    function teamRoleBadge(role){
+      var r = role || 'crew';
+      return '<span style="font-size:9.5px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;padding:3px 8px;border-radius:99px;background:'+(ROLE_BADGE_BG[r]||'#eef2f7')+';color:'+(ROLE_BADGE_FG[r]||'#59718a')+'">'+(ROLE_LABEL[r]||r)+'</span>';
+    }
+    // "Job Role" (employee_roles.permission_role) is a job-function taxonomy
+    // (owner, project_manager, field_tech, ...) separate from System Access
+    // (profiles.role, the login tier) -- title-cased for display since the
+    // stored values are snake_case.
+    function teamJobRoleLabel(jobRole){
+      if (!jobRole) return '—';
+      return String(jobRole).split('_').map(function(w){ return w.charAt(0).toUpperCase()+w.slice(1); }).join(' ');
+    }
+
     async function teamRefreshList(){
       var listEl = document.getElementById('team-list');
       return hlRequireSession(async function(sess){
@@ -5040,78 +5066,48 @@ function ninvSave(){ var amt = parseFloat(document.getElementById('ninv-amt').va
       var data = await res.json();
       if (!data || data.ok === false) { listEl.textContent = 'Could not load the team list: ' + ((data && data.error) || 'unknown error'); return; }
       var rows = data.team || [];
-      listEl.innerHTML = '';
+      _teamMemberById = {};
+      rows.forEach(function(p){ _teamMemberById[p.id] = p; });
       var mine = rows.find(function(p){ return sess.user && p.id === sess.user.id; });
       var myRole = (mine && mine.role) || 'crew';
       var isSuperadmin = myRole === 'superadmin';
       var isAdmin = myRole === 'admin' || isSuperadmin;
-      var ROLE_LABEL = { superadmin: 'Superadmin', admin: 'Admin', crew: 'Crew' };
       if (!rows.length) {
-        var none = document.createElement('div');
-        none.style.cssText = 'font-size:12px;color:var(--mut)';
-        none.textContent = 'No team members found yet.';
-        listEl.appendChild(none);
+        listEl.innerHTML = '<div style="font-size:12px;color:var(--mut)">No team members found yet.</div>';
       } else {
-        rows.forEach(function(p){
+        var searchHtml = rows.length > 6
+          ? '<input id="team-search" type="text" placeholder="Search '+rows.length+' people…" oninput="teamFilterRows(this.value)" style="width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:8px;font-size:12px;font-family:inherit;margin-bottom:10px"/>'
+          : '';
+        var th = function(label){ return '<th style="padding:8px 10px;font-size:9.5px;color:var(--mut);font-weight:800;letter-spacing:.05em;text-transform:uppercase;text-align:left;white-space:nowrap">'+label+'</th>'; };
+        var rowsHtml = rows.map(function(p){
           var isSelf = !!(sess.user && p.id === sess.user.id);
           var pRole = p.role || 'crew';
-          var row = document.createElement('div');
-          row.style.cssText = 'display:flex;align-items:center;gap:10px;padding:9px 2px;border-bottom:1px solid var(--line);flex-wrap:wrap';
-          var name = document.createElement('div');
-          name.style.cssText = 'flex:1;font-weight:700;font-size:12.5px;min-width:120px';
-          name.textContent = p.full_name || '(no name)';
-          var email = document.createElement('div');
-          email.style.cssText = 'flex:1;color:var(--mut);font-size:11px;min-width:140px';
-          email.textContent = p.email || '';
-          row.appendChild(name); row.appendChild(email);
-
-          if (isSuperadmin && !isSelf) {
-            // Superadmin gets a live role dropdown -- change_role fires on change.
-            var roleSel = document.createElement('select');
-            roleSel.style.cssText = 'font-size:10px;font-weight:800;text-transform:uppercase;padding:4px 6px;border:1px solid var(--line);border-radius:6px;font-family:inherit';
-            ['superadmin', 'admin', 'crew'].forEach(function(r){
-              var opt = document.createElement('option');
-              opt.value = r; opt.textContent = ROLE_LABEL[r];
-              if (r === pRole) opt.selected = true;
-              roleSel.appendChild(opt);
-            });
-            roleSel.onchange = function(){ teamChangeRole(p.id, roleSel.value, p.full_name || p.email); };
-            row.appendChild(roleSel);
-          } else {
-            var roleTag = document.createElement('span');
-            roleTag.style.cssText = 'font-size:10px;font-weight:800;text-transform:uppercase;color:var(--mut)';
-            roleTag.textContent = ROLE_LABEL[pRole] || pRole;
-            row.appendChild(roleTag);
-          }
-
+          var initial = (p.full_name || p.email || '?').trim().charAt(0).toUpperCase();
+          var nameCell = '<div style="display:flex;align-items:center;gap:9px;cursor:pointer" onclick="teamOpenMemberDetail(\''+p.id+'\')">'
+            + '<div style="width:28px;height:28px;border-radius:50%;background:#59718a;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:12px;flex-shrink:0">'+initial+'</div>'
+            + '<div><div style="font-weight:700;font-size:12.5px">'+(p.full_name || '(no name)')+'</div><div style="color:var(--mut);font-size:10.5px">'+(p.email || '')+'</div></div>'
+            + '</div>';
+          var accessCell = (isSuperadmin && !isSelf)
+            ? '<select onchange="teamChangeRole(\''+p.id+'\', this.value, '+JSON.stringify(p.full_name || p.email)+')" style="font-size:10px;font-weight:800;text-transform:uppercase;padding:4px 6px;border:1px solid var(--line);border-radius:6px;font-family:inherit">'
+              + ['superadmin','admin','crew'].map(function(r){ return '<option value="'+r+'"'+(r===pRole?' selected':'')+'>'+ROLE_LABEL[r]+'</option>'; }).join('')
+              + '</select>'
+            : teamRoleBadge(pRole);
+          var actionsCell = '';
           var canResetTheirs = isSuperadmin ? !isSelf : (isAdmin && !isSelf && pRole === 'crew');
-          if (canResetTheirs) {
-            var resetBtn = document.createElement('button');
-            resetBtn.type = 'button';
-            resetBtn.textContent = 'Reset password';
-            resetBtn.style.cssText = 'font-size:10px;font-weight:800;padding:5px 10px;border-radius:6px;border:1px solid var(--line);background:#fff;cursor:pointer;color:#161e2e';
-            resetBtn.onclick = function(){ teamResetPassword(p.id, p.full_name || p.email); };
-            row.appendChild(resetBtn);
-          }
-          if (isSelf) {
-            var myPwBtn = document.createElement('button');
-            myPwBtn.type = 'button';
-            myPwBtn.textContent = 'Change my password';
-            myPwBtn.style.cssText = 'font-size:10px;font-weight:800;padding:5px 10px;border-radius:6px;border:1px solid var(--line);background:#fff;cursor:pointer;color:#161e2e';
-            myPwBtn.onclick = function(){ teamChangeOwnPassword(); };
-            row.appendChild(myPwBtn);
-          }
-          if (isSuperadmin && !isSelf) {
-            var delBtn = document.createElement('button');
-            delBtn.type = 'button';
-            delBtn.textContent = 'Remove';
-            delBtn.style.cssText = 'font-size:10px;font-weight:800;padding:5px 10px;border-radius:6px;border:1px solid var(--red);background:#fff;cursor:pointer;color:var(--red)';
-            delBtn.onclick = function(){ teamDeleteUser(p.id, p.full_name || p.email); };
-            row.appendChild(delBtn);
-          }
-
-          listEl.appendChild(row);
-        });
+          if (canResetTheirs) actionsCell += '<button type="button" onclick="teamResetPassword(\''+p.id+'\', '+JSON.stringify(p.full_name || p.email)+')" style="font-size:9.5px;font-weight:800;padding:5px 9px;border-radius:6px;border:1px solid var(--line);background:#fff;cursor:pointer;color:#161e2e;white-space:nowrap;margin-right:5px">Reset password</button>';
+          if (isSelf) actionsCell += '<button type="button" onclick="teamChangeOwnPassword()" style="font-size:9.5px;font-weight:800;padding:5px 9px;border-radius:6px;border:1px solid var(--line);background:#fff;cursor:pointer;color:#161e2e;white-space:nowrap;margin-right:5px">Change my password</button>';
+          if (isSuperadmin && !isSelf) actionsCell += '<button type="button" onclick="teamDeleteUser(\''+p.id+'\', '+JSON.stringify(p.full_name || p.email)+')" style="font-size:9.5px;font-weight:800;padding:5px 9px;border-radius:6px;border:1px solid var(--red);background:#fff;cursor:pointer;color:var(--red);white-space:nowrap">Remove</button>';
+          var searchKey = ((p.full_name||'')+' '+(p.email||'')).toLowerCase().replace(/"/g,'&quot;');
+          return '<tr class="team-row" data-name="'+searchKey+'" style="border-top:1px solid var(--line)">'
+            + '<td style="padding:8px 10px">'+nameCell+'</td>'
+            + '<td style="padding:8px 10px;white-space:nowrap">'+accessCell+'</td>'
+            + '<td style="padding:8px 10px;white-space:nowrap;font-size:11.5px;color:'+(p.jobRole?'#161e2e':'var(--mut)')+'">'+teamJobRoleLabel(p.jobRole)+'</td>'
+            + '<td style="padding:8px 10px;white-space:nowrap;font-size:11px;color:var(--mut)">'+(p.lastSeenInApp ? hlTimeAgo(p.lastSeenInApp) : '—')+'</td>'
+            + '<td style="padding:8px 10px;white-space:nowrap;text-align:right">'+actionsCell+'</td>'
+            + '</tr>';
+        }).join('');
+        listEl.innerHTML = searchHtml
+          + '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse"><thead><tr>'+th('User')+th('System Access')+th('Job Role')+th('Last seen in app')+th('')+'</tr></thead><tbody id="team-rows">'+rowsHtml+'</tbody></table></div>';
       }
       var invCard = document.getElementById('team-invite-card');
       var noCard = document.getElementById('team-noaccess-card');
@@ -5124,6 +5120,42 @@ function ninvSave(){ var amt = parseFloat(document.getElementById('ninv-amt').va
       if (hcCard) hcCard.style.display = isAdmin ? 'block' : 'none';
       }, function(){ listEl.textContent = 'Not signed in.'; });
     }
+
+    window.teamFilterRows = function(query){
+      var q = (query || '').toLowerCase();
+      document.querySelectorAll('#team-rows tr.team-row').forEach(function(row){
+        row.style.display = row.getAttribute('data-name').indexOf(q) === -1 ? 'none' : '';
+      });
+    };
+
+    // Detail view -- a modal, matching every other detail popup in this app
+    // (Monitor Settings, EOD reports, etc.) rather than a new persistent
+    // side-panel layout this app doesn't use anywhere else.
+    window.teamOpenMemberDetail = function(id){
+      var p = _teamMemberById[id];
+      if (!p) return;
+      var row = function(label, valueHtml){
+        return '<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--line);font-size:12px"><span style="color:var(--mut);font-weight:700">'+label+'</span><span style="font-weight:700">'+valueHtml+'</span></div>';
+      };
+      var yesNo = function(v){ return v ? 'Yes' : 'No'; };
+      var connected = function(v){ return v ? '<span style="color:#1B7A50">Connected</span>' : '<span style="color:var(--mut)">Not connected</span>'; };
+      var synced = function(v){ return v ? '<span style="color:#1B7A50">Synced</span>' : '<span style="color:var(--mut)">Not synced</span>'; };
+      var initial = (p.full_name || p.email || '?').trim().charAt(0).toUpperCase();
+      var header = '<div style="display:flex;align-items:center;gap:12px;margin-bottom:14px">'
+        + '<div style="width:44px;height:44px;border-radius:50%;background:#59718a;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:17px;flex-shrink:0">'+initial+'</div>'
+        + '<div><div style="font-weight:900;font-size:14px">'+(p.full_name || '(no name)')+'</div><div style="color:var(--mut);font-size:11.5px">'+(p.email || '')+'</div></div>'
+        + '</div>';
+      var body = header
+        + row('System Access', teamRoleBadge(p.role))
+        + row('Job Role', teamJobRoleLabel(p.jobRole))
+        + row('Crew Lead', yesNo(p.isLead))
+        + row('Division', p.division || '—')
+        + row('Vehicle Assignment', p.vehicleName || 'None')
+        + row('HiveConnect', connected(p.hiveConnectConnected))
+        + row('Jobber Sync', synced(p.jobberSynced))
+        + row('Phone', p.phone || '—');
+      hlModal('👤 ' + (p.full_name || p.email || 'Team member'), body);
+    };
 
     window.teamChangeRole = async function(userId, newRole, label){
       return hlRequireSession(async function(sess){

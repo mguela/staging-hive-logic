@@ -1662,13 +1662,59 @@ async function handleTeam(req, res) {
   }
 
   if (req.method === 'GET') {
-    const r = await supabaseRequest('profiles?select=id,email,full_name,role&order=full_name.asc');
+    const r = await supabaseRequest('profiles?select=id,email,full_name,role,mobile,page_build_seen_at&order=full_name.asc');
     if (!r.ok) {
       const text = await r.text();
       return res.status(500).json({ ok: false, error: text });
     }
     const rows = await r.json();
-    return res.status(200).json({ ok: true, source: 'Supabase Auth', team: rows });
+    // Job Role / Crew Lead / Vehicle Assignment / HiveConnect / Jobber Sync
+    // (2026-08-29, Team & Access redesign): bulk-fetched once for the WHOLE
+    // team and joined in memory, not looked up per person -- the existing
+    // per-profile helper (getPermissionRoles(), api/_lib/permission-roles.js)
+    // does two round trips per call, which would be an N+1 query storm for
+    // a table of everyone. Same bulk-then-join style already used elsewhere
+    // for employee_roles (e.g. the crew/schedule reads above).
+    //
+    // employee_roles has no direct FK to profiles.id -- it keys on
+    // jobber_id, reached only via profiles.email -> users.email ->
+    // users.jobber_id. hiveconnect_account_map is the one exception: its
+    // PK IS profiles.id directly, so that join needs no hop at all.
+    const [usersRes, rolesRes, hcRes] = await Promise.all([
+      supabaseRequest('users?select=jobber_id,email,assigned_vehicle_name,synced_at'),
+      supabaseRequest('employee_roles?select=jobber_id,permission_role,permission_roles,is_lead,division'),
+      supabaseRequest('hiveconnect_account_map?select=hivelogic_user_id,status'),
+    ]);
+    const usersRows = usersRes.ok ? await usersRes.json() : [];
+    const rolesRows = rolesRes.ok ? await rolesRes.json() : [];
+    const hcRows = hcRes.ok ? await hcRes.json() : [];
+    const userByEmail = {};
+    for (const u of usersRows || []) if (u.email) userByEmail[u.email.toLowerCase()] = u;
+    const rolesByJobberId = {};
+    for (const er of rolesRows || []) rolesByJobberId[er.jobber_id] = er;
+    const hcByProfileId = {};
+    for (const hc of hcRows || []) hcByProfileId[hc.hivelogic_user_id] = hc;
+    const team = (rows || []).map((p) => {
+      const userRow = p.email ? userByEmail[p.email.toLowerCase()] : null;
+      const roleRow = userRow && userRow.jobber_id ? rolesByJobberId[userRow.jobber_id] : null;
+      const hcRow = hcByProfileId[p.id];
+      const jobRole = (roleRow && (roleRow.permission_role || (roleRow.permission_roles && roleRow.permission_roles[0]))) || null;
+      return {
+        id: p.id,
+        email: p.email,
+        full_name: p.full_name,
+        role: p.role,
+        phone: p.mobile || null,
+        lastSeenInApp: p.page_build_seen_at || null,
+        jobRole,
+        isLead: !!(roleRow && roleRow.is_lead),
+        division: (roleRow && roleRow.division) || null,
+        vehicleName: (userRow && userRow.assigned_vehicle_name) || null,
+        jobberSynced: !!userRow,
+        hiveConnectConnected: !!(hcRow && hcRow.status === 'active'),
+      };
+    });
+    return res.status(200).json({ ok: true, source: 'Supabase Auth', team });
   }
 
   if (req.method === 'POST') {
