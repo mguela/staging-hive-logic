@@ -255,7 +255,7 @@
 
       <!-- body: message list | reading pane | Reina AI -->
       <div class="ev-body" id="ev-body">
-        <div class="ev-list-pane">
+        <div class="ev-list-pane" id="ev-list-pane">
           <div class="ev-list-head" id="ev-list-head">
             <input type="checkbox" id="ev-select-all" class="ev-select-all" title="Select all">
             <div class="ev-fo-tabs">
@@ -267,7 +267,9 @@
           </div>
           <div class="ev-list" id="ev-list"></div>
         </div>
+        <div class="ev-resizer" id="ev-list-resizer" title="Drag to resize"></div>
         <div class="ev-read" id="ev-read"><div class="ev-read-empty">Select a message to read it here.</div></div>
+        <div class="ev-resizer" id="ev-reina-resizer" title="Drag to resize"></div>
         <div class="ev-reina-pane" id="ev-reina-pane">
           <div class="ev-reina-scroll" id="ev-reina-scroll"><div class="ev-read-empty">Reina's take on the open message will appear here.</div></div>
           <div class="ev-reina-footer">

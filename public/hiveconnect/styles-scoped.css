@@ -2621,7 +2621,7 @@ html[data-theme="dark"] :is(#hiveconnect-root, .hc-embed).huddle-banner {
    card. The "Ask Reina" trigger lives in its own footer, pinned to the
    bottom instead of scrolling away with the brief/AI output above it. */
 :is(#hiveconnect-root, .hc-embed) .ev-reina-pane,
-:is(#hiveconnect-root, .hc-embed).ev-reina-pane { width: 380px; min-width: 320px; border-left: 1px solid var(--line); background: var(--card); display: flex; flex-direction: column; min-height: 0; }
+:is(#hiveconnect-root, .hc-embed).ev-reina-pane { width: 380px; min-width: 240px; background: var(--card); display: flex; flex-direction: column; min-height: 0; }
 :is(#hiveconnect-root, .hc-embed) .ev-reina-scroll,
 :is(#hiveconnect-root, .hc-embed).ev-reina-scroll { flex: 1; overflow-y: auto; min-height: 0; }
 :is(#hiveconnect-root, .hc-embed) .ev-reina-footer,
@@ -2643,9 +2643,21 @@ html[data-theme="dark"] :is(#hiveconnect-root, .hc-embed).huddle-banner {
 
 /* list pane wrapper + head (select-all, Focused/Other tabs, sort) */
 :is(#hiveconnect-root, .hc-embed) .ev-list-pane,
-:is(#hiveconnect-root, .hc-embed).ev-list-pane { width: 380px; min-width: 320px; border-right: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0; }
+:is(#hiveconnect-root, .hc-embed).ev-list-pane { width: 380px; min-width: 240px; display: flex; flex-direction: column; min-height: 0; }
 :is(#hiveconnect-root, .hc-embed) .ev-list-pane .ev-list,
 :is(#hiveconnect-root, .hc-embed).ev-list-pane .ev-list { width: auto; min-width: 0; border-right: none; flex: 1; }
+:is(#hiveconnect-root, .hc-embed) .ev-resizer,
+:is(#hiveconnect-root, .hc-embed).ev-resizer { width: 5px; flex: none; cursor: col-resize; background: transparent; border-left: 1px solid var(--line); position: relative; z-index: 5; }
+:is(#hiveconnect-root, .hc-embed) .ev-resizer:hover,
+:is(#hiveconnect-root, .hc-embed).ev-resizer:hover,
+:is(#hiveconnect-root, .hc-embed) .ev-resizer.dragging,
+:is(#hiveconnect-root, .hc-embed).ev-resizer.dragging { background: var(--steel); border-left-color: transparent; }
+:is(#hiveconnect-root, .hc-embed) .ev-body.resizing,
+:is(#hiveconnect-root, .hc-embed).ev-body.resizing { cursor: col-resize; }
+:is(#hiveconnect-root, .hc-embed) .ev-body.resizing .ev-list-pane,
+:is(#hiveconnect-root, .hc-embed).ev-body.resizing .ev-list-pane,
+:is(#hiveconnect-root, .hc-embed) .ev-body.resizing .ev-reina-pane,
+:is(#hiveconnect-root, .hc-embed).ev-body.resizing .ev-reina-pane { transition: none; }
 :is(#hiveconnect-root, .hc-embed) .ev-list-head,
 :is(#hiveconnect-root, .hc-embed).ev-list-head { display: flex; align-items: center; gap: 10px; padding: 8px 14px; border-bottom: 1px solid var(--line); background: var(--card); flex: none; }
 :is(#hiveconnect-root, .hc-embed) .ev-select-all,
@@ -2788,6 +2800,8 @@ html[data-theme="dark"] :is(#hiveconnect-root, .hc-embed).huddle-banner {
 :is(#hiveconnect-root, .hc-embed).ev-body:not(.ev-reading) .ev-read { display: none; }
   :is(#hiveconnect-root, .hc-embed) .ev-reina-pane,
 :is(#hiveconnect-root, .hc-embed).ev-reina-pane { display: none; }
+  :is(#hiveconnect-root, .hc-embed) .ev-resizer,
+:is(#hiveconnect-root, .hc-embed).ev-resizer { display: none; }
 }
 
 /* ===== EMAIL Phase 4: importance flag, reading-pane avatar, save-draft

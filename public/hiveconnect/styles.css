@@ -1734,7 +1734,7 @@ html[data-theme="dark"] .huddle-banner {
    border) so it reads as one more column of this layout, not a bolted-on
    card. The "Ask Reina" trigger lives in its own footer, pinned to the
    bottom instead of scrolling away with the brief/AI output above it. */
-.ev-reina-pane { width: 380px; min-width: 320px; border-left: 1px solid var(--line); background: var(--card); display: flex; flex-direction: column; min-height: 0; }
+.ev-reina-pane { width: 380px; min-width: 240px; background: var(--card); display: flex; flex-direction: column; min-height: 0; }
 .ev-reina-scroll { flex: 1; overflow-y: auto; min-height: 0; }
 .ev-reina-footer { flex: none; display: flex; justify-content: center; padding: 14px 22px; border-top: 1px solid var(--line); }
 .ev-reina-ask {
@@ -1749,8 +1749,12 @@ html[data-theme="dark"] .huddle-banner {
 .ev-reina-ask-star { font-size: 13px; }
 
 /* list pane wrapper + head (select-all, Focused/Other tabs, sort) */
-.ev-list-pane { width: 380px; min-width: 320px; border-right: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0; }
+.ev-list-pane { width: 380px; min-width: 240px; display: flex; flex-direction: column; min-height: 0; }
 .ev-list-pane .ev-list { width: auto; min-width: 0; border-right: none; flex: 1; }
+.ev-resizer { width: 5px; flex: none; cursor: col-resize; background: transparent; border-left: 1px solid var(--line); position: relative; z-index: 5; }
+.ev-resizer:hover, .ev-resizer.dragging { background: var(--steel); border-left-color: transparent; }
+.ev-body.resizing { cursor: col-resize; }
+.ev-body.resizing .ev-list-pane, .ev-body.resizing .ev-reina-pane { transition: none; }
 .ev-list-head { display: flex; align-items: center; gap: 10px; padding: 8px 14px; border-bottom: 1px solid var(--line); background: var(--card); flex: none; }
 .ev-select-all { width: 15px; height: 15px; accent-color: var(--steel-deep); cursor: pointer; flex: none; }
 .ev-list-head-spacer { flex: 1; }
@@ -1824,6 +1828,7 @@ html[data-theme="dark"] .huddle-banner {
   .ev-body.ev-reading .ev-list-pane { display: none; }
   .ev-body:not(.ev-reading) .ev-read { display: none; }
   .ev-reina-pane { display: none; }
+  .ev-resizer { display: none; }
 }
 
 /* ===== EMAIL Phase 4: importance flag, reading-pane avatar, save-draft

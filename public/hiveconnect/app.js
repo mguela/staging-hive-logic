@@ -3020,37 +3020,48 @@ document.querySelectorAll('.rail-btn[data-tab]').forEach(b => b.addEventListener
   setNavTab(b.dataset.tab);
 }));
 
-// ---- Sidebar resize (drag the divider between the sidebar and main content) ----
+// ---- Column resize (drag a divider to resize the pane beside it) ----
 // Real, cross-device preference (hcPref) -- same mechanism as every other
-// saved setting in this app, not a device-local hack.
-(function () {
-  const sidebar = document.querySelector('.sidebar');
-  const resizer = $('sidebar-resizer');
-  if (!sidebar || !resizer) return;
-  const MIN_W = 200, MAX_W = 460;
-  const saved = parseInt(hcPref('hcSidebarWidth', 'hcSidebarWidth', ''), 10);
-  if (saved && saved >= MIN_W && saved <= MAX_W) {
-    sidebar.style.width = saved + 'px'; sidebar.style.minWidth = saved + 'px';
+// saved setting in this app, not a device-local hack. `invert` flips which
+// direction growing the pane is: false = pane is left of the resizer and
+// grows as the pointer moves right; true = pane is right of the resizer
+// and grows as the pointer moves left.
+function wireColumnResizer(target, resizer, { prefKey, min, max, invert = false, extraClass } = {}) {
+  if (!target || !resizer) return;
+  const saved = parseInt(hcPref(prefKey, prefKey, ''), 10);
+  if (saved && saved >= min && saved <= max) {
+    target.style.width = saved + 'px'; target.style.minWidth = saved + 'px';
   }
   let dragging = false, startX = 0, startW = 0;
   resizer.addEventListener('mousedown', (e) => {
     e.preventDefault();
-    dragging = true; startX = e.clientX; startW = sidebar.getBoundingClientRect().width;
-    sidebar.classList.add('resizing'); resizer.classList.add('dragging');
+    dragging = true; startX = e.clientX; startW = target.getBoundingClientRect().width;
+    if (extraClass) extraClass.classList.add('resizing');
+    resizer.classList.add('dragging');
     document.body.style.userSelect = 'none';
   });
   document.addEventListener('mousemove', (e) => {
     if (!dragging) return;
-    const w = Math.min(MAX_W, Math.max(MIN_W, startW + (e.clientX - startX)));
-    sidebar.style.width = w + 'px'; sidebar.style.minWidth = w + 'px';
+    const dx = (e.clientX - startX) * (invert ? -1 : 1);
+    const w = Math.min(max, Math.max(min, startW + dx));
+    target.style.width = w + 'px'; target.style.minWidth = w + 'px';
   });
   document.addEventListener('mouseup', () => {
     if (!dragging) return;
-    dragging = false; sidebar.classList.remove('resizing'); resizer.classList.remove('dragging');
+    dragging = false; if (extraClass) extraClass.classList.remove('resizing'); resizer.classList.remove('dragging');
     document.body.style.userSelect = '';
-    hcPrefSet('hcSidebarWidth', 'hcSidebarWidth', Math.round(sidebar.getBoundingClientRect().width));
+    hcPrefSet(prefKey, prefKey, Math.round(target.getBoundingClientRect().width));
   });
-})();
+}
+wireColumnResizer(document.querySelector('.sidebar'), $('sidebar-resizer'), {
+  prefKey: 'hcSidebarWidth', min: 200, max: 460, extraClass: document.querySelector('.sidebar'),
+});
+wireColumnResizer($('ev-list-pane'), $('ev-list-resizer'), {
+  prefKey: 'hcEmailListWidth', min: 240, max: 560, extraClass: $('ev-body'),
+});
+wireColumnResizer($('ev-reina-pane'), $('ev-reina-resizer'), {
+  prefKey: 'hcEmailReinaWidth', min: 240, max: 560, invert: true, extraClass: $('ev-body'),
+});
 // Cmd/Ctrl+K -- focus the Messages sidebar search (the ⌘K hint chip next to
 // it advertises this), scoped to the Messages tab so it doesn't fight other
 // tabs' own shortcuts.
