@@ -5415,8 +5415,9 @@ function evBuildFolderRow(f, icon, active, isCustom) {
   row.appendChild(pin);
   const ct = document.createElement('span'); ct.className = 'ev-folder-ct';
   if (!isCustom) ct.id = 'evfc-' + f.id;
-  ct.textContent = f.unread || ''; row.appendChild(ct);
+  ct.textContent = (f.total != null ? f.total : '') || ''; row.appendChild(ct);
   row.onclick = () => { if (!evActive) { const c = $('ev-connect'); if (c) c.classList.remove('hidden'); return; } selectFolder(f.id, f.name); };
+  row.oncontextmenu = (e) => { e.preventDefault(); if (!evActive) return; evFolderMenu(e, f, isCustom); };
   row.ondragover = (e) => { e.preventDefault(); row.classList.add('dragover'); };
   row.ondragleave = () => row.classList.remove('dragover');
   row.ondrop = (e) => {
@@ -5426,17 +5427,68 @@ function evBuildFolderRow(f, icon, active, isCustom) {
   };
   return row;
 }
+// Right-click menu for a folder row -- real actions only: favouriting and
+// mark-all-read work for every mailbox type; rename/delete are Graph-only
+// (evCreateFolder already blocks IMAP from ever having a custom folder to
+// begin with, so a custom-folder row here is guaranteed to be a Graph one).
+function evFolderMenu(e, f, isCustom) {
+  const favs = evFavFolders(); const pinned = favs.includes(f.id);
+  const items = [
+    [pinned ? '☆ Remove from favourites' : '★ Add to favourites', () => {
+      const next = pinned ? favs.filter(x => x !== f.id) : favs.concat([f.id]);
+      evSaveFavFolders(next); renderEmailSidebar();
+    }],
+    ['✉ Mark all as read', () => evMarkFolderRead(f)],
+  ];
+  // Rename/delete are Microsoft Graph operations the IMAP adapter has no
+  // handler for -- offering them for an IMAP-connected folder would look
+  // like it worked (the adapter answers unmatched paths with an empty
+  // success, not an error) and silently do nothing.
+  if (isCustom && !(evActive && evActive.provider === 'imap')) {
+    items.push('---');
+    items.push(['✎ Rename folder', () => evRenameFolder(f)]);
+    items.push(['🗑 Delete folder', () => evDeleteFolder(f)]);
+  }
+  evMenu(e, items);
+}
+// Marks read whatever's currently loaded for that folder -- opens it first
+// if it isn't already the open folder, same bounded scope as the existing
+// "Mark all as read" toolbar button (evMarkAllRead), just reachable for any
+// folder instead of only the one already open.
+async function evMarkFolderRead(f) {
+  if (f.id !== evFolderId) await selectFolder(f.id, f.name);
+  await evMarkAllRead();
+}
+async function evRenameFolder(f) {
+  const name = window.prompt('Rename folder to:', f.name); if (!name || !name.trim() || name.trim() === f.name) return;
+  try {
+    await evGraph(`/me/mailFolders/${f.id}`, { method: 'PATCH', body: { displayName: name.trim() } });
+    if (f.id === evFolderId) { evFolderName = name.trim(); const fn = $('ev-folder-name'); if (fn) fn.textContent = evFolderName; }
+    evToast('Folder renamed ✓');
+    refreshFolderCounts();
+  } catch (e) { evToast('Rename failed — ' + (e.message || '')); }
+}
+async function evDeleteFolder(f) {
+  const ok = await evConfirm({ title: 'Delete folder?', body: '"' + f.name + '" and everything in it will be deleted. This can\'t be undone.', okLabel: 'Delete folder' });
+  if (!ok) return;
+  try {
+    await evGraph(`/me/mailFolders/${f.id}`, { method: 'DELETE' });
+    if (f.id === evFolderId) selectFolder('inbox', 'Inbox');
+    evToast('Folder deleted');
+    refreshFolderCounts();
+  } catch (e) { evToast('Delete failed — ' + (e.message || '')); }
+}
 async function refreshFolderCounts() {
   try {
     if (evAllInboxes && evAccounts.length > 1) {
-      // Unified view: sum unread counts per well-known folder across every mailbox.
+      // Unified view: sum total item counts per well-known folder across every mailbox.
       const totals = {};
-      const settled = await Promise.allSettled(evAccounts.map(a => evGraph('/me/mailFolders?$select=id,displayName,wellKnownName,unreadItemCount&$top=100', { account: a })));
+      const settled = await Promise.allSettled(evAccounts.map(a => evGraph('/me/mailFolders?$select=id,displayName,wellKnownName,unreadItemCount,totalItemCount&$top=100', { account: a })));
       settled.forEach(r => {
         if (r.status !== 'fulfilled') return;
         (r.value.value || []).forEach(f => {
           const key = (f.wellKnownName || '').toLowerCase();
-          if (key) totals[key] = (totals[key] || 0) + (f.unreadItemCount || 0);
+          if (key) totals[key] = (totals[key] || 0) + (f.totalItemCount || 0);
         });
       });
       document.querySelectorAll('#panel-email .ev-folder-ct[id^="evfc-"]').forEach(el => {
@@ -5445,13 +5497,13 @@ async function refreshFolderCounts() {
       evCustomFolders = []; renderCustomFolders(); // custom folders are per-mailbox; hidden in unified view
       return;
     }
-    const j = await evGraph('/me/mailFolders?$select=id,displayName,wellKnownName,unreadItemCount&$top=100');
+    const j = await evGraph('/me/mailFolders?$select=id,displayName,wellKnownName,unreadItemCount,totalItemCount&$top=100');
     (j.value || []).forEach(f => {
       const key = (f.wellKnownName || '').toLowerCase();
-      const el = $('evfc-' + key); if (el) el.textContent = f.unreadItemCount ? f.unreadItemCount : '';
+      const el = $('evfc-' + key); if (el) el.textContent = f.totalItemCount ? f.totalItemCount : '';
     });
     // user-created folders (no wellKnownName) shown under "Your folders"
-    evCustomFolders = (j.value || []).filter(f => !f.wellKnownName).map(f => ({ id: f.id, name: f.displayName, unread: f.unreadItemCount }));
+    evCustomFolders = (j.value || []).filter(f => !f.wellKnownName).map(f => ({ id: f.id, name: f.displayName, unread: f.unreadItemCount, total: f.totalItemCount }));
     renderCustomFolders();
   } catch (e) {}
 }
