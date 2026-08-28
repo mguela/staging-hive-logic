@@ -48,7 +48,12 @@ async function withMockedFetch(fn) {
   global.fetch = async (url) => {
     const u = String(url);
     if (u.includes('/auth/v1/user')) return jsonRes({ id: 'requester-1', email: scenario.email });
-    if (u.includes('/rest/v1/profiles')) return jsonRes([{ id: 'requester-1', email: scenario.email, role: scenario.role }]);
+    // getRequestingProfile's own lookup and the roster's bulk
+    // profiles-by-id lookup both hit this same endpoint -- the roster
+    // exclusion test needs the bulk one to return every profile it asks
+    // for, not just the requester's own, so scenario.profiles overrides
+    // when a test needs more than one.
+    if (u.includes('/rest/v1/profiles')) return jsonRes(scenario.profiles || [{ id: 'requester-1', email: scenario.email, role: scenario.role }]);
     if (u.includes('/rest/v1/monitor_agents')) return scenario.agentsFail ? failedRes() : jsonRes(scenario.agents || []);
     if (u.includes('/rest/v1/monitor_sessions')) return jsonRes([]);
     return jsonRes({ error: 'not relevant to this test' });
@@ -91,4 +96,25 @@ test('a paired agent still shows up in the roster (the query succeeding path is 
   assert.equal(r.body.ok, true);
   assert.equal(r.body.roster.length, 1);
   assert.equal(r.body.roster[0].employeeId, 'requester-1');
+});
+
+test('the explicitly excluded account (robert@ghgrp.net) never appears in the roster, but others still do', async () => {
+  scenario = {
+    email: 'patrick@ghgrp.net',
+    role: 'admin',
+    agentsFail: false,
+    profiles: [
+      { id: 'requester-1', email: 'patrick@ghgrp.net', full_name: 'Patrick', role: 'admin' },
+      { id: 'robert-emp-id', email: 'robert@ghgrp.net', full_name: 'Robert Marcus', role: 'crew' },
+    ],
+    agents: [
+      { id: 'agent-1', employee_id: 'requester-1', device_name: 'DESKTOP-1', platform: 'windows', status: 'active', paired_at: '2026-08-28T00:00:00Z', last_seen_at: new Date().toISOString(), last_disconnected_at: null, agent_version: '1.3.2' },
+      { id: 'agent-2', employee_id: 'robert-emp-id', device_name: 'DESKTOP-2', platform: 'windows', status: 'active', paired_at: '2026-08-28T00:00:00Z', last_seen_at: new Date().toISOString(), last_disconnected_at: null, agent_version: '1.3.2' },
+    ],
+  };
+  const r = await withMockedFetch(monitorReviewRoster);
+  assert.equal(r.body.ok, true);
+  assert.equal(r.body.roster.length, 1, 'only the non-excluded account should be in the roster');
+  assert.equal(r.body.roster[0].employeeId, 'requester-1');
+  assert.ok(!r.body.roster.some((row) => row.employeeId === 'robert-emp-id'));
 });
