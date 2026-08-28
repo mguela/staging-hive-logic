@@ -6271,6 +6271,15 @@ async function getRequestingAgent(req) {
 // isAgentAlive() below.
 export const MONITOR_AGENT_ALIVE_MINUTES = 3;
 
+// Accounts excluded from the Monitor roster display, by explicit request
+// (Chris/the user, 2026-08-29) -- a specific, named exception, not a
+// general rule about pairing state or role. Kept as emails rather than
+// names or ids so it stays correct if a profile is ever renamed, and
+// stays readable without a lookup. Used only by handleMonitorReview's
+// roster branch (Activity & Screenshot Review) -- Monitor Settings' own
+// per-person roster is a separate list and intentionally untouched.
+const MONITOR_ROSTER_EXCLUDED_EMAILS = new Set(['robert@ghgrp.net']);
+
 // One place decides "is this agent actually alive right now," reused by
 // every roster/status endpoint so they can't quietly disagree with each
 // other. Two ways an agent counts as not-alive:
@@ -7022,7 +7031,17 @@ async function handleMonitorReview(req, res) {
 
   if (!employeeId) {
     const agentsRes = await supabaseRequest('monitor_agents?select=id,employee_id,device_name,platform,status,paired_at,last_seen_at,last_disconnected_at,agent_version&order=last_seen_at.desc');
-    const agents = agentsRes.ok ? await agentsRes.json() : [];
+    // A failed query here used to silently become an empty roster --
+    // indistinguishable from "genuinely nobody has paired yet" on the
+    // frontend, which shows that exact reassuring message either way
+    // (public/index.html mgrMonRefresh). That is the worst failure mode
+    // for an admin-facing screen: it reads as calm, true information when
+    // it may be reporting a query that never ran. Surface the real error
+    // instead so a broken query looks broken, not empty.
+    if (!agentsRes.ok) {
+      return res.status(500).json({ ok: false, error: 'Could not load the Monitor roster: ' + (await agentsRes.text()) });
+    }
+    const agents = await agentsRes.json();
     const empIds = [...new Set((agents || []).map((a) => a.employee_id))];
     let profiles = [];
     if (empIds.length) {
@@ -7062,7 +7081,17 @@ async function handleMonitorReview(req, res) {
     // roster of "every agent that ever paired" is what showed Marvin twice.
     const agentsByEmployee2 = {};
     for (const a of agents || []) (agentsByEmployee2[a.employee_id] = agentsByEmployee2[a.employee_id] || []).push(a);
-    const roster = Object.keys(agentsByEmployee2).map((empId) => {
+    // Excluded from this display by explicit request (2026-08-29) -- one
+    // specific account, not a general rule (this is NOT "hide anyone who
+    // hasn't paired yet"; someone in that same state otherwise still
+    // shows). Matched by email rather than name, so it can never
+    // accidentally catch a different person who happens to share a
+    // display name.
+    const rosterEmpIds = Object.keys(agentsByEmployee2).filter((empId) => {
+      const email = (byId[empId] && byId[empId].email || '').toLowerCase();
+      return !MONITOR_ROSTER_EXCLUDED_EMAILS.has(email);
+    });
+    const roster = rosterEmpIds.map((empId) => {
       const a = pickBestMonitorAgent(agentsByEmployee2[empId]);
       return {
         employeeId: empId,
