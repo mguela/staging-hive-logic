@@ -37,14 +37,21 @@ function extractFunction(src, decl) {
 // ---- backend: api/invoices.js gets a job filter -----------------------------
 
 test('getInvoicesData accepts a jobRef and filters by invoices.job_id', () => {
-  const fn = extractFunction(INVOICES, 'export async function getInvoicesData({ limit, jobRef } = {}) {');
+  const fn = extractFunction(INVOICES, 'export async function getInvoicesData({ limit, jobRef, clientId } = {}) {');
   assert.match(fn, /job_id=eq\.\$\{encodeURIComponent\(jobRef\)\}/);
 });
 
 test('omitting jobRef still returns every invoice, unfiltered', () => {
-  const fn = extractFunction(INVOICES, 'export async function getInvoicesData({ limit, jobRef } = {}) {');
+  const fn = extractFunction(INVOICES, 'export async function getInvoicesData({ limit, jobRef, clientId } = {}) {');
   assert.match(fn, /const jobFilter = jobRef \? `&job_id=eq\.\$\{encodeURIComponent\(jobRef\)\}`\s*:\s*'';/,
     'jobFilter must be empty (not throw or filter on undefined) when no jobRef is given');
+});
+
+// jomell, 2026-08-27: the client profile modal's Invoices tab needs every
+// invoice for one client, not the whole table.
+test('getInvoicesData accepts a clientId and filters by invoices.client_id', () => {
+  const fn = extractFunction(INVOICES, 'export async function getInvoicesData({ limit, jobRef, clientId } = {}) {');
+  assert.match(fn, /client_id=eq\.\$\{encodeURIComponent\(clientId\)\}/);
 });
 
 test('the route handler passes req.query.jobRef through', () => {

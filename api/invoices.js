@@ -32,15 +32,19 @@ const PAGE_SIZE = 50;
 // to the job's jobber_id at creation (handleCreateInvoiceFromJob) --
 // filtering on it here is the same key the create path already writes,
 // not a new relationship.
-export async function getInvoicesData({ limit, jobRef } = {}) {
+// clientId (2026-08-27): the client profile modal's Invoices tab needs
+// every invoice for ONE client, not the whole table -- same pattern as
+// jobRef above, filtering on the column the create/sync paths already set.
+export async function getInvoicesData({ limit, jobRef, clientId } = {}) {
   const cappedLimit = Math.min(Number(limit) || PAGE_SIZE, 10000);
   const jobFilter = jobRef ? `&job_id=eq.${encodeURIComponent(jobRef)}` : '';
+  const clientFilter = clientId ? `&client_id=eq.${encodeURIComponent(clientId)}` : '';
   const CHUNK = 1000;
   let rows = [];
   let totalCount = 0;
   for (let offset = 0; offset < cappedLimit; offset += CHUNK) {
     const pageLimit = Math.min(CHUNK, cappedLimit - offset);
-    const r = await supabaseRequest(`invoices?select=*&order=issued_date.desc&limit=${pageLimit}&offset=${offset}${jobFilter}`, {
+    const r = await supabaseRequest(`invoices?select=*&order=issued_date.desc&limit=${pageLimit}&offset=${offset}${jobFilter}${clientFilter}`, {
       headers: { Prefer: 'count=exact' }
     });
     if (!r.ok) throw new Error(await r.text());
@@ -93,7 +97,7 @@ export default async function handler(req, res) {
     if (!_authedUser) return res.status(401).json({ ok: false, error: 'Not signed in.' });
   }
   try {
-    const data = await getInvoicesData({ limit: req.query.limit, jobRef: req.query.jobRef });
+    const data = await getInvoicesData({ limit: req.query.limit, jobRef: req.query.jobRef, clientId: req.query.clientId });
     res.status(200).json({ ok: true, source: 'Jobber via Supabase', ...data });
   } catch (e) {
     res.status(500).json({ ok: false, error: e.message });

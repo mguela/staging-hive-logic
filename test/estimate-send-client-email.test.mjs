@@ -17,6 +17,11 @@
 
 import { test, mock } from 'node:test';
 import assert from 'node:assert/strict';
+// Real pure math, captured before mock.module below replaces this specifier
+// -- the estimate PDF (api/_lib/estimate-pdf.js) needs these at send time,
+// and a hand-rewritten stub would silently drift from the real business
+// logic in server/bookkeeping/src/estimates.js.
+import { lineCost, linePrice, paymentScheduleAmounts, estimateTotals } from '../server/bookkeeping/src/estimates.js';
 
 process.env.BOOKKEEPING_ENABLED = 'true';
 
@@ -82,6 +87,8 @@ mock.module('../api/_lib/email.js', {
 mock.module('../server/bookkeeping/src/estimates.js', {
   namedExports: {
     sendEstimate: (est) => ({ ...est, lifecycleStatus: 'sent' }),
+    // Real functions, not reimplemented -- see the import above.
+    lineCost, linePrice, paymentScheduleAmounts, estimateTotals,
   },
 });
 
@@ -168,6 +175,17 @@ test('no address on file omits the row entirely, not a blank one', async () => {
   reset();
   await handler(req(), res());
   assert.doesNotMatch(sendEmailCalls[0].html, />Address</);
+});
+
+test('the email carries a real PDF attachment of the estimate', async () => {
+  reset();
+  await handler(req(), res());
+  assert.equal(sendEmailCalls.length, 1);
+  const attachments = sendEmailCalls[0].attachments;
+  assert.equal(attachments.length, 1);
+  assert.match(attachments[0].filename, /^Estimate-E-10012\.pdf$/);
+  const bytes = Buffer.from(attachments[0].content, 'base64');
+  assert.equal(bytes.slice(0, 5).toString('latin1'), '%PDF-', 'attachment must be a real, well-formed PDF');
 });
 
 test('a missing client email does not fail the send', async () => {

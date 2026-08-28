@@ -22,6 +22,7 @@
 //   Main number Voice webhook:        POST /api/voice-webhook?resource=inbound
 //   Main number Status Callback:      POST /api/voice-webhook?resource=status
 //   TwiML App Voice Request URL:      POST /api/voice-webhook?resource=outbound
+//   Main number Messaging webhook:    POST /api/voice-webhook?resource=sms-inbound
 
 import { supabaseRequest } from './_lib/jobber.js';
 import {
@@ -196,6 +197,45 @@ async function isBlocked(e164) {
     if (!res.ok) return false;
     return (await res.json()).length > 0;
   } catch { return false; }
+}
+
+// ---------------------------------------------------------------------
+// resource=sms-inbound -- a text landed on the HiveLogic Phone number.
+// Twilio calls this the same way it calls resource=inbound for a voice
+// call, except there is no call to answer -- just a message to log and
+// (best-effort) attribute to a client, via the exact same
+// lookupClientAndJob used for calls so a number is never resolved two
+// different ways depending on which channel it came in on.
+// ---------------------------------------------------------------------
+async function handleSmsInbound(req, res) {
+  const p = req.body || {};
+  const from = normalizeToE164(p.From) || p.From || 'unknown';
+  const to = normalizeToE164(p.To) || p.To || 'unknown';
+  const body = typeof p.Body === 'string' ? p.Body : '';
+
+  if (await isBlocked(from)) {
+    await logEvent(null, 'sms_blocked', { from });
+    return xmlResponse(res, new TwiML());
+  }
+
+  const { clientId } = await lookupClientAndJob(from);
+  await supabaseRequest('voice_messages', {
+    method: 'POST',
+    body: JSON.stringify({
+      direction: 'inbound',
+      from_number: from,
+      to_number: to,
+      body,
+      provider_sid: p.MessageSid || null,
+      status: 'received',
+      client_id: clientId,
+    }),
+  }).catch(() => {});
+
+  // An empty TwiML response tells Twilio not to auto-reply. A reply goes out
+  // through the ordinary send path (api/voice.js resource=sms) or the Reina
+  // action-approval flow (api/reina-action.js) -- never from here.
+  xmlResponse(res, new TwiML());
 }
 
 // ---------------------------------------------------------------------
@@ -1361,6 +1401,7 @@ async function handleCallTranscription(req, res) {
 
 const RESOURCES = {
   inbound: handleInbound,
+  'sms-inbound': handleSmsInbound,
   gather: handleGather,
   'recording-status': handleRecordingStatus,
   'call-transcription': handleCallTranscription,

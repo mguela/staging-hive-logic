@@ -22,6 +22,8 @@
 // POST /api/voice?resource=contact_create          -> { e164, name } (label an unknown number)
 // POST /api/voice?resource=contact_link            -> { e164, jobberClientId } (link a number to an existing Jobber client)
 // POST /api/voice?resource=sms                     -> { to, body } (send a one-off SMS via Twilio)
+// GET  /api/voice?resource=sms_threads              -> one row per real conversation, newest first
+// GET  /api/voice?resource=sms_thread&number=...    -> the full message history with one number
 // GET  /api/voice?resource=caller&e164=...        -> { matches[], knownName } (who is calling)
 // GET  /api/voice?resource=calls                   -> call log, paginated
 // GET  /api/voice?resource=voicemails               -> voicemail list (own extension by default)
@@ -335,6 +337,99 @@ async function handleSms(req, res) {
   if (!send.ok) return res.status(400).json({ ok: false, error: payload.message || 'Twilio could not send the message.' });
   await supabaseRequest('voice_messages', { method: 'POST', body: JSON.stringify({ direction: 'outbound', from_number: mainNumber.e164, to_number: to, body: text, provider_sid: payload.sid || null, status: payload.status || 'queued' }) }).catch(() => {});
   res.status(200).json({ ok: true, sid: payload.sid || null });
+}
+
+// Same two-step resolution handleCallsGet uses for a call's number, applied
+// to a set of SMS counterpart numbers at once: clients.phone_e164 first,
+// then voice_known_numbers (what "Create Contact" / "Add to Existing
+// Contact" write) for whatever is left. Kept a duplicate of that logic
+// rather than sharing it -- handleCallsGet's version is folded into a
+// single already-fetched call list and reworking it into something both
+// call sites can share is more churn than the two ever agreeing to change.
+async function resolveNamesForNumbers(numbers) {
+  const map = new Map();
+  if (!numbers.length) return map;
+  const inList = numbers.map(n => encodeURIComponent(`"${n}"`)).join(',');
+  const [byPhone, byKnown] = await Promise.all([
+    supabaseRequest(`clients?phone_e164=in.(${inList})&select=jobber_id,name,first_name,last_name,company_name,phone_e164`).then(x => x.ok ? x.json() : []),
+    supabaseRequest(`voice_known_numbers?e164=in.(${inList})&select=e164,display_name,jobber_client_id`).then(x => x.ok ? x.json() : []),
+  ]);
+  for (const c of byPhone) map.set(c.phone_e164, { clientId: c.jobber_id, name: clientDisplayName(c) });
+  const linkedIds = [...new Set(byKnown.map(k => k.jobber_client_id).filter(Boolean))];
+  const linkedClients = linkedIds.length
+    ? await supabaseRequest(`clients?jobber_id=in.(${linkedIds.join(',')})&select=jobber_id,name,first_name,last_name,company_name`).then(x => x.ok ? x.json() : [])
+    : [];
+  const linkedById = new Map(linkedClients.map(c => [c.jobber_id, c]));
+  for (const k of byKnown) {
+    if (map.has(k.e164)) continue;
+    const linked = k.jobber_client_id && linkedById.has(k.jobber_client_id) ? linkedById.get(k.jobber_client_id) : null;
+    map.set(k.e164, { clientId: k.jobber_client_id || null, name: linked ? clientDisplayName(linked) : k.display_name });
+  }
+  return map;
+}
+
+// One row per real conversation -- every voice_messages row grouped by the
+// human on the other end (from_number on an inbound row, to_number on an
+// outbound one), newest activity first. `needsReply` is computed, not
+// stored: it is simply "the most recent message in this thread came from
+// the client", which is the honest definition and never goes stale the way
+// a separate flag would if a reply were ever sent through another path.
+async function handleSmsThreadsGet(req, res) {
+  const limit = Math.min(Number(req.query.limit) || 500, 1000);
+  const r = await supabaseRequest(`voice_messages?select=direction,from_number,to_number,body,status,created_at&order=created_at.desc&limit=${limit}`);
+  const rows = r.ok ? await r.json() : [];
+
+  const byNumber = new Map();
+  for (const m of rows) {
+    const number = m.direction === 'inbound' ? m.from_number : m.to_number;
+    if (!number) continue;
+    if (!byNumber.has(number)) byNumber.set(number, []);
+    byNumber.get(number).push(m);
+  }
+
+  const numbers = [...byNumber.keys()];
+  const names = await resolveNamesForNumbers(numbers);
+
+  const threads = numbers.map((number) => {
+    const messages = byNumber.get(number); // already newest-first
+    const last = messages[0];
+    const identity = names.get(number) || null;
+    return {
+      number,
+      clientId: identity ? identity.clientId : null,
+      clientName: identity ? identity.name : null,
+      lastMessage: { body: last.body, direction: last.direction, createdAt: last.created_at, status: last.status },
+      messageCount: messages.length,
+      needsReply: last.direction === 'inbound',
+    };
+  });
+
+  threads.sort((a, b) => new Date(b.lastMessage.createdAt).getTime() - new Date(a.lastMessage.createdAt).getTime());
+  res.status(200).json({ ok: true, threads });
+}
+
+// The full history with one number, oldest first (a thread reads top to
+// bottom like a conversation). `origin: 'reina_approved'` on a row means it
+// went out through the Reina draft-then-approve flow (api/reina-action.js);
+// null means an ordinary send.
+async function handleSmsThreadGet(req, res) {
+  const number = normalizeToE164(req.query.number || '');
+  if (!number) return res.status(400).json({ ok: false, error: 'A phone number is required.' });
+  const limit = Math.min(Number(req.query.limit) || 200, 500);
+  const r = await supabaseRequest(
+    `voice_messages?or=(from_number.eq.${encodeURIComponent(number)},to_number.eq.${encodeURIComponent(number)})` +
+    `&select=id,direction,from_number,to_number,body,status,origin,created_at&order=created_at.asc&limit=${limit}`
+  );
+  const messages = r.ok ? await r.json() : [];
+  const names = await resolveNamesForNumbers([number]);
+  const identity = names.get(number) || null;
+  res.status(200).json({
+    ok: true,
+    number,
+    clientId: identity ? identity.clientId : null,
+    clientName: identity ? identity.name : null,
+    messages,
+  });
 }
 
 // ---- who is calling -------------------------------------------------------
@@ -1054,6 +1149,8 @@ const GET_HANDLERS = {
   queue_status: handleQueueStatusGet,
   agent_status: handleAgentStatusGet,
   callbacks: handleCallbacksGet,
+  sms_threads: handleSmsThreadsGet,
+  sms_thread: handleSmsThreadGet,
 };
 
 const POST_HANDLERS = {
