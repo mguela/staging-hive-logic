@@ -19,7 +19,7 @@
  * monitor_my_status poll, so "is this person running current code" is a
  * question the database can answer. Do not hand-edit it -- run
  * `node scripts/stamp-page-build.mjs`. */
-var HL_PAGE_BUILD = '55be1da9598c7266';
+var HL_PAGE_BUILD = '36679dc23606a3da';
 </script>
 <script>
 (function () { // HL_FETCH_DEDUPE_V1 — single wrapper: GET /api/ dedupe + 60s cache + write-invalidate
@@ -4801,8 +4801,8 @@ function ninvSave(){ var amt = parseFloat(document.getElementById('ninv-amt').va
 <div id="team">
   <button class="back" onclick="showView('cc')">← COMMAND CENTER</button>
   <div class="card" style="margin-bottom:16px">
-    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap">
-      <div>
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:nowrap">
+      <div style="flex:1;min-width:0">
         <h2 style="margin:0 0 4px;font-family:Montserrat;font-size:15px;font-weight:900">Team &amp; Access</h2>
         <div style="font-size:11px;color:var(--mut);font-weight:600;margin-bottom:14px">Real HiveLogic logins, backed by Supabase Auth. Only a superadmin can add, remove, or change the role of a team member; an admin can reset a crew member's password; everyone can change their own.</div>
       </div>
@@ -5151,12 +5151,12 @@ function ninvSave(){ var amt = parseFloat(document.getElementById('ninv-amt').va
     // title now instead of sitting on the page permanently. teamInvite()
     // (below) reads these same ids and needed no changes.
     window.teamOpenInviteModal = function(){
-      var body = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">'
-        + '<div><label style="display:block;font-size:10px;font-weight:800;color:var(--mut);margin-bottom:4px">FULL NAME</label><input id="team-inv-name" type="text" style="width:100%;box-sizing:border-box;padding:9px 10px;border:1px solid var(--line);border-radius:8px;font-size:12.5px;font-family:Montserrat"></div>'
-        + '<div><label style="display:block;font-size:10px;font-weight:800;color:var(--mut);margin-bottom:4px">EMAIL</label><input id="team-inv-email" type="email" style="width:100%;box-sizing:border-box;padding:9px 10px;border:1px solid var(--line);border-radius:8px;font-size:12.5px;font-family:Montserrat"></div>'
+      var body = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px">'
+        + '<div><label style="display:block;font-size:10px;font-weight:800;color:var(--mut);margin-bottom:4px;letter-spacing:.04em">FULL NAME</label><input id="team-inv-name" type="text" placeholder="Enter full name" style="width:100%;box-sizing:border-box;padding:10px 12px;border:1px solid var(--line);border-radius:8px;font-size:12.5px;font-family:Montserrat"></div>'
+        + '<div><label style="display:block;font-size:10px;font-weight:800;color:var(--mut);margin-bottom:4px;letter-spacing:.04em">EMAIL</label><input id="team-inv-email" type="email" placeholder="Enter email address" style="width:100%;box-sizing:border-box;padding:10px 12px;border:1px solid var(--line);border-radius:8px;font-size:12.5px;font-family:Montserrat"></div>'
         + '</div>'
-        + '<div style="display:flex;align-items:center;gap:12px;margin-bottom:14px"><label style="font-size:10px;font-weight:800;color:var(--mut)">ROLE</label><select id="team-inv-role" style="padding:8px 10px;border:1px solid var(--line);border-radius:8px;font-size:12.5px;font-family:Montserrat"><option value="crew">Crew</option><option value="admin">Admin</option></select></div>'
-        + '<button id="team-inv-send-btn" class="lg-btn" style="width:100%" onclick="teamInvite()">Send invite</button>'
+        + '<div style="margin-bottom:14px"><label style="display:block;font-size:10px;font-weight:800;color:var(--mut);margin-bottom:4px;letter-spacing:.04em">ROLE</label><select id="team-inv-role" style="width:100%;box-sizing:border-box;padding:10px 12px;border:1px solid var(--line);border-radius:8px;font-size:12.5px;font-family:Montserrat"><option value="crew">Crew</option><option value="admin">Admin</option></select></div>'
+        + '<button id="team-inv-send-btn" class="lg-btn" style="width:100%;margin-top:0" onclick="teamInvite()">Send invite</button>'
         + '<div id="team-inv-result" style="margin-top:14px"></div>';
       hlModal('👤 Invite a team member', body);
     };
