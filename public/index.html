@@ -19,7 +19,7 @@
  * monitor_my_status poll, so "is this person running current code" is a
  * question the database can answer. Do not hand-edit it -- run
  * `node scripts/stamp-page-build.mjs`. */
-var HL_PAGE_BUILD = '36679dc23606a3da';
+var HL_PAGE_BUILD = 'ea99c90f484e6761';
 </script>
 <script>
 (function () { // HL_FETCH_DEDUPE_V1 — single wrapper: GET /api/ dedupe + 60s cache + write-invalidate
@@ -5033,6 +5033,27 @@ function ninvSave(){ var amt = parseFloat(document.getElementById('ninv-amt').va
     var ROLE_LABEL = { superadmin: 'Superadmin', admin: 'Admin', crew: 'Crew' };
     var ROLE_BADGE_BG = { superadmin: '#efe7fb', admin: '#e3ecfb', crew: '#eef2f7' };
     var ROLE_BADGE_FG = { superadmin: '#6b3fc4', admin: '#2255aa', crew: '#59718a' };
+    // Table state (2026-08-29, sorting + pagination). Client-side, not a
+    // second server round trip per page/sort -- resource=team already
+    // returns the whole (modest-sized) roster in one call, so re-slicing
+    // an array already in memory is simpler and faster than teaching the
+    // server pagination it doesn't need yet. _teamAllRows/_teamCtx are set
+    // once per refresh; query/sort/page mutate and re-render from them.
+    var _teamAllRows = [];
+    var _teamCtx = { isSuperadmin: false, isAdmin: false, selfId: null };
+    var _teamQuery = '';
+    var _teamSortKey = 'name';
+    var _teamSortDir = 'asc';
+    var _teamPage = 0;
+    var TEAM_PAGE_SIZE = 10;
+    var TEAM_SORT_RANK = { superadmin: 0, admin: 1, crew: 2 };
+    var TEAM_COLUMNS = [
+      { key: 'name', label: 'User' },
+      { key: 'access', label: 'System Access' },
+      { key: 'jobRole', label: 'Job Role' },
+      { key: 'lastSeen', label: 'Last seen in app' },
+      { key: null, label: '' },
+    ];
 
     function teamRoleBadge(role){
       var r = role || 'crew';
@@ -5058,62 +5079,156 @@ function ninvSave(){ var amt = parseFloat(document.getElementById('ninv-amt').va
       rows.forEach(function(p){ _teamMemberById[p.id] = p; });
       var mine = rows.find(function(p){ return sess.user && p.id === sess.user.id; });
       var myRole = (mine && mine.role) || 'crew';
-      var isSuperadmin = myRole === 'superadmin';
-      var isAdmin = myRole === 'admin' || isSuperadmin;
-      if (!rows.length) {
-        listEl.innerHTML = '<div style="font-size:12px;color:var(--mut)">No team members found yet.</div>';
-      } else {
-        var searchHtml = rows.length > 6
-          ? '<input id="team-search" type="text" placeholder="Search '+rows.length+' people…" oninput="teamFilterRows(this.value)" style="width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:8px;font-size:12px;font-family:inherit;margin-bottom:10px"/>'
-          : '';
-        var th = function(label){ return '<th style="padding:8px 10px;font-size:9.5px;color:var(--mut);font-weight:800;letter-spacing:.05em;text-transform:uppercase;text-align:left;white-space:nowrap">'+label+'</th>'; };
-        var rowsHtml = rows.map(function(p){
-          var isSelf = !!(sess.user && p.id === sess.user.id);
-          var pRole = p.role || 'crew';
-          var initial = (p.full_name || p.email || '?').trim().charAt(0).toUpperCase();
-          var nameCell = '<div style="display:flex;align-items:center;gap:9px;cursor:pointer" onclick="teamOpenMemberDetail(\''+p.id+'\')">'
-            + '<div style="width:28px;height:28px;border-radius:50%;background:#59718a;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:12px;flex-shrink:0">'+initial+'</div>'
-            + '<div><div style="font-weight:700;font-size:12.5px">'+(p.full_name || '(no name)')+'</div><div style="color:var(--mut);font-size:10.5px">'+(p.email || '')+'</div></div>'
-            + '</div>';
-          var accessCell = (isSuperadmin && !isSelf)
-            ? '<select onchange="teamChangeRole(\''+p.id+'\', this.value, '+JSON.stringify(p.full_name || p.email)+')" style="font-size:10px;font-weight:800;text-transform:uppercase;padding:4px 6px;border:1px solid var(--line);border-radius:6px;font-family:inherit">'
-              + ['superadmin','admin','crew'].map(function(r){ return '<option value="'+r+'"'+(r===pRole?' selected':'')+'>'+ROLE_LABEL[r]+'</option>'; }).join('')
-              + '</select>'
-            : teamRoleBadge(pRole);
-          var actionsCell = '';
-          var canResetTheirs = isSuperadmin ? !isSelf : (isAdmin && !isSelf && pRole === 'crew');
-          if (canResetTheirs) actionsCell += '<button type="button" onclick="teamResetPassword(\''+p.id+'\', '+JSON.stringify(p.full_name || p.email)+')" style="font-size:9.5px;font-weight:800;padding:5px 9px;border-radius:6px;border:1px solid var(--line);background:#fff;cursor:pointer;color:#161e2e;white-space:nowrap;margin-right:5px">Reset password</button>';
-          if (isSelf) actionsCell += '<button type="button" onclick="teamChangeOwnPassword()" style="font-size:9.5px;font-weight:800;padding:5px 9px;border-radius:6px;border:1px solid var(--line);background:#fff;cursor:pointer;color:#161e2e;white-space:nowrap;margin-right:5px">Change my password</button>';
-          if (isSuperadmin && !isSelf) actionsCell += '<button type="button" onclick="teamDeleteUser(\''+p.id+'\', '+JSON.stringify(p.full_name || p.email)+')" style="font-size:9.5px;font-weight:800;padding:5px 9px;border-radius:6px;border:1px solid var(--red);background:#fff;cursor:pointer;color:var(--red);white-space:nowrap">Remove</button>';
-          var searchKey = ((p.full_name||'')+' '+(p.email||'')).toLowerCase().replace(/"/g,'&quot;');
-          return '<tr class="team-row" data-name="'+searchKey+'" style="border-top:1px solid var(--line)">'
-            + '<td style="padding:8px 10px">'+nameCell+'</td>'
-            + '<td style="padding:8px 10px;white-space:nowrap">'+accessCell+'</td>'
-            + '<td style="padding:8px 10px;white-space:nowrap;font-size:11.5px;color:'+(p.jobRole?'#161e2e':'var(--mut)')+'">'+teamJobRoleLabel(p.jobRole)+'</td>'
-            + '<td style="padding:8px 10px;white-space:nowrap;font-size:11px;color:var(--mut)">'+(p.lastSeenInApp ? hlTimeAgo(p.lastSeenInApp) : '—')+'</td>'
-            + '<td style="padding:8px 10px;white-space:nowrap;text-align:right">'+actionsCell+'</td>'
-            + '</tr>';
-        }).join('');
-        listEl.innerHTML = searchHtml
-          + '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse"><thead><tr>'+th('User')+th('System Access')+th('Job Role')+th('Last seen in app')+th('')+'</tr></thead><tbody id="team-rows">'+rowsHtml+'</tbody></table></div>';
-      }
+      _teamAllRows = rows;
+      _teamCtx = { isSuperadmin: myRole === 'superadmin', isAdmin: myRole === 'admin' || myRole === 'superadmin', selfId: (sess.user && sess.user.id) || null };
+      _teamQuery = ''; _teamSortKey = 'name'; _teamSortDir = 'asc'; _teamPage = 0;
+      teamRenderTable();
       var inviteBtn = document.getElementById('team-invite-btn');
       var noCard = document.getElementById('team-noaccess-card');
       var hcCard = document.getElementById('team-hc-backfill-card');
       // Inviting/removing/re-roling other people is superadmin-only now --
       // admin's only power over another account is resetting a crew
       // member's password (handled per-row above, not gated on this card).
-      if (inviteBtn) inviteBtn.style.display = isSuperadmin ? 'inline-flex' : 'none';
-      if (noCard) noCard.style.display = isSuperadmin ? 'none' : 'block';
-      if (hcCard) hcCard.style.display = isAdmin ? 'block' : 'none';
+      if (inviteBtn) inviteBtn.style.display = _teamCtx.isSuperadmin ? 'inline-flex' : 'none';
+      if (noCard) noCard.style.display = _teamCtx.isSuperadmin ? 'none' : 'block';
+      if (hcCard) hcCard.style.display = _teamCtx.isAdmin ? 'block' : 'none';
       }, function(){ listEl.textContent = 'Not signed in.'; });
     }
 
-    window.teamFilterRows = function(query){
-      var q = (query || '').toLowerCase();
-      document.querySelectorAll('#team-rows tr.team-row').forEach(function(row){
-        row.style.display = row.getAttribute('data-name').indexOf(q) === -1 ? 'none' : '';
+    // Sort value per column -- a comparable primitive, not display HTML.
+    // 'access' sorts by tier rank (Superadmin, Admin, Crew), not
+    // alphabetically ("Admin" < "Crew" < "Superadmin" would be a
+    // meaningless order for a privilege level). Missing "last seen" sorts
+    // to the end regardless of direction -- "never seen" isn't oldest OR
+    // newest, and treating epoch-0/Infinity as a real timestamp would rank
+    // it as one or the other by accident.
+    function teamSortValue(p, key){
+      if (key === 'name') return (p.full_name || p.email || '').toLowerCase();
+      if (key === 'access') return TEAM_SORT_RANK[p.role] != null ? TEAM_SORT_RANK[p.role] : 9;
+      if (key === 'jobRole') return teamJobRoleLabel(p.jobRole).toLowerCase();
+      if (key === 'lastSeen') return p.lastSeenInApp ? new Date(p.lastSeenInApp).getTime() : null;
+      return '';
+    }
+
+    function teamRenderTable(){
+      var listEl = document.getElementById('team-list');
+      if (!listEl) return;
+      var ctx = _teamCtx;
+      if (!_teamAllRows.length) {
+        listEl.innerHTML = '<div style="font-size:12px;color:var(--mut)">No team members found yet.</div>';
+        return;
+      }
+      var q = _teamQuery.toLowerCase();
+      var filtered = q
+        ? _teamAllRows.filter(function(p){ return ((p.full_name||'')+' '+(p.email||'')).toLowerCase().indexOf(q) !== -1; })
+        : _teamAllRows.slice();
+      var dir = _teamSortDir === 'desc' ? -1 : 1;
+      var key = _teamSortKey;
+      filtered.sort(function(a, b){
+        var av = teamSortValue(a, key), bv = teamSortValue(b, key);
+        if (av == null && bv == null) return 0;
+        if (av == null) return 1;   // nulls (e.g. never seen) always last, regardless of direction
+        if (bv == null) return -1;
+        if (av < bv) return -1 * dir;
+        if (av > bv) return 1 * dir;
+        return 0;
       });
+      var total = filtered.length;
+      var pageCount = Math.max(1, Math.ceil(total / TEAM_PAGE_SIZE));
+      if (_teamPage >= pageCount) _teamPage = pageCount - 1;
+      if (_teamPage < 0) _teamPage = 0;
+      var pageStart = _teamPage * TEAM_PAGE_SIZE;
+      var pageRows = filtered.slice(pageStart, pageStart + TEAM_PAGE_SIZE);
+
+      var searchHtml = _teamAllRows.length > 6
+        ? '<input id="team-search" type="text" placeholder="Search '+_teamAllRows.length+' people…" value="'+_teamQuery.replace(/"/g,'&quot;')+'" oninput="teamFilterRows(this.value)" style="width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:8px;font-size:12px;font-family:inherit;margin-bottom:10px"/>'
+        : '';
+      var th = function(col){
+        if (!col.key) return '<th style="padding:8px 10px;font-size:9.5px;color:var(--mut);font-weight:800;letter-spacing:.05em;text-transform:uppercase;text-align:left;white-space:nowrap"></th>';
+        var active = _teamSortKey === col.key;
+        var arrow = active ? (_teamSortDir === 'asc' ? ' ▲' : ' ▼') : '';
+        return '<th onclick="teamSortBy(\''+col.key+'\')" style="padding:8px 10px;font-size:9.5px;color:'+(active?'#161e2e':'var(--mut)')+';font-weight:800;letter-spacing:.05em;text-transform:uppercase;text-align:left;white-space:nowrap;cursor:pointer;user-select:none">'+col.label+arrow+'</th>';
+      };
+      var rowsHtml = pageRows.map(function(p){
+        var isSelf = !!(ctx.selfId && p.id === ctx.selfId);
+        var pRole = p.role || 'crew';
+        var initial = (p.full_name || p.email || '?').trim().charAt(0).toUpperCase();
+        var nameCell = '<div style="display:flex;align-items:center;gap:9px;cursor:pointer" onclick="teamOpenMemberDetail(\''+p.id+'\')">'
+          + '<div style="width:28px;height:28px;border-radius:50%;background:#59718a;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:12px;flex-shrink:0">'+initial+'</div>'
+          + '<div><div style="font-weight:700;font-size:12.5px">'+(p.full_name || '(no name)')+'</div><div style="color:var(--mut);font-size:10.5px">'+(p.email || '')+'</div></div>'
+          + '</div>';
+        var accessCell = (ctx.isSuperadmin && !isSelf)
+          ? '<select onchange="teamChangeRole(\''+p.id+'\', this.value, '+JSON.stringify(p.full_name || p.email)+')" style="font-size:10px;font-weight:800;text-transform:uppercase;padding:4px 6px;border:1px solid var(--line);border-radius:6px;font-family:inherit">'
+            + ['superadmin','admin','crew'].map(function(r){ return '<option value="'+r+'"'+(r===pRole?' selected':'')+'>'+ROLE_LABEL[r]+'</option>'; }).join('')
+            + '</select>'
+          : teamRoleBadge(pRole);
+        var actionsCell = '';
+        var canResetTheirs = ctx.isSuperadmin ? !isSelf : (ctx.isAdmin && !isSelf && pRole === 'crew');
+        if (canResetTheirs) actionsCell += '<button type="button" onclick="teamResetPassword(\''+p.id+'\', '+JSON.stringify(p.full_name || p.email)+')" style="font-size:9.5px;font-weight:800;padding:5px 9px;border-radius:6px;border:1px solid var(--line);background:#fff;cursor:pointer;color:#161e2e;white-space:nowrap;margin-right:5px">Reset password</button>';
+        if (isSelf) actionsCell += '<button type="button" onclick="teamChangeOwnPassword()" style="font-size:9.5px;font-weight:800;padding:5px 9px;border-radius:6px;border:1px solid var(--line);background:#fff;cursor:pointer;color:#161e2e;white-space:nowrap;margin-right:5px">Change my password</button>';
+        if (ctx.isSuperadmin && !isSelf) actionsCell += '<button type="button" onclick="teamDeleteUser(\''+p.id+'\', '+JSON.stringify(p.full_name || p.email)+')" style="font-size:9.5px;font-weight:800;padding:5px 9px;border-radius:6px;border:1px solid var(--red);background:#fff;cursor:pointer;color:var(--red);white-space:nowrap">Remove</button>';
+        return '<tr class="team-row" style="border-top:1px solid var(--line)">'
+          + '<td style="padding:8px 10px">'+nameCell+'</td>'
+          + '<td style="padding:8px 10px;white-space:nowrap">'+accessCell+'</td>'
+          + '<td style="padding:8px 10px;white-space:nowrap;font-size:11.5px;color:'+(p.jobRole?'#161e2e':'var(--mut)')+'">'+teamJobRoleLabel(p.jobRole)+'</td>'
+          + '<td style="padding:8px 10px;white-space:nowrap;font-size:11px;color:var(--mut)">'+(p.lastSeenInApp ? hlTimeAgo(p.lastSeenInApp) : '—')+'</td>'
+          + '<td style="padding:8px 10px;white-space:nowrap;text-align:right">'+actionsCell+'</td>'
+          + '</tr>';
+      }).join('');
+      if (!pageRows.length) {
+        rowsHtml = '<tr><td colspan="5" style="padding:16px 10px;font-size:12px;color:var(--mut);text-align:center">No one matches "'+_teamQuery+'".</td></tr>';
+      }
+      var rangeStart = total ? pageStart + 1 : 0;
+      var rangeEnd = Math.min(pageStart + TEAM_PAGE_SIZE, total);
+      var pagerHtml = '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-top:10px;font-size:11px;color:var(--mut)">'
+        + '<div>Showing '+rangeStart+' to '+rangeEnd+' of '+total+' user'+(total===1?'':'s')+'</div>'
+        + '<div style="display:flex;gap:6px">'
+        + '<button type="button" onclick="teamGoToPage('+(_teamPage-1)+')" '+(_teamPage<=0?'disabled':'')+' style="padding:5px 10px;border-radius:6px;border:1px solid var(--line);background:#fff;cursor:pointer;font-size:11px;font-weight:700">Previous</button>'
+        + '<span style="padding:5px 4px;font-weight:700">Page '+(_teamPage+1)+' of '+pageCount+'</span>'
+        + '<button type="button" onclick="teamGoToPage('+(_teamPage+1)+')" '+(_teamPage>=pageCount-1?'disabled':'')+' style="padding:5px 10px;border-radius:6px;border:1px solid var(--line);background:#fff;cursor:pointer;font-size:11px;font-weight:700">Next</button>'
+        + '</div></div>';
+      listEl.innerHTML = searchHtml
+        + '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse"><thead><tr>'+TEAM_COLUMNS.map(th).join('')+'</tr></thead><tbody id="team-rows">'+rowsHtml+'</tbody></table></div>'
+        + pagerHtml;
+      // Re-focus + restore cursor position on the search box -- innerHTML
+      // replacement above tore out and recreated it, which would otherwise
+      // drop focus after every keystroke. Only when a keystroke is what
+      // triggered this render (_teamRestoreSearchFocus) -- unconditionally
+      // stealing focus into the search box on every render would also
+      // yank it away from wherever the user just clicked (a sort header,
+      // a pager button, the initial page load).
+      if (_teamRestoreSearchFocus) {
+        _teamRestoreSearchFocus = false;
+        var searchInput = document.getElementById('team-search');
+        if (searchInput) {
+          searchInput.focus();
+          searchInput.setSelectionRange(searchInput.value.length, searchInput.value.length);
+        }
+      }
+    }
+
+    var _teamRestoreSearchFocus = false;
+    window.teamFilterRows = function(query){
+      _teamQuery = query || '';
+      _teamPage = 0;
+      _teamRestoreSearchFocus = true;
+      teamRenderTable();
+    };
+
+    window.teamSortBy = function(key){
+      if (_teamSortKey === key) {
+        _teamSortDir = _teamSortDir === 'asc' ? 'desc' : 'asc';
+      } else {
+        _teamSortKey = key;
+        _teamSortDir = 'asc';
+      }
+      _teamPage = 0;
+      teamRenderTable();
+    };
+
+    window.teamGoToPage = function(page){
+      _teamPage = page;
+      teamRenderTable();
     };
 
     // Detail view -- a modal, matching every other detail popup in this app
