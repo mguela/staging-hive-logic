@@ -19,7 +19,7 @@
  * monitor_my_status poll, so "is this person running current code" is a
  * question the database can answer. Do not hand-edit it -- run
  * `node scripts/stamp-page-build.mjs`. */
-var HL_PAGE_BUILD = 'ea99c90f484e6761';
+var HL_PAGE_BUILD = '1018bf28794d634a';
 </script>
 <script>
 (function () { // HL_FETCH_DEDUPE_V1 — single wrapper: GET /api/ dedupe + 60s cache + write-invalidate
@@ -2785,7 +2785,7 @@ button,.dowork,.startday,.back,.cdb-new,.nc-create,.fm-save,.gbtn,.iconbtn,.dw-a
       <div class="nav" id="nav-pcx" onclick="showView('pcx')" style="padding-left:26px;font-size:12px" title="Design mockup — lands in Portals & Field once built"><span class="ic" style="font-size:12px;display:flex;align-items:center;justify-content:center">🏠</span>Client Portal</div>
       <div class="nav" id="nav-pex" onclick="showView('pex')" style="padding-left:26px;font-size:12px" title="Design mockup — lands in Portals & Field once built"><span class="ic" style="font-size:12px;display:flex;align-items:center;justify-content:center">👥</span>Employee Portal</div>
       <div class="nav" id="nav-fax" onclick="showView('fax')" style="padding-left:26px;font-size:12px" title="Design mockup — lands in Portals & Field once built"><span class="ic" style="font-size:12px;display:flex;align-items:center;justify-content:center">📱</span>Field App</div>
-      <div class="nav" id="nav-cmx" onclick="showView('cmx')" style="padding-left:26px;font-size:12px" title="Design mockup — lands in the top bar (💬 icon) once built"><span class="ic" style="font-size:12px;display:flex;align-items:center;justify-content:center">💬</span>Comms Hub</div>
+      <div class="nav" id="nav-cmx" onclick="showView('cmx')" style="padding-left:26px;font-size:12px" title="Calls, texts &amp; client threads are real. Team Channels and Reviews are still a design mockup."><span class="ic" style="font-size:12px;display:flex;align-items:center;justify-content:center">💬</span>Comms Hub</div>
     </div>
     <div class="nav nav-dowork" onclick="document.getElementById('dwv').classList.add('open')" style="margin-top:16px"><span class="ic"><svg viewBox="0 0 24 24" stroke="#FF9D3C"><path d="M13 2L5 13.5h5L9.5 22 18 10.5h-5.5z"/></svg></span>Do Work</div>
     <div class="foot" onclick="hlCompanyPop()" style="cursor:pointer" title="Switch company"><div class="gh">GH</div><div><b style="color:#fff" id="hlfootco">Greenwich Handyman</b><br>Chris Kendall</div></div>
@@ -3704,7 +3704,12 @@ function efLines(){
   var lines = [];
   EST.items.forEach(function(it){
     if (it.type === 'text' || it.opt) return;
-    lines.push({ type: 'labor', description: it.title || 'Item', qty: 1, unit: 'ea', unitCost: efCost(it), pmode: 'manual', manualUnitPrice: efTotal(it), owner: it.owner || null });
+    // jomell, 2026-08-27: the Scope of Work description (bullet points under
+    // each line item's name) used to be typed in and then dropped at save
+    // time -- only the name (title) ever made it into the saved record.
+    // Carried through as its own field so the PDF (and anywhere else) can
+    // show the real name/description split, not just the name.
+    lines.push({ type: 'labor', description: it.title || 'Item', notes: it.desc || '', qty: 1, unit: 'ea', unitCost: efCost(it), pmode: 'manual', manualUnitPrice: efTotal(it), owner: it.owner || null });
   });
   if (EST.disc > 0) lines.push({ type: 'discount', description: 'Discount', qty: 1, unit: 'ea', unitCost: 0, pmode: 'manual', manualUnitPrice: EST.disc });
   return lines;
@@ -17390,7 +17395,7 @@ function hlToast(m){_t.innerHTML=m;_t.style.transform='translateX(-50%) translat
 " style="width:100%;height:calc(100vh - 130px);border:1px solid var(--line);border-radius:14px;background:#fff"></iframe></div>
 
 <div id="view-cmx" style="display:none">
-<div class="uc-note" style="background:#fbf1e2;border:1px solid #e8c37a;border-radius:10px;padding:10px 14px;margin-bottom:10px;font-size:11px;font-weight:700;color:#8a6414">&#128679; <b>Under construction</b> &#8212; this is a design mockup, not a working feature. When it is built it lands in <b>the top bar (💬 icon)</b>.</div>
+<div class="uc-note" style="background:#e6f2ec;border:1px solid #9fcfb8;border-radius:10px;padding:10px 14px;margin-bottom:10px;font-size:11px;font-weight:700;color:#1B7A50">&#9989; Client Threads and Calls &amp; Voicemail below are real. <b>Team Channels</b> and <b>Reviews</b> are still a design mockup (labeled where they appear) &#8212; no chat backend or Google/Yelp integration exists yet.</div>
 <iframe id="if-cmx" data-hl63="<!DOCTYPE html>
 <html lang=&quot;en&quot;>
 <head>
@@ -17496,172 +17501,541 @@ function hlToast(m){_t.innerHTML=m;_t.style.transform='translateX(-50%) translat
 
   .foot{margin-top:18px;font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:.14em;color:var(--mut);text-transform:uppercase;text-align:center}
   @media(max-width:980px){.cols{grid-template-columns:1fr}}
+
+  /* ===== real data states ===== */
+  .cmx-empty{padding:22px 10px;font-size:11px;font-weight:600;color:var(--mut);text-align:center}
+  .cmx-placeholder{padding:60px 20px;text-align:center;color:var(--mut);font-size:12px;font-weight:600}
+  .compose{border-top:1px solid var(--line);padding:14px 18px;display:flex;flex-direction:column;gap:8px}
+  .compose textarea{width:100%;min-height:56px;border:1px solid var(--line);border-radius:9px;padding:10px 12px;font-family:var(--sans);font-size:12px;color:var(--ink);resize:vertical}
+  .compose-actions{display:flex;gap:8px;flex-wrap:wrap}
+  .cbtn{font-family:var(--sans);font-size:9.5px;font-weight:800;padding:8px 15px;border-radius:7px;cursor:pointer;border:none;text-transform:uppercase;letter-spacing:.03em}
+  .cbtn.primary{background:var(--rail);color:#fff}
+  .cbtn.ghost{background:#fff;color:var(--purple);border:1.5px solid var(--purple)}
+  .zb.mock{background:var(--amber-bg);color:var(--amber)}
 </style>
 </head>
 <body>
 <div class=&quot;wrap&quot;>
 
   <h1>⬡ Comms <span>Hub</span></h1>
-  <div class=&quot;tag&quot;>One inbox · one thread per human · calls, texts, email, portal &amp; team channels — each in its own lane</div>
+  <div class=&quot;tag&quot;>One inbox · one thread per human · real calls and texts, plus a Team Channels / Reviews mockup below</div>
 
   <div class=&quot;cols&quot;>
     <!-- ============ SECTIONED RAIL ============ -->
     <div class=&quot;rail2&quot;>
       <div class=&quot;zsec&quot;>
-        <div class=&quot;zhead&quot;>📥 NEEDS REPLY <span class=&quot;zb red&quot;>3</span></div>
-        <div class=&quot;item on&quot; onclick=&quot;cxOpen('peterson',this)&quot;><span class=&quot;av&quot;>JP</span><span>John Peterson<small>asked about photos · 9:15a</small></span><span class=&quot;un&quot;></span></div>
-        <div class=&quot;item&quot; onclick=&quot;cxOpen('santos',this)&quot;><span class=&quot;av&quot; style=&quot;background:#59718a&quot;>MS</span><span>Maria Santos<small>move Thursday's visit? · 8:40a</small></span><span class=&quot;un&quot;></span></div>
-        <div class=&quot;item&quot; onclick=&quot;cxOpen('vance',this)&quot;><span class=&quot;av&quot; style=&quot;background:#9a6414&quot;>TV</span><span>T. Vance — rescue reply<small>panel details in · book Einer</small></span><span class=&quot;un&quot;></span></div>
+        <div class=&quot;zhead&quot;>NEEDS REPLY <span class=&quot;zb red&quot; id=&quot;cmx-nr-count&quot;>0</span></div>
+        <div id=&quot;cmx-nr-list&quot;><div class=&quot;cmx-empty&quot;>Loading...</div></div>
       </div>
       <div class=&quot;zdiv&quot;></div>
       <div class=&quot;zsec&quot;>
-        <div class=&quot;zhead&quot;>📞 CALLS &amp; VOICEMAIL <span class=&quot;zb grey&quot;>31 TODAY</span></div>
-        <div class=&quot;item&quot; onclick=&quot;cxOpen('calls',this)&quot;><span class=&quot;av&quot; style=&quot;background:#1B7A50&quot;>📞</span><span>Recent calls<small>every one recorded → transcript</small></span><span class=&quot;when&quot;>7:42a</span></div>
-        <div class=&quot;item&quot; onclick=&quot;cxOpen('calls',this)&quot;><span class=&quot;av&quot; style=&quot;background:#c65b4e&quot;>📵</span><span>Missed-call rescues<small>2 running · texts sent</small></span><span class=&quot;when&quot;>LIVE</span></div>
+        <div class=&quot;zhead&quot;>CALLS AND VOICEMAIL <span class=&quot;zb grey&quot; id=&quot;cmx-calls-badge&quot;>...</span></div>
+        <div class=&quot;item&quot; id=&quot;cmx-nav-calls&quot;><span class=&quot;av&quot; style=&quot;background:#1B7A50&quot;>C</span><span>Recent calls<small>real call log, recordings and transcripts where available</small></span></div>
+        <div class=&quot;item&quot; id=&quot;cmx-nav-missed&quot;><span class=&quot;av&quot; style=&quot;background:#c65b4e&quot;>M</span><span>Missed calls today<small id=&quot;cmx-missed-sub&quot;>-</small></span></div>
       </div>
       <div class=&quot;zdiv&quot;></div>
       <div class=&quot;zsec&quot;>
-        <div class=&quot;zhead&quot;>👥 CLIENT THREADS</div>
-        <div class=&quot;item&quot; onclick=&quot;cxOpen('peterson',this)&quot;><span class=&quot;av&quot;>JP</span><span>John Peterson<small>231-004 · Whole Home Reno</small></span><span class=&quot;when&quot;>9:15a</span></div>
-        <div class=&quot;item&quot; onclick=&quot;cxOpen('santos',this)&quot;><span class=&quot;av&quot; style=&quot;background:#59718a&quot;>MS</span><span>Maria Santos<small>231-005 · Sunny Acres</small></span><span class=&quot;when&quot;>8:40a</span></div>
-        <div class=&quot;item&quot; onclick=&quot;cxOpen('kowalski',this)&quot;><span class=&quot;av&quot; style=&quot;background:#6a3fb5&quot;>DK</span><span>Dan Kowalski<small>231-003 · CO approved ✓</small></span><span class=&quot;when&quot;>Yest</span></div>
+        <div class=&quot;zhead&quot;>CLIENT THREADS</div>
+        <div id=&quot;cmx-threads-list&quot;><div class=&quot;cmx-empty&quot;>Loading...</div></div>
       </div>
       <div class=&quot;zdiv&quot;></div>
       <div class=&quot;zsec&quot;>
-        <div class=&quot;zhead&quot;>🏗 TEAM CHANNELS</div>
-        <div class=&quot;item&quot; onclick=&quot;cxOpen('dispatch',this)&quot;><span class=&quot;av&quot; style=&quot;background:#2a5fa8&quot;>#</span><span>dispatch<small>Andy, crews &amp; Reina</small></span><span class=&quot;un&quot;></span></div>
-        <div class=&quot;item&quot; onclick=&quot;cxOpen('materials',this)&quot;><span class=&quot;av&quot; style=&quot;background:#9a6414&quot;>#</span><span>material-ordering<small>Patrick + field requests</small></span><span class=&quot;when&quot;>7:38a</span></div>
-        <div class=&quot;item&quot; onclick=&quot;cxOpen('dispatch',this)&quot;><span class=&quot;av&quot; style=&quot;background:#5d657b&quot;>#</span><span>change-orders<small>feeds the CO module</small></span><span class=&quot;when&quot;>Yest</span></div>
+        <div class=&quot;zhead&quot;>TEAM CHANNELS <span class=&quot;zb mock&quot;>MOCKUP</span></div>
+        <div class=&quot;item&quot; id=&quot;cmx-nav-dispatch&quot;><span class=&quot;av&quot; style=&quot;background:#2a5fa8&quot;>#</span><span>dispatch<small>Andy, crews and Reina</small></span></div>
+        <div class=&quot;item&quot; id=&quot;cmx-nav-materials&quot;><span class=&quot;av&quot; style=&quot;background:#9a6414&quot;>#</span><span>material-ordering<small>Patrick and field requests</small></span></div>
       </div>
       <div class=&quot;zdiv&quot;></div>
       <div class=&quot;zsec&quot;>
-        <div class=&quot;zhead&quot;>⭐ REVIEWS</div>
-        <div class=&quot;item&quot; onclick=&quot;cxOpen('reviews',this)&quot;><span class=&quot;av&quot; style=&quot;background:#f0a53c&quot;>★</span><span>Review autopilot<small>4.9 Google · +7 this month</small></span><span class=&quot;when&quot;>AUTO</span></div>
+        <div class=&quot;zhead&quot;>REVIEWS <span class=&quot;zb mock&quot;>MOCKUP</span></div>
+        <div class=&quot;item&quot; id=&quot;cmx-nav-reviews&quot;><span class=&quot;av&quot; style=&quot;background:#f0a53c&quot;>R</span><span>Review autopilot<small>4.9 Google, +7 this month</small></span></div>
       </div>
     </div>
 
     <!-- ============ CENTER ============ -->
-    <div class=&quot;center&quot;>
-      <!-- PETERSON -->
-      <div id=&quot;cx-peterson&quot;>
-        <div class=&quot;chead&quot;><span class=&quot;av&quot;>JP</span><span><b>John Peterson</b><small>245 Bridgeport Lane · Job 231-004 · Whole Home Renovation</small></span><div class=&quot;chan&quot;><span class=&quot;sms&quot;>SMS ✓</span><span class=&quot;em&quot;>EMAIL</span><span class=&quot;po&quot;>PORTAL</span></div></div>
-        <div class=&quot;cbody on&quot;>
-          <div class=&quot;day&quot;>TODAY · JULY 13 · ONE THREAD — EVERY CHANNEL HE USES LANDS HERE</div>
-          <div class=&quot;sysline&quot;>⬡ Reina sent the ETA text automatically — Jeff arriving 8:00 AM</div>
-          <div class=&quot;msg out&quot;><span class=&quot;mm&quot;>SMS · SENT BY REINA · APPROVED BY OFFICE</span>Hi John — phase 2 started today. Electrician on site now. Progress photos coming by end of day.<span class=&quot;tm2&quot;>8:30 AM ✓✓</span></div>
-          <div class=&quot;msg in&quot;><span class=&quot;mm&quot;>SMS · FROM JOHN</span>Thanks! Looking forward to seeing the photos. Any concerns so far?<span class=&quot;tm2&quot;>9:15 AM</span></div>
-          <div class=&quot;draft&quot;>
-            <div class=&quot;dl2&quot;>⬡ REINA DRAFTED — ONE TAP TO SEND</div>
-            <p>&quot;None so far, John! Rough-in passed the morning check and we're tracking right on schedule for July 20. Photos coming your way around 4 PM. 👍&quot;</p>
-            <div class=&quot;db2&quot;><button class=&quot;send&quot; onclick=&quot;hlToast('✓ Sent as SMS — his preferred channel (he ignores email, answers texts in 5 min)')&quot;>Send as SMS</button><button class=&quot;edit&quot; onclick=&quot;hlToast('✏️ Editing — your voice, Reina&amp;#8217;s draft')&quot;>Edit first</button><button class=&quot;dis&quot; onclick=&quot;hlToast('Dismissed — thread stays in NEEDS REPLY until someone answers John')&quot;>Dismiss</button></div>
-          </div>
-        </div>
-      </div>
-      <!-- SANTOS -->
-      <div id=&quot;cx-santos&quot; style=&quot;display:none&quot;>
-        <div class=&quot;chead&quot;><span class=&quot;av&quot; style=&quot;background:#59718a&quot;>MS</span><span><b>Maria Santos</b><small>Job 231-005 · Sunny Acres HVAC · 40% complete</small></span><div class=&quot;chan&quot;><span class=&quot;sms&quot;>SMS ✓</span></div></div>
-        <div class=&quot;cbody on&quot;>
-          <div class=&quot;day&quot;>TODAY</div>
-          <div class=&quot;msg in&quot;><span class=&quot;mm&quot;>SMS · FROM MARIA</span>Can we move Thursday's visit to the afternoon? Doctor appointment in the morning.<span class=&quot;tm2&quot;>8:40 AM</span></div>
-          <div class=&quot;draft&quot;>
-            <div class=&quot;dl2&quot;>⬡ REINA CHECKED THE BOARD FIRST</div>
-            <p>&quot;Of course, Maria! Alex can shift to 1:00–3:00 Thursday — same crew, same plan. Does that window work?&quot; <b style=&quot;color:var(--purple)&quot;>(1–3 PM is genuinely open — Reina verified before drafting.)</b></p>
-            <div class=&quot;db2&quot;><button class=&quot;send&quot; onclick=&quot;hlToast('✓ Sent — if she confirms, the schedule moves itself and Alex gets the update')&quot;>Send as SMS</button><button class=&quot;edit&quot;>Edit first</button></div>
-          </div>
-        </div>
-      </div>
-      <!-- VANCE -->
-      <div id=&quot;cx-vance&quot; style=&quot;display:none&quot;>
-        <div class=&quot;chead&quot;><span class=&quot;av&quot; style=&quot;background:#9a6414&quot;>TV</span><span><b>T. Vance — missed-call rescue</b><small>GH Electric line · panel tripping · became a request 6:46 AM</small></span><div class=&quot;chan&quot;><span class=&quot;sms&quot;>SMS ✓</span></div></div>
-        <div class=&quot;cbody on&quot;>
-          <div class=&quot;day&quot;>THIS MORNING — THE RESCUE THREAD</div>
-          <div class=&quot;sysline&quot;>📵 6:41 missed call → 6:41:19 Reina texted back → reply → REQUEST CREATED ✓</div>
-          <div class=&quot;msg in&quot;><span class=&quot;mm&quot;>SMS · FROM CALLER</span>Half the house keeps losing power, breaker trips every hour or so. Getting worse since yesterday.<span class=&quot;tm2&quot;>6:44 AM</span></div>
-          <div class=&quot;draft&quot;>
-            <div class=&quot;dl2&quot;>⬡ NEXT MOVE — EINER HAS A 10:30 SLOT</div>
-            <p>&quot;That sounds like a breaker or panel issue we should look at today. Our licensed electrician can be there 10:30–11:00 this morning — does that work?&quot;</p>
-            <div class=&quot;db2&quot;><button class=&quot;send&quot; onclick=&quot;hlToast('✓ Sent — on confirm: booked to Einer 10:30, request → SVC ticket, Andy&amp;#8217;s board updates')&quot;>Send &amp; hold slot</button><button class=&quot;edit&quot;>Edit first</button></div>
-          </div>
-        </div>
-      </div>
-      <!-- KOWALSKI -->
-      <div id=&quot;cx-kowalski&quot; style=&quot;display:none&quot;>
-        <div class=&quot;chead&quot;><span class=&quot;av&quot; style=&quot;background:#6a3fb5&quot;>DK</span><span><b>Dan Kowalski</b><small>Job 231-003 · Commercial Kitchen · CO-231-003-02 approved yesterday</small></span><div class=&quot;chan&quot;><span class=&quot;em&quot;>EMAIL ✓</span><span class=&quot;po&quot;>PORTAL</span></div></div>
-        <div class=&quot;cbody on&quot;>
-          <div class=&quot;day&quot;>YESTERDAY</div>
-          <div class=&quot;msg in&quot;><span class=&quot;mm&quot;>PORTAL · FROM DAN</span>Approved the change order. When does that work start?<span class=&quot;tm2&quot;>4:12 PM</span></div>
-          <div class=&quot;msg out&quot;><span class=&quot;mm&quot;>EMAIL · SENT BY DAVE</span>Thanks Dan — CO work slots in Thursday morning. Schedule updated in your portal.<span class=&quot;tm2&quot;>4:40 PM ✓</span></div>
-          <div class=&quot;sysline&quot;>✓ Handled — no reply needed. This thread lives in CLIENT THREADS, not your queue.</div>
-        </div>
-      </div>
-      <!-- CALLS -->
-      <div id=&quot;cx-calls&quot; style=&quot;display:none&quot;>
-        <div class=&quot;chead&quot;><span class=&quot;av&quot; style=&quot;background:#1B7A50&quot;>📞</span><span><b>Calls &amp; Voicemail — HiveLine</b><small>12 lines · 6 brands · every call recorded, transcribed &amp; filed to its thread</small></span></div>
-        <div class=&quot;cbody on&quot;>
-          <div class=&quot;callrow&quot;><span class=&quot;ci miss&quot;>📵</span><span><b>(203) 219-…  · GH Handyman line</b><small>MISSED 6:41 AM → rescue text sent in 12 seconds → reply received → became T. Vance request ✓</small></span><span class=&quot;cbt&quot;><button onclick=&quot;hlToast('Thread opened')&quot;>THREAD</button></span></div>
-          <div class=&quot;callrow&quot;><span class=&quot;ci in2&quot;>📞</span><span><b>Okafor, D. · 7:12 AM · 4m 12s</b><small>Water heater banging noise · Sami booked 8:00</small><span class=&quot;tx&quot;>&quot;…it's been making this banging sound since last night, and with the kids' baths in the morning I really need someone today…&quot;</span></span><span class=&quot;cbt&quot;><button onclick=&quot;hlToast('▶ Recording plays — transcript follows along')&quot;>▶ PLAY</button><button onclick=&quot;hlToast('Full transcript opened — searchable, filed to the Okafor thread')&quot;>TRANSCRIPT</button></span></div>
-          <div class=&quot;callrow&quot;><span class=&quot;ci vm&quot;>🎙</span><span><b>Voicemail · K&amp;M line · 7:55 AM</b><small>Reina transcribed + drafted the callback text — waiting your OK in NEEDS REPLY</small><span class=&quot;tx&quot;>&quot;Hi, we're redoing our master bath and were told you're the people to call…&quot;</span></span><span class=&quot;cbt&quot;><button onclick=&quot;hlToast('✓ New lead created from voicemail — source: K&amp;M line')&quot;>→ LEAD</button></span></div>
-          <div class=&quot;callrow&quot;><span class=&quot;ci in2&quot;>📞</span><span><b>Ferguson counter · Patrick · 10:40 AM · 6m</b><small>Copper order confirmed for the 24th — PO-231-004-02 note updated automatically</small></span><span class=&quot;cbt&quot;><button onclick=&quot;hlToast('PO thread opened')&quot;>→ PO</button></span></div>
-        </div>
-      </div>
-      <!-- DISPATCH CHANNEL -->
-      <div id=&quot;cx-dispatch&quot; style=&quot;display:none&quot;>
-        <div class=&quot;chead&quot;><span class=&quot;av&quot; style=&quot;background:#2a5fa8&quot;>#</span><span><b>#dispatch</b><small>Andy, crew leads &amp; Reina · replaces the Slack channel — same muscle memory, wired to the board</small></span></div>
-        <div class=&quot;cbody on&quot;>
-          <div class=&quot;day&quot;>THIS MORNING</div>
-          <div class=&quot;chmsg&quot;><span class=&quot;av&quot; style=&quot;background:#1FA0C4&quot;>SA</span><span><b>Sami</b><span class=&quot;t4&quot;>7:42 AM</span><p>Okafor heater is the anode rod — 45 min fix, have the part on the truck.</p><span class=&quot;act3&quot; onclick=&quot;hlToast('⬡ Reina updated the ticket: diagnosis + ETA → client texted automatically')&quot;>⬡ ticket updated · client notified</span></span></div>
-          <div class=&quot;chmsg&quot;><span class=&quot;av&quot; style=&quot;background:#D95C8A&quot;>AN</span><span><b>Andy</b><span class=&quot;t4&quot;>7:45 AM</span><p>Alex running 22 behind — Jones client already got new ETA. Watch the 1:00 handoff.</p></span></div>
-          <div class=&quot;chmsg&quot;><span class=&quot;av&quot; style=&quot;background:#8E5CD9&quot;>RE</span><span><b>⬡ Reina</b><span class=&quot;t4&quot;>7:50 AM</span><p>Heads up: rain 80% Thursday — reshuffle drafted and waiting for Chris's signature. 6 exterior jobs affected.</p><span class=&quot;act3&quot; onclick=&quot;hlToast('Reshuffle opened for review')&quot;>review reshuffle →</span></span></div>
-        </div>
-      </div>
-      <!-- MATERIALS CHANNEL -->
-      <div id=&quot;cx-materials&quot; style=&quot;display:none&quot;>
-        <div class=&quot;chead&quot;><span class=&quot;av&quot; style=&quot;background:#9a6414&quot;>#</span><span><b>#material-ordering</b><small>field requests → Patrick → POs, automatically numbered</small></span></div>
-        <div class=&quot;cbody on&quot;>
-          <div class=&quot;day&quot;>THIS MORNING</div>
-          <div class=&quot;chmsg&quot;><span class=&quot;av&quot; style=&quot;background:#2E7D4F&quot;>JF</span><span><b>Jeff</b><span class=&quot;t4&quot;>7:38 AM</span><p>Need 2 boxes toggle single-pole switches at the shop tomorrow.</p><span class=&quot;act3&quot; onclick=&quot;hlToast('⬡ Restock drafted → Patrick&amp;#8217;s queue → HD Pro cart · becomes a PO the second it ties to a job')&quot;>⬡ restock drafted → cart</span></span></div>
-          <div class=&quot;chmsg&quot;><span class=&quot;av&quot; style=&quot;background:#59718a&quot;>PA</span><span><b>Patrick</b><span class=&quot;t4&quot;>7:51 AM</span><p>On it — adding to tomorrow's Port Chester pickup with Einer's PO-231-004-03 staging.</p></span></div>
-        </div>
-      </div>
-      <!-- REVIEWS -->
-      <div id=&quot;cx-reviews&quot; style=&quot;display:none&quot;>
-        <div class=&quot;chead&quot;><span class=&quot;av&quot; style=&quot;background:#f0a53c&quot;>★</span><span><b>Review autopilot</b><small>fires after final payment · brand-matched links · never mid-punch-list</small></span></div>
-        <div class=&quot;cbody on&quot;>
-          <div class=&quot;kv&quot; style=&quot;padding:9px 0&quot;>Google rating<b>★★★★★ 4.9</b></div>
-          <div class=&quot;kv&quot;>Reviews this month<b>+7</b></div>
-          <div class=&quot;kv&quot;>Job 231-002 closed 5-star ✓<b>posted</b></div>
-          <div class=&quot;kv&quot;>Job 231-003 · queued<b>fires on final payment</b></div>
-          <div class=&quot;sysline&quot; style=&quot;margin-top:12px&quot;>⬡ Reina asks at the happiness peak — final payment + positive last message — never during a dispute.</div>
-        </div>
-      </div>
+    <div class=&quot;center&quot; id=&quot;cmx-center&quot;>
+      <div class=&quot;cmx-placeholder&quot;>Select a conversation on the left.</div>
     </div>
 
-    <!-- ============ CONTEXT (for open thread) ============ -->
-    <div class=&quot;ctx&quot;>
-      <div class=&quot;bl&quot;>🎯 CONTEXT — THIS THREAD ONLY</div>
-      <div class=&quot;kv&quot;>Jobs lifetime<b>3</b></div>
-      <div class=&quot;kv&quot;>Revenue lifetime<b>$61,400</b></div>
-      <div class=&quot;kv&quot;>Open balance<b>$6,240</b></div>
-      <div class=&quot;kv&quot;>Avg response time<b>11 min</b></div>
-      <div class=&quot;kv&quot;>Preferred channel<b>SMS</b></div>
-      <div class=&quot;reina2&quot;>⬡ <b>Reina noticed:</b> John opens texts within 5 minutes but ignores emails for days. Default channel switched to SMS for this client.</div>
-      <div class=&quot;lnkrow&quot; onclick=&quot;hlToast('Job 231-004 opened')&quot;>OPEN JOB 231-004 →</div>
-      <div class=&quot;lnkrow&quot; onclick=&quot;hlToast('Client record opened')&quot;>CLIENT RECORD →</div>
+    <!-- ============ CONTEXT ============ -->
+    <div class=&quot;ctx&quot; id=&quot;cmx-ctx&quot; style=&quot;display:none&quot;>
+      <div class=&quot;bl&quot;>THIS THREAD</div>
+      <div class=&quot;kv&quot;>Messages<b id=&quot;cmx-ctx-count&quot;>-</b></div>
+      <div class=&quot;kv&quot;>Number<b id=&quot;cmx-ctx-number&quot;>-</b></div>
+      <div class=&quot;lnkrow&quot; id=&quot;cmx-ctx-openclient&quot; style=&quot;display:none&quot;>OPEN CLIENT RECORD</div>
     </div>
   </div>
 
-  <div class=&quot;foot&quot;>⬡ HiveLogic · Comms Hub · one thread per human, one lane per kind · Control the Chaos</div>
+  <div class=&quot;foot&quot;>HiveLogic Comms Hub -- Control the Chaos</div>
 
 </div>
 
 <script>
-function cxOpen(k, el){
-  ['peterson','santos','vance','kowalski','calls','dispatch','materials','reviews'].forEach(function(id){
-    var d=document.getElementById('cx-'+id); if(d) d.style.display=(id===k)?'block':'none';
-  });
-  document.querySelectorAll('.item').forEach(function(i){i.classList.remove('on')});
-  if(el) el.classList.add('on');
+/* Real data below -- no fabricated names, counts, or stats. Client Threads
+   and Calls and Voicemail are wired to real HiveLogic endpoints; Team
+   Channels and Reviews stay a labeled design mockup (see cmxOpenMock). */
+function cmxAuthHeaders(){
+  var h = {};
+  h['Content-Type'] = 'application/json';
+  try {
+    var tok = (parent &amp;&amp; parent.hlTokenSync) ? parent.hlTokenSync() : null;
+    if (tok) h['Authorization'] = 'Bearer ' + tok;
+  } catch (e) {}
+  return h;
 }
+function cmxApiBase(){
+  try { return (parent &amp;&amp; parent.window &amp;&amp; parent.window.API) || ''; }
+  catch (e) { return ''; }
+}
+function cmxToast(m){ if (window.hlToast) hlToast(m); }
+function cmxClear(el){ while (el.firstChild) el.removeChild(el.firstChild); }
+function cmxEl(tag, className, text){
+  var e = document.createElement(tag);
+  if (className) e.className = className;
+  if (text != null) e.textContent = text;
+  return e;
+}
+function cmxInitials(name){
+  if (!name) return '#';
+  var parts = name.trim().split(/\s+/);
+  var out = '';
+  for (var i = 0; i < parts.length &amp;&amp; out.length < 2; i++) {
+    if (parts[i].length) out += parts[i].charAt(0);
+  }
+  return out ? out.toUpperCase() : '#';
+}
+function cmxFmtTime(iso){
+  if (!iso) return '';
+  var d = new Date(iso);
+  if (isNaN(d.getTime())) return '';
+  var now = new Date();
+  if (d.toDateString() === now.toDateString()) {
+    return d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  }
+  return d.toLocaleDateString([], { month: 'short', day: 'numeric' });
+}
+
+var CMX_THREADS = [];
+var CMX_CALLS = [];
+var CMX_VOICEMAILS = [];
+var CMX_ACTIVE_NUMBER = null;
+var CMX_DRAFT = null;
+
+function cmxSetActive(el){
+  var rail = document.querySelector('.rail2');
+  if (rail) {
+    var items = rail.querySelectorAll('.item');
+    for (var i = 0; i < items.length; i++) items[i].classList.remove('on');
+  }
+  if (el) el.classList.add('on');
+}
+
+function cmxRefresh(){
+  fetch(cmxApiBase() + '/api/voice?resource=sms_threads', { headers: cmxAuthHeaders() })
+    .then(function (r) { return r.json(); })
+    .then(function (d) {
+      CMX_THREADS = (d &amp;&amp; d.ok &amp;&amp; d.threads) || [];
+      cmxRenderThreadLists();
+    })
+    .catch(function () { CMX_THREADS = []; cmxRenderThreadLists(); });
+
+  fetch(cmxApiBase() + '/api/voice?resource=calls&amp;limit=200', { headers: cmxAuthHeaders() })
+    .then(function (r) { return r.json(); })
+    .then(function (d) {
+      CMX_CALLS = (d &amp;&amp; d.ok &amp;&amp; d.calls) || [];
+      var today = new Date().toDateString();
+      var todayCount = 0, missedToday = 0;
+      for (var i = 0; i < CMX_CALLS.length; i++) {
+        var c = CMX_CALLS[i];
+        if (c.started_at &amp;&amp; new Date(c.started_at).toDateString() === today) {
+          todayCount++;
+          if (c.status === 'missed') missedToday++;
+        }
+      }
+      var badge = document.getElementById('cmx-calls-badge');
+      if (badge) badge.textContent = todayCount + ' TODAY';
+      var sub = document.getElementById('cmx-missed-sub');
+      if (sub) sub.textContent = missedToday + ' missed today';
+    })
+    .catch(function () { CMX_CALLS = []; });
+
+  fetch(cmxApiBase() + '/api/voice?resource=voicemails', { headers: cmxAuthHeaders() })
+    .then(function (r) { return r.json(); })
+    .then(function (d) { CMX_VOICEMAILS = (d &amp;&amp; d.ok &amp;&amp; d.voicemails) || []; })
+    .catch(function () { CMX_VOICEMAILS = []; });
+}
+
+function cmxRenderThreadLists(){
+  var needsReply = [];
+  for (var i = 0; i < CMX_THREADS.length; i++) {
+    if (CMX_THREADS[i].needsReply) needsReply.push(CMX_THREADS[i]);
+  }
+  var nrCount = document.getElementById('cmx-nr-count');
+  if (nrCount) nrCount.textContent = String(needsReply.length);
+
+  var nrList = document.getElementById('cmx-nr-list');
+  if (nrList) {
+    cmxClear(nrList);
+    if (!needsReply.length) {
+      nrList.appendChild(cmxEl('div', 'cmx-empty', 'Nothing waiting on a reply.'));
+    } else {
+      for (var j = 0; j < needsReply.length; j++) nrList.appendChild(cmxThreadRow(needsReply[j]));
+    }
+  }
+
+  var tList = document.getElementById('cmx-threads-list');
+  if (tList) {
+    cmxClear(tList);
+    if (!CMX_THREADS.length) {
+      tList.appendChild(cmxEl('div', 'cmx-empty', 'No text conversations yet.'));
+    } else {
+      for (var k = 0; k < CMX_THREADS.length; k++) tList.appendChild(cmxThreadRow(CMX_THREADS[k]));
+    }
+  }
+}
+
+function cmxThreadRow(t){
+  var name = t.clientName || t.number;
+  var row = cmxEl('div', 'item');
+  row.appendChild(cmxEl('span', 'av', cmxInitials(t.clientName)));
+  var mid = document.createElement('span');
+  mid.appendChild(document.createTextNode(name));
+  var preview = (t.lastMessage &amp;&amp; t.lastMessage.body) || '';
+  mid.appendChild(cmxEl('small', null, preview));
+  row.appendChild(mid);
+  if (t.needsReply) {
+    row.appendChild(cmxEl('span', 'un', ''));
+  } else {
+    row.appendChild(cmxEl('span', 'when', cmxFmtTime(t.lastMessage &amp;&amp; t.lastMessage.createdAt)));
+  }
+  // A real .onclick (property, not addEventListener) so the shared
+  // &quot;no dead buttons&quot; click interceptor's b.onclick check exempts this
+  // element -- otherwise it would pop the STILL IN DEVELOPMENT modal on
+  // top of every real click.
+  row.onclick = function () { cmxOpenThread(t.number, row); };
+  return row;
+}
+
+function cmxOpenThread(number, el){
+  cmxSetActive(el);
+  CMX_ACTIVE_NUMBER = number;
+  CMX_DRAFT = null;
+  var center = document.getElementById('cmx-center');
+  cmxClear(center);
+  center.appendChild(cmxEl('div', 'cmx-empty', 'Loading thread...'));
+  var ctx = document.getElementById('cmx-ctx');
+  if (ctx) ctx.style.display = 'none';
+
+  fetch(cmxApiBase() + '/api/voice?resource=sms_thread&amp;number=' + encodeURIComponent(number), { headers: cmxAuthHeaders() })
+    .then(function (r) { return r.json(); })
+    .then(function (d) {
+      if (!d || !d.ok) {
+        cmxClear(center);
+        center.appendChild(cmxEl('div', 'cmx-empty', 'Could not load this thread.'));
+        return;
+      }
+      cmxRenderThread(d);
+    })
+    .catch(function () {
+      cmxClear(center);
+      center.appendChild(cmxEl('div', 'cmx-empty', 'Could not load this thread.'));
+    });
+}
+
+function cmxRenderThread(d){
+  var center = document.getElementById('cmx-center');
+  cmxClear(center);
+  var name = d.clientName || d.number;
+
+  var chead = document.createElement('div');
+  chead.className = 'chead';
+  chead.appendChild(cmxEl('span', 'av', cmxInitials(d.clientName)));
+  var titleWrap = document.createElement('span');
+  var b = document.createElement('b');
+  b.textContent = name;
+  titleWrap.appendChild(b);
+  titleWrap.appendChild(cmxEl('small', null, d.number));
+  chead.appendChild(titleWrap);
+  var chan = document.createElement('div');
+  chan.className = 'chan';
+  chan.appendChild(cmxEl('span', 'sms', 'SMS'));
+  chead.appendChild(chan);
+  center.appendChild(chead);
+
+  var cbody = document.createElement('div');
+  cbody.className = 'cbody on';
+  cbody.id = 'cmx-thread-body';
+
+  if (!d.messages.length) {
+    cbody.appendChild(cmxEl('div', 'cmx-empty', 'No messages yet with this number.'));
+  } else {
+    for (var i = 0; i < d.messages.length; i++) {
+      var m = d.messages[i];
+      var row = document.createElement('div');
+      row.className = 'msg ' + (m.direction === 'inbound' ? 'in' : 'out');
+      var who;
+      if (m.direction === 'inbound') who = 'SMS -- FROM ' + (d.clientName || m.from_number);
+      else if (m.origin === 'reina_approved') who = 'SMS -- SENT BY REINA -- APPROVED BY OFFICE';
+      else who = 'SMS -- SENT';
+      row.appendChild(cmxEl('span', 'mm', who));
+      row.appendChild(document.createTextNode(m.body));
+      row.appendChild(cmxEl('span', 'tm2', cmxFmtTime(m.created_at)));
+      cbody.appendChild(row);
+    }
+  }
+
+  var draftSlot = document.createElement('div');
+  draftSlot.id = 'cmx-draft-slot';
+  cbody.appendChild(draftSlot);
+
+  var compose = document.createElement('div');
+  compose.className = 'compose';
+  var ta = document.createElement('textarea');
+  ta.id = 'cmx-compose-text';
+  ta.placeholder = 'Type a reply...';
+  compose.appendChild(ta);
+  var actions = document.createElement('div');
+  actions.className = 'compose-actions';
+  var sendBtn = cmxEl('button', 'cbtn primary', 'Send');
+  sendBtn.onclick = function () { cmxSendManual(d.number); };
+  var draftBtn = cmxEl('button', 'cbtn ghost', 'Draft a reply with Reina');
+  draftBtn.onclick = function () { cmxDraftWithReina(d.number); };
+  actions.appendChild(sendBtn);
+  actions.appendChild(draftBtn);
+  compose.appendChild(actions);
+  cbody.appendChild(compose);
+
+  center.appendChild(cbody);
+  cbody.scrollTop = cbody.scrollHeight;
+
+  var ctx = document.getElementById('cmx-ctx');
+  if (ctx) {
+    ctx.style.display = 'block';
+    document.getElementById('cmx-ctx-count').textContent = String(d.messages.length);
+    document.getElementById('cmx-ctx-number').textContent = d.number;
+    var link = document.getElementById('cmx-ctx-openclient');
+    if (d.clientId) {
+      link.style.display = 'block';
+      link.onclick = function () {
+        try { if (parent &amp;&amp; parent.openRealClient) parent.openRealClient(d.clientId); } catch (e) {}
+      };
+    } else {
+      link.style.display = 'none';
+    }
+  }
+}
+
+function cmxSendManual(number){
+  var ta = document.getElementById('cmx-compose-text');
+  var text = (ta &amp;&amp; ta.value || '').trim();
+  if (!text) return;
+  ta.disabled = true;
+  fetch(cmxApiBase() + '/api/voice?resource=sms', {
+    method: 'POST',
+    headers: cmxAuthHeaders(),
+    body: JSON.stringify({ to: number, body: text })
+  })
+    .then(function (r) { return r.json(); })
+    .then(function (d) {
+      ta.disabled = false;
+      if (d &amp;&amp; d.ok) {
+        cmxToast('Sent.');
+        cmxOpenThread(number, null);
+        cmxRefresh();
+      } else {
+        cmxToast((d &amp;&amp; d.error) || 'Could not send that message.');
+      }
+    })
+    .catch(function () {
+      ta.disabled = false;
+      cmxToast('Could not send that message.');
+    });
+}
+
+function cmxDraftWithReina(number){
+  var slot = document.getElementById('cmx-draft-slot');
+  if (slot) {
+    cmxClear(slot);
+    slot.appendChild(cmxEl('div', 'cmx-empty', 'Reina is drafting...'));
+  }
+  fetch(cmxApiBase() + '/api/reina-action', {
+    method: 'POST',
+    headers: cmxAuthHeaders(),
+    body: JSON.stringify({ op: 'propose_sms', to: number })
+  })
+    .then(function (r) { return r.json(); })
+    .then(function (d) {
+      if (slot) cmxClear(slot);
+      if (!d || !d.ok) {
+        var code = d &amp;&amp; d.code;
+        if (code === 'actions_disabled') cmxToast('Reina drafting is not turned on for this workspace yet.');
+        else cmxToast('Reina could not draft a reply right now.');
+        return;
+      }
+      CMX_DRAFT = { approvalId: d.approvalId, to: d.proposal.to, body: d.proposal.body };
+      cmxRenderDraft();
+    })
+    .catch(function () {
+      if (slot) cmxClear(slot);
+      cmxToast('Reina could not draft a reply right now.');
+    });
+}
+
+function cmxRenderDraft(){
+  var slot = document.getElementById('cmx-draft-slot');
+  if (!slot || !CMX_DRAFT) return;
+  cmxClear(slot);
+  var box = document.createElement('div');
+  box.className = 'draft';
+  box.appendChild(cmxEl('div', 'dl2', 'REINA DRAFTED -- ONE TAP TO SEND'));
+  var p = document.createElement('p');
+  p.id = 'cmx-draft-text';
+  p.textContent = CMX_DRAFT.body;
+  box.appendChild(p);
+  var row = document.createElement('div');
+  row.className = 'db2';
+  var sendBtn = cmxEl('button', 'send', 'Send as SMS');
+  sendBtn.onclick = cmxSendDraft;
+  var editBtn = cmxEl('button', 'edit', 'Edit first');
+  editBtn.onclick = cmxEditDraft;
+  var disBtn = cmxEl('button', 'dis', 'Discard');
+  disBtn.onclick = cmxDiscardDraft;
+  row.appendChild(sendBtn);
+  row.appendChild(editBtn);
+  row.appendChild(disBtn);
+  box.appendChild(row);
+  slot.appendChild(box);
+}
+
+function cmxEditDraft(){
+  var p = document.getElementById('cmx-draft-text');
+  if (!p || !CMX_DRAFT) return;
+  p.setAttribute('contenteditable', 'true');
+  p.focus();
+}
+
+function cmxSendDraft(){
+  if (!CMX_DRAFT) return;
+  var p = document.getElementById('cmx-draft-text');
+  var body = p ? p.textContent : CMX_DRAFT.body;
+  var approvalId = CMX_DRAFT.approvalId;
+  var to = CMX_DRAFT.to;
+  fetch(cmxApiBase() + '/api/reina-action', {
+    method: 'POST',
+    headers: cmxAuthHeaders(),
+    body: JSON.stringify({ op: 'execute_sms', approvalId: approvalId, payload: { to: to, body: body } })
+  })
+    .then(function (r) { return r.json(); })
+    .then(function (d) {
+      if (d &amp;&amp; d.ok) {
+        cmxToast('Sent.');
+        CMX_DRAFT = null;
+        cmxOpenThread(to, null);
+        cmxRefresh();
+      } else {
+        cmxToast('Could not send that message.');
+      }
+    })
+    .catch(function () { cmxToast('Could not send that message.'); });
+}
+
+function cmxDiscardDraft(){
+  var slot = document.getElementById('cmx-draft-slot');
+  if (!CMX_DRAFT) {
+    if (slot) cmxClear(slot);
+    return;
+  }
+  var approvalId = CMX_DRAFT.approvalId;
+  fetch(cmxApiBase() + '/api/reina-action', {
+    method: 'POST',
+    headers: cmxAuthHeaders(),
+    body: JSON.stringify({ op: 'reject_sms', approvalId: approvalId })
+  }).catch(function () {});
+  CMX_DRAFT = null;
+  if (slot) cmxClear(slot);
+}
+
+function cmxOpenCalls(el){
+  cmxSetActive(el);
+  var center = document.getElementById('cmx-center');
+  cmxClear(center);
+  var ctx = document.getElementById('cmx-ctx');
+  if (ctx) ctx.style.display = 'none';
+
+  var chead = document.createElement('div');
+  chead.className = 'chead';
+  chead.appendChild(cmxEl('span', 'av', 'C'));
+  var titleWrap = document.createElement('span');
+  var b = document.createElement('b');
+  b.textContent = 'Calls and Voicemail';
+  titleWrap.appendChild(b);
+  titleWrap.appendChild(cmxEl('small', null, 'Real call log -- recordings and transcripts where available'));
+  chead.appendChild(titleWrap);
+  center.appendChild(chead);
+
+  var cbody = document.createElement('div');
+  cbody.className = 'cbody on';
+
+  var items = CMX_CALLS.slice(0, 50);
+  if (!items.length) {
+    cbody.appendChild(cmxEl('div', 'cmx-empty', 'No calls yet.'));
+  } else {
+    for (var i = 0; i < items.length; i++) {
+      var c = items[i];
+      var row = document.createElement('div');
+      row.className = 'callrow';
+      var iconClass = c.status === 'missed' ? 'ci miss' : (c.status === 'voicemail' ? 'ci vm' : 'ci in2');
+      var iconChar = c.status === 'missed' ? '!' : (c.status === 'voicemail' ? 'VM' : 'C');
+      row.appendChild(cmxEl('span', iconClass, iconChar));
+      var mid = document.createElement('span');
+      var who = c.clientName || (c.direction === 'inbound' ? c.from_number : c.to_number) || 'Unknown';
+      var bWho = document.createElement('b');
+      bWho.textContent = who;
+      mid.appendChild(bWho);
+      var dur = c.duration_seconds ? (Math.round(c.duration_seconds / 60) + 'm') : '';
+      var metaBits = [c.direction, c.status];
+      if (c.started_at) metaBits.push(cmxFmtTime(c.started_at));
+      if (dur) metaBits.push(dur);
+      mid.appendChild(cmxEl('small', null, metaBits.join(' -- ')));
+      if (c.transcript) {
+        mid.appendChild(cmxEl('span', 'tx', c.transcript.slice(0, 220)));
+      }
+      row.appendChild(mid);
+      cbody.appendChild(row);
+    }
+  }
+  center.appendChild(cbody);
+}
+
+var CMX_MOCK_LABELS = {
+  dispatch: 'This section is a design mockup -- no team chat backend exists yet.',
+  materials: 'This section is a design mockup -- no team chat backend exists yet.',
+  reviews: 'This section is a design mockup -- no Google or Yelp integration exists yet.'
+};
+
+function cmxOpenMock(key, el){
+  cmxSetActive(el);
+  var center = document.getElementById('cmx-center');
+  cmxClear(center);
+  var ctx = document.getElementById('cmx-ctx');
+  if (ctx) ctx.style.display = 'none';
+  var cbody = document.createElement('div');
+  cbody.className = 'cbody on';
+  var banner = document.createElement('div');
+  banner.className = 'sysline';
+  banner.style.background = '#fbf1e2';
+  banner.style.color = '#8a6414';
+  banner.textContent = CMX_MOCK_LABELS[key] || 'This section is a design mockup.';
+  cbody.appendChild(banner);
+  center.appendChild(cbody);
+}
+
+document.getElementById('cmx-nav-calls').onclick = function () { cmxOpenCalls(this); };
+document.getElementById('cmx-nav-missed').onclick = function () { cmxOpenCalls(this); };
+document.getElementById('cmx-nav-dispatch').onclick = function () { cmxOpenMock('dispatch', this); };
+document.getElementById('cmx-nav-materials').onclick = function () { cmxOpenMock('materials', this); };
+document.getElementById('cmx-nav-reviews').onclick = function () { cmxOpenMock('reviews', this); };
+
+cmxRefresh();
 </script>
 <script>/* HL universal wiring — no dead buttons */
 (function(){
@@ -24047,7 +24421,7 @@ wirePipeDnD();
 
 <!-- ===== CLIENT RECORD MODAL (v47) ===== -->
 <div class="jcv" id="ckv" onclick="if(event.target===this)this.classList.remove('open')">
-  <div class="jcm" style="width:780px">
+  <div class="jcm" style="width:1060px;max-width:96vw">
     <div class="jcm-head"><span class="jcm-col" id="ck-town"></span><span id="ck-tags"></span><span class="jcm-x" onclick="document.getElementById('ckv').classList.remove('open')">&#10005;</span></div>
     <div class="jcm-body">
       <div class="jcm-title" id="ck-name"></div>
@@ -24061,8 +24435,23 @@ wirePipeDnD();
         <div class="ck-box"><h4>PEOPLE ON THIS ACCOUNT</h4><div id="ck-ppl"></div></div>
         <div class="ck-box"><h4>MONEY</h4><div id="ck-money"></div></div>
       </div>
-      <div class="jcm-sec-h">JOB HISTORY</div>
+      <!-- jomell, 2026-08-27: Job History gets real tabs (Estimates/Jobs/
+           Invoices/Requests), each scoped to this one client, instead of the
+           old "not wired in yet" placeholder. -->
+      <div class="jcm-sec-h" style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+        <span>JOB HISTORY</span>
+        <span style="display:inline-flex;gap:4px;margin-left:auto" id="ck-histtabs">
+          <span class="ck-histtab on" id="ck-histtab-estimates" onclick="ckHistTab('estimates')">Estimates</span>
+          <span class="ck-histtab" id="ck-histtab-jobs" onclick="ckHistTab('jobs')">Jobs</span>
+          <span class="ck-histtab" id="ck-histtab-invoices" onclick="ckHistTab('invoices')">Invoices</span>
+          <span class="ck-histtab" id="ck-histtab-requests" onclick="ckHistTab('requests')">Requests</span>
+        </span>
+      </div>
       <div id="ck-hist" style="margin-bottom:14px"></div>
+      <div class="jcm-sec-h">CLIENT SCHEDULE</div>
+      <div id="ck-sched" style="margin-bottom:14px"></div>
+      <div class="jcm-sec-h">RECENT PRICING</div>
+      <div id="ck-pricing" style="margin-bottom:14px"></div>
       <div class="ck-grid">
         <div class="ck-box"><h4>COMPANY MEMORY</h4><div id="ck-mem"></div></div>
         <div class="ck-box"><h4>RECENT ACTIVITY</h4><div class="ck-tl" id="ck-tl"></div></div>
@@ -24070,6 +24459,23 @@ wirePipeDnD();
     </div>
   </div>
 </div>
+<style>
+  .ck-histtab{font-size:10.5px;font-weight:800;letter-spacing:.02em;color:var(--mut);background:#fff;border:1px solid var(--line);border-radius:99px;padding:5px 12px;cursor:pointer}
+  .ck-histtab.on{background:#161e2e;color:#fff;border-color:#161e2e}
+  .ck-histlist{display:flex;flex-direction:column;gap:1px;border:1px solid var(--line);border-radius:10px;overflow:hidden}
+  .ck-histrow{display:flex;align-items:center;gap:12px;padding:9px 14px;background:#fff;font-size:12px;cursor:pointer}
+  .ck-histrow:hover{background:#f7f8fb}
+  .ck-histrow .cht-t{font-weight:700;color:var(--ink);flex:1;min-width:0}
+  .ck-histrow .cht-m{color:var(--mut);font-size:10.5px;text-transform:capitalize;white-space:nowrap}
+  .ck-histrow .cht-a{font-weight:800;color:var(--ink);white-space:nowrap;min-width:70px;text-align:right}
+  .ck-tbl{width:100%;border-collapse:collapse;font-size:12px}
+  .ck-tbl th{text-align:left;font-size:10px;font-weight:800;letter-spacing:.03em;color:var(--mut);text-transform:uppercase;padding:6px 10px;border-bottom:1px solid var(--line)}
+  .ck-tbl td{padding:9px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+  .ck-tbl tr:last-child td{border-bottom:none}
+  .ck-sch-badge{display:inline-flex;align-items:center;gap:5px;font-size:10.5px;font-weight:800;white-space:nowrap}
+  .ck-sch-badge.on{color:#1B7A50}
+  .ck-sch-badge.off{color:var(--mut)}
+</style>
 
 <script>
 /* ===== CLIENT DATABASE (v47) ===== */
@@ -24142,7 +24548,7 @@ function openRealClient(id){
   if(c.email)acts+='<button class="gbtn" onclick="window.location.href=\'mailto:'+hlEsc(c.email)+'\'">\u2709 Email</button>';
   if(c.jobberUrl)acts+='<button class="gbtn go" onclick="window.open(\''+hlEsc(c.jobberUrl)+'\',\'_blank\')">\u2197 Open in Jobber</button>';
   document.getElementById('ck-act').innerHTML=acts||'<span style="font-size:11px;color:var(--mut)">No contact info on file.</span>';
-  document.getElementById('ck-qb').innerHTML='\u26A1 <b>Reina:</b> Real record synced from Jobber. Job history and property notes aren\'t wired into this view yet \u2014 use \u201COpen in Jobber\u201D for the full record.';
+  document.getElementById('ck-qb').innerHTML='\u26A1 <b>Reina:</b> Real record synced from Jobber. Property notes aren\'t wired into this view yet \u2014 use \u201COpen in Jobber\u201D for the full record.';
   // 2026-08-25: this card never had a Phone row at all (a different modal,
   // the appointment sheet, already showed "No phone on file" correctly --
   // this one just omitted it entirely). Editable here via
@@ -24168,10 +24574,115 @@ function openRealClient(id){
     '<div class="ck-kv"><span>Open balance</span><b style="color:'+(bal>0?'#a34237':'var(--ink)')+'">'+rcMoney(bal)+'</b></div>'
     +'<div class="ck-kv"><span>Lifetime value</span><b>\u2014</b></div>'
     +'<div class="ck-kv"><span>Jobs</span><b>\u2014</b></div>';
-  document.getElementById('ck-hist').innerHTML='<div style="font-size:11px;color:var(--mut);padding:6px 0">Job history isn\'t wired into this view yet.'+(c.jobberUrl?' <a href="'+hlEsc(c.jobberUrl)+'" target="_blank" style="color:var(--slate);font-weight:800">Open in Jobber \u2197</a>':'')+'</div>';
   document.getElementById('ck-mem').innerHTML='<div style="font-size:11px;color:var(--mut);padding:4px 0">No notes synced into this view yet.</div>';
   document.getElementById('ck-tl').innerHTML='<div class="t"><b>Last updated</b><small>'+rcDate(c.updatedAt)+'</small></div>';
   document.getElementById('ckv').classList.add('open');
+  // jomell, 2026-08-27: Job History now has real tabs (Estimates/Jobs/
+  // Invoices/Requests), plus real Client Schedule and Recent Pricing
+  // sections -- all scoped to this one client, replacing the old
+  // "isn't wired into this view yet" placeholder.
+  CK_HIST_TAB='estimates';
+  CK_CACHE={estimates:null,jobs:null,invoices:null,requests:null};
+  ['estimates','jobs','invoices','requests'].forEach(function(t){
+    var b=document.getElementById('ck-histtab-'+t); if(b) b.className='ck-histtab'+(t==='estimates'?' on':'');
+  });
+  ckRenderHist();
+  document.getElementById('ck-sched').innerHTML='<div style="font-size:11px;color:var(--mut);padding:6px 0">Loading&hellip;</div>';
+  document.getElementById('ck-pricing').innerHTML='<div style="font-size:11px;color:var(--mut);padding:6px 0">Loading&hellip;</div>';
+  ckLoadClientExtras(c.id);
+}
+function ckHistTab(tab){
+  CK_HIST_TAB=tab;
+  ['estimates','jobs','invoices','requests'].forEach(function(t){
+    var b=document.getElementById('ck-histtab-'+t); if(b) b.className='ck-histtab'+(t===tab?' on':'');
+  });
+  ckRenderHist();
+}
+function ckRenderHist(){
+  var host=document.getElementById('ck-hist'); if(!host)return;
+  var data=CK_CACHE[CK_HIST_TAB];
+  if(data==null){ host.innerHTML='<div style="font-size:11px;color:var(--mut);padding:6px 0">Loading&hellip;</div>'; return; }
+  if(!data.length){ host.innerHTML='<div style="font-size:11px;color:var(--mut);padding:6px 0">No '+CK_HIST_TAB+' on file for this client.</div>'; return; }
+  var rows=data.map(function(r){
+    return '<div class="ck-histrow"'+(r.onclick?' onclick="'+r.onclick+'"':'')+'><span class="cht-t">'+hlEsc(r.title)+'</span><span class="cht-m">'+hlEsc(r.meta||'')+'</span><span class="cht-a">'+(r.amount!=null?hlEsc(r.amount):'')+'</span></div>';
+  }).join('');
+  host.innerHTML='<div class="ck-histlist">'+rows+'</div>';
+}
+var CK_HIST_TAB='estimates', CK_CACHE={};
+function ckLoadClientExtras(clientId){
+  var h={'Content-Type':'application/json'}; var tok=hlTokenSync(); if(tok)h['Authorization']='Bearer '+tok;
+  var base=window.API||'';
+  fetch(base+'/api/bookkeeping/estimates/list?clientId='+encodeURIComponent(clientId),{headers:h}).then(function(r){return r.json();}).then(function(d){
+    CK_CACHE.estimates=(d&&d.ok&&d.estimates||[]).map(function(e){
+      var total=(e.totals&&(e.totals.cardPrice!=null?e.totals.cardPrice:e.totals.price))||0;
+      return {title:(e.estimateNumber||'Estimate')+(e.title?' \u00b7 '+e.title:''),meta:String(e.displayStatus||e.lifecycleStatus||'').replace(/_/g,' '),amount:rcMoney(total)};
+    });
+    if(CK_HIST_TAB==='estimates')ckRenderHist();
+  }).catch(function(){ CK_CACHE.estimates=[]; if(CK_HIST_TAB==='estimates')ckRenderHist(); });
+
+  fetch(base+'/api/jobs?clientId='+encodeURIComponent(clientId)+'&limit=200',{headers:h}).then(function(r){return r.json();}).then(function(d){
+    CK_CACHE.jobs=(d&&d.ok&&d.jobs||[]).map(function(j){
+      return {title:(j.projectRef||(j.jobNumber!=null?'#'+j.jobNumber:'Job'))+' \u00b7 '+(j.title||'Untitled job'),meta:String(j.status||'').replace(/_/g,' '),amount:rcMoney(j.total||0)};
+    });
+    if(CK_HIST_TAB==='jobs')ckRenderHist();
+  }).catch(function(){ CK_CACHE.jobs=[]; if(CK_HIST_TAB==='jobs')ckRenderHist(); });
+
+  fetch(base+'/api/invoices?clientId='+encodeURIComponent(clientId)+'&limit=200',{headers:h}).then(function(r){return r.json();}).then(function(d){
+    CK_CACHE.invoices=(d&&d.ok&&d.invoices||[]).map(function(inv){
+      return {title:'#'+(inv.invoiceNumber||inv.id)+(inv.subject?' \u00b7 '+inv.subject:''),meta:String(inv.status||'').replace(/_/g,' '),amount:rcMoney(inv.total||0)};
+    });
+    if(CK_HIST_TAB==='invoices')ckRenderHist();
+  }).catch(function(){ CK_CACHE.invoices=[]; if(CK_HIST_TAB==='invoices')ckRenderHist(); });
+
+  fetch(base+'/api/track1?resource=requests&clientId='+encodeURIComponent(clientId)+'&limit=200',{headers:h}).then(function(r){return r.json();}).then(function(d){
+    CK_CACHE.requests=(d&&d.ok&&d.requests||[]).map(function(rq){
+      return {title:rq.title||'Request',meta:String(rq.status||'').replace(/_/g,' '),amount:null};
+    });
+    if(CK_HIST_TAB==='requests')ckRenderHist();
+  }).catch(function(){ CK_CACHE.requests=[]; if(CK_HIST_TAB==='requests')ckRenderHist(); });
+
+  // Client schedule blends the two real sources: Jobber-synced visits
+  // (job-linked, real crew via assignedUsers) and HiveLogic-native
+  // appointments (client_ref-linked, crew known only as a count -- no
+  // roster lookup here to turn ids into names).
+  Promise.all([
+    fetch(base+'/api/track1?resource=visits&clientId='+encodeURIComponent(clientId)+'&limit=200',{headers:h}).then(function(r){return r.json();}).catch(function(){return null;}),
+    fetch(base+'/api/track1?resource=hl_appointments&clientId='+encodeURIComponent(clientId)+'&limit=200',{headers:h}).then(function(r){return r.json();}).catch(function(){return null;})
+  ]).then(function(both){
+    var rows=[];
+    ((both[0]&&both[0].ok&&both[0].visits)||[]).forEach(function(v){
+      rows.push({scheduled:!!v.startAt,title:v.title||'Visit',when:v.startAt,assigned:(v.assignedUsers&&v.assignedUsers.length)?v.assignedUsers.join(', '):null});
+    });
+    ((both[1]&&both[1].ok&&both[1].hl_appointments)||[]).forEach(function(a){
+      rows.push({scheduled:!!a.startAt,title:a.title||'Appointment',when:a.startAt,assigned:(a.crewCount>0)?(a.crewCount+' assigned'):null});
+    });
+    rows.sort(function(a,b){ return (b.when?new Date(b.when).getTime():-1)-(a.when?new Date(a.when).getTime():-1); });
+    ckRenderSchedule(rows);
+  });
+
+  fetch(base+'/api/bookkeeping/estimates/client-pricing?clientId='+encodeURIComponent(clientId),{headers:h}).then(function(r){return r.json();}).then(function(d){
+    ckRenderPricing((d&&d.ok&&d.rows)||[]);
+  }).catch(function(){ ckRenderPricing([]); });
+}
+function ckRenderSchedule(rows){
+  var host=document.getElementById('ck-sched'); if(!host)return;
+  if(!rows.length){ host.innerHTML='<div style="font-size:11px;color:var(--mut);padding:6px 0">No scheduled visits for this client yet.</div>'; return; }
+  var body=rows.map(function(r){
+    var badge=r.scheduled?'<span class="ck-sch-badge on">\u25cf Scheduled</span>':'<span class="ck-sch-badge off">Unscheduled</span>';
+    var assigned=r.assigned?hlEsc(r.assigned):'<span style="color:#c65b4e">\u2298 Unassigned</span>';
+    return '<tr><td>'+badge+'</td><td>'+hlEsc(r.title)+(r.when?'<div style="font-size:10px;color:var(--mut)">'+rcDate(r.when)+'</div>':'')+'</td><td>'+assigned+'</td></tr>';
+  }).join('');
+  host.innerHTML='<table class="ck-tbl"><thead><tr><th>Schedule</th><th>Title</th><th>Assigned</th></tr></thead><tbody>'+body+'</tbody></table>';
+}
+function ckRenderPricing(rows){
+  var host=document.getElementById('ck-pricing'); if(!host)return;
+  if(!rows.length){ host.innerHTML='<div style="font-size:11px;color:var(--mut);padding:6px 0">No converted estimates to compare pricing against yet.</div>'; return; }
+  var body=rows.map(function(r){
+    var q='<b>'+rcMoney(r.quoted.amount)+'</b>'+(r.quoted.date?'<div style="font-size:10px;color:var(--mut)">'+rcDate(r.quoted.date)+'</div>':'');
+    var j=r.job?('<b>'+rcMoney(r.job.amount)+'</b>'+(r.job.date?'<div style="font-size:10px;color:var(--mut)">'+rcDate(r.job.date)+'</div>':'')):'<span style="color:var(--mut)">\u2014</span>';
+    return '<tr><td>'+hlEsc(r.lineItem)+'</td><td style="text-align:right">'+q+'</td><td style="text-align:right">'+j+'</td></tr>';
+  }).join('');
+  host.innerHTML='<table class="ck-tbl"><thead><tr><th>Line item</th><th style="text-align:right">Quoted</th><th style="text-align:right">Job</th></tr></thead><tbody>'+body+'</tbody></table>';
 }
 // 2026-08-25: "his number is not present anywhere add this and it should
 // reflect to all clients and future clients" -- own modal (not
@@ -26683,7 +27194,12 @@ showView = function(v){
         console.error('[csx view] failed to load views/csx.html', e);
       });
     } else {
-      if(v==='psx'){ if(f.dataset.loaded!=='1'){ f.src='/subportal-admin/'; f.dataset.loaded='1'; } } else { f.srcdoc=f.getAttribute('data-hl63'); f.dataset.loaded='1'; }
+      if(v==='psx'){ if(f.dataset.loaded!=='1'){ f.src='/subportal-admin/'; f.dataset.loaded='1'; } }
+      else if(f.dataset.loaded!=='1'){ f.srcdoc=f.getAttribute('data-hl63'); f.dataset.loaded='1'; }
+      // Comms Hub carries real, live data (sms threads, calls) -- unlike every
+      // other data-hl63 mockup here, a revisit should not show what was true
+      // the first time the tab was ever opened.
+      else if(v==='cmx' && f.contentWindow && typeof f.contentWindow.cmxRefresh==='function'){ f.contentWindow.cmxRefresh(); }
     }
   }
   var g=HLGRP[v];

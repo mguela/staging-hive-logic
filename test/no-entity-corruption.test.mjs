@@ -90,12 +90,23 @@ function scriptsOf(doc) {
 }
 
 test('no HTML entities inside quoted /api/ URLs in frontend source', () => {
+  // A data-hl63 attribute is the one place "&amp;" IS the correct text (see
+  // header comment #2): the attribute decode (pass 1) turns it into a real
+  // "&" before that text ever becomes the inner document's <script> content,
+  // which is exactly what decodeAttr()/hl63Ranges() below model. This check
+  // is about the OTHER case -- a REAL top-level script, which gets no such
+  // decode and would send the literal text "&amp;" out over the wire.
   const bad = [];
   for (const f of frontendFiles()) {
     const s = fs.readFileSync(f, 'utf8');
+    const attrRanges = path.basename(f) === 'index.html' ? hl63Ranges(s) : [];
+    const inAttr = (i) => attrRanges.some(r => i >= r[0] && i < r[1]);
     const re = /['"`](\/api\/[^'"`]*?&(?:amp|lt|gt|quot|#39);[^'"`]*?)['"`]/g;
     let m;
-    while ((m = re.exec(s))) bad.push(path.relative(ROOT, f) + ' -> ' + m[1].slice(0, 90));
+    while ((m = re.exec(s))) {
+      if (inAttr(m.index)) continue;
+      bad.push(path.relative(ROOT, f) + ' -> ' + m[1].slice(0, 90));
+    }
   }
   assert.deepStrictEqual(bad, [],
     'HTML entities found inside JS /api/ URL strings (browsers do not decode entities in <script>; requests go out corrupted):\n' + bad.join('\n'));
