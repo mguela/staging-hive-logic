@@ -19,7 +19,7 @@
  * monitor_my_status poll, so "is this person running current code" is a
  * question the database can answer. Do not hand-edit it -- run
  * `node scripts/stamp-page-build.mjs`. */
-var HL_PAGE_BUILD = '1d9f62dfd5b2df71';
+var HL_PAGE_BUILD = '9313844b83373ce0';
 </script>
 <script>
 (function () { // HL_FETCH_DEDUPE_V1 — single wrapper: GET /api/ dedupe + 60s cache + write-invalidate
@@ -2668,15 +2668,6 @@ button,.dowork,.startday,.back,.cdb-new,.nc-create,.fm-save,.gbtn,.iconbtn,.dw-a
       .rail .nav:hover{background:rgba(255,255,255,.09)}
       .rail .nav.on{background:linear-gradient(90deg,#35536d,#49647b);border:none;font-weight:700}
       .rail .logo .tagline{color:rgba(180,210,225,.75)}
-      /* 2026-08-26, jomell: "what i mean by logo is including the 'HiveLogic
-         CONTROL THE CHAOS'" -- sampled the real wordmark colors out of the
-         coworker's source PNG (Downloads/hivelogic-logo.png): "Logic" is a
-         vivid blue (~#5A8CDB at the top of its gradient), not the app's old
-         pale slate-blue. The tagline in that PNG is a dark navy meant for a
-         white background (~#1B498E) -- unreadable on this dark sidebar, so
-         it keeps the light, translucent treatment above instead of a literal
-         color port. "Hive" was already solid white, matching the source. */
-      .rail .logo .word span{color:#5b8cdb}
     </style>
     <div class="logo">
       <!-- 2026-08-26, jomell: "lets also change the hivelogic logo on the
@@ -2690,17 +2681,17 @@ button,.dowork,.startday,.back,.cdb-new,.nc-create,.fm-save,.gbtn,.iconbtn,.dw-a
     </div>
 
     <div id="nav-grpall-btn" onclick="hlGrpAllToggle()" style="font-family:'JetBrains Mono',monospace;font-size:9px;font-weight:800;letter-spacing:.05em;text-align:center;color:#9fb0c9;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);border-radius:99px;margin:2px 8px 10px;padding:7px 0;cursor:pointer;user-select:none">▾ EXPAND ALL</div>
-    <div class="nav" id="nav-cc" onclick="showView('cc')"><span class="ic"><svg viewBox="0 0 24 24" stroke="#ffc000"><path d="M3 3h7v7H3z"/><path d="M14 3h7v7h-7z"/><path d="M3 14h7v7H3z"/><path d="M14 18h7M17.5 14v7"/></svg></span>Command Center</div>
-    <div class="nav" id="nav-sched" onclick="showView('schedule')"><span class="ic"><svg viewBox="0 0 24 24" stroke="#ffc000"><path d="M3 5h18v16H3z"/><path d="M8 3v4M16 3v4M3 10h18"/></svg></span>Schedule</div>
-    <div class="nav" onclick="hlGrp('sales')" style="font-weight:800"><span class="ic"><img src="/images/nav-sales.png" alt="" style="width:17px;height:17px;object-fit:contain"></span>Sales<span id="grpar-sales" style="margin-left:auto;font-size:10px;color:#5d7290">▸</span></div>
+    <div class="nav" id="nav-cc" onclick="showView('cc')"><span class="ic"><svg viewBox="0 0 24 24" stroke="#FFC94B"><path d="M4 15a8 8 0 0 1 16 0"/><path d="M4 15h2M18 15h2M12 7v2M6.6 9.6l1.4 1.4M17.4 9.6L16 11"/><path d="M12 15l3.5-3.5"/><circle cx="12" cy="15" r="1.6" fill="#FFC94B"/></svg></span>Command Center</div>
+    <div class="nav" id="nav-sched" onclick="showView('schedule')"><span class="ic"><svg viewBox="0 0 24 24" stroke="#6EA8DC"><rect x="3.5" y="5" width="17" height="16" rx="2.5"/><path d="M3.5 10h17M8 2.5V6M16 2.5V6"/><circle cx="8.5" cy="14" r="1" fill="#6EA8DC"/><circle cx="12" cy="14" r="1" fill="#6EA8DC"/><circle cx="15.5" cy="14" r="1" fill="#6EA8DC"/></svg></span>Schedule</div>
+    <div class="nav" onclick="hlGrp('sales')" style="font-weight:800"><span class="ic" style="font-size:13px;display:flex;align-items:center;justify-content:center">🧲</span>Sales<span id="grpar-sales" style="margin-left:auto;font-size:10px;color:#5d7290">▸</span></div>
     <div id="grp-sales" style="display:none">
       <div class="nav" style="padding-left:26px;font-size:12px" id="nav-leads" onclick="showView('leads')"><span class="ic"><svg viewBox="0 0 24 24" stroke="#6FBF8B"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.5"/><circle cx="12" cy="12" r="1" fill="#6FBF8B"/></svg></span>Leads</div>
       <div class="nav" style="padding-left:26px;font-size:12px" id="nav-estimates" onclick="showView('estimates')"><span class="ic"><svg viewBox="0 0 24 24" stroke="#8FD48F"><path d="M6 3h9l4 4v14H6z"/><path d="M15 3v4h4"/><path d="M9 11h6M9 14.5h6M9 18h3.5"/></svg></span>Estimates</div>
       <div class="nav" id="nav-tox" onclick="showView('tox')" style="padding-left:26px;font-size:12px"><span class="ic" style="font-size:12px;display:flex;align-items:center;justify-content:center">📐</span>HiveGrid</div>
       <div class="nav" id="nav-prx" onclick="showView('prx')" style="padding-left:26px;font-size:12px"><span class="ic" style="font-size:12px;display:flex;align-items:center;justify-content:center">🎨</span>Presentations</div>
     </div>
-    <div class="nav" id="nav-marketing-cc" onclick="openMarketingCC()" style="font-weight:800"><span class="ic"><img src="/images/nav-hive-marketing.png" alt="" style="width:17px;height:17px;object-fit:contain"></span>Hive Marketing</div>
-    <div class="nav" onclick="hlGrp('jobs')" style="font-weight:800"><span class="ic"><svg viewBox="0 0 24 24" stroke="#ffc000"><path d="M3 6h18v14H3z"/><path d="M8 6V4h8v2"/></svg></span>Jobs<span id="grpar-jobs" style="margin-left:auto;font-size:10px;color:#5d7290">▸</span></div>
+    <div class="nav" id="nav-marketing-cc" onclick="openMarketingCC()" style="font-weight:800"><span class="ic" style="font-size:13px;display:flex;align-items:center;justify-content:center">🐝</span>Hive Marketing</div>
+    <div class="nav" onclick="hlGrp('jobs')" style="font-weight:800"><span class="ic" style="font-size:13px;display:flex;align-items:center;justify-content:center">🚦</span>Jobs<span id="grpar-jobs" style="margin-left:auto;font-size:10px;color:#5d7290">▸</span></div>
     <div id="grp-jobs" style="display:none">
       <div class="nav" style="padding-left:26px;font-size:12px" id="nav-jobs" onclick="showView('jobs')"><span class="ic"><svg viewBox="0 0 24 24" stroke="#E0906B"><path d="M13.5 6.5l4 4L9 19l-4 1 1-4z"/><path d="M12 5l2-2 6 6-2 2"/><path d="M14 3l4 4"/></svg></span>Jobs</div>
       <div class="nav" id="nav-ajx" onclick="showView('ajx')" style="padding-left:26px;font-size:12px"><span class="ic" style="font-size:12px;display:flex;align-items:center;justify-content:center">&#128203;</span>Active Jobs</div>
@@ -2708,7 +2699,7 @@ button,.dowork,.startday,.back,.cdb-new,.nc-create,.fm-save,.gbtn,.iconbtn,.dw-a
       <div class="nav" id="nav-ldx" onclick="showView('ldx')" style="padding-left:26px;font-size:12px"><span class="ic" style="font-size:12px;display:flex;align-items:center;justify-content:center">📍</span>Live Dispatch</div>
       <div class="nav" id="nav-tmx" onclick="showView('tmx')" style="padding-left:26px;font-size:12px" title="Partial prototype — live meter and rates; ticket workflow is not connected"><span class="ic" style="font-size:12px;display:flex;align-items:center;justify-content:center">🎫</span>T&amp;M / Service Lane</div>
     </div>
-    <div class="nav" onclick="hlGrp('money')" style="font-weight:800"><span class="ic"><svg viewBox="0 0 24 24" stroke="#22c55e"><path d="M12 1v22"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg></span>Finances<span id="grpar-money" style="margin-left:auto;font-size:10px;color:#5d7290">▸</span></div>
+    <div class="nav" onclick="hlGrp('money')" style="font-weight:800"><span class="ic" style="font-size:13px;display:flex;align-items:center;justify-content:center">💰</span>Finances<span id="grpar-money" style="margin-left:auto;font-size:10px;color:#5d7290">▸</span></div>
     <div id="grp-money" style="display:none">
       <div class="nav" style="padding-left:26px;font-size:12px" id="nav-financial" onclick="showView('financial')"><span class="ic"><svg viewBox="0 0 24 24" stroke="#7DD3A8"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5v9"/><path d="M14.5 9.2c0-1-1.1-1.7-2.5-1.7s-2.5.7-2.5 1.7 1.2 1.5 2.5 1.8 2.5.8 2.5 1.8-1.1 1.7-2.5 1.7-2.5-.7-2.5-1.7"/></svg></span>Financial</div>
       <div class="nav" id="nav-invx" onclick="showView('invx')" style="padding-left:26px;font-size:12px"><span class="ic" style="font-size:12px;display:flex;align-items:center;justify-content:center">🧾</span>Invoicing & AR</div>
@@ -2718,32 +2709,32 @@ button,.dowork,.startday,.back,.cdb-new,.nc-create,.fm-save,.gbtn,.iconbtn,.dw-a
       <div class="nav" id="nav-fix" onclick="showView('fix')" style="padding-left:26px;font-size:12px"><span class="ic" style="font-size:12px;display:flex;align-items:center;justify-content:center">🧠</span>Financial Intelligence</div>
       <div class="nav" id="nav-vcx" onclick="showView('vcx')" style="padding-left:26px;font-size:12px"><span class="ic" style="font-size:12px;display:flex;align-items:center;justify-content:center">🛒</span>Vendor Catalog</div>
     </div>
-    <div class="nav" onclick="hlGrp('insights')" style="font-weight:800"><span class="ic"><svg viewBox="0 0 24 24" stroke="#ffc000"><path d="M4 20V10"/><path d="M10 20V4"/><path d="M16 20v-7"/><path d="M22 20H2"/></svg></span>Reports<span id="grpar-insights" style="margin-left:auto;font-size:10px;color:#5d7290">▸</span></div>
+    <div class="nav" onclick="hlGrp('insights')" style="font-weight:800"><span class="ic" style="font-size:13px;display:flex;align-items:center;justify-content:center">📊</span>Reports<span id="grpar-insights" style="margin-left:auto;font-size:10px;color:#5d7290">▸</span></div>
     <div id="grp-insights" style="display:none">
       <div class="nav" style="padding-left:26px;font-size:12px" id="nav-reports" onclick="showView('reports')"><span class="ic"><svg viewBox="0 0 24 24" stroke="#9FB6D9"><path d="M4 20V4"/><path d="M4 20h16"/><path d="M7.5 15.5l3.5-3.5 2.5 2.5 5-5.5"/><path d="M15.5 9h3v3"/></svg></span>Reports</div>
     </div>
-    <div class="nav" onclick="hlGrp('crm')" style="font-weight:800"><span class="ic"><svg viewBox="0 0 24 24" stroke="#ff8b19"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg></span>Clients<span id="grpar-crm" style="margin-left:auto;font-size:10px;color:#5d7290">▸</span></div>
+    <div class="nav" onclick="hlGrp('crm')" style="font-weight:800"><span class="ic" style="font-size:13px;display:flex;align-items:center;justify-content:center">🤝</span>Clients<span id="grpar-crm" style="margin-left:auto;font-size:10px;color:#5d7290">▸</span></div>
     <div id="grp-crm" style="display:none">
       <div class="nav" style="padding-left:26px;font-size:12px" id="nav-clients" onclick="showView('clients')"><span class="ic"><svg viewBox="0 0 24 24" stroke="#7FB2E5"><path d="M3.5 10.5L12 4l8.5 6.5"/><path d="M6 9.5V20h12V9.5"/><circle cx="12" cy="12.8" r="1.9"/><path d="M9 19c.3-2.2 1.5-3.3 3-3.3s2.7 1.1 3 3.3"/></svg></span>Clients</div>
     </div>
-    <div class="nav" onclick="hlGrp('vendors')" style="font-weight:800"><span class="ic"><svg viewBox="0 0 24 24" stroke="#00d7df"><path d="M3 7h11v9H3z"/><path d="M14 10h4l3 3v3h-7"/><path d="M7 18a2 2 0 100-4 2 2 0 000 4z"/><path d="M18 18a2 2 0 100-4 2 2 0 000 4z"/></svg></span>Vendors & Subs<span id="grpar-vendors" style="margin-left:auto;font-size:10px;color:#5d7290">▸</span></div>
+    <div class="nav" onclick="hlGrp('vendors')" style="font-weight:800"><span class="ic"><svg viewBox="0 0 24 24" stroke="#D9A85C"><path d="M2.5 7h11v10h-11z"/><path d="M13.5 10h4l3.5 3.5V17h-7.5"/><circle cx="6.5" cy="18.5" r="1.8"/><circle cx="16.5" cy="18.5" r="1.8"/></svg></span>Vendors & Subs<span id="grpar-vendors" style="margin-left:auto;font-size:10px;color:#5d7290">▸</span></div>
     <div id="grp-vendors" style="display:none">
       <div class="nav" style="padding-left:26px;font-size:12px" id="nav-subs" onclick="showView('subs');if(window.subsRefresh)subsRefresh();"><span class="ic"><svg viewBox="0 0 24 24" stroke="#D9A85C"><path d="M2.5 7h11v10h-11z"/><path d="M13.5 10h4l3.5 3.5V17h-7.5"/><circle cx="6.5" cy="18.5" r="1.8"/><circle cx="16.5" cy="18.5" r="1.8"/></svg></span>Subs &amp; Suppliers</div>
     </div>
-    <div class="nav" onclick="hlGrp('people')" style="font-weight:800"><span class="ic"><svg viewBox="0 0 24 24" stroke="#00d7df"><path d="M3 20c0-4 2-7 6-7s6 3 6 7"/><path d="M14 13c4 0 8 2 8 7"/><path d="M8 8a3 3 0 100-6 3 3 0 000 6z"/><path d="M17 9a2.5 2.5 0 100-5 2.5 2.5 0 000 5z"/></svg></span>Team<span id="grpar-people" style="margin-left:auto;font-size:10px;color:#5d7290">▸</span></div>
+    <div class="nav" onclick="hlGrp('people')" style="font-weight:800"><span class="ic" style="font-size:13px;display:flex;align-items:center;justify-content:center">👥</span>Team<span id="grpar-people" style="margin-left:auto;font-size:10px;color:#5d7290">▸</span></div>
     <div id="grp-people" style="display:none">
       <div class="nav" id="nav-ttx" onclick="showView('ttx')" style="padding-left:26px;font-size:12px"><span class="ic" style="font-size:12px;display:flex;align-items:center;justify-content:center">⏱</span>Time & Timesheets</div>
       <div class="nav" id="nav-agents" onclick="window.open('/agents/','_blank')" style="padding-left:26px;font-size:12px"><span class="ic" style="font-size:12px;display:flex;align-items:center;justify-content:center">💻</span>Automation Devices</div>
       <div class="nav" id="nav-team" onclick="showView('');go('team');if(window.teamRefreshList)teamRefreshList();if(window.crewRosterRefresh)crewRosterRefresh();" style="padding-left:26px;font-size:12px"><span class="ic" style="font-size:12px;display:flex;align-items:center;justify-content:center">🔑</span>Team &amp; Access</div>
     </div>
-    <div class="nav" onclick="hlGrp('portal')" style="font-weight:800"><span class="ic"><svg viewBox="0 0 24 24" stroke="#20df62"><path d="M5 3h14a2 2 0 012 2v16H3V5a2 2 0 012-2z"/><path d="M9 12l2 2 4-4"/><path d="M9 3v3h6V3"/></svg></span>Portals & Field<span id="grpar-portal" style="margin-left:auto;font-size:10px;color:#5d7290">▸</span></div>
+    <div class="nav" onclick="hlGrp('portal')" style="font-weight:800"><span class="ic" style="font-size:13px;display:flex;align-items:center;justify-content:center">🌐</span>Portals & Field<span id="grpar-portal" style="margin-left:auto;font-size:10px;color:#5d7290">▸</span></div>
     <div id="grp-portal" style="display:none">
       <div class="nav" id="nav-psx" onclick="showView('psx')" style="padding-left:26px;font-size:12px"><span class="ic" style="font-size:12px;display:flex;align-items:center;justify-content:center">🔧</span>Sub Portal</div>
     </div>
-    <div class="nav" id="nav-docs" onclick="showView('docs')"><span class="ic">📸</span>Documents</div>
-    <div class="nav" id="nav-vi" onclick="showView('vi')"><span class="ic"><svg viewBox="0 0 24 24" stroke="#ffc000"><path d="M2 12s4-6 10-6 10 6 10 6-4 6-10 6S2 12 2 12z"/><path d="M12 9a3 3 0 100 6 3 3 0 000-6z"/></svg></span>HiveSight</div>
-    <div class="nav" id="nav-hiveconnect" onclick="openHiveConnectNewTab()" style="position:relative"><span class="ic"><svg viewBox="0 0 24 24" stroke="#ff2c95"><path d="M8 6h8"/><path d="M18 7v9"/><path d="M16 18H8"/><path d="M6 16V8"/><path d="M6 6a2 2 0 100-4 2 2 0 000 4z"/><path d="M18 6a2 2 0 100-4 2 2 0 000 4z"/><path d="M18 22a2 2 0 100-4 2 2 0 000 4z"/><path d="M6 22a2 2 0 100-4 2 2 0 000 4z"/></svg></span>HiveConnect<span id="hiveconnect-badge" style="margin-left:auto;font-family:'JetBrains Mono',monospace;font-size:8px;font-weight:800;background:#6a3fb5;color:#fff;border-radius:99px;padding:2px 7px;display:none"></span></div>
-    <div class="nav" onclick="hlGrp('manager')" style="font-weight:800"><span class="ic"><svg viewBox="0 0 24 24" stroke="#ff8b19"><path d="M12 2a5 5 0 100 10A5 5 0 0012 2z"/><path d="M4 21c.7-5 3.5-8 8-8s7.3 3 8 8"/><path d="M17 8l2 2-2 2"/></svg></span>Manager's<span id="grpar-manager" style="margin-left:auto;font-size:10px;color:#5d7290">▸</span></div>
+    <div class="nav" id="nav-docs" onclick="showView('docs')"><span class="ic">📁</span>Documents</div>
+    <div class="nav" id="nav-vi" onclick="showView('vi')"><span class="ic" style="font-size:13px;display:flex;align-items:center;justify-content:center">📸</span>HiveSight</div>
+    <div class="nav" id="nav-hiveconnect" onclick="openHiveConnectNewTab()" style="position:relative"><span class="ic">🐝</span>HiveConnect<span id="hiveconnect-badge" style="margin-left:auto;font-family:'JetBrains Mono',monospace;font-size:8px;font-weight:800;background:#6a3fb5;color:#fff;border-radius:99px;padding:2px 7px;display:none"></span></div>
+    <div class="nav" onclick="hlGrp('manager')" style="font-weight:800"><span class="ic" style="font-size:13px;display:flex;align-items:center;justify-content:center">📋</span>Manager's<span id="grpar-manager" style="margin-left:auto;font-size:10px;color:#5d7290">▸</span></div>
     <div id="grp-manager" style="display:none">
       <div class="nav" id="nav-council" onclick="showView('council')" style="padding-left:26px;font-size:12px"><span class="ic" style="font-size:12px;display:flex;align-items:center;justify-content:center">B</span>The Boardroom</div>
       <div class="nav" id="nav-gpux" onclick="showView('gpux')" style="padding-left:26px;font-size:12px"><span class="ic" style="font-size:12px;display:flex;align-items:center;justify-content:center">🏗️</span>Project Updates</div>
@@ -2756,7 +2747,7 @@ button,.dowork,.startday,.back,.cdb-new,.nc-create,.fm-save,.gbtn,.iconbtn,.dw-a
            default and revealed in hlApplyRolePermissions(). -->
       <div class="nav" id="nav-devtodo" onclick="showView('devtodo')" style="padding-left:26px;font-size:12px;display:none"><span class="ic" style="font-size:12px;display:flex;align-items:center;justify-content:center">🛠️</span>Dev To-Do</div>
     </div>
-    <div class="nav" onclick="hlGrp('ops')" style="font-weight:800"><span class="ic"><svg viewBox="0 0 24 24" stroke="#00d7df"><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/><path d="M4.93 4.93l2.12 2.12M16.95 16.95l2.12 2.12M4.93 19.07l2.12-2.12M16.95 7.05l2.12-2.12"/><path d="M12 9a3 3 0 100 6 3 3 0 000-6z"/></svg></span>Settings<span id="grpar-ops" style="margin-left:auto;font-size:10px;color:#5d7290">▸</span></div>
+    <div class="nav" onclick="hlGrp('ops')" style="font-weight:800"><span class="ic" style="font-size:13px;display:flex;align-items:center;justify-content:center">⚙️</span>Settings<span id="grpar-ops" style="margin-left:auto;font-size:10px;color:#5d7290">▸</span></div>
     <div id="grp-ops" style="display:none">
       <div class="nav" id="nav-csx" onclick="showView('csx')" style="padding-left:26px;font-size:12px"><span class="ic" style="font-size:12px;display:flex;align-items:center;justify-content:center">🧬</span>Company Setup</div>
       <div class="nav" id="nav-desktop-app" onclick="window.open(&#39;https://github.com/csk5369/hivelogic-desktop/releases/latest/download/HiveLogic-Setup.exe&#39;,&#39;_blank&#39;)" style="padding-left:26px;font-size:12px" title="Install the HiveLogic desktop app on your PC"><span class="ic" style="font-size:12px;display:flex;align-items:center;justify-content:center"><svg viewBox="0 0 24 24" stroke="currentColor" fill="none" width="12" height="12"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg></span>Get Desktop App</div>
