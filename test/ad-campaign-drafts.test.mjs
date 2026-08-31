@@ -159,9 +159,19 @@ test('handleAdCampaignReviewPost: reject stores a real reason and never touches 
 });
 
 test('handleAdCampaignReviewPost: approve is refused when the real budget check fails', async () => {
+  // checkBudgetHeadroom (api/_lib/ad-budget-governor.js) projects the daily
+  // budget across the REAL remaining days in the calendar month
+  // (dailyBudget * daysRemaining), and this test never pins `now` -- it
+  // can't, handleAdCampaignReviewPost has no way to thread one through.
+  // The old fixture (cap 150000, spent 140000, daily 5000: remaining
+  // 10000) only exceeded the cap when daysRemaining > 2, so this failed
+  // near the end of any month instead of passing every day. remainingCents
+  // here is deliberately tiny (100) so daily 5000 exceeds it even at the
+  // SMALLEST possible daysRemaining (1, the last day of a month) --
+  // date-independent by construction, not by luck.
   const supa = fakeSupabase([
     { rows: [{ id: 'c1', status: 'draft', daily_budget_cents: 5000 }] },
-    { rows: [{ cap_cents: 150000, autonomy_level: 'auto_within_cap' }] },
+    { rows: [{ cap_cents: 140100, autonomy_level: 'auto_within_cap' }] },
     { rows: [{ spend_cents: 140000 }] },
   ]);
   const res = fakeRes();
