@@ -162,6 +162,49 @@ test('reina_read: all_sheets mode reads every sheet given, retaining sheet ident
   }
 });
 
+// --- the cross-sheet "overview" synthesis ------------------------------------
+// No ANTHROPIC_API_KEY in this test env, so every per-sheet read comes back
+// as the honest needsAiConnection stub -- which means there is nothing real
+// to synthesize across, and the route must skip the synthesis call entirely
+// rather than running it over a pile of "not configured" placeholders.
+
+test('reina_read: all_sheets mode with only stub (unconfigured) reads never attempts a synthesis pass', async () => {
+  const original = global.fetch;
+  global.fetch = stubAuthFetch();
+  try {
+    const mod = await import('../api/takeoffs.js');
+    const r = res();
+    const sheets = [
+      { index: 0, name: 'A-1.0', dataUrl: PNG_DATA_URL },
+      { index: 1, name: 'E-1.0', dataUrl: PNG_DATA_URL },
+    ];
+    await mod.default(authedReq({ action: 'reina_read', mode: 'all_sheets', sheets }), r);
+    assert.equal(r.statusCode, 200);
+    assert.equal(r.body.overview, null, 'stub reads carry nothing real to synthesize -- overview must stay null, not a fabricated summary');
+    assert.equal(r.body.overviewError, null);
+  } finally {
+    global.fetch = original;
+  }
+});
+
+test('reina_read: current_sheet mode never runs the multi-sheet synthesis pass', async () => {
+  const original = global.fetch;
+  global.fetch = stubAuthFetch();
+  try {
+    const mod = await import('../api/takeoffs.js');
+    const r = res();
+    await mod.default(authedReq({
+      action: 'reina_read',
+      mode: 'current_sheet',
+      sheets: [{ index: 0, name: 'A-1.0', dataUrl: PNG_DATA_URL }],
+    }), r);
+    assert.equal(r.statusCode, 200);
+    assert.equal(r.body.overview, null);
+  } finally {
+    global.fetch = original;
+  }
+});
+
 test('reina_read: a bad mode value falls back to current_sheet rather than silently processing everything', async () => {
   const original = global.fetch;
   global.fetch = stubAuthFetch();

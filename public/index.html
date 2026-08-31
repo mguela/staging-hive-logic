@@ -10929,7 +10929,7 @@ window.wbReinaRead=function(mode){
   })
   .then(function(d){
    if(!d||!d.ok)throw new Error((d&amp;&amp;d.error)||'Reina could not read this plan.');
-   wbReinaShowResults(useMode,d.results||[],d.configured);
+   wbReinaShowResults(useMode,d.results||[],d.configured,d.overview,d.overviewError);
   })
   .catch(function(e){hlToast('⚠ Reina read failed — '+e.message);})
   .then(function(){wbReinaSetBusy(useMode,false);});
@@ -11038,7 +11038,29 @@ function wbReinaSheetCardHtml(r){
   +wbReinaSection('Issues &amp; warnings', issuesHtml)
   +'&lt;/div&gt;';
 }
-window.wbReinaShowResults=function(mode,results,configured){
+function wbReinaOverviewHtml(overview,overviewError){
+ if(overviewError&amp;&amp;!overview){
+  return '&lt;div style=&quot;border:1px solid var(--amber);background:var(--amber-bg);border-radius:11px;padding:12px;margin-bottom:12px&quot;&gt;&lt;b style=&quot;font-size:12px;color:var(--amber)&quot;&gt;⚠ Overall summary unavailable&lt;/b&gt;&lt;div style=&quot;font-size:10.5px;color:var(--rail);margin-top:4px&quot;&gt;'+rlvToxEsc(overviewError)+' — per-sheet results below are still real.&lt;/div&gt;&lt;/div&gt;';
+ }
+ if(!overview)return '';
+ if(overview.needsAiConnection)return '';
+ var trades=(overview.tradesInvolved&amp;&amp;overview.tradesInvolved.length)?wbReinaChips(overview.tradesInvolved):'';
+ var candidatesHtml=(overview.rolledUpTakeoffCandidates||[]).map(function(c){return wbReinaCandidateRow(c);}).join('');
+ var conflictsHtml=wbReinaListHtml(overview.conflicts,function(n){return rlvToxEsc(n);});
+ var missingHtml=wbReinaListHtml(overview.missingInfo,function(n){return rlvToxEsc(n);});
+ return '&lt;div style=&quot;border:2px solid var(--purple);background:var(--purple-bg);border-radius:13px;padding:14px;margin-bottom:14px&quot;&gt;'
+  +'&lt;div style=&quot;display:flex;align-items:center;gap:8px;margin-bottom:6px&quot;&gt;&lt;b style=&quot;font-size:13px;color:var(--rail)&quot;&gt;📋 Overall Plan Summary&lt;/b&gt;'
+  +(overview.projectType?'&lt;span style=&quot;font-family:var(--mono);font-size:8px;background:#fff;border-radius:99px;padding:2px 8px;text-transform:uppercase&quot;&gt;'+rlvToxEsc(overview.projectType)+'&lt;/span&gt;':'')
+  +(typeof overview.confidence==='number'?'&lt;span style=&quot;font-family:var(--mono);font-size:8px;color:var(--mut)&quot;&gt;'+Math.round(overview.confidence*100)+'% confidence&lt;/span&gt;':'')
+  +'&lt;/div&gt;'
+  +(overview.overallSummary?'&lt;div style=&quot;font-size:11.5px;color:var(--rail);line-height:1.5;margin-bottom:8px&quot;&gt;'+rlvToxEsc(overview.overallSummary)+'&lt;/div&gt;':'')
+  +(trades?wbReinaSection('Trades involved',trades):'')
+  +wbReinaSection('Rolled-up takeoff candidates — suggestions only, never saved automatically',candidatesHtml)
+  +wbReinaSection('Conflicts between sheets',conflictsHtml)
+  +wbReinaSection('What this sheet set does not answer',missingHtml)
+  +'&lt;/div&gt;';
+}
+window.wbReinaShowResults=function(mode,results,configured,overview,overviewError){
  WBREINA_CANDIDATES=[];
  var okCount=results.filter(function(r){return r.ok;}).length;
  var failCount=results.length-okCount;
@@ -11046,7 +11068,8 @@ window.wbReinaShowResults=function(mode,results,configured){
   ?('&lt;b&gt;'+results.length+' sheet'+(results.length===1?'':'s')+' analyzed&lt;/b&gt;'+(failCount?' — '+okCount+' of '+results.length+' sheets read successfully; '+failCount+' could not be processed.':''))
   :'&lt;b&gt;Scope:&lt;/b&gt; Current sheet';
  var connWarn=(configured===false)?'&lt;div style=&quot;background:var(--amber-bg);color:var(--amber);border-radius:9px;padding:9px 12px;font-size:10.5px;font-weight:700;margin-bottom:10px&quot;&gt;⚠ Reina is not connected in this environment (no ANTHROPIC_API_KEY configured) — the read below is a placeholder, not a real plan read.&lt;/div&gt;':'';
- var body=connWarn+'&lt;div style=&quot;font-size:11.5px;color:var(--rail);margin-bottom:10px&quot;&gt;'+scopeLine+'&lt;/div&gt;'+results.map(function(r){return wbReinaSheetCardHtml(r);}).join('');
+ var overviewHtml=(mode==='all_sheets')?wbReinaOverviewHtml(overview,overviewError):'';
+ var body=connWarn+overviewHtml+'&lt;div style=&quot;font-size:11.5px;color:var(--rail);margin-bottom:10px&quot;&gt;'+scopeLine+'&lt;/div&gt;'+results.map(function(r){return wbReinaSheetCardHtml(r);}).join('');
  var title=mode==='all_sheets'?'🔮 Reina Plan Analysis':'🔮 Reina Analysis';
  wbReinaModal(title, body);
 };

@@ -12,7 +12,7 @@
 // anywhere in this codebase) -- sb() wrapper copied from api/fieldops.js.
 import { supabaseRequest } from './_lib/jobber.js';
 import { requireUser } from './_lib/auth.js';
-import { readPlanSheetsWithReina, reinaPlanReadConfigured } from './_lib/reina-plan-read.js';
+import { readPlanSheetsWithReina, reinaPlanReadConfigured, synthesizePlanSetWithReina } from './_lib/reina-plan-read.js';
 
 async function sb(path, options) {
   const res = await supabaseRequest(path, options);
@@ -138,12 +138,32 @@ export default async function handler(req, res) {
         }
 
         const results = await readPlanSheetsWithReina(parsed, { concurrency: 3 });
+
+        // Reading each sheet independently answers "what is on this sheet" --
+        // it never ties them into "what is this project". For a real
+        // multi-sheet batch, run one more (text-only, no re-reading of images)
+        // pass over the already-extracted JSON to synthesize that. Skipped for
+        // a single sheet (nothing to tie together) and for stub/unreadable
+        // reads (nothing real to synthesize across).
+        let overview = null;
+        let overviewError = null;
+        const readable = results.filter((r) => r.ok && r.analysis && !r.analysis.needsAiConnection && r.analysis.drawingType !== 'unreadable');
+        if (mode === 'all_sheets' && readable.length >= 2) {
+          try {
+            overview = await synthesizePlanSetWithReina(readable.map((r) => ({ name: r.name, analysis: r.analysis })));
+          } catch (e) {
+            overviewError = e.message || 'Reina could not synthesize an overall summary for this plan set.';
+          }
+        }
+
         return res.status(200).json({
           ok: true,
           mode,
           quoteId: body.quote_id || null,
           configured: reinaPlanReadConfigured(),
           results,
+          overview,
+          overviewError,
         });
       }
 

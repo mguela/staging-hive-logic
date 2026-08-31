@@ -134,3 +134,56 @@ export async function readPlanSheetsWithReina(sheets, { concurrency = 3 } = {}) 
   await Promise.all(workers);
   return results;
 }
+
+// "READ ALL SHEETS" reading N sheets independently answers "what is on each
+// sheet" but never "what is this project" -- nothing ties the sheets
+// together into one scope of work. This is the tying-together step: a
+// single TEXT-ONLY call (no images -- the per-sheet reads already extracted
+// everything visible; this only synthesizes across their JSON, so it cannot
+// see anything the sheet reads didn't already report) over the successful
+// per-sheet reads.
+//
+// sheetSummaries: [{ name, analysis }] -- pass only sheets that actually read
+// (skip failures and needsAiConnection/unreadable stubs; synthesizing across
+// those would just be summarizing "nothing was read").
+const SYNTHESIS_PROMPT_PREFIX =
+  'Act as the HiveLogic construction takeoff reader (Reina). Below is JSON you ALREADY extracted from each sheet of one contractor\'s plan set, sheet by sheet. ' +
+  'Synthesize an overall understanding of THIS PROJECT from that JSON alone -- do not invent anything that is not already present in it, and do not re-read or assume anything about the original images. ' +
+  'Return ONLY JSON with: overallSummary (2-4 sentences describing the project and how the sheets relate to each other), ' +
+  'projectType (short phrase, e.g. "kitchen remodel", or null if unclear from the sheets), ' +
+  'tradesInvolved (array of trade codes from GEN/CARP/ELEC/PLUMB/TILE/PAINT/VENDOR actually implied by the sheets), ' +
+  'rolledUpTakeoffCandidates (array of {name, type, unit, trade, estimatedQty, confidence, notes, sourceSheets} -- merge/sum matching items that appear on more than one sheet, e.g. the same fixture shown on both a floor plan and an electrical sheet, and list which sheet names each came from in sourceSheets; keep distinct items separate), ' +
+  'conflicts (array of short strings describing anything that disagrees between sheets, e.g. a room labeled differently on two sheets, or a quantity that does not reconcile), ' +
+  'missingInfo (array of short strings describing what this sheet set does not answer, e.g. no sheet shows the roof or site work), ' +
+  'confidence (0-1 overall). ' +
+  'Never claim a trade, quantity, or relationship that is not actually supported by the per-sheet JSON below.\n\nSHEETS:\n';
+
+const SYNTHESIS_MAX_TOKENS = 3000;
+
+export async function synthesizePlanSetWithReina(sheetSummaries) {
+  const list = Array.isArray(sheetSummaries) ? sheetSummaries : [];
+  if (list.length < 2) {
+    throw new Error('synthesizePlanSetWithReina needs at least 2 successfully-read sheets to synthesize across.');
+  }
+  if (!anthropic) {
+    return {
+      overallSummary: null, projectType: null, tradesInvolved: [], rolledUpTakeoffCandidates: [],
+      conflicts: [], missingInfo: [], confidence: 0,
+      warnings: ['ANTHROPIC_API_KEY is not configured for this deployment -- no synthesis was actually run.'],
+      needsAiConnection: true,
+    };
+  }
+
+  const payload = list.map((s) => ({ sheetName: s.name, analysis: s.analysis }));
+  const response = await anthropic.messages.create({
+    model: MODEL,
+    max_tokens: SYNTHESIS_MAX_TOKENS,
+    messages: [{ role: 'user', content: SYNTHESIS_PROMPT_PREFIX + JSON.stringify(payload) }],
+  });
+
+  const textBlock = (response.content || []).find((part) => part.type === 'text');
+  if (!textBlock || !textBlock.text) {
+    throw new Error('Reina\'s plan-set synthesis returned no readable content.');
+  }
+  return extractJson(textBlock.text);
+}

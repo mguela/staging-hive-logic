@@ -16,6 +16,7 @@ import {
   reinaPlanReadConfigured,
   scanPlanSheetWithReina,
   readPlanSheetsWithReina,
+  synthesizePlanSetWithReina,
   extractJson,
 } from '../api/_lib/reina-plan-read.js';
 
@@ -98,4 +99,24 @@ test('readPlanSheetsWithReina() isolates a per-sheet failure -- one bad sheet do
 test('readPlanSheetsWithReina() with an empty list returns an empty result set without throwing', async () => {
   const results = await readPlanSheetsWithReina([]);
   assert.deepEqual(results, []);
+});
+
+// --- synthesizePlanSetWithReina() -- the cross-sheet "overall project" pass -
+
+test('synthesizePlanSetWithReina() requires at least 2 sheets -- there is nothing to tie together otherwise', async () => {
+  await assert.rejects(() => synthesizePlanSetWithReina([]), /at least 2/);
+  await assert.rejects(() => synthesizePlanSetWithReina([{ name: 'A-1.0', analysis: {} }]), /at least 2/);
+});
+
+test('without a configured API key, synthesizePlanSetWithReina() returns an honest stub -- never fabricates a project summary', async () => {
+  const overview = await synthesizePlanSetWithReina([
+    { name: 'A-1.0', analysis: { drawingType: 'floor_plan' } },
+    { name: 'E-1.0', analysis: { drawingType: 'electrical' } },
+  ]);
+  assert.equal(overview.needsAiConnection, true);
+  assert.equal(overview.overallSummary, null);
+  assert.deepEqual(overview.tradesInvolved, []);
+  assert.deepEqual(overview.rolledUpTakeoffCandidates, []);
+  assert.equal(overview.confidence, 0);
+  assert.ok(/ANTHROPIC_API_KEY is not configured/.test(overview.warnings[0]));
 });

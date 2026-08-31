@@ -40,6 +40,15 @@ const FAKE_ANALYSIS = {
   issues: [], confidence: 0.8, warnings: [],
 };
 
+const FAKE_OVERVIEW = {
+  overallSummary: 'Kitchen remodel with new electrical rough-in across two sheets.',
+  projectType: 'Kitchen remodel', tradesInvolved: ['ELEC', 'CARP'],
+  rolledUpTakeoffCandidates: [{ name: 'Rolled-up recessed cans', type: 'count', unit: 'EA', trade: 'ELEC', estimatedQty: 8, confidence: 0.75, notes: 'from both sheets', sourceSheets: ['A-1.0', 'E-1.0'] }],
+  conflicts: ['Room labeled differently between sheets'],
+  missingInfo: ['No plumbing sheet in this set'],
+  confidence: 0.7,
+};
+
 // This fake backend's whole state: what a real /api/takeoffs?action=reina_read
 // call would have received, so tests can assert on the real request shape.
 let lastReinaRequest = null;
@@ -64,7 +73,9 @@ function stubApi(on) {
           lastReinaRequest = body;
           reinaRequestCount += 1;
           const results = body.sheets.map((s) => ({ index: s.index, name: s.name, ok: true, analysis: FAKE_ANALYSIS }));
-          return route.fulfill({ body: JSON.stringify({ ok: true, mode: body.mode, quoteId: body.quote_id, configured: true, results }), contentType: 'application/json' });
+          // Mirrors the real route: only all_sheets mode over 2+ readable sheets gets a synthesis pass.
+          const overview = (body.mode === 'all_sheets' && results.length >= 2) ? FAKE_OVERVIEW : null;
+          return route.fulfill({ body: JSON.stringify({ ok: true, mode: body.mode, quoteId: body.quote_id, configured: true, results, overview, overviewError: null }), contentType: 'application/json' });
         }
         return route.fulfill({ body: JSON.stringify({ ok: true }), contentType: 'application/json' });
       }
@@ -158,6 +169,51 @@ test('READ ALL SHEETS sends every loaded sheet, retaining sheet identity', { ski
   assert.match(modalText, /Reina Plan Analysis/);
   assert.match(modalText, new RegExp(`${sheetCount} sheets? analyzed`));
 
+  await frame.evaluate(() => { var m = document.getElementById('wbreinamodal'); if (m) m.remove(); });
+});
+
+test('READ ALL SHEETS shows a cross-sheet Overall Plan Summary, not just N independent per-sheet reads', { skip }, async () => {
+  // The stubbed backend only returns an overview for 2+ readable sheets --
+  // same rule as the real route (nothing to synthesize across just one). The
+  // sample plan starts with a single seeded sheet, so add a second one
+  // directly (reusing the sample canvas -- only its presence matters for
+  // rlvToxSheetImageDataURL(), not its pixels).
+  await frame.evaluate(() => {
+    var s0 = window.WB.sheets[0];
+    window.WB.sheets.push({ name: 'E-1.0 SAMPLE', img: s0.img, w: s0.w, h: s0.h, ftpx: 0, cal: false, ppi: null });
+  });
+  // Defensive: a prior failing test in this file could have left the modal
+  // open, which would intercept this click for the full actionability timeout.
+  await frame.evaluate(() => { var m = document.getElementById('wbreinamodal'); if (m) m.remove(); });
+
+  await frame.locator('#wbreinabtn2').click();
+  await frame.waitForFunction(`!!document.getElementById('wbreinamodal')`, null, { timeout: 5000 });
+
+  const modalText = await frame.locator('#wbreinamodal').innerText();
+  assert.match(modalText, /Overall Plan Summary/);
+  assert.match(modalText, /Kitchen remodel with new electrical rough-in/);
+  assert.match(modalText, /Rolled-up recessed cans/, 'the rolled-up (cross-sheet) candidate must render, not just each sheet\'s own candidates');
+  assert.match(modalText, /Room labeled differently between sheets/, 'a cross-sheet conflict must surface, not be silently dropped');
+  assert.match(modalText, /No plumbing sheet in this set/);
+
+  // The rolled-up candidate must be addable through the same mechanism as a
+  // per-sheet candidate -- one more real condition, still no marks touched.
+  const before = await frame.evaluate(() => ({ condCount: window.WBCONDS.length, markCount: window.WB.marks.length }));
+  await frame.locator('#wbreinamodal button:has-text("ADD TO TAKEOFF")').first().click();
+  const after = await frame.evaluate(() => ({ condCount: window.WBCONDS.length, markCount: window.WB.marks.length, names: window.WBCONDS.map((c) => c.name) }));
+  assert.equal(after.condCount, before.condCount + 1);
+  assert.ok(after.names.includes('Rolled-up recessed cans'));
+  assert.equal(after.markCount, before.markCount);
+
+  await frame.evaluate(() => { var m = document.getElementById('wbreinamodal'); if (m) m.remove(); });
+});
+
+test('REINA READS SHEET (single sheet) never shows a cross-sheet Overall Plan Summary -- there is nothing to synthesize', { skip }, async () => {
+  await frame.evaluate(() => { var m = document.getElementById('wbreinamodal'); if (m) m.remove(); });
+  await frame.locator('#wbreinabtn1').click();
+  await frame.waitForFunction(`!!document.getElementById('wbreinamodal')`, null, { timeout: 5000 });
+  const modalText = await frame.locator('#wbreinamodal').innerText();
+  assert.doesNotMatch(modalText, /Overall Plan Summary/);
   await frame.evaluate(() => { var m = document.getElementById('wbreinamodal'); if (m) m.remove(); });
 });
 
