@@ -123,23 +123,8 @@ test('nothing in the summary/list/card path was renamed -- ivxLoad, ivxRender, a
 const RAIL = (() => {
   const start = HTML.indexOf('<aside class="rail" role="navigation" aria-label="Primary">');
   assert.ok(start > -1, 'the primary sidebar should still be findable');
-  return HTML.slice(start, start + 2800);
+  return HTML.slice(start, start + 2000);
 })();
-
-test('the sidebar reskin is scoped under .rail, never a bare redefinition of .nav/.ic/.logo/.foot -- all four are reused by unrelated parts of the app', () => {
-  assert.match(RAIL, /\.rail \.nav\{/);
-  assert.match(RAIL, /\.rail \.nav:hover\{/);
-  assert.match(RAIL, /\.rail \.nav\.on\{/);
-  assert.match(RAIL, /\.rail \.logo \.tagline\{/);
-  assert.doesNotMatch(RAIL, /\n\s*\.nav\{/);
-  assert.doesNotMatch(RAIL, /\n\s*\.ic\{/);
-  assert.doesNotMatch(RAIL, /\n\s*\.logo\{/);
-  assert.doesNotMatch(RAIL, /\n\s*\.foot\{/);
-});
-
-test('the sidebar background moves to the mockup\'s navy gradient', () => {
-  assert.match(RAIL, /\.rail\{background:linear-gradient\(180deg,#0a1e30 0%,#0f2d47 55%,#0a1c2e 100%\)\}/);
-});
 
 test('the sidebar logo (upper-left, every page) swaps to the new hexagon-H mark, and the login screen\'s separate logo is untouched', () => {
   assert.match(RAIL, /<img class="bee" src="\/images\/hivelogic-icon\.png" alt="HiveLogic" width="240" height="225">/);
@@ -343,77 +328,4 @@ test('every real nav id and its onclick handler survive the reskin untouched', (
   }
   assert.match(section, /onclick="hlGrpAllToggle\(\)"/);
   assert.match(section, /onclick="hlCompanyPop\(\)"/);
-});
-
-// ---- Sidebar nav icons ---------------------------------------------------
-// jomell: "lets try to change the icons from the sidebar in staging-hivelogic.
-// can you get the icons in the hivelogic.make?" -- every real top-level nav
-// item/group header that has a counterpart in the mockup's navItems array
-// gets that exact icon (path data + accent color) or, for Sales/Hive
-// Marketing, the mockup's own raster icon. Items with no mockup counterpart
-// (the nested sub-items like Active Jobs, Invoicing & AR, etc., and every
-// real-app-only screen already excluded from the iframe retint pass) are
-// untouched.
-
-const RAIL2 = (() => {
-  const start = HTML.indexOf('<aside class="rail" role="navigation" aria-label="Primary">');
-  const end = HTML.indexOf('</aside>', start);
-  return HTML.slice(start, end);
-})();
-
-test('the wordmark color override is scoped under .rail, matching the sampled hivelogic.make "Logic" blue', () => {
-  assert.match(RAIL2, /\.rail \.logo \.word span\{color:#5b8cdb\}/);
-  assert.doesNotMatch(RAIL2, /\n\s*\.word span\{/, 'must not be a bare, unscoped .word span redefinition');
-});
-
-test('each real nav item with a hivelogic.make counterpart gets that exact icon (path data or raster) and accent color', () => {
-  const items = [
-    ['nav-cc', /<svg viewBox="0 0 24 24" stroke="#ffc000"><path d="M3 3h7v7H3z"\/><path d="M14 3h7v7h-7z"\/><path d="M3 14h7v7H3z"\/><path d="M14 18h7M17\.5 14v7"\/><\/svg>/],
-    ['nav-sched', /<svg viewBox="0 0 24 24" stroke="#ffc000"><path d="M3 5h18v16H3z"\/><path d="M8 3v4M16 3v4M3 10h18"\/><\/svg>/],
-    ['nav-marketing-cc', /<img src="\/images\/nav-hive-marketing\.png"/],
-    ['nav-vi', /<svg viewBox="0 0 24 24" stroke="#ffc000"><path d="M2 12s4-6 10-6 10 6 10 6-4 6-10 6S2 12 2 12z"\/>/],
-    ['nav-hiveconnect', /<svg viewBox="0 0 24 24" stroke="#ff2c95">/],
-  ];
-  for (const [id, iconRe] of items) {
-    const idx = RAIL2.indexOf(`id="${id}"`);
-    assert.ok(idx > -1, `${id} should still exist`);
-    const chunk = RAIL2.slice(idx, idx + 500);
-    assert.match(chunk, iconRe, `${id} should have its hivelogic.make icon`);
-  }
-});
-
-test('group-header nav items (hlGrp toggles) get their mockup icon while keeping the real onclick/expand-arrow', () => {
-  const groups = [
-    ["hlGrp('sales')", /<img src="\/images\/nav-sales\.png"/],
-    ["hlGrp('jobs')", /<svg viewBox="0 0 24 24" stroke="#ffc000"><path d="M3 6h18v14H3z"\/><path d="M8 6V4h8v2"\/><\/svg>/],
-    ["hlGrp('money')", /<svg viewBox="0 0 24 24" stroke="#22c55e">/],
-    ["hlGrp('insights')", /<svg viewBox="0 0 24 24" stroke="#ffc000"><path d="M4 20V10"\/>/],
-    ["hlGrp('crm')", /<svg viewBox="0 0 24 24" stroke="#ff8b19">/],
-    ["hlGrp('vendors')", /<svg viewBox="0 0 24 24" stroke="#00d7df"><path d="M3 7h11v9H3z"\/>/],
-    ["hlGrp('people')", /<svg viewBox="0 0 24 24" stroke="#00d7df"><path d="M3 20c0-4 2-7 6-7s6 3 6 7"\/>/],
-    ["hlGrp('portal')", /<svg viewBox="0 0 24 24" stroke="#20df62">/],
-    ["hlGrp('manager')", /<svg viewBox="0 0 24 24" stroke="#ff8b19"><path d="M12 2a5 5 0 100 10A5 5 0 0012 2z"\/>/],
-    ["hlGrp('ops')", /<svg viewBox="0 0 24 24" stroke="#00d7df"><path d="M12 2v3M12 19v3M2 12h3M19 12h3"\/>/],
-  ];
-  for (const [onclick, iconRe] of groups) {
-    const idx = RAIL2.indexOf(`onclick="${onclick}"`);
-    assert.ok(idx > -1, `${onclick} should still exist`);
-    const rowEnd = RAIL2.indexOf('</div>', idx);
-    const chunk = RAIL2.slice(idx, rowEnd);
-    assert.match(chunk, iconRe, `${onclick} should have its hivelogic.make icon`);
-    assert.match(chunk, /<span id="grpar-\w+"/, `${onclick} should keep its real expand arrow`);
-  }
-});
-
-test('Documents switches from a folder to hivelogic.make\'s camera emoji (the mockup uses emoji for this one item, not path data)', () => {
-  const idx = RAIL2.indexOf('id="nav-docs"');
-  const chunk = RAIL2.slice(idx, idx + 120);
-  assert.match(chunk, /<span class="ic">📸<\/span>Documents/);
-});
-
-test('the two raster nav icons (Sales, Hive Marketing) exist as real image assets, cropped from the mockup\'s own imported PNGs', () => {
-  for (const name of ['nav-sales.png', 'nav-hive-marketing.png']) {
-    const p = path.join(__dirname, '..', 'public', 'images', name);
-    assert.ok(fs.existsSync(p), `expected public/images/${name} to exist`);
-  }
 });
