@@ -1,27 +1,17 @@
-// The quick-access group lives INLINE in the topbar now, horizontally.
+// The quick-access rail belongs on the RIGHT EDGE, vertically.
 //
-// History: a02740e ("feat(nav): move quick-access rail buttons to the
-// topbar, except Reina") first tried this move and wrapped onto two lines
-// at normal desktop widths -- Chris found it live, and the rail was moved
-// back to a fixed right-edge column, with this file added to guard the
-// vertical layout so a future move couldn't regress it invisibly again.
+// a02740e ("feat(nav): move quick-access rail buttons to the topbar, except
+// Reina") relocated all twelve of them into the topbar icon row. On a real
+// screen they wrapped onto two lines at the top of the page. Chris found it in
+// the live app, not in a test -- nothing in the suite asserted WHERE the rail
+// rendered, only that its handlers existed, so the move was invisible to CI.
 //
-// jomell, 2026-08-27: asked for the exact move a02740e made -- the icons
-// back in the top nav bar. This time the topbar's own wrap breakpoints
-// (public/index.html, ~line 317) were widened by the group's real measured
-// width (~500px) specifically so it holds one row at normal desktop widths
-// instead of overflowing the viewport (confirmed manually: at 1500px wide
-// the unwidened breakpoints let the topbar overflow ~300px past the
-// viewport edge with the avatar pushed off-screen entirely -- worse than
-// the original two-line wrap bug, not better). This file now guards THAT:
-// one row and no horizontal page overflow at a normal desktop width, a
-// clean wrap (not an overflow) at a narrower one, and no leftover
-// right-edge rail.
-//
-// Every assertion here is a measurement from a real browser layout.
-// Source-level checks cannot see any of this -- the same lesson the
-// map-refresh button taught, where twelve passing assertions described a
-// button wired to a dead map.
+// That is the gap this file closes. Every assertion here is a measurement from
+// a real browser layout: which side of the viewport the rail sits on, that it
+// stacks vertically rather than wrapping, and that hovering one tab expands
+// that tab alone without shoving its siblings. Source-level checks cannot see
+// any of it -- the same lesson the map-refresh button taught, where twelve
+// passing assertions described a button wired to a dead map.
 
 import test, { before, after } from 'node:test';
 import assert from 'node:assert';
@@ -37,7 +27,7 @@ const OPTS = reason ? { skip: reason } : {};
 const pw = reason ? null : findPlaywright();
 const chromiumPath = reason ? null : findChromium();
 
-let server; let browser;
+let server; let page; let browser;
 
 before(async () => {
   if (reason) return;
@@ -45,6 +35,16 @@ before(async () => {
   browser = await pw.chromium.launch({
     executablePath: chromiumPath, args: ['--no-sandbox', '--disable-gpu'],
   });
+  page = await browser.newPage({ viewport: { width: 1500, height: 1000 } });
+  // Seal the network. A blocked external request HANGS rather than failing,
+  // which would stall load and make every measurement below a confident lie.
+  await page.route((u) => u.hostname !== '127.0.0.1' && u.protocol.startsWith('http'), (r) => r.abort());
+  await page.goto(`${server.url}/index.html`, { waitUntil: 'domcontentloaded', timeout: 30000 });
+  // The rail is display:none until the app marks the body signed-in; this
+  // harness has no login, so stand in for it rather than skipping the check.
+  await page.evaluate(() => document.body.classList.add('hl-authed'));
+  await page.waitForSelector('.rolodex .rolo', { timeout: 10000 });
+  await page.waitForTimeout(400);
 });
 
 after(async () => {
@@ -52,143 +52,85 @@ after(async () => {
   if (server) await server.close();
 });
 
-async function openAt(width, height) {
-  const page = await browser.newPage({ viewport: { width, height } });
-  await page.route((u) => u.hostname !== '127.0.0.1' && u.protocol.startsWith('http'), (r) => r.abort());
-  await page.goto(`${server.url}/index.html`, { waitUntil: 'domcontentloaded', timeout: 30000 });
-  // The group is display:none until the app marks the body signed-in; this
-  // harness has no login, so stand in for it rather than skipping the check.
-  await page.evaluate(() => document.body.classList.add('hl-authed'));
-  await page.waitForSelector('.rolodex .rolo', { timeout: 10000 });
-  await page.waitForTimeout(400);
-  return page;
-}
+test('the rail is docked to the right edge, not the top', OPTS, async () => {
+  const m = await page.evaluate(() => {
+    const el = document.querySelector('.rolodex');
+    const r = el.getBoundingClientRect();
+    return {
+      right: r.right, left: r.left, top: r.top, height: r.height, width: r.width,
+      vw: window.innerWidth, vh: window.innerHeight,
+      position: getComputedStyle(el).position,
+      direction: getComputedStyle(el).flexDirection,
+      display: getComputedStyle(el).display,
+    };
+  });
 
-test('the group lives inside the topbar, not a fixed right-edge rail', OPTS, async () => {
-  const page = await openAt(1920, 1080);
-  try {
-    const m = await page.evaluate(() => {
-      const el = document.querySelector('.rolodex');
-      return {
-        parentClass: el.parentElement.className,
-        position: getComputedStyle(el).position,
-      };
-    });
-    assert.equal(m.parentClass, 'topbar', 'the group must be a child of .topbar');
-    assert.notEqual(m.position, 'fixed', 'it is inline content now, not a docked overlay');
-  } finally { await page.close(); }
+  assert.equal(m.display, 'flex', 'the rail must be visible once signed in');
+  assert.equal(m.position, 'fixed', 'it is a docked rail, not something that scrolls away');
+  assert.equal(m.direction, 'column', 'a column, not a wrapped row across the top');
+
+  // The measurement that would have caught a02740e.
+  assert.ok(m.right >= m.vw - 2,
+    `the rail must touch the RIGHT edge; its right edge is at ${m.right} of ${m.vw}`);
+  assert.ok(m.left > m.vw * 0.75,
+    `the rail must live in the right quarter of the screen, not at the top; left=${m.left}`);
+  assert.ok(m.top > 40,
+    `the rail must not be pinned to the top of the page; top=${m.top}`);
 });
 
-test('all twelve tabs are present, and none are duplicated outside the group', OPTS, async () => {
-  // jomell, 2026-08-27: "let's keep the Reina button on the side" -- Reina
-  // is deliberately NOT one of these twelve (Phone through Monitor); its
-  // own #rnaFab launcher is checked separately below.
-  const page = await openAt(1920, 1080);
-  try {
-    const counts = await page.evaluate(() => ({
-      total: document.querySelectorAll('.rolo').length,
-      inGroup: document.querySelectorAll('.rolodex .rolo').length,
-      monitorIds: document.querySelectorAll('#rolo-mon').length,
+test('all thirteen tabs are in the rail, stacked in one column', OPTS, async () => {
+  const tabs = await page.evaluate(() => [...document.querySelectorAll('.rolodex .rolo')]
+    .map((t) => {
+      const r = t.getBoundingClientRect();
+      return { label: (t.querySelector('.rlabel') || {}).textContent || null, x: r.left, y: r.top };
     }));
-    assert.equal(counts.inGroup, 12, 'Phone through Monitor, Reina excluded');
-    assert.equal(counts.total, counts.inGroup, 'no .rolo button may live outside the group');
-    assert.equal(counts.monitorIds, 1, 'a duplicated #rolo-mon would break the live recording glow');
-  } finally { await page.close(); }
+
+  assert.equal(tabs.length, 13, 'Phone through Monitor, Reina included');
+
+  // One column means every tab shares an x and each sits below the last. A
+  // wrapped topbar row would break both.
+  const xs = new Set(tabs.map((t) => Math.round(t.x)));
+  assert.equal(xs.size, 1, `all tabs must share one x; found ${[...xs].join(', ')}`);
+  for (let i = 1; i < tabs.length; i += 1) {
+    assert.ok(tabs[i].y > tabs[i - 1].y,
+      `tab ${i} ("${tabs[i].label}") must sit below "${tabs[i - 1].label}"`);
+  }
 });
 
-test('Reina keeps its own floating launcher, outside the topbar group', OPTS, async () => {
-  const page = await openAt(1920, 1080);
-  try {
-    const m = await page.evaluate(() => {
-      const titles = [...document.querySelectorAll('.rolodex .rolo')].map((t) => t.getAttribute('title') || '');
-      const fab = document.getElementById('rnaFab');
-      return {
-        inGroup: titles.some((t) => /reina/i.test(t)),
-        fabExists: !!fab,
-        fabDisplay: fab ? getComputedStyle(fab).display : null,
-        fabPosition: fab ? getComputedStyle(fab).position : null,
-      };
-    });
-    assert.equal(m.inGroup, false, 'Reina must not be one of the topbar tabs');
-    assert.ok(m.fabExists, '#rnaFab must still exist');
-    assert.equal(m.fabDisplay, 'flex', 'the Reina launcher must be visible');
-    assert.equal(m.fabPosition, 'fixed', 'it stays a docked floating button, on the side');
-  } finally { await page.close(); }
+test('hovering one tab expands only that tab, and the stack does not drift', OPTS, async () => {
+  const before = await page.evaluate(() => [...document.querySelectorAll('.rolodex .rolo')]
+    .map((t) => { const r = t.getBoundingClientRect(); return { w: r.width, x: r.left, y: r.top }; }));
+
+  await page.hover('.rolodex .rolo:nth-child(3)');
+  await page.waitForTimeout(300); // the 170ms width/transform transition, plus slack
+
+  const after = await page.evaluate(() => [...document.querySelectorAll('.rolodex .rolo')]
+    .map((t) => { const r = t.getBoundingClientRect(); return { w: r.width, x: r.left, y: r.top }; }));
+
+  assert.ok(after[2].w > before[2].w + 40,
+    `the hovered tab must widen to show its label (${before[2].w} -> ${after[2].w})`);
+  assert.ok(after[2].x < before[2].x - 4,
+    'it must expand LEFTWARD, over the page, rather than pushing the edge');
+
+  // The bug the original rail was built to avoid: one tab expanding and
+  // dragging the whole stack sideways.
+  for (let i = 0; i < before.length; i += 1) {
+    if (i === 2) continue;
+    assert.ok(Math.abs(after[i].x - before[i].x) < 2,
+      `tab ${i} moved sideways when a sibling was hovered (${before[i].x} -> ${after[i].x})`);
+    assert.ok(Math.abs(after[i].y - before[i].y) < 2,
+      `tab ${i} moved vertically when a sibling was hovered`);
+  }
 });
 
-test('at a normal desktop width, the row does not wrap and does not overflow the viewport', OPTS, async () => {
-  // The regression this whole file exists to catch, in either of its two
-  // possible shapes: wrapping onto an ugly extra line, or -- what an
-  // unwidened breakpoint actually produced here -- silently overflowing the
-  // page horizontally with trailing icons (settings, help, the avatar)
-  // pushed off past the right edge entirely.
-  const page = await openAt(1920, 1080);
-  try {
-    const m = await page.evaluate(() => {
-      const rolo = document.querySelector('.rolodex');
-      const avatar = document.getElementById('hlavatar');
-      return {
-        flexWrap: getComputedStyle(rolo.parentElement).flexWrap,
-        docScrollWidth: document.documentElement.scrollWidth,
-        vw: window.innerWidth,
-        avatarRight: avatar ? avatar.getBoundingClientRect().right : null,
-      };
-    });
-    assert.equal(m.flexWrap, 'nowrap', 'the topbar must hold one row at a normal desktop width');
-    assert.ok(m.docScrollWidth <= m.vw + 4,
-      `the page must not scroll horizontally; scrollWidth=${m.docScrollWidth} vw=${m.vw}`);
-    assert.ok(m.avatarRight !== null && m.avatarRight <= m.vw,
-      `the avatar (last topbar icon) must stay on-screen; right=${m.avatarRight} vw=${m.vw}`);
-  } finally { await page.close(); }
-});
-
-test('at a narrower width, the topbar wraps cleanly rather than overflowing', OPTS, async () => {
-  const page = await openAt(1500, 1000);
-  try {
-    const m = await page.evaluate(() => {
-      const rolo = document.querySelector('.rolodex');
-      return {
-        flexWrap: getComputedStyle(rolo.parentElement).flexWrap,
-        docScrollWidth: document.documentElement.scrollWidth,
-        vw: window.innerWidth,
-      };
-    });
-    assert.equal(m.flexWrap, 'wrap', 'below the widened breakpoint the topbar must wrap, not overflow');
-    assert.ok(m.docScrollWidth <= m.vw + 4,
-      `wrapping must actually prevent horizontal overflow; scrollWidth=${m.docScrollWidth} vw=${m.vw}`);
-  } finally { await page.close(); }
-});
-
-test('every tab carries a real tooltip (no hover-expand mechanic in a horizontal row)', OPTS, async () => {
-  const page = await openAt(1920, 1080);
-  try {
-    const titles = await page.evaluate(() => [...document.querySelectorAll('.rolodex .rolo')].map((t) => t.getAttribute('title')));
-    assert.equal(titles.length, 12);
-    assert.ok(titles.every((t) => t && t.length > 0), 'every tab must have a non-empty title tooltip');
-  } finally { await page.close(); }
-});
-
-test('the Reina launcher survives a simulated host-dispose while still signed in, and correctly hides on a real sign-out', OPTS, async () => {
-  // jomell, 2026-08-27: "why does it disappear from time to time" --
-  // reina-pilot-host.js's hidePage() sets #rnaFab's inline style to
-  // display:none on every host dispose, including a brief unmount/remount
-  // pair the Supabase auth listener can fire spuriously while the person
-  // never actually signed out. public/index.html now pins a
-  // `body.hl-authed #rnaFab{display:flex!important}` rule specifically to
-  // outrank that inline style while genuinely signed in.
-  const page = await openAt(1920, 1080);
-  try {
-    const authed = await page.evaluate(() => {
-      const fab = document.getElementById('rnaFab');
-      fab.style.display = 'none'; // simulate hidePage() firing while still authed
-      return getComputedStyle(fab).display;
-    });
-    assert.equal(authed, 'flex', 'a transient host dispose must not visibly hide the launcher while signed in');
-
-    const signedOut = await page.evaluate(() => {
-      document.body.classList.remove('hl-authed');
-      return getComputedStyle(document.getElementById('rnaFab')).display;
-    });
-    assert.equal(signedOut, 'none', 'a real sign-out must still hide it');
-  } finally { await page.close(); }
+test('the topbar did not keep a second copy of the buttons', OPTS, async () => {
+  // a02740e put them in the topbar. A partial revert that left duplicates
+  // behind would still look wrong and would double every id.
+  const counts = await page.evaluate(() => ({
+    total: document.querySelectorAll('.rolo').length,
+    inRail: document.querySelectorAll('.rolodex .rolo').length,
+    monitorIds: document.querySelectorAll('#rolo-mon').length,
+  }));
+  assert.equal(counts.total, counts.inRail, 'no .rolo button may live outside the rail');
+  assert.equal(counts.monitorIds, 1, 'a duplicated #rolo-mon would break the live recording glow');
 });
