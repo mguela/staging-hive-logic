@@ -19,7 +19,7 @@
  * monitor_my_status poll, so "is this person running current code" is a
  * question the database can answer. Do not hand-edit it -- run
  * `node scripts/stamp-page-build.mjs`. */
-var HL_PAGE_BUILD = '9aeb17d06ca3d601';
+var HL_PAGE_BUILD = '070ae588a34bf9ef';
 </script>
 <script>
 (function () { // HL_FETCH_DEDUPE_V1 — single wrapper: GET /api/ dedupe + 60s cache + write-invalidate
@@ -8284,6 +8284,14 @@ function coAfter(d,okMsg){ if(d&&d.ok){ chirpToast('&#10003; '+okMsg); } else { 
       </div>
       <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
         <label style="display:inline-flex;align-items:center;gap:6px;font-family:var(--sans);font-size:12.5px;font-weight:700;color:#0f172a;cursor:pointer;user-select:none"><input id="ivx-group-toggle" type="checkbox" onchange="ivxToggleGroup(this.checked)" style="width:15px;height:15px;cursor:pointer">Group by client</label>
+        <label style="display:inline-flex;align-items:center;gap:6px;font-family:var(--sans);font-size:12.5px;font-weight:700;color:#0f172a">Per page
+          <select id="ivx-pagesize" onchange="ivxSetPageSize(this.value)" style="border:1.5px solid var(--line);border-radius:8px;padding:6px 8px;font-family:var(--sans);font-size:12.5px;font-weight:700;background:#fff;cursor:pointer">
+            <option value="10" selected>10</option>
+            <option value="15">15</option>
+            <option value="20">20</option>
+            <option value="50">50</option>
+          </select>
+        </label>
         <input id="ivx-search" type="search" placeholder="Search invoice #, client, or title&hellip;" oninput="ivxSearch(this.value)" style="border:1.5px solid var(--line);border-radius:9px;padding:8px 14px;font-family:var(--sans);font-size:13px;font-weight:600;min-width:240px;outline:none;background:#fff">
       </div>
     </div>
@@ -8291,20 +8299,45 @@ function coAfter(d,okMsg){ if(d&&d.ok){ chirpToast('&#10003; '+okMsg); } else { 
   </div>
 </div>
 <script>
-var IVX = { invoices: [], clientsById: {}, mode: 'open', query: '', groupByClient: false };
-function ivxToggleGroup(on){ IVX.groupByClient = !!on; ivxRender(); }
+var IVX = { invoices: [], clientsById: {}, mode: 'open', query: '', groupByClient: false, page: 0, pageSize: 10 };
+function ivxToggleGroup(on){ IVX.groupByClient = !!on; IVX.page=0; ivxRender(); }
+function ivxSetPageSize(n){ IVX.pageSize = parseInt(n,10)||10; IVX.page=0; ivxRender(); }
+function ivxGoToPage(p){ IVX.page = p; ivxRender(); }
+// Shared by the flat list and the grouped view (paginating rows or
+// groups, respectively) -- clamps the current page into range whenever
+// the underlying list shrinks (a search narrows results, a page size
+// changes) rather than landing on a blank "page 4 of 2".
+function ivxPaginate(list){
+  var total=list.length;
+  var pageCount=Math.max(1, Math.ceil(total/IVX.pageSize));
+  if(IVX.page>=pageCount) IVX.page=pageCount-1;
+  if(IVX.page<0) IVX.page=0;
+  var start=IVX.page*IVX.pageSize;
+  return { page: list.slice(start, start+IVX.pageSize), total: total, pageCount: pageCount, start: start };
+}
+function ivxPagerHtml(pg, itemLabel){
+  var rangeStart = pg.total ? pg.start+1 : 0;
+  var rangeEnd = Math.min(pg.start+IVX.pageSize, pg.total);
+  return '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-top:14px;font-size:12px;color:var(--mut)">'
+    +'<div>Showing '+rangeStart+' to '+rangeEnd+' of '+pg.total+' '+itemLabel+(pg.total===1?'':'s')+'</div>'
+    +'<div style="display:flex;align-items:center;gap:8px">'
+    +'<button type="button" onclick="ivxGoToPage('+(IVX.page-1)+')" '+(IVX.page<=0?'disabled':'')+' style="padding:6px 12px;border-radius:7px;border:1.5px solid var(--line);background:#fff;cursor:pointer;font-size:12px;font-weight:700;color:#0f172a">Previous</button>'
+    +'<span style="font-weight:700">Page '+(IVX.page+1)+' of '+pg.pageCount+'</span>'
+    +'<button type="button" onclick="ivxGoToPage('+(IVX.page+1)+')" '+(IVX.page>=pg.pageCount-1?'disabled':'')+' style="padding:6px 12px;border-radius:7px;border:1.5px solid var(--line);background:#fff;cursor:pointer;font-size:12px;font-weight:700;color:#0f172a">Next</button>'
+    +'</div></div>';
+}
 function ivxEsc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
 function ivxMoney(n){ n=+n||0; return '$'+n.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}); }
 function ivxFmtDate(s){ if(!s) return ''; var d=new Date(s); if(isNaN(d.getTime())) return String(s); return d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric',timeZone:'UTC'}); }
 function ivxInp(){ return 'border:1.5px solid var(--line);border-radius:9px;padding:10px 11px;font-family:var(--sans);font-size:12px;font-weight:700;width:100%;outline:none;background:#fff;box-sizing:border-box'; }
 function ivxBadge(s){ var m={paid:['#047857','#d1fae5'],past_due:['#b91c1c','#fee2e2'],awaiting_payment:['#b45309','#fef3c7'],draft:['#475569','#f1f5f9'],bad_debt:['#6b7280','#f3f4f6']}; var c=m[s]||['#475569','#f1f5f9']; return '<span style="background:'+c[1]+';color:'+c[0]+';font-weight:800;font-size:10px;padding:3px 9px;border-radius:99px;text-transform:uppercase;letter-spacing:.04em">'+ivxEsc((s||'draft').replace(/_/g,' '))+'</span>'; }
 function ivxEmpty(t,s){ return '<div style="border:1.5px dashed var(--line);border-radius:14px;padding:44px;text-align:center;background:#fff"><div style="font-family:var(--sans);font-weight:900;font-size:16px;color:#0f172a">'+ivxEsc(t)+'</div><div style="color:var(--mut);font-size:12px;font-weight:700;margin-top:6px">'+ivxEsc(s)+'</div></div>'; }
-function ivxSetMode(m){ IVX.mode=m; var o=document.getElementById('ivx-tab-open'), a=document.getElementById('ivx-tab-all'); if(o){ o.style.background=(m==='open'?'#fff':'transparent'); o.style.color=(m==='open'?'#0f172a':'var(--mut)'); o.style.boxShadow=(m==='open'?'0 1px 3px rgba(0,0,0,.08)':'none'); } if(a){ a.style.background=(m==='all'?'#fff':'transparent'); a.style.color=(m==='all'?'#0f172a':'var(--mut)'); a.style.boxShadow=(m==='all'?'0 1px 3px rgba(0,0,0,.08)':'none'); } ivxRender(); }
+function ivxSetMode(m){ IVX.mode=m; IVX.page=0; var o=document.getElementById('ivx-tab-open'), a=document.getElementById('ivx-tab-all'); if(o){ o.style.background=(m==='open'?'#fff':'transparent'); o.style.color=(m==='open'?'#0f172a':'var(--mut)'); o.style.boxShadow=(m==='open'?'0 1px 3px rgba(0,0,0,.08)':'none'); } if(a){ a.style.background=(m==='all'?'#fff':'transparent'); a.style.color=(m==='all'?'#0f172a':'var(--mut)'); a.style.boxShadow=(m==='all'?'0 1px 3px rgba(0,0,0,.08)':'none'); } ivxRender(); }
 // jomell, 2026-08-27: a way to find one invoice among hundreds -- by
 // number, client name, or title. Filters before the "All recent" 150-row
 // cap (not after), so a search still finds an older invoice that would
 // otherwise be cut off.
-function ivxSearch(v){ IVX.query=v||''; ivxRender(); }
+function ivxSearch(v){ IVX.query=v||''; IVX.page=0; ivxRender(); }
 function ivxMatchesQuery(i,q){
   q=String(q||'').trim().toLowerCase();
   if(!q) return true;
@@ -8360,9 +8393,10 @@ function ivxRender(){
   var html;
   if(IVX.groupByClient){ html=ivxRenderGrouped(rows, q); }
   else {
+    var pg=ivxPaginate(rows);
     html='<div style="display:flex;flex-direction:column;gap:10px">';
-    rows.forEach(function(i){ html+=ivxCard(i); });
-    html+='</div>';
+    pg.page.forEach(function(i){ html+=ivxCard(i); });
+    html+='</div>'+ivxPagerHtml(pg, 'invoice');
   }
   if(capped) html+='<div style="color:var(--mut);font-size:11px;font-weight:700;text-align:center;padding:14px">Showing the 150 most recent. Use search in Jobber for older invoices.</div>';
   el.innerHTML=html;
@@ -8392,9 +8426,14 @@ function ivxRenderGrouped(rows, q){
     if(b.balance!==a.balance) return b.balance-a.balance;
     return a.name.localeCompare(b.name);
   });
-  var openAll = !!q || groups.length<=8;
+  // Paginate CLIENTS here, not invoices -- IVX.pageSize means "how many
+  // [rows/clients] per page" for whichever view is showing; flattening
+  // across client groups to hit a row-count target would break the
+  // grouping itself.
+  var pg=ivxPaginate(groups);
+  var openAll = !!q || pg.page.length<=8;
   var html='<div style="display:flex;flex-direction:column;gap:10px">';
-  groups.forEach(function(g){
+  pg.page.forEach(function(g){
     html+='<details class="ivx-group"'+(openAll?' open':'')+' style="border:1px solid var(--line);border-radius:12px;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.05);overflow:hidden">'
       +'<summary style="padding:14px 18px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">'
       +'<span style="display:flex;align-items:center;gap:8px;font-family:var(--sans);font-weight:800;font-size:14px;color:#0f172a"><span class="chev">▾</span>'+ivxEsc(g.name)+'<span style="color:var(--mut);font-weight:600;font-size:12px">'+g.list.length+' invoice'+(g.list.length===1?'':'s')+'</span></span>'
@@ -8403,7 +8442,7 @@ function ivxRenderGrouped(rows, q){
       +'<div style="padding:0 14px 14px;display:flex;flex-direction:column;gap:10px">'+g.list.map(ivxCard).join('')+'</div>'
       +'</details>';
   });
-  html+='</div>';
+  html+='</div>'+ivxPagerHtml(pg, 'client');
   return html;
 }
 function ivxCard(i){

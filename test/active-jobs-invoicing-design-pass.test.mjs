@@ -114,7 +114,10 @@ test('nothing in the summary/list/card path was renamed -- ivxLoad, ivxRender, a
   const loadFn = extractFunction(HTML, 'function ivxLoad(){');
   assert.match(loadFn, /ivxRender\(\);/);
   const renderFn = extractFunction(HTML, 'function ivxRender(){');
-  assert.match(renderFn, /rows\.forEach\(function\(i\)\{ html\+=ivxCard\(i\); \}\);/);
+  // 2026-08-29: rows are paginated (ivxPaginate) before rendering -- the
+  // loop now walks pg.page (the current page's slice), not the full rows
+  // array directly, but it's still exactly one ivxCard(i) call per row.
+  assert.match(renderFn, /pg\.page\.forEach\(function\(i\)\{ html\+=ivxCard\(i\); \}\);/);
 });
 
 // ---- Sidebar -----------------------------------------------------------------

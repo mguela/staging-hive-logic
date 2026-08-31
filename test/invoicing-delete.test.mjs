@@ -131,7 +131,7 @@ test('a failed delete surfaces the real error', async () => {
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const source = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf-8');
 
-const startSnippet = "var IVX = { invoices: [], clientsById: {}, mode: 'open', query: '', groupByClient: false };";
+const startSnippet = "var IVX = { invoices: [], clientsById: {}, mode: 'open', query: '', groupByClient: false, page: 0, pageSize: 10 };";
 const start = source.indexOf(startSnippet);
 assert.notEqual(start, -1, 'invoicing script block not found in index.html');
 const end = source.indexOf('</script>', start);
