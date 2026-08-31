@@ -126,21 +126,6 @@ const RAIL = (() => {
   return HTML.slice(start, start + 2000);
 })();
 
-test('the sidebar reskin is scoped under .rail, never a bare redefinition of .nav/.ic/.logo/.foot -- all four are reused by unrelated parts of the app', () => {
-  assert.match(RAIL, /\.rail \.nav\{/);
-  assert.match(RAIL, /\.rail \.nav:hover\{/);
-  assert.match(RAIL, /\.rail \.nav\.on\{/);
-  assert.match(RAIL, /\.rail \.logo \.tagline\{/);
-  assert.doesNotMatch(RAIL, /\n\s*\.nav\{/);
-  assert.doesNotMatch(RAIL, /\n\s*\.ic\{/);
-  assert.doesNotMatch(RAIL, /\n\s*\.logo\{/);
-  assert.doesNotMatch(RAIL, /\n\s*\.foot\{/);
-});
-
-test('the sidebar background moves to the mockup\'s navy gradient', () => {
-  assert.match(RAIL, /\.rail\{background:linear-gradient\(180deg,#0a1e30 0%,#0f2d47 55%,#0a1c2e 100%\)\}/);
-});
-
 test('the sidebar logo (upper-left, every page) swaps to the new hexagon-H mark, and the login screen\'s separate logo is untouched', () => {
   assert.match(RAIL, /<img class="bee" src="\/images\/hivelogic-icon\.png" alt="HiveLogic" width="240" height="225">/);
   assert.doesNotMatch(RAIL, /<svg class="bee"/, 'the old hand-coded hexagon svg should be gone from the sidebar');

@@ -19,7 +19,7 @@
  * monitor_my_status poll, so "is this person running current code" is a
  * question the database can answer. Do not hand-edit it -- run
  * `node scripts/stamp-page-build.mjs`. */
-var HL_PAGE_BUILD = '9313844b83373ce0';
+var HL_PAGE_BUILD = '8e017803963fd4e6';
 </script>
 <script>
 (function () { // HL_FETCH_DEDUPE_V1 — single wrapper: GET /api/ dedupe + 60s cache + write-invalidate
@@ -2655,20 +2655,6 @@ button,.dowork,.startday,.back,.cdb-new,.nc-create,.fm-save,.gbtn,.iconbtn,.dw-a
   <div id="hl-mnav-backdrop" onclick="hlMobNavClose()"></div>
 
   <aside class="rail" role="navigation" aria-label="Primary">
-    <!-- 2026-08-26, jomell: "add the ui/ux design for the sidebar" --
-         design-language pass from the coworker's Figma Make redesign.
-         Scoped under .rail so it can never collide with anything outside
-         the sidebar (.foot/.logo/.ic/.nav are reused by unrelated parts of
-         the app -- .rail .foot is already this file's own convention for
-         that, right below). Every real id/onclick (showView, hlGrp,
-         hlGrpAllToggle, hlCompanyPop...) is untouched. -->
-    <style>
-      .rail{background:linear-gradient(180deg,#0a1e30 0%,#0f2d47 55%,#0a1c2e 100%)}
-      .rail .nav{border-radius:7px;font-weight:600}
-      .rail .nav:hover{background:rgba(255,255,255,.09)}
-      .rail .nav.on{background:linear-gradient(90deg,#35536d,#49647b);border:none;font-weight:700}
-      .rail .logo .tagline{color:rgba(180,210,225,.75)}
-    </style>
     <div class="logo">
       <!-- 2026-08-26, jomell: "lets also change the hivelogic logo on the
            upperleft" -- the coworker's new hexagon mark, cropped from their
