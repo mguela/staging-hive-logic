@@ -9534,6 +9534,11 @@ document.addEventListener('click',function(e){
   .wbtop{position:absolute;top:12px;right:12px;display:flex;gap:6px}
   .wbbtn{font-size:9px;font-weight:800;padding:8px 12px;border-radius:7px;border:1px solid var(--line);background:#fff;color:var(--rail);cursor:pointer;font-family:var(--sans);text-transform:uppercase;letter-spacing:.04em}
   .wbbtn.dark{background:var(--rail);color:#fff;border-color:var(--rail)}
+  .wbbtn.ai{background:#fff;color:var(--purple);border-color:var(--purple)}
+  .wbbtn.ai:hover{background:var(--purple-bg)}
+  .wbbtn.ai[disabled]{opacity:.45;cursor:not-allowed}
+  .wbbtn.ai.busy{background:var(--purple-bg);cursor:wait}
+  .wbtop{flex-wrap:wrap;max-width:calc(100% - 24px);justify-content:flex-end}
   .wbscale{position:absolute;bottom:12px;left:12px;font-family:var(--mono);font-size:8.5px;font-weight:800;border-radius:99px;padding:5px 11px}
   .wbscale.ok{background:var(--green-bg);color:var(--green)}
   .wbscale.no{background:var(--red-bg);color:var(--red)}
@@ -9606,11 +9611,14 @@ document.addEventListener('click',function(e){
     var RLV_TOX_QUOTE_ID='';
     var RLV_TOX_EXISTING=null;
     var sb = window.parent.sb;
-    function rlvToxFetch(url){
+    function rlvToxFetch(url,opts){
+      opts=opts||{};
       return sb.auth.getSession().then(function(s){
         var sess = s &amp;&amp; s.data &amp;&amp; s.data.session;
-        var headers = sess ? { 'Authorization': 'Bearer ' + sess.access_token } : {};
-        return fetch(url, { headers: headers });
+        var headers={};
+        if(opts.headers){ for(var k in opts.headers) headers[k]=opts.headers[k]; }
+        if(sess) headers['Authorization']='Bearer '+sess.access_token;
+        return fetch(url, { method: opts.method, headers: headers, body: opts.body });
       });
     }
     function rlvToxEsc(s){return String(s==null?'':s).replace(/[&amp;<>]/g,function(c){return {'&amp;':'&amp;amp;','<':'&amp;lt;','>':'&amp;gt;'}[c];});}
@@ -9750,6 +9758,8 @@ document.addEventListener('click',function(e){
           <button class=&quot;wbbtn&quot; onclick=&quot;document.getElementById('wbpdf').click()&quot;>⬆ PDF</button>
           <input type=&quot;file&quot; id=&quot;wbfile&quot; accept=&quot;image/*&quot; style=&quot;display:none&quot; onchange=&quot;wbLoadImage(this)&quot;>
           <input type=&quot;file&quot; id=&quot;wbpdf&quot; accept=&quot;application/pdf&quot; style=&quot;display:none&quot; onchange=&quot;wbLoadPDF(this)&quot;>
+          <button class=&quot;wbbtn ai&quot; id=&quot;wbreinabtn1&quot; onclick=&quot;wbReinaRead('current_sheet')&quot; title=&quot;Ask Reina to analyze only the currently displayed sheet.&quot; aria-label=&quot;Reina reads sheet&quot;>🧠 REINA READS SHEET</button>
+          <button class=&quot;wbbtn ai&quot; id=&quot;wbreinabtn2&quot; onclick=&quot;wbReinaRead('all_sheets')&quot; title=&quot;Ask Reina to analyze every sheet in this plan.&quot; aria-label=&quot;Read all sheets&quot;>🧠 READ ALL SHEETS</button>
         </div>
         <div class=&quot;wbscale ok&quot; id=&quot;wbscalechip&quot; style=&quot;cursor:pointer&quot; onclick=&quot;wbScaleMenu()&quot; title=&quot;Click to set scale&quot;>SCALE ✓</div>
         <div class=&quot;wbhint&quot; id=&quot;wbhint&quot;>V pan · C count · L linear · A area · D deduct · S scale · dbl-click closes · Esc cancels · Ctrl+Z undo</div>
@@ -10863,6 +10873,195 @@ window.wbLoadPDF=function(inp){
 
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',window.wbEnsure);
 else window.wbEnsure();
+
+/* ---------- Reina plan reading (REINA READS SHEET / READ ALL SHEETS) ---------- */
+var WBREINA_BUSY=false;
+var WBREINA_CANDIDATES=[];
+function wbReinaSync(){
+ var ready=!!(WB.sheets&amp;&amp;WB.sheets.length);
+ ['wbreinabtn1','wbreinabtn2'].forEach(function(id){
+  var b=document.getElementById(id); if(!b)return;
+  var dis=!ready||WBREINA_BUSY;
+  b.disabled=dis; b.setAttribute('aria-disabled',String(dis));
+ });
+}
+function wbReinaSheetPayload(i){
+ var s=WB.sheets[i]; if(!s)return null;
+ var dataUrl=rlvToxSheetImageDataURL(s);
+ if(!dataUrl)return null;
+ return {index:i,name:s.name||('Sheet '+(i+1)),dataUrl:dataUrl};
+}
+function wbReinaSetBusy(mode,busy,label){
+ WBREINA_BUSY=busy;
+ var id=mode==='all_sheets'?'wbreinabtn2':'wbreinabtn1';
+ var b=document.getElementById(id); if(!b){wbReinaSync();return;}
+ b.setAttribute('aria-busy',String(busy));
+ if(busy){
+  if(!b.dataset.label)b.dataset.label=b.textContent;
+  b.textContent=label||'Reading…'; b.classList.add('busy');
+ } else {
+  if(b.dataset.label)b.textContent=b.dataset.label;
+  b.classList.remove('busy');
+ }
+ wbReinaSync();
+}
+window.wbReinaRead=function(mode){
+ if(WBREINA_BUSY)return;
+ if(!WB.sheets||!WB.sheets.length){hlToast('No plan is loaded yet — upload a sheet first.');return;}
+ var payload,useMode;
+ if(mode==='all_sheets'){
+  useMode='all_sheets'; payload=[];
+  for(var i=0;i&lt;WB.sheets.length;i++){var p=wbReinaSheetPayload(i); if(p)payload.push(p);}
+  if(!payload.length){hlToast('No sheet images are loaded yet.');return;}
+ } else {
+  useMode='current_sheet';
+  if(!sheet()){hlToast('No active sheet selected.');return;}
+  var one=wbReinaSheetPayload(WB.cur);
+  if(!one){hlToast('This sheet has no image loaded yet — upload it or wait for it to finish loading.');return;}
+  payload=[one];
+ }
+ wbReinaSetBusy(useMode,true,useMode==='all_sheets'?('Reading All Sheets… ('+payload.length+')'):'Reading Sheet…');
+ var body={action:'reina_read',mode:useMode,quote_id:RLV_TOX_QUOTE_ID||null,sheets:payload};
+ rlvToxFetch('/api/takeoffs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
+  .then(function(r){
+   if(r.status===401)throw new Error('You are signed out — sign in again and retry.');
+   return r.json().catch(function(){throw new Error('Reina sent back an unreadable response.');});
+  })
+  .then(function(d){
+   if(!d||!d.ok)throw new Error((d&amp;&amp;d.error)||'Reina could not read this plan.');
+   wbReinaShowResults(useMode,d.results||[],d.configured);
+  })
+  .catch(function(e){hlToast('⚠ Reina read failed — '+e.message);})
+  .then(function(){wbReinaSetBusy(useMode,false);});
+};
+function wbReinaRetrySheet(i){
+ var one=wbReinaSheetPayload(i);
+ if(!one){hlToast('That sheet has no image loaded.');return;}
+ var card=document.getElementById('wbreina-sheet-'+i);
+ if(card)card.innerHTML='&lt;div style=&quot;font-size:11px;font-weight:700;color:var(--mut)&quot;&gt;⏳ Retrying '+rlvToxEsc(one.name)+'…&lt;/div&gt;';
+ var body={action:'reina_read',mode:'current_sheet',quote_id:RLV_TOX_QUOTE_ID||null,sheets:[one]};
+ rlvToxFetch('/api/takeoffs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
+  .then(function(r){return r.json();})
+  .then(function(d){
+   if(!d||!d.ok||!d.results||!d.results[0])throw new Error((d&amp;&amp;d.error)||'Retry failed.');
+   if(card)card.outerHTML=wbReinaSheetCardHtml(d.results[0]);
+  })
+  .catch(function(e){ if(card)card.innerHTML='&lt;div style=&quot;font-size:11px;font-weight:700;color:var(--red)&quot;&gt;⚠ Retry failed — '+rlvToxEsc(e.message)+'&lt;/div&gt;'; });
+}
+window.wbReinaRetrySheet=wbReinaRetrySheet;
+function wbReinaChips(arr){
+ if(!arr||!arr.length)return '&lt;span style=&quot;color:var(--mut);font-weight:600&quot;&gt;None detected&lt;/span&gt;';
+ return arr.map(function(x){return '&lt;span style=&quot;display:inline-block;background:#eef0f6;border-radius:99px;padding:3px 9px;margin:0 5px 5px 0;font-size:10px;font-weight:700;color:var(--rail)&quot;&gt;'+rlvToxEsc(x)+'&lt;/span&gt;';}).join('');
+}
+function wbReinaSection(title,html){
+ if(!html)return '';
+ return '&lt;div style=&quot;margin-top:10px&quot;&gt;&lt;div style=&quot;font-family:var(--mono);font-size:8.5px;font-weight:800;letter-spacing:.08em;color:var(--mut);text-transform:uppercase;margin-bottom:5px&quot;&gt;'+title+'&lt;/div&gt;'+html+'&lt;/div&gt;';
+}
+function wbReinaListHtml(arr,fn){
+ if(!arr||!arr.length)return '';
+ return '&lt;ul style=&quot;margin:0 0 0 16px;padding:0;font-size:11px;color:var(--ink);line-height:1.6&quot;&gt;'+arr.map(function(x){return '&lt;li&gt;'+fn(x)+'&lt;/li&gt;';}).join('')+'&lt;/ul&gt;';
+}
+function wbReinaCandidateRow(c){
+ var id=WBREINA_CANDIDATES.length; WBREINA_CANDIDATES.push(c);
+ var name=rlvToxEsc(c.name||'Untitled item');
+ var trade=rlvToxEsc(c.trade||'GEN');
+ var unit=rlvToxEsc(c.unit||(c.type==='linear'?'LF':c.type==='area'?'SF':'EA'));
+ var qty=(typeof c.estimatedQty==='number')?Math.round(c.estimatedQty*100)/100:'?';
+ var conf=(typeof c.confidence==='number')?Math.round(c.confidence*100)+'% confidence':'';
+ return '&lt;div style=&quot;display:flex;align-items:center;gap:8px;padding:6px 0;border-top:1px dashed #e4e7f0&quot;&gt;'
+  +'&lt;div style=&quot;flex:1;min-width:0&quot;&gt;&lt;b style=&quot;font-size:11px&quot;&gt;'+name+'&lt;/b&gt; &lt;span style=&quot;font-family:var(--mono);font-size:7.5px;background:#eef0f6;border-radius:99px;padding:2px 7px&quot;&gt;'+trade+'&lt;/span&gt;'
+  +'&lt;div style=&quot;font-size:9.5px;color:var(--mut);font-weight:600&quot;&gt;~'+qty+' '+unit+(conf?' · '+conf:'')+(c.notes?' · '+rlvToxEsc(String(c.notes)):'')+'&lt;/div&gt;&lt;/div&gt;'
+  +'&lt;button class=&quot;wbbtn dark&quot; style=&quot;padding:6px 10px;font-size:8px;white-space:nowrap&quot; onclick=&quot;wbReinaAddCandidateAt('+id+',this)&quot;&gt;+ ADD TO TAKEOFF&lt;/button&gt;'
+  +'&lt;/div&gt;';
+}
+window.wbReinaAddCandidateAt=function(id,btn){
+ var c=WBREINA_CANDIDATES[id]; if(!c)return;
+ var type=(c.type==='linear'||c.type==='area')?c.type:'count';
+ var trade=/^(GEN|CARP|ELEC|PLUMB|TILE|PAINT|VENDOR)$/.test(c.trade)?c.trade:'GEN';
+ var unit=c.unit||(type==='linear'?'LF':type==='area'?'SF':'EA');
+ var name=String(c.name||'Untitled item').trim();
+ if(!name)return;
+ if(WBCONDS.some(function(x){return x.name===name;})){hlToast('🎯 '+name+' is already a condition.');return;}
+ var cols=['#1B7A50','#6a3fb5','#59718a','#c65b4e','#9a6414','#2a5fa8','#c2447e'];
+ WBCONDS.push({name:name,type:type,unit:unit,trade:trade,color:cols[WBCONDS.length%cols.length],waste:0,meas:[],hide:false});
+ wbCondsRender(); wbQtyRender();
+ hlToast('🎯 '+name+' added as a suggestion from Reina — mark it on the plan to get a real quantity.');
+ if(btn){btn.disabled=true;btn.textContent='✓ ADDED';}
+};
+function wbReinaSheetCardHtml(r){
+ var title=rlvToxEsc(r.name||('Sheet '+((r.index||0)+1)));
+ if(!r.ok){
+  return '&lt;div id=&quot;wbreina-sheet-'+r.index+'&quot; style=&quot;border:1px solid var(--red);background:var(--red-bg);border-radius:11px;padding:12px;margin-bottom:10px&quot;&gt;'
+   +'&lt;b style=&quot;font-size:12px;color:var(--red)&quot;&gt;⚠ '+title+' — could not be read&lt;/b&gt;'
+   +'&lt;div style=&quot;font-size:10.5px;color:var(--rail);margin:4px 0 8px&quot;&gt;'+rlvToxEsc(r.error||'Unknown error')+'&lt;/div&gt;'
+   +'&lt;button class=&quot;wbbtn dark&quot; style=&quot;font-size:8px&quot; onclick=&quot;wbReinaRetrySheet('+r.index+')&quot;&gt;↻ RETRY THIS SHEET&lt;/button&gt;'
+   +'&lt;/div&gt;';
+ }
+ var a=r.analysis||{};
+ var unreadable=a.drawingType==='unreadable'||a.needsAiConnection;
+ var head='&lt;div style=&quot;display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px&quot;&gt;'
+  +'&lt;b style=&quot;font-size:12.5px;color:var(--rail)&quot;&gt;'+title+'&lt;/b&gt;'
+  +(a.sheetNumber?'&lt;span style=&quot;font-family:var(--mono);font-size:8px;background:#eef0f6;border-radius:99px;padding:2px 8px&quot;&gt;'+rlvToxEsc(a.sheetNumber)+'&lt;/span&gt;':'')
+  +(a.drawingType?'&lt;span style=&quot;font-family:var(--mono);font-size:8px;background:var(--purple-bg);color:var(--purple);border-radius:99px;padding:2px 8px;text-transform:uppercase&quot;&gt;'+rlvToxEsc(String(a.drawingType).replace(/_/g,' '))+'&lt;/span&gt;':'')
+  +(typeof a.confidence==='number'?'&lt;span style=&quot;font-family:var(--mono);font-size:8px;color:var(--mut)&quot;&gt;'+Math.round(a.confidence*100)+'% confidence&lt;/span&gt;':'')
+  +'&lt;/div&gt;';
+ if(unreadable){
+  return '&lt;div id=&quot;wbreina-sheet-'+r.index+'&quot; style=&quot;border:1px solid var(--line);border-radius:11px;padding:12px;margin-bottom:10px&quot;&gt;'+head
+   +'&lt;div style=&quot;font-size:11px;color:var(--mut);font-weight:700&quot;&gt;'+(a.needsAiConnection?'Reina is not connected in this environment — no sheet was actually read.':'Reina could not confidently read this sheet.')+'&lt;/div&gt;'
+   +wbReinaListHtml(a.warnings,function(w){return rlvToxEsc(w);})
+   +'&lt;/div&gt;';
+ }
+ var candidatesHtml=(a.takeoffCandidates||[]).map(function(c){return wbReinaCandidateRow(c);}).join('');
+ var symbolsHtml=wbReinaListHtml(a.symbols,function(s){return '&lt;b&gt;'+rlvToxEsc(s.label||'?')+'&lt;/b&gt;'+(s.count?' × '+s.count:'')+(s.trade?' &lt;span style=&quot;color:var(--mut)&quot;&gt;('+rlvToxEsc(s.trade)+')&lt;/span&gt;':'')+(s.notes?' — '+rlvToxEsc(s.notes):'');});
+ var roomsHtml=(a.rooms&amp;&amp;a.rooms.length)?wbReinaChips(a.rooms.map(function(r2){return (r2&amp;&amp;r2.name)||String(r2);})):'';
+ var fixturesHtml=wbReinaListHtml(a.fixtures,function(f){return rlvToxEsc(f.type||'?')+(f.count?' × '+f.count:'')+(f.trade?' ('+rlvToxEsc(f.trade)+')':'')+(f.notes?' — '+rlvToxEsc(f.notes):'');});
+ var demoHtml=wbReinaListHtml(a.demolition,function(d){return rlvToxEsc(d.area||'?')+(d.notes?' — '+rlvToxEsc(d.notes):'');});
+ var doorsWindows=(a.doors||[]).concat(a.windows||[]);
+ var dwHtml=wbReinaListHtml(doorsWindows,function(d){return rlvToxEsc(d.type||'?')+(d.count?' × '+d.count:'');});
+ var flooringHtml=wbReinaListHtml(a.flooring,function(f){return rlvToxEsc(f.material||'?')+(f.area?' — '+rlvToxEsc(f.area):'')+(f.notes?' — '+rlvToxEsc(f.notes):'');});
+ var cabinetsHtml=wbReinaListHtml(a.cabinets,function(c){return rlvToxEsc(c.run||'?')+(c.notes?' — '+rlvToxEsc(c.notes):'');});
+ var materialsHtml=wbReinaListHtml(a.materials,function(m){return rlvToxEsc(m.name||'?')+(m.notes?' — '+rlvToxEsc(m.notes):'');});
+ var notesHtml=wbReinaListHtml(a.notes,function(n){return rlvToxEsc(n);});
+ var issuesHtml=wbReinaListHtml((a.issues||[]).concat(a.warnings||[]),function(n){return rlvToxEsc(n);});
+ return '&lt;div id=&quot;wbreina-sheet-'+r.index+'&quot; style=&quot;border:1px solid var(--line);border-radius:11px;padding:12px;margin-bottom:10px&quot;&gt;'+head
+  +wbReinaSection('Rooms', roomsHtml)
+  +wbReinaSection('Symbols &amp; counts', symbolsHtml)
+  +wbReinaSection('Doors &amp; windows', dwHtml)
+  +wbReinaSection('Cabinets', cabinetsHtml)
+  +wbReinaSection('Flooring', flooringHtml)
+  +wbReinaSection('Demolition', demoHtml)
+  +wbReinaSection('Fixtures', fixturesHtml)
+  +wbReinaSection('Materials', materialsHtml)
+  +(a.existingVsNew?wbReinaSection('Existing vs. new', '&lt;div style=&quot;font-size:11px&quot;&gt;'+rlvToxEsc(a.existingVsNew)+'&lt;/div&gt;'):'')
+  +wbReinaSection('Notes &amp; specifications', notesHtml)
+  +wbReinaSection('Takeoff candidates — suggestions only, never saved automatically', candidatesHtml)
+  +wbReinaSection('Issues &amp; warnings', issuesHtml)
+  +'&lt;/div&gt;';
+}
+window.wbReinaShowResults=function(mode,results,configured){
+ WBREINA_CANDIDATES=[];
+ var okCount=results.filter(function(r){return r.ok;}).length;
+ var failCount=results.length-okCount;
+ var scopeLine=mode==='all_sheets'
+  ?('&lt;b&gt;'+results.length+' sheet'+(results.length===1?'':'s')+' analyzed&lt;/b&gt;'+(failCount?' — '+okCount+' of '+results.length+' sheets read successfully; '+failCount+' could not be processed.':''))
+  :'&lt;b&gt;Scope:&lt;/b&gt; Current sheet';
+ var connWarn=(configured===false)?'&lt;div style=&quot;background:var(--amber-bg);color:var(--amber);border-radius:9px;padding:9px 12px;font-size:10.5px;font-weight:700;margin-bottom:10px&quot;&gt;⚠ Reina is not connected in this environment (no ANTHROPIC_API_KEY configured) — the read below is a placeholder, not a real plan read.&lt;/div&gt;':'';
+ var body=connWarn+'&lt;div style=&quot;font-size:11.5px;color:var(--rail);margin-bottom:10px&quot;&gt;'+scopeLine+'&lt;/div&gt;'+results.map(function(r){return wbReinaSheetCardHtml(r);}).join('');
+ var title=mode==='all_sheets'?'🔮 Reina Plan Analysis':'🔮 Reina Analysis';
+ wbReinaModal(title, body);
+};
+function wbReinaModal(title,body){
+ var old=document.getElementById('wbreinamodal'); if(old)old.remove();
+ var d=document.createElement('div'); d.id='wbreinamodal';
+ d.style.cssText='position:fixed;inset:0;background:rgba(22,30,46,.55);z-index:9500;display:flex;align-items:center;justify-content:center;padding:20px';
+ d.innerHTML='&lt;div style=&quot;background:#fff;border-radius:16px;width:640px;max-width:96%;max-height:88vh;overflow-y:auto;font-family:var(--sans)&quot;&gt;'
+  +'&lt;div style=&quot;display:flex;align-items:center;padding:16px 20px;border-bottom:1px solid var(--line);position:sticky;top:0;background:#fff;z-index:2&quot;&gt;'
+  +'&lt;b style=&quot;font-size:14px;color:var(--rail)&quot;&gt;'+title+'&lt;/b&gt;'
+  +'&lt;span onclick=&quot;document.getElementById(\'wbreinamodal\').remove()&quot; style=&quot;margin-left:auto;cursor:pointer;font-size:16px;font-weight:800;color:var(--mut)&quot;&gt;✕&lt;/span&gt;'
+  +'&lt;/div&gt;&lt;div style=&quot;padding:16px 20px&quot;&gt;'+body+'&lt;/div&gt;&lt;/div&gt;';
+ d.addEventListener('click',function(e){if(e.target===d)d.remove();});
+ document.body.appendChild(d);
+}
 })();
 </script>
 

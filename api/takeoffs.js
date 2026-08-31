@@ -12,6 +12,7 @@
 // anywhere in this codebase) -- sb() wrapper copied from api/fieldops.js.
 import { supabaseRequest } from './_lib/jobber.js';
 import { requireUser } from './_lib/auth.js';
+import { readPlanSheetsWithReina, reinaPlanReadConfigured } from './_lib/reina-plan-read.js';
 
 async function sb(path, options) {
   const res = await supabaseRequest(path, options);
@@ -119,6 +120,31 @@ export default async function handler(req, res) {
         }
         const storagePath = await uploadTakeoffSheetImage(quoteId, sheetIndex, dataUrl);
         return res.status(200).json({ ok: true, storagePath });
+      }
+
+      if (body.action === 'reina_read') {
+        const mode = body.mode === 'all_sheets' ? 'all_sheets' : 'current_sheet';
+        const sheets = Array.isArray(body.sheets) ? body.sheets : [];
+        if (!sheets.length) return res.status(400).json({ ok: false, error: 'sheets is required and must be a non-empty array.' });
+        if (mode === 'current_sheet' && sheets.length > 1) {
+          return res.status(400).json({ ok: false, error: 'current_sheet mode analyzes exactly one sheet.' });
+        }
+
+        const parsed = [];
+        for (const s of sheets) {
+          const match = /^data:([^;]+);base64,(.+)$/.exec(s && s.dataUrl || '');
+          if (!match) return res.status(400).json({ ok: false, error: `Sheet ${s && s.index} is missing a valid base64 image data_url.` });
+          parsed.push({ index: s.index, name: s.name || null, mimeType: match[1], imageBase64: match[2] });
+        }
+
+        const results = await readPlanSheetsWithReina(parsed, { concurrency: 3 });
+        return res.status(200).json({
+          ok: true,
+          mode,
+          quoteId: body.quote_id || null,
+          configured: reinaPlanReadConfigured(),
+          results,
+        });
       }
 
       const {
