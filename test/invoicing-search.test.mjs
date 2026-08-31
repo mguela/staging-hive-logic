@@ -20,7 +20,7 @@ import { fileURLToPath } from 'node:url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const source = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf-8');
 
-const startSnippet = "var IVX = { invoices: [], clientsById: {}, mode: 'open', query: '' };";
+const startSnippet = "var IVX = { invoices: [], clientsById: {}, mode: 'open', query: '', groupByClient: false };";
 const start = source.indexOf(startSnippet);
 assert.notEqual(start, -1, 'invoicing script block not found in index.html, or IVX.query was never added');
 const end = source.indexOf('</script>', start);

@@ -19,7 +19,7 @@
  * monitor_my_status poll, so "is this person running current code" is a
  * question the database can answer. Do not hand-edit it -- run
  * `node scripts/stamp-page-build.mjs`. */
-var HL_PAGE_BUILD = '1018bf28794d634a';
+var HL_PAGE_BUILD = '9aeb17d06ca3d601';
 </script>
 <script>
 (function () { // HL_FETCH_DEDUPE_V1 — single wrapper: GET /api/ dedupe + 60s cache + write-invalidate
@@ -8252,6 +8252,17 @@ function coApprove(id){ coApi('approve',{id:id}).then(function(d){ coAfter(d,'Ch
 function coAfter(d,okMsg){ if(d&&d.ok){ chirpToast('&#10003; '+okMsg); } else { chirpToast('&#9888; '+((d&&d.error)||'That action could not be completed')); } coLoadList(); }
 </script>
 <div id="view-invx" style="display:none">
+  <style>
+    /* Scoped to this view (see the note below) -- exists only because a
+       <details> marker's chevron can't be styled from an inline style=""
+       attribute (::-webkit-details-marker and [open] are not reachable
+       that way). Everything else about the "group by client" sections
+       stays inline, matching the rest of this page. */
+    #view-invx .ivx-group>summary{list-style:none;cursor:pointer}
+    #view-invx .ivx-group>summary::-webkit-details-marker{display:none}
+    #view-invx .ivx-group>summary .chev{transition:transform .18s;color:var(--mut);font-size:11px}
+    #view-invx .ivx-group[open]>summary .chev{transform:rotate(180deg)}
+  </style>
   <div style="max-width:1080px;margin:0 auto;padding:18px 16px 60px">
     <!-- 2026-08-26, jomell: "Start with Active Jobs and Invoicing & AR" --
          design-language pass from the coworker's Figma Make redesign. Kept
@@ -8271,13 +8282,17 @@ function coAfter(d,okMsg){ if(d&&d.ok){ chirpToast('&#10003; '+okMsg); } else { 
         <button id="ivx-tab-open" onclick="ivxSetMode('open')" style="border:1.5px solid #d1d5db;border-radius:8px;padding:7px 18px;font-family:var(--sans);font-weight:600;font-size:13px;cursor:pointer;background:#fff;color:#0f172a;box-shadow:0 1px 3px rgba(0,0,0,.08)">Open &amp; drafts</button>
         <button id="ivx-tab-all" onclick="ivxSetMode('all')" style="border:1.5px solid #d1d5db;border-radius:8px;padding:7px 18px;font-family:var(--sans);font-weight:600;font-size:13px;cursor:pointer;background:transparent;color:var(--mut)">All recent</button>
       </div>
-      <input id="ivx-search" type="search" placeholder="Search invoice #, client, or title&hellip;" oninput="ivxSearch(this.value)" style="border:1.5px solid var(--line);border-radius:9px;padding:8px 14px;font-family:var(--sans);font-size:13px;font-weight:600;min-width:240px;outline:none;background:#fff">
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <label style="display:inline-flex;align-items:center;gap:6px;font-family:var(--sans);font-size:12.5px;font-weight:700;color:#0f172a;cursor:pointer;user-select:none"><input id="ivx-group-toggle" type="checkbox" onchange="ivxToggleGroup(this.checked)" style="width:15px;height:15px;cursor:pointer">Group by client</label>
+        <input id="ivx-search" type="search" placeholder="Search invoice #, client, or title&hellip;" oninput="ivxSearch(this.value)" style="border:1.5px solid var(--line);border-radius:9px;padding:8px 14px;font-family:var(--sans);font-size:13px;font-weight:600;min-width:240px;outline:none;background:#fff">
+      </div>
     </div>
     <div id="ivx-list"><div style="color:var(--mut);padding:44px;text-align:center;font-weight:700">Loading&hellip;</div></div>
   </div>
 </div>
 <script>
-var IVX = { invoices: [], clientsById: {}, mode: 'open', query: '' };
+var IVX = { invoices: [], clientsById: {}, mode: 'open', query: '', groupByClient: false };
+function ivxToggleGroup(on){ IVX.groupByClient = !!on; ivxRender(); }
 function ivxEsc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
 function ivxMoney(n){ n=+n||0; return '$'+n.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}); }
 function ivxFmtDate(s){ if(!s) return ''; var d=new Date(s); if(isNaN(d.getTime())) return String(s); return d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric',timeZone:'UTC'}); }
@@ -8342,11 +8357,54 @@ function ivxRender(){
     if(q){ el.innerHTML=ivxEmpty('No matches', 'Nothing matches "'+q+'" in '+(IVX.mode==='open'?'Open & drafts':'All recent')+'.'); return; }
     el.innerHTML=ivxEmpty(IVX.mode==='open'?'No open invoices':'No invoices', IVX.mode==='open'?'Nothing is awaiting payment right now.':'Nothing to show.'); return;
   }
-  var html='<div style="display:flex;flex-direction:column;gap:10px">';
-  rows.forEach(function(i){ html+=ivxCard(i); });
-  html+='</div>';
+  var html;
+  if(IVX.groupByClient){ html=ivxRenderGrouped(rows, q); }
+  else {
+    html='<div style="display:flex;flex-direction:column;gap:10px">';
+    rows.forEach(function(i){ html+=ivxCard(i); });
+    html+='</div>';
+  }
   if(capped) html+='<div style="color:var(--mut);font-size:11px;font-weight:700;text-align:center;padding:14px">Showing the 150 most recent. Use search in Jobber for older invoices.</div>';
   el.innerHTML=html;
+}
+// "categorize the invoices per company/client" (2026-08-29, the user) --
+// one collapsible section per client, subtotaled by balance owed and
+// sorted highest-owed first, so the client costing the most cash-flow
+// pain surfaces immediately instead of getting lost in a long flat
+// scroll. Native <details>/<summary> -- no extra JS state to track which
+// sections are open, the browser already does that. Auto-expanded when
+// there are few enough groups to not overwhelm the page, or whenever a
+// search is active (a search result hidden behind a click to expand
+// would defeat the point of searching).
+function ivxRenderGrouped(rows, q){
+  var byClient={}, order=[];
+  rows.forEach(function(i){
+    var cid=i.clientId||'';
+    if(!byClient[cid]){ byClient[cid]=[]; order.push(cid); }
+    byClient[cid].push(i);
+  });
+  var groups=order.map(function(cid){
+    var list=byClient[cid];
+    var balance=list.reduce(function(s,i){ return s+(+i.balance||0); },0);
+    return { cid:cid, name: ivxClientName(cid)||'No client on file', list:list, balance:balance };
+  });
+  groups.sort(function(a,b){
+    if(b.balance!==a.balance) return b.balance-a.balance;
+    return a.name.localeCompare(b.name);
+  });
+  var openAll = !!q || groups.length<=8;
+  var html='<div style="display:flex;flex-direction:column;gap:10px">';
+  groups.forEach(function(g){
+    html+='<details class="ivx-group"'+(openAll?' open':'')+' style="border:1px solid var(--line);border-radius:12px;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.05);overflow:hidden">'
+      +'<summary style="padding:14px 18px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">'
+      +'<span style="display:flex;align-items:center;gap:8px;font-family:var(--sans);font-weight:800;font-size:14px;color:#0f172a"><span class="chev">▾</span>'+ivxEsc(g.name)+'<span style="color:var(--mut);font-weight:600;font-size:12px">'+g.list.length+' invoice'+(g.list.length===1?'':'s')+'</span></span>'
+      +(g.balance>0?'<span style="font-family:var(--sans);font-weight:900;font-size:15px;color:#0f172a">'+ivxMoney(g.balance)+' owed</span>':'<span style="color:var(--mut);font-size:12px;font-weight:700">Nothing owed</span>')
+      +'</summary>'
+      +'<div style="padding:0 14px 14px;display:flex;flex-direction:column;gap:10px">'+g.list.map(ivxCard).join('')+'</div>'
+      +'</details>';
+  });
+  html+='</div>';
+  return html;
 }
 function ivxCard(i){
   var name=ivxClientName(i.clientId);

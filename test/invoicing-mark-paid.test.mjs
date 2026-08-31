@@ -130,7 +130,7 @@ test('mark_invoice_paid is POST-only', async () => {
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const source = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf-8');
 
-const startSnippet = "var IVX = { invoices: [], clientsById: {}, mode: 'open', query: '' };";
+const startSnippet = "var IVX = { invoices: [], clientsById: {}, mode: 'open', query: '', groupByClient: false };";
 const start = source.indexOf(startSnippet);
 assert.notEqual(start, -1, 'invoicing script block not found in index.html');
 const end = source.indexOf('</script>', start);
